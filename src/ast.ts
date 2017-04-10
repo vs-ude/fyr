@@ -1,0 +1,155 @@
+import {Type} from "./typecheck"
+
+export type NodeConfig = {
+    readonly loc: Location;
+    readonly op: NodeOp;
+    readonly lhs?: Node;
+    readonly condition?: Node;
+    readonly rhs?: Node;
+    readonly value?: string;
+    readonly name?: Node;
+    readonly comments?: Array<Node>;
+    readonly statements?: Array<Node>;
+    readonly elseBranch?: Node;
+    readonly parameters?: Array<Node>;
+    readonly genericParameters?: Array<Node>;
+}
+
+export type LocationPoint = {
+    offset: number;
+    line: number;
+    column: number;
+}
+
+export type Location = {
+    start: LocationPoint;
+    end: LocationPoint;
+}
+
+export type NodeOp = "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "defaultParam" | "ellipsisParam" | "strType" | "genericType" | "genericInstance" | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "const_in" | "var" | "const" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | "("
+
+export class Node {
+    constructor(config?: NodeConfig) {
+        if (config) {
+            if (config.op !== undefined) {
+                this.op = config.op;
+            }
+            if (config.lhs !== undefined) {
+                this.lhs = config.lhs;
+            }
+            if (config.rhs !== undefined) {
+                this.rhs = config.rhs;
+            }
+            if (config.value !== undefined) {
+                this.value = config.value;
+            }
+            if (config.name !== undefined) {
+                this.name = config.name;
+            }
+            if (config.loc !== undefined) {
+                this.loc = config.loc;
+            }
+            if (config.comments !== undefined) {
+                this.comments = config.comments;
+            }
+            if (config.condition !== undefined) {
+                this.condition = config.condition;
+            }
+            if (config.statements !== undefined) {
+                this.statements = config.statements;
+            }
+            if (config.elseBranch !== undefined) {
+                this.elseBranch = config.elseBranch;
+            }
+            if (config.parameters !== undefined) {
+                this.parameters = config.parameters;
+            }
+            if (config.genericParameters !== undefined) {
+                this.genericParameters = config.genericParameters;
+            }
+        }
+    }
+
+    public stringify(prefix: string): string {
+        let str = "";
+        if (this.comments) {
+            for(let c of this.comments) {
+                str += prefix + "// " + c.value + "\n";
+            }
+        }
+        str += prefix + this.op + (this.value !== undefined ? " " + this.value : "") + "\n";
+        if (this.name) {
+            str += prefix + "-name:" + "\n" + this.name.stringify(prefix + "  ");
+        }
+        if (this.genericParameters) {
+            str += prefix + "-genericParameters:" + "\n";
+            for(let s of this.genericParameters) {
+                str += s.stringify(prefix + "  ");
+            }            
+        }
+        if (this.parameters) {
+            str += prefix + "-parameters:" + "\n";
+            for(let s of this.parameters) {
+                str += s.stringify(prefix + "  ");
+            }
+        }
+        if (this.lhs) {
+            str += prefix + "-lhs:" + "\n" + this.lhs.stringify(prefix + "  ");
+        }
+        if (this.condition) {
+            str += prefix + "-condition:" + "\n" + this.condition.stringify(prefix + "  ");
+        }
+        if (this.rhs) {
+            str += prefix + "-rhs:" + "\n" + this.rhs.stringify(prefix + "  ");
+        }
+        if (this.statements) {
+            str += prefix + "-statements:" + "\n";
+            for(let s of this.statements) {
+                str += s.stringify(prefix + "  ");
+            }
+        }
+        if (this.elseBranch) {
+            str += prefix + "-elseBranch:" + "\n" + this.elseBranch.stringify(prefix + "  ");
+        }
+
+        return str;
+    }
+
+    public isUnifyableLiteral(): boolean {
+        if (this.op == "int" || this.op == "float" || this.op == "str" || this.op == "array" || this.op == "object" || this.op == "tuple") {
+            return true;
+        }
+        return false;
+    }
+
+    public op: NodeOp;
+    public lhs: Node;
+    public rhs: Node;
+    public value: string;
+    public name: Node;
+    public loc: Location;
+    public comments: Array<Node>;
+    public condition: Node;
+    public statements: Array<Node>;
+    public elseBranch: Node;
+    public parameters: Array<Node>;
+    public genericParameters: Array<Node>;
+    public type: Type;
+}
+
+/*
+function f(a, b) {
+
+}
+
+// function t<A,B>() {
+
+// }
+
+var t;
+var u;
+var v;
+//type u = {};
+//type v = {};
+f(t < u, v > 1+2);
+*/

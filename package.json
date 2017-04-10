@@ -1,0 +1,27 @@
+{
+  "name": "weblang",
+  "version": "0.0.1",
+  "description": "An experimental compiler",
+  "main": "lib/index",
+  "typings": "lib/index",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "compiler"
+  ],
+  "author": "Torben Weis",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "colors": "^1.1.2",
+    "commander": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/colors": "^1.1.2",
+    "@types/node": "^7.0.12",
+    "pegjs": "^0.10.0",
+    "typescript": "^2.2.2"
+  }
+}
