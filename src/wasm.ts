@@ -1,17 +1,77 @@
 export abstract class Node {
     public abstract get op(): string;
-    public abstract toWabt(indent: string): string;
+    public abstract toWast(indent: string): string;
 }
 
 export type StorageType = "i32" | "i64" | "f32" | "f64";
 
 let nameCounter = 0;
 
+export class Module extends Node {
+    public get op(): string {
+        return "module";
+    }
+
+    public toWast(indent: string): string {
+        let s = indent + "(module\n";
+        s += indent + "    (memory " + (this.dataSize + this.heapSize + this.stackSize).toString() + ")\n";
+        for(let f of this.funcs) {
+            s += f.toWast(indent + "    ") + "\n";
+        }
+        for(let d of this.data) {
+            s += d.toWast(indent + "    ") + "\n";
+        }
+        for(let k of this.exports.keys()) {
+            let v = this.exports.get(k);
+            if (v instanceof Function) {
+                s += indent + "    (export \"" + k + "\" (func $" + v.name + "))\n";
+            } else {
+                throw "Implementation error";
+            } 
+        }
+        return s + indent + ")";
+    }
+
+    public addData(value: string): number {
+        let o = this.dataSize;
+        this.data.push(new Data(o, value));
+        this.dataSize += value.length;
+        return o;
+    }
+
+    public stackSize = 0;
+    public heapSize = 0;
+    public funcs: Array<Function> = [];
+    public exports: Map<string, Node> = new Map<string, Node>();
+    public dataSize: number = 0;
+    public data: Array<Data> = [];
+}
+
+export class Data extends Node {
+    constructor(offset: number, value: string) {
+        super();
+        this.offset = offset;
+        this.value = value;
+    }
+
+    public get op(): string {
+        return "data";
+    }
+
+    public toWast(indent: string): string {
+        let v = "\"" + this.value + "\""; // TODO: Proper encoding
+        return indent + "(data (i32.const " + this.offset.toString() + ") " + v + ")";
+    }
+
+    public offset: number;
+    public value: string;
+}
+
 export class Function extends Node {
     constructor(name?: string) {
         super();
         if (!name) {
-            this.name = "$f" + nameCounter.toString();
+            this.name = "f" + nameCounter.toString();
             nameCounter++;
         } else {
             this.name = name;
@@ -22,8 +82,8 @@ export class Function extends Node {
         return "function";
     }
 
-    public toWabt(indent: string): string {
-        let s = indent + "(func " + this.name;
+    public toWast(indent: string): string {
+        let s = indent + "(func $" + this.name;
         for(let p of this.parameters) {
             s += " (param " + p + ")";
         } 
@@ -35,9 +95,9 @@ export class Function extends Node {
         } 
         s += "\n";
         for(let st of this.statements) {
-            s += st.toWabt(indent + "    ") + "\n";
+            s += st.toWast(indent + "    ") + "\n";
         }
-        return s + ")";
+        return s + indent + ")";
     }
 
     public name: string;
@@ -58,10 +118,72 @@ export class Constant extends Node {
         return this.type + ".const";
     }
 
-    public toWabt(indent: string): string {
+    public toWast(indent: string): string {
         return indent + this.op + " " + this.value.toString();
     }
 
     public value: number;  
     public type: StorageType;  
+}
+
+export class Drop extends Node {
+    public get op(): string {
+        return "drop";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "drop";
+    }   
+}
+
+export type BinaryIntOp = "add" | "sub" | "mul" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u";
+
+export class BinaryIntInstruction extends Node {
+    constructor(type: "i32" | "i64", op: BinaryIntOp) {
+        super();
+        this.intOp = op;
+        this.type = type;
+    }
+
+    public get op(): string {
+        return this.type + "." + this.intOp;
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + "." + this.intOp;
+    }   
+
+    public type: "i32" | "i64";
+    public intOp: BinaryIntOp;
+}
+
+export type BinaryFloatOp = "add" | "sub" | "mul" | "div" | "eq" | "ne" | "le" | "lt" | "ge" | "gt" | "min" | "max";
+
+export class BinaryFloatInstruction extends Node {
+    constructor(type: "f32" | "f64", op: BinaryFloatOp) {
+        super();
+        this.intOp = op;
+        this.type = type;
+    }
+
+    public get op(): string {
+        return this.type + "." + this.intOp;
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + "." + this.intOp;
+    }   
+
+    public type: "f32" | "f64";
+    public intOp: BinaryFloatOp;
+}
+
+export class Return extends Node {
+    public get op(): string {
+        return "return";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "return";
+    }       
 }

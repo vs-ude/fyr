@@ -6,6 +6,7 @@ import program = require('commander');
 import colors = require('colors');
 import parser = require("./parser");
 import typecheck = require("./typecheck");
+import codegen = require("./codegen");
 
 // Make TSC not throw out the colors lib
 colors.red;
@@ -16,14 +17,17 @@ function compileModules() {
 	var args = Array.prototype.slice.call(arguments, 0);
 	for(var i = 0; i < args.length - 1; i++) {
 		var arg = path.resolve(args[i]);
-        console.log("Compiling " + arg + "...");
+//        console.log("Compiling " + arg + "...");
         let code = fs.readFileSync(arg, 'utf8');
         try {
             let fnode = parser.parse(code);
-            console.log(fnode.stringify(""));
+//            console.log(fnode.stringify(""));
             let tc = new typecheck.TypeChecker();
             let scope = tc.createScope();
             let f = tc.createFunction(fnode, scope);
+            let cg = new codegen.CodeGenerator(tc);
+            cg.processFunction(f, true);
+            console.log(cg.module.toWast(""));
         } catch(ex) {
             if (ex instanceof parser.SyntaxError) {
                 console.log((args[i] + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);

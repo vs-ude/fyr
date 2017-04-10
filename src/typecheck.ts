@@ -686,6 +686,9 @@ export class TypeChecker {
     }
     
     public createFunction(fnode: Node, scope: Scope): Function {
+        if (!fnode.name) {
+            throw new TypeError("Function must be named", fnode.loc);
+        }
         var f: Function = new Function();
         f.name = fnode.name.value;
         f.scope.parent = scope;
