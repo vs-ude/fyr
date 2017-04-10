@@ -10,7 +10,6 @@
         "noImplicitReturns": true,
         "noImplicitThis": false,
         "noUnusedLocals": false,
-        "allowJs": true,
         "outDir": "lib",
         "declaration": true,
         "typeRoots": ["node_modules/@types"]
