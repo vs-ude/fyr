@@ -1,4 +1,4 @@
-import {Type} from "./typecheck"
+import {Type, Scope} from "./typecheck"
 
 export type NodeConfig = {
     readonly loc: Location;
@@ -135,6 +135,7 @@ export class Node {
     public parameters: Array<Node>;
     public genericParameters: Array<Node>;
     public type: Type;
+    public scope: Scope;
 }
 
 /*

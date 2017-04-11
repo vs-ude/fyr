@@ -1361,6 +1361,7 @@ export class TypeChecker {
                 break;
             case "if":
                 let s = new Scope(scope);
+                snode.scope = s;
                 if (snode.lhs) {
                     this.checkStatement(snode.lhs, s);
                 }
@@ -1375,12 +1376,14 @@ export class TypeChecker {
                 break;
             case "else":
                 let s2 = new Scope(scope);
+                snode.scope = s2;
                 for(let st of snode.statements) {
                     this.checkStatement(st, s2);
                 }
                 break;       
             case "for":
                 let forScope = new Scope(scope);
+                snode.scope = forScope;
                 forScope.forLoop = true;
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {

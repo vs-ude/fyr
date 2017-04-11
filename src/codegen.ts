@@ -20,7 +20,7 @@ export class CodeGenerator {
         }
 
         for(let node of f.node.statements) {
-            this.processStatement(f, f.scope, node, func.statements);
+            this.processStatement(f, f.scope, node, func, func.statements);
         }
         if (exportFunc) {
             this.module.exports.set(f.name, func);
@@ -51,8 +51,34 @@ export class CodeGenerator {
         }
     }
 
-    public processStatement(f: Function, scope: Scope, snode: Node, code: Array<wasm.Node>) {
+    public processStatement(f: Function, scope: Scope, snode: Node, wf: wasm.Function, code: Array<wasm.Node>) {
         switch(snode.op) {
+            case "if":
+            {
+                this.processScope(wf, snode.scope);
+                if (snode.lhs) {
+                    this.processStatement(f, snode.scope, snode.lhs, wf, code);
+                }
+                this.processExpression(f, snode.scope, snode.condition, code);
+                code.push(new wasm.If());
+                for(let st of snode.statements) {
+                    this.processStatement(f, snode.scope, st, wf, code);
+                }
+                if (snode.elseBranch) {
+                    code.push(new wasm.Else());
+                    this.processStatement(f, snode.elseBranch.scope, snode.elseBranch, wf, code);
+                }
+                code.push(new wasm.End());
+                break;
+            }
+            case "else":
+            {
+                this.processScope(wf, snode.scope);
+                for(let st of snode.statements) {
+                    this.processStatement(f, snode.scope, st, wf, code);
+                }
+                break;                
+            }
             case "var":
             {
                 if (snode.rhs) {
@@ -120,11 +146,12 @@ export class CodeGenerator {
                 }
                 break;
                 // TODO
-        }
-        this.processExpression(f, scope, snode, code);
-        if (snode.type != this.tc.t_void) {
-            // TODO: How much should be dropped?
-            code.push(new wasm.Drop);
+            default:
+                this.processExpression(f, scope, snode, code);
+                if (snode.type != this.tc.t_void) {
+                    // TODO: How much should be dropped?
+                    code.push(new wasm.Drop);
+                }
         }
     }
 

@@ -548,7 +548,7 @@ comparison2
   = "==" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "==", rhs:right}); }
   / "!=" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "!=", rhs:right}); }
   / "<=" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "<=", rhs:right}); }
-  / "=>" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: ">=", rhs:right}); }
+  / ">=" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: ">=", rhs:right}); }
   / ">" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: ">", rhs:right}); }
   / "<" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "<", rhs:right}); }
 
