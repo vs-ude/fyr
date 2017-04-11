@@ -92,6 +92,10 @@ export class CodeGenerator {
                         }
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
+                    } else if (snode.lhs.op == "array") {
+                        throw "TODO"                        
+                    } else if (snode.lhs.op == "object") {
+                        throw "TODO"                        
                     } else {
                         throw "Impl error"
                     }
@@ -107,16 +111,33 @@ export class CodeGenerator {
                                 throw "TODO";
                             }
                         }
-                    } else if (snode.lhs.op == "tuple") {
-                        throw "TODO"                        
-                    } else if (snode.lhs.op == "array") {
-                        throw "TODO"                        
-                    } else if (snode.lhs.op == "object") {
+                    } else {
                         throw "TODO"                        
                     }
                     // TODO: Initialize if required (only on FYR stack)
                 }
                 return;
+            }
+            case "=":
+            {
+                if (snode.lhs.op == "id") {
+                    let element = scope.resolveElement(snode.lhs.value);
+                    if (this.isRegisterSize(element.type)) {
+                        this.processExpression(f, scope, snode.rhs, code);
+                        this.storeElementFromStack(element, code);
+                    } else {
+                        throw "TODO";
+                    }
+                } else if (snode.lhs.op == "tuple") {
+                    throw "TODO"
+                } else if (snode.lhs.op == "array") {
+                    throw "TODO"                        
+                } else if (snode.lhs.op == "object") {
+                    throw "TODO"                        
+                } else {
+                    throw "Impl error"
+                }
+                break;
             }
             case "return":
                 // TODO: Clean up the FYR stack if required
