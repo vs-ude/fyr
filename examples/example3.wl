@@ -1,3 +1,5 @@
 func demo() int {
-    return 42 + 8
+    var y int = 21
+    var x int
+    return y * 2 + x
 }

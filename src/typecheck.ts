@@ -1,9 +1,14 @@
 import {Node, NodeOp, Location} from "./ast"
 
+export type StorageLocation = "local" | "global" | "fyrStack" | "funcTable";
+
 export interface ScopeElement {
     name: string;
     type: Type;
     loc: Location;
+
+    storageIndex: number;
+    storageLocation: StorageLocation;
 }
 
 export class Variable implements ScopeElement {
@@ -11,6 +16,10 @@ export class Variable implements ScopeElement {
     public name: string;
     public type: Type;
     public loc: Location;
+    public isResult: boolean = false;
+
+    public storageIndex: number;
+    public storageLocation: StorageLocation;
 }
 
 export class Function implements ScopeElement {
@@ -25,13 +34,18 @@ export class Function implements ScopeElement {
     public scope: Scope;
     public node: Node;
     public loc: Location;
+
+    public storageIndex: number;
+    public storageLocation: StorageLocation;
 }
 
+/*
 export class TypeDef implements ScopeElement {
     public name: string;
     public type: Type;
     public loc: Location;
 }
+*/
 
 export class Scope {
     constructor(parent: Scope) {
@@ -152,6 +166,9 @@ export class FunctionParameter implements ScopeElement {
     public optional: boolean;
     public type: Type;
     public loc: Location;
+
+    public storageIndex: number;
+    public storageLocation: StorageLocation;
 }
 
 export class FunctionType extends Type {
@@ -752,6 +769,7 @@ export class TypeChecker {
                     let pnode = fnode.rhs.parameters[i];
                     if (pnode.name) {
                         let v = new Variable();
+                        v.isResult = true;
                         v.loc = pnode.loc;
                         v.name = pnode.name.value;
                         v.type = (f.type.returnType as TupleType).types[i];

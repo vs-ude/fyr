@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, FunctionType, TypeChecker, TupleType, BasicType} from "./typecheck"
+import {Function, Type, FunctionType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as wasm from "./wasm"
 
 export class CodeGenerator {
@@ -9,23 +9,18 @@ export class CodeGenerator {
 
     public processFunction(f: Function, exportFunc: boolean = false) {
         let func = new wasm.Function(f.name);
-        // TODO: Parameters
-        if (f.type.returnType != this.tc.t_void) {
-            // TODO: namedReturnType
-            if (f.type.returnType instanceof TupleType) {
-                // TODO
-            } else if (f.type.returnType == this.tc.t_string) {
-                // TODO
-            } else if (f.type.returnType == this.tc.t_error) {
-                // TODO
-            } else if (f.type.returnType instanceof BasicType) {
-                func.results.push(this.storageTypeOf(f.type.returnType));
-            } else {
+        this.processScope(func, f.scope);
 
+        if (f.type.returnType != this.tc.t_void) {
+            if (this.isRegisterSize(f.type.returnType)) {
+                func.results.push(this.stackTypeOf(f.type.returnType));
+            } else {
+                // TODO
             }
         }
+
         for(let node of f.node.statements) {
-            func.statements = func.statements.concat(this.processStatement(node));
+            func.statements = func.statements.concat(this.processStatement(f, f.scope, node));
         }
         if (exportFunc) {
             this.module.exports.set(f.name, func);
@@ -33,34 +28,113 @@ export class CodeGenerator {
         this.module.funcs.push(func);
     }
 
-    public processStatement(snode: Node): Array<wasm.Node> {
+    public processScope(func: wasm.Function, scope: Scope) {
+        for(let name of scope.elements.keys()) {
+            let e = scope.elements.get(name);
+            if (e instanceof Variable) {
+                if (this.isRegisterSize(e.type)) {
+                    e.storageLocation = "local";
+                    e.storageIndex = func.parameters.length + func.locals.length;
+                    func.locals.push(this.stackTypeOf(e.type));
+                } else {
+                    // TODO
+                }
+            } else if (e instanceof FunctionParameter) {
+                if (this.isRegisterSize(e.type)) {
+                    e.storageLocation = "local";
+                    e.storageIndex = func.parameters.length;
+                    func.parameters.push(this.stackTypeOf(e.type));
+                } else {
+                    // TODO
+                }
+            }
+        }
+    }
+
+    public processStatement(f: Function, scope: Scope, snode: Node): Array<wasm.Node> {
         switch(snode.op) {
+            case "var":
+            {
+                let code: Array<wasm.Node> = [];
+                if (snode.rhs) {
+                    if (snode.lhs.op == "id") {
+                        let element = scope.resolveElement(snode.lhs.value);
+                        if (this.isRegisterSize(element.type)) {
+                            code = code.concat(this.processExpression(f, scope, snode.rhs));
+                            this.storeElementFromStack(element, code);
+                        } else {
+                            throw "TODO";
+                        }
+                    } else if (snode.lhs.op == "tuple") {
+                        throw "TODO"
+                    } else {
+                        throw "Impl error"
+                    }
+                } else {
+                    if (snode.lhs.op == "id") {
+                        let element = scope.resolveElement(snode.lhs.value);
+                        if (element.storageLocation == "fyrStack") {
+                            if (this.isRegisterSize(snode.lhs.type)) {
+                                let storage = this.stackTypeOf(element.type);
+                                code.push(new wasm.Constant(storage, 0));
+                                this.storeElementFromStack(element, code);                            
+                            } else {
+                                throw "TODO";
+                            }
+                        }
+                    } else if (snode.lhs.op == "tuple") {
+                        throw "TODO"                        
+                    } else if (snode.lhs.op == "array") {
+                        throw "TODO"                        
+                    } else if (snode.lhs.op == "object") {
+                        throw "TODO"                        
+                    }
+                    // TODO: Initialize if required (only on FYR stack)
+                }
+                return code;
+            }
             case "return":
+                // TODO: Clean up the FYR stack if required
                 if (!snode.lhs) {
-                    // TODO: Named return types
-                    return [new wasm.Return()];
+                    let code = [];
+                    if (f.namedReturnTypes) {
+                        let resultCount = 0;
+                        for(let key of f.scope.elements.keys()) {
+                            let v = f.scope.elements.get(key);
+                            if (v instanceof Variable && v.isResult) {
+                                if (resultCount == 0 && this.isRegisterSize(v.type)) {
+                                    // TODO: Load on WASM stack
+                                } else {
+                                    // TODO: Load on FYR stack
+                                }
+                            }
+                        }
+                    }
+                    code.push(new wasm.Return());
+                    return code;
                 }
                 if (snode.lhs.type instanceof TupleType) {
                     // TODO
                 } else {
-                    let n = this.processExpression(snode.lhs);
-                    n.push(new wasm.Return());
-                    return n;
+                    let code = this.processExpression(f, scope, snode.lhs);
+                    code.push(new wasm.Return());
+                    return code;
                 }
                 break;
-            // TODO
+                // TODO
         }
-        let n = this.processExpression(snode);
+        let code = this.processExpression(f, scope, snode);
         if (snode.type != this.tc.t_void) {
             // TODO: How much should be dropped?
-            n.push(new wasm.Drop);
+            code.push(new wasm.Drop);
         }
-        return n;
+        return code;
     }
 
-    public processExpression(enode: Node): Array<wasm.Node> {
+    public processExpression(f: Function, scope: Scope, enode: Node): Array<wasm.Node> {
         switch(enode.op) {
             case "int":
+            case "float":
                 if (enode.type == this.tc.t_int8 || enode.type == this.tc.t_int16 || enode.type == this.tc.t_int32) {
                     return [new wasm.Constant("i32", parseInt(enode.value))];
                 } else if (enode.type == this.tc.t_int64) {
@@ -69,13 +143,12 @@ export class CodeGenerator {
                     return [new wasm.Constant("i32", parseInt(enode.value))];
                 } else if (enode.type == this.tc.t_uint64) {
                     return [new wasm.Constant("i64", parseInt(enode.value))];                    
-                }
-                break;
-            case "float":
-                if (enode.type == this.tc.t_float) {
+                } else if (enode.type == this.tc.t_float) {
                     return [new wasm.Constant("f32", parseFloat(enode.value))];
-                } else {
+                } else if (enode.type == this.tc.t_double) {
                     return [new wasm.Constant("f64", parseFloat(enode.value))];
+                } else {
+                    throw "CodeGen: Implementation error";
                 }
             case "bool":
                 return [new wasm.Constant("i32", enode.value == "true" ? 1 : 0)];
@@ -84,35 +157,125 @@ export class CodeGenerator {
                 // TODO: Code to load the string
                 throw "TODO";
             case "+":
-                let n = this.processExpression(enode.lhs);
-                n = n.concat(this.processExpression(enode.rhs));
-                if (enode.lhs.type == this.tc.t_int64 || enode.lhs.type == this.tc.t_uint64) {
-                    n.push(new wasm.BinaryIntInstruction("i64", "add"))
-                } else if (enode.lhs.type == this.tc.t_string) {
+            {
+                let code = this.processExpression(f, scope, enode.lhs);
+                code = code.concat(this.processExpression(f, scope, enode.rhs));
+                if (enode.lhs.type == this.tc.t_string) {
                     throw "TODO"
-                } else if (enode.lhs.type == this.tc.t_float) {
-                    n.push(new wasm.BinaryFloatInstruction("f32", "add"))
-                } else if (enode.lhs.type == this.tc.t_double) {
-                    n.push(new wasm.BinaryFloatInstruction("f64", "add"))
                 } else {
-                    n.push(new wasm.BinaryIntInstruction("i32", "add"))
+                    let storage = this.stackTypeOf(enode.type);
+                    if (storage == "f32" || storage == "f64") {
+                        code.push(new wasm.BinaryFloatInstruction(storage, "add"))
+                    } else {
+                        code.push(new wasm.BinaryIntInstruction(storage, "add"))
+                    }                    
                 }
-                return n;
+                return code;
+            }
+            case "*":
+            case "-":
+            {
+                let code = this.processExpression(f, scope, enode.lhs);
+                code = code.concat(this.processExpression(f, scope, enode.rhs));
+                let storage = this.stackTypeOf(enode.type);
+                let opcode: "mul" | "sub" = enode.op == "*" ? "mul" : "sub";
+                if (storage == "f32" || storage == "f64") {
+                    code.push(new wasm.BinaryFloatInstruction(storage, opcode))
+                } else {
+                    code.push(new wasm.BinaryIntInstruction(storage, opcode))
+                }
+                return code;
+            }
+            case "/":
+            {
+                let code = this.processExpression(f, scope, enode.lhs);
+                code = code.concat(this.processExpression(f, scope, enode.rhs));
+                let storage = this.stackTypeOf(enode.type);
+                if (storage == "f32" || storage == "f64") {
+                    code.push(new wasm.BinaryFloatInstruction(storage, "div"))
+                } else {
+                    let opcode: "div_u" | "div_s" = this.isSigned(enode.type) ? "div_s" : "div_u";
+                    code.push(new wasm.BinaryIntInstruction(storage, opcode))
+                }
+                return code;
+            }
+            case "id":
+                let element = scope.resolveElement(enode.value);
+                let code: Array<wasm.Node> = [];
+                if (this.isRegisterSize(element.type)) {
+                    this.loadElementOnStack(element, code);
+                } else {
+                    throw "TODO"
+                }
+                return code;
         }
-        throw "Implementation error";
+        throw "CodeGen: Implementation error " + enode.op;
     }
 
-    public storageTypeOf(t: BasicType): wasm.StorageType {
+    public loadElementOnStack(e: ScopeElement, code: Array<wasm.Node>) {
+        if (e instanceof FunctionParameter || e instanceof Variable) {
+            switch(e.storageLocation) {
+                case "local":
+                    code.push(new wasm.GetLocal(e.storageIndex));
+                    break;
+                case "global":
+                    code.push(new wasm.GetGlobal(e.storageIndex));
+                    break;
+                case "fyrStack":
+                    code.push(new wasm.GetGlobal(0));
+//                    code.push(new wasm.Load(this.stackTypeOf(e.type)))
+                    throw "TODO";
+            }
+        }
+    }
+
+    public storeElementFromStack(e: ScopeElement, code: Array<wasm.Node>) {
+        if (e instanceof FunctionParameter || e instanceof Variable) {
+            switch(e.storageLocation) {
+                case "local":
+                    code.push(new wasm.SetLocal(e.storageIndex));
+                    break;
+                case "global":
+                    code.push(new wasm.SetGlobal(e.storageIndex));
+                    break;
+                case "fyrStack":
+                    code.push(new wasm.GetGlobal(0));
+                    throw "TODO";
+            }
+        }
+    }
+
+    public isSigned(t: Type): boolean {
+        if (t == this.tc.t_int8 || t == this.tc.t_int16 || t == this.tc.t_int32 || t == this.tc.t_int64 || t == this.tc.t_float || t == this.tc.t_double) {
+            return true;
+        }
+        if (t == this.tc.t_uint8 || t == this.tc.t_uint16 || t == this.tc.t_uint32 || t == this.tc.t_uint64) {
+            return false;
+        }
+        throw "CodeGen: Implementation error: signed check on non number type"       
+    }
+
+    public stackTypeOf(t: Type): wasm.StackType {
         if (t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
             return "i32";
         }
-        if (t == this.tc.t_int64 || this.tc.t_uint64) {
+        if (t == this.tc.t_int64 || t == this.tc.t_uint64) {
             return "i64";
         }
         if (t == this.tc.t_float) {
             return "f32";
         }
-        return "f64";
+        if (t == this.tc.t_double) {
+            return "f64";
+        }
+        throw "CodeGen: Implementation error: The type does not fit in a register"
+    }
+
+    public isRegisterSize(t: Type) {
+        if (t == this.tc.t_double || t == this.tc.t_float || t == this.tc.t_int64 || this.tc.t_uint64 || t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
+            return true;
+        }
+        return false;
     }
 
     public module: wasm.Module = new wasm.Module();

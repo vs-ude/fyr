@@ -3,7 +3,7 @@ export abstract class Node {
     public abstract toWast(indent: string): string;
 }
 
-export type StorageType = "i32" | "i64" | "f32" | "f64";
+export type StackType = "i32" | "i64" | "f32" | "f64";
 
 let nameCounter = 0;
 
@@ -87,11 +87,11 @@ export class Function extends Node {
         for(let p of this.parameters) {
             s += " (param " + p + ")";
         } 
-        for(let p of this.locals) {
-            s += " (local " + p + ")";
-        } 
         for(let p of this.results) {
             s += " (result " + p + ")";
+        } 
+        for(let p of this.locals) {
+            s += " (local " + p + ")";
         } 
         s += "\n";
         for(let st of this.statements) {
@@ -101,14 +101,14 @@ export class Function extends Node {
     }
 
     public name: string;
-    public parameters: Array<StorageType> = [];
-    public locals: Array<StorageType> = [];
-    public results: Array<StorageType> = [];
+    public parameters: Array<StackType> = [];
+    public locals: Array<StackType> = [];
+    public results: Array<StackType> = [];
     public statements: Array<Node> = [];
 }
 
 export class Constant extends Node {
-    constructor(type: StorageType, value: number) {
+    constructor(type: StackType, value: number) {
         super();
         this.type = type;
         this.value = value;
@@ -123,7 +123,7 @@ export class Constant extends Node {
     }
 
     public value: number;  
-    public type: StorageType;  
+    public type: StackType;  
 }
 
 export class Drop extends Node {
@@ -186,4 +186,93 @@ export class Return extends Node {
     public toWast(indent: string): string {
         return indent + "return";
     }       
+}
+
+export class GetLocal extends Node {
+    constructor(index: number) {
+        super();
+        this.index = index;
+    }
+
+    public get op(): string {
+        return "get_local";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "get_local " + this.index.toString();
+    }
+
+    public index: number;
+}
+
+export class GetGlobal extends Node {
+    constructor(index: number) {
+        super();
+        this.index = index;
+    }
+
+    public get op(): string {
+        return "get_global";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "get_global " + this.index.toString();
+    }
+    
+    public index: number;
+}
+
+export class SetLocal extends Node {
+    constructor(index: number) {
+        super();
+        this.index = index;
+    }
+
+    public get op(): string {
+        return "set_local";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "set_local " + this.index.toString();
+    }
+
+    public index: number;
+}
+
+export class SetGlobal extends Node {
+    constructor(index: number) {
+        super();
+        this.index = index;
+    }
+
+    public get op(): string {
+        return "set_global";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "set_global " + this.index.toString();
+    }
+    
+    public index: number;
+}
+
+export class Load extends Node {
+    constructor(type: StackType, asType: null | "8s" | "8u" | "16s" | "16u" | "32s" | "32u" = null, offset: number = 0) {
+        super();
+        this.type = type;
+        this.asType = asType;
+        this.offset = offset;
+    }
+
+    public get op(): string {
+        return "load";
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + ".load" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? "offset=" + this.offset.toString() : "");
+    }       
+
+    public type: StackType;
+    public offset: number;
+    public asType: null | "8s" | "8u" | "16s" | "16u" | "32s" | "32u"; 
 }
