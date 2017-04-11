@@ -199,6 +199,43 @@ export class CodeGenerator {
                 }
                 return code;
             }
+            case "%":
+            {
+                let code = this.processExpression(f, scope, enode.lhs);
+                code = code.concat(this.processExpression(f, scope, enode.rhs));
+                let storage = this.stackTypeOf(enode.type);
+                let opcode: "rem_u" | "rem_s" = this.isSigned(enode.type) ? "rem_s" : "rem_u";
+                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), opcode));
+                return code;
+            }
+            case "|":
+            case "&":
+            case "^":
+            {
+                let opcode: "or" | "xor" | "and" = enode.op == "|" ? "or" : (enode.op == "&" ? "and" : "xor");
+                let code = this.processExpression(f, scope, enode.lhs);
+                code = code.concat(this.processExpression(f, scope, enode.rhs));
+                let storage = this.stackTypeOf(enode.type);
+                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), opcode));
+                return code;
+            }
+            case "&^":
+            {
+                let code = this.processExpression(f, scope, enode.lhs);
+                code = code.concat(this.processExpression(f, scope, enode.rhs));
+                let storage = this.stackTypeOf(enode.type);
+                code.push(new wasm.Constant(storage as ("i32" | "i64"), -1));
+                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
+                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "and"));
+                return code;
+            }
+            case "unary!":
+            {
+                let code = this.processExpression(f, scope, enode.rhs);
+                code.push(new wasm.Constant("i32", 1));
+                code.push(new wasm.BinaryIntInstruction("i32", "xor"));
+                return code;                
+            }
             case "id":
                 let element = scope.resolveElement(enode.value);
                 let code: Array<wasm.Node> = [];

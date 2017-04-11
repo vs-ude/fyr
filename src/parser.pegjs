@@ -235,7 +235,7 @@ semicolon
 statement
   = "break" { return new ast.Node({loc: location(), op: "break"}); }
   / "continue" { return new ast.Node({loc: location(), op: "continue"}); }
-  / "return" e:expressionList? {
+  / "return" [ \t]* e:expressionList? {
       if (e && e.length == 1) {
           e = e[0];
       } else if (e) {
@@ -505,7 +505,7 @@ elseBranch
   / b: block { return new ast.Node({loc: location(), op: "else", statements: b}); } 
 
 expression
-  = c: comparison { return c; }
+  = c: logicOr { return c; }
 
 expressionList
   = e:expression [ \t]* r:("," [ \t\n]* expression [ \t]*)* {
@@ -520,17 +520,17 @@ expressionList
     }
 
 logicOr
-  = left: logicAnd ("||" [ \t\n]* right: logicOr)? {
-      if (right) {
-         return new ast.Node({loc: location(), op: "||", lhs: left, rhs: right});
+  = left: logicAnd r:("||" [ \t\n]* logicOr)? {
+      if (r) {
+         return new ast.Node({loc: location(), op: "||", lhs: left, rhs: r[2]});
       }
       return left;
   }
 
 logicAnd
-  = left: comparison ("&&" [ \t\n]* right: logicAnd)? {
-      if (right) {
-         return new ast.Node({loc: location(), op: "&&", lhs: left, rhs: right});
+  = left: comparison r:("&&" [ \t\n]* logicAnd)? {
+      if (r) {
+         return new ast.Node({loc: location(), op: "&&", lhs: left, rhs: r[2]});
       }
       return left;
   }
