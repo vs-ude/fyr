@@ -178,6 +178,27 @@ export class BinaryFloatInstruction extends Node {
     public intOp: BinaryFloatOp;
 }
 
+export type UnaryFloatOp = "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+
+export class UnaryFloatInstruction extends Node {
+    constructor(type: "f32" | "f64", op: UnaryFloatOp) {
+        super();
+        this.intOp = op;
+        this.type = type;
+    }
+
+    public get op(): string {
+        return this.type + "." + this.intOp;
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + "." + this.intOp;
+    }   
+
+    public type: "f32" | "f64";
+    public intOp: UnaryFloatOp;
+}
+
 export class Return extends Node {
     public get op(): string {
         return "return";

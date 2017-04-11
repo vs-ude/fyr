@@ -1,4 +1,4 @@
 func demo() bool {
-    var y = true
-    return !y
+    var x = 5
+    return x == 5
 }
