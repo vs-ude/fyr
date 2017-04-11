@@ -297,3 +297,46 @@ export class Load extends Node {
     public offset: number;
     public asType: null | "8s" | "8u" | "16s" | "16u" | "32s" | "32u"; 
 }
+
+export class If extends Node {
+    constructor(blockType: Array<StackType> = null) {
+        super();
+        this.blockType = blockType;
+    }
+
+    public get op(): string {
+        return "if";
+    }    
+
+    public toWast(indent: string): string {
+        let s = indent + "if";
+        if (this.blockType) {
+            for(let st of this.blockType) {
+                s += " " + st;
+            }
+        }
+        return s;
+    }
+
+    public blockType: Array<StackType>;
+}
+
+export class Else extends Node {
+    public get op(): string {
+        return "else";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "else";
+    }
+}
+
+export class End extends Node {
+    public get op(): string {
+        return "end";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "end";
+    }
+}

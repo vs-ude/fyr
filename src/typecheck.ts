@@ -1627,6 +1627,14 @@ export class TypeChecker {
                     }
                 }
                 break;
+            case "||":
+            case "&&":
+                this.checkExpression(enode.lhs, scope);
+                this.checkExpression(enode.rhs, scope);
+                this.checkIsBool(enode.lhs);
+                this.checkIsBool(enode.rhs);
+                enode.type = this.t_bool;
+                break;
             case "&":
             case "|":
             case "^":
@@ -2095,18 +2103,18 @@ export class TypeChecker {
         throw new TypeError("Expected a string, but got " + node.type.name, node.loc);
     }
 
-    public checkIsBool(node: Node) {
-        if (node.type == this.t_bool) {
-            return;
-        }
-        throw new TypeError("Expected a bool, but got " + node.type.name, node.loc);
-    }
-
     public checkIsSignedNumber(node: Node) {
         if (node.type == this.t_float || node.type == this.t_double || node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64) {
             return;
         }
         throw new TypeError("Expected a signed numeric type, but got " + node.type.name, node.loc);
+    }
+
+    public checkIsBool(node: Node) {
+        if (node.type == this.t_bool) {
+            return;
+        }
+        throw new TypeError("Expected a boolean type, but got " + node.type.name, node.loc);
     }
 
     public checkIsNumber(node: Node) {

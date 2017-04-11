@@ -312,6 +312,26 @@ export class CodeGenerator {
                 code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
                 break;
             }
+            case "||":
+            {
+                this.processExpression(f, scope, enode.lhs, code);
+                code.push(new wasm.If(["i32"]));
+                code.push(new wasm.Constant("i32", 1));
+                code.push(new wasm.Else());
+                this.processExpression(f, scope, enode.rhs, code);
+                code.push(new wasm.End());
+                break;
+            }
+            case "&&":
+            {
+                this.processExpression(f, scope, enode.lhs, code);
+                code.push(new wasm.If(["i32"]));
+                this.processExpression(f, scope, enode.rhs, code);
+                code.push(new wasm.Else());
+                code.push(new wasm.Constant("i32", 0));
+                code.push(new wasm.End());
+                break;
+            }
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
