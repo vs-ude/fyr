@@ -774,9 +774,9 @@ export class TypeChecker {
                         v.name = pnode.name.value;
                         v.type = (f.type.returnType as TupleType).types[i];
                         f.scope.registerElement(v.name, v);
+                        f.namedReturnTypes = true;
                     }
                 }
-                f.namedReturnTypes = true;
             }
         } else {
             f.type.returnType = this.t_void;
@@ -1809,6 +1809,80 @@ export class TypeChecker {
                 enode.type = t;
                 }
                 break;
+            case "=>":
+            {
+                var f = new Function();
+                f.loc = enode.loc;
+                f.node = enode;
+                f.scope = new Scope(scope);
+                f.scope.func = f;
+                f.type = new FunctionType();
+                f.type.loc = enode.loc;
+                enode.scope = f.scope;
+                enode.type = f.type;
+                if (enode.parameters) {
+                    for(let pnode of enode.parameters) {
+                        let original_pnode = pnode;
+                        var p = new FunctionParameter();
+                        if (pnode.op == "ellipsisParam") {
+                            p.ellipsis = true;
+                            pnode = pnode.lhs;
+                        } else if (pnode.op == "defaultParam") {
+                            p.optional = true;
+                            this.checkExpression(pnode.rhs, enode.scope);
+                            pnode = pnode.lhs;
+                        }
+                        if (pnode.name) {
+                            p.name = pnode.name.value;
+                            for(let param of f.type.parameters) {
+                                if (param.name == p.name) {
+                                    throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
+                                }
+                            }
+                        }
+                        p.type = this.createType(pnode, enode.scope);
+                        if (p.ellipsis && !(p.type instanceof SliceType)) {
+                            throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
+                        }
+                        if (p.optional) {
+                            this.checkIsAssignableNode(p.type, original_pnode.rhs);
+                        }
+                        p.loc = pnode.loc;
+                        f.type.parameters.push(p);
+                        f.scope.registerElement(p.name, p);
+                    }
+                }
+                if (enode.lhs) {
+                    f.type.returnType = this.createType(enode.lhs, f.scope);
+                    if (enode.lhs.op == "tupleType") {
+                        for(let i = 0; i < enode.lhs.parameters.length; i++) {
+                            let pnode = enode.lhs.parameters[i];
+                            if (pnode.name) {
+                                let v = new Variable();
+                                v.isResult = true;
+                                v.loc = pnode.loc;
+                                v.name = pnode.name.value;
+                                v.type = (f.type.returnType as TupleType).types[i];
+                                f.scope.registerElement(v.name, v);
+                                f.namedReturnTypes = true;
+                            }
+                        }
+                    }
+                }
+                if (enode.rhs) {
+                    this.checkExpression(enode.rhs, enode.scope);
+                    if (!f.type.returnType) {
+                        f.type.returnType = enode.rhs.type;
+                    } else {
+                        this.checkIsAssignableNode(f.type.returnType, enode.rhs, false);
+                    }
+                } else {
+                    for(let s of enode.statements) {
+                        this.checkStatement(s, enode.scope);
+                    }
+                }
+                break;
+            }
             case "ellipsisId":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
             case "optionalId":

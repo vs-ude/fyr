@@ -2,7 +2,7 @@
 //comment
 func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
                        tuple (int, float), tuple2 (int, bool), arr [3]int, slice []int,
-                       fu (int) => double, t map<string,int>, t2 map<string,int>,
+                       fu func(int) double, t map<string,int>, t2 map<string,int>,
                        en "red" | "green", en2 "green" | "red",
                        o1 int | string | "a" | "b", o2 string | "b" | "a" | int = "x") (r1 int | bool, r2 string) {
     r1 = x
@@ -102,23 +102,23 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
         x++
         break
     }
-    var fx (byte, "a" | "b") => void
+    var fx func (byte, "a" | "b")
     fx(1, "a")
-    var fe (string, ...[]string) => void
+    var fe func (string, ...[]string)
     fe("a", "b", "c")
     b == (*p)[0]
     var mapme map<*string, bool>
     bo == mapme[p]
-    var fa([]int) => void
+    var fa func([]int)
     fa([1,2,3])
-    var fb(bool | int) => void
+    var fb func(bool | int)
     fb(x)
     var [q1, q2 int | bool] = [1, 2]
-    var fopt(int, string?) => void
+    var fopt func(int, string?)
     fopt(5)
     var o3 int | "a" | "b" = x
     var o4 int | "a" | "b" = "a"
-    var fc([][]int) => void
+    var fc func([][]int)
     fc([[1,2],[3, 4]])
     var jsonarr = [1, 2, 3]
     jsonarr == j
@@ -153,5 +153,6 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
     {x: ox3, y?: oy3, ...or3}, _ = j
     s += "Hallo"
     x += 1   
+    var lambda = func(a string, b string) => a + b
     return (2, "Hallo")
 }

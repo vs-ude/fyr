@@ -55,8 +55,8 @@ func f(x int) {
     var x *int
     var x [][]int
     var x (int, bool)
-    var x (int) => bool
-    var x (int, []int) => (bool, error)
+    var x func (int) bool
+    var x func (int, []int) (bool, error)
     var json = []
     var json = [4,a+b]
     [a, _, x?, ...remainder], err = someJson
@@ -75,8 +75,8 @@ func f(x int) {
         return a
     }
     return a, b
-    f(()=>a+b, 12)
-    f((int a)=>{
+    f(func()=>a+b, 12)
+    f( func(int a) int => {
         return a + b
     });
     var a map<string,bool>

@@ -135,28 +135,20 @@ andType
     }
 
 primitiveType
-  = "[" [ \t\n]* e:expression? "]" [ \t]* t:type {
+  = "[" [ \t]* e:expression? "]" [ \t]* t:type {
       if (e) {
           return new ast.Node({loc: location(), op: "arrayType", rhs: t, lhs: e})
       }
       return new ast.Node({loc: location(), op: "sliceType", rhs: t})
     }
-  / "(" [ \t\n]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" f:([ \t]* "=>" [ \t]* type)? {
-      if (f) {
-          if (e) {
-              t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
-          }
-          return new ast.Node({loc: location(), op: "funcType", parameters:t, rhs: f[3]});      
-      }
-      if (e) {
-          error("'...' is not allowed in a tuple type definition");
-      }
-      for(let x of t) {
-          if (x.op == "defaultParam") {
-              error("'?' is not allowed in a tuple type definition");
-          }
-      }
+  / "(" [ \t]* t:typeList [ \t]* ")" {
       return new ast.Node({loc: location(), op: "tupleType", parameters: t});
+    }
+  / "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:type? {
+      if (e) {
+        t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
+      }
+      return new ast.Node({loc: location(), op: "funcType", parameters: t, rhs: f});      
     }
   / "*" [ \t]* t:type {
       return new ast.Node({loc: location(), op: "pointerType", rhs: t});
@@ -617,17 +609,20 @@ primary2
       return i;
     }
   / s: string { return s; }
-  / "(" [ \t\n]* e: expressionList ")" !([ \t]* "=>") {
+  / "(" [ \t\n]* e: expressionList ")" {
       if (e.length == 1) {
           return e[0];
       }
       return new ast.Node({loc: location(), op: "tuple", parameters: e});
     }
-  / "(" [ \t\n]* p:parameters? ")" [ \t]* "=>" [ \t]* b:(block / expression) {
+  / "func" [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:type? [ \t]* "=>" [ \t]* b:(block / expression) {
       if (b.op) {
-          return new ast.Node({loc: location(), op: "=>", parameters: p, rhs: b});
+          return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, rhs: b});
       }
-      return new ast.Node({loc: location(), op: "=>", parameters: p, statements: b});
+      if (!t) {
+          expected("type following '=>'");
+      }
+      return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, statements: b});
     }
   / o:object { return o; }
   / a:array { return a; }
