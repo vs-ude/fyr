@@ -16,11 +16,20 @@
     }
 }
 
-funcDef
-  = c:comments f:func {
-      f.comments = c;
-      return f;
-  }
+module
+  = m:(comments / func / $("\n"+))* {
+        let result = [];
+        for(let i = 0; i < m.length; i++) {
+            let x = m[i];
+            if (x.op == "func") {
+                if (i > 0 && (m[i-1] instanceof Array)) {
+                    x.comments = m[i-1];
+                }
+                result.push(x);
+            }
+        }
+        return new ast.Node({loc: location(), op: "module", statements: result});
+    }
 
 func
   = "func" [ \t]* n:identifier? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
@@ -205,7 +214,7 @@ statementOrComment
   / s:statement c:semicolon { if (c) { s.comments = [c]; } return s; } 
 
 comments
-  = c:([ \t]* comment)* {
+  = c:([ \t]* comment)+ {
       if (c) {
         let result = [];
         for(let x of c) {

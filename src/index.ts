@@ -20,13 +20,12 @@ function compileModules() {
 //        console.log("Compiling " + arg + "...");
         let code = fs.readFileSync(arg, 'utf8');
         try {
-            let fnode = parser.parse(code);
+            let mnode = parser.parse(code);
 //            console.log(fnode.stringify(""));
             let tc = new typecheck.TypeChecker();
-            let scope = tc.createScope();
-            let f = tc.createFunction(fnode, scope);
+            let scope = tc.checkModule(mnode);
             let cg = new codegen.CodeGenerator(tc);
-            cg.processFunction(f, true);
+            cg.processModule(scope);
             console.log(cg.module.toWast(""));
         } catch(ex) {
             if (ex instanceof parser.SyntaxError) {

@@ -19,5 +19,5 @@ Running `npm build:parser` will only generate fresh JavaScript from the `parser.
 ## Running the compiler
 
 ```
-node ./lib/index.js compile examples/examples3.wl
+node ./lib/index.js compile examples/example3.wl
 ```

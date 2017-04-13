@@ -783,7 +783,6 @@ export class TypeChecker {
         }
 
         scope.registerElement(f.name, f);
-        this.checkFunctionBody(f);
 
         return f;
     }
@@ -803,6 +802,22 @@ export class TypeChecker {
             scope.registerElement(v.name, v);
         }
         return v;
+    }
+
+    public checkModule(mnode: Node): Scope {
+        let scope = this.createScope();
+        for(let fnode of mnode.statements) {
+            this.createFunction(fnode, scope);
+        }
+        for(let key of scope.elements.keys()) {
+            let e = scope.elements.get(key);
+            if (e instanceof Function) {
+                this.checkFunctionBody(e);
+            } else {
+                throw "Implementation error " + e;
+            }
+        }
+        return scope;
     }
 
     public checkFunctionBody(f: Function) {

@@ -7,6 +7,17 @@ export class CodeGenerator {
         this.tc = tc;
     }
 
+    public processModule(scope: Scope) {
+        for(let name of scope.elements.keys()) {
+            let e = scope.elements.get(name);
+            if (e instanceof Function) {
+                this.processFunction(e, true);
+            } else {
+                throw "CodeGen: Implementation Error " + e
+            }
+        }
+    }
+
     public processFunction(f: Function, exportFunc: boolean = false) {
         let func = new wasm.Function(f.name);
         this.processScope(func, f.scope);
@@ -47,6 +58,8 @@ export class CodeGenerator {
                 } else {
                     // TODO
                 }
+            } else {
+                throw "CodeGen: Implementation Error " + e
             }
         }
     }
