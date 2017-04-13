@@ -4,7 +4,7 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
                        tuple (int, float), tuple2 (int, bool), arr [3]int, slice []int,
                        fu func(int) double, t map<string,int>, t2 map<string,int>,
                        en "red" | "green", en2 "green" | "red",
-                       o1 int | string | "a" | "b", o2 string | "b" | "a" | int = "x") (r1 int | bool, r2 string) {
+                       o1 int | string | "a" | "b", o2 string | "b" | "a" | int) (r1 int | bool, r2 string) {
     r1 = x
     r2 == "Welt"
     +x + z
@@ -24,7 +24,6 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
     t == t2
     y == fu(x)
     f<int, double>(x, y, z, b, s, bo, p, tuple, tuple2, arr, slice, fu, t, t2, en, en2, o1, o2)
-    f<int, double>(x, y, z, b, s, bo, p, tuple, tuple2, arr, slice, fu, t, t2, en, en2, o1)
     en == en2
     o1 == o2
     b == 1 + 2 ^ 7
@@ -114,8 +113,8 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
     var fb func(bool | int)
     fb(x)
     var [q1, q2 int | bool] = [1, 2]
-    var fopt func(int, string?)
-    fopt(5)
+    var fopt func(int, string)
+    fopt(5, "x")
     var o3 int | "a" | "b" = x
     var o4 int | "a" | "b" = "a"
     var fc func([][]int)

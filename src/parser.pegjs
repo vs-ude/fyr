@@ -34,15 +34,9 @@ module
 func
   = "func" [ \t]* n:identifier? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
-          let optional = false;
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
                   error("'...' can only be attached to the last parameter");
-              } else if (p[i].op == "defaultParam") {
-                  optional = true;
-              }
-              if (optional && p[i].op != "defaultParam" && p[i].op != "ellipsisParam") {
-                  error("parameter without default values follows parameter with default value");
               }
           }
       }
@@ -62,18 +56,17 @@ parameters
     }
 
 parameter
-  = n:namedType e:([ \t]* "=" [ \t]* expression)? {
-      if (e) {
-          return new ast.Node({loc: location(), op: "defaultParam", lhs: n, rhs: e[3]});          
-      }
-      return n;
+  = n:identifier [ \t]* t:type {
+      t.name = n;
+      return t;
     }
-  / "..." [ \t]* n:namedType {
-      return new ast.Node({loc: location(), op: "ellipsisParam", lhs: n});
+  / "..." [ \t]* n:identifier [ \t]* t:type {
+      t.name = n;
+      return new ast.Node({loc: location(), op: "ellipsisParam", lhs: t});
     }
 
 funcTypeParameters
-  = p:funcTypeParameter r:([ \t]* "," [ \t\n]* funcTypeParameter)* [ \t]* {
+  = p:type r:([ \t]* "," [ \t\n]* type)* [ \t]* {
       if (r) {
         let result = [p];
         for(let x of r) {
@@ -82,14 +75,6 @@ funcTypeParameters
         return result;
       }
       return [p];
-    }
-
-funcTypeParameter
-  = n:type e:([ \t]* "?")? {
-      if (e) {
-          return new ast.Node({loc: location(), op: "defaultParam", lhs: n});          
-      }
-      return n;
     }
 
 genericParameters
@@ -174,7 +159,7 @@ primitiveType
     }
 
 namedType
-  = n:identifier [ \t]+ t:type {
+  = n:identifier [ \t]* t:type {
       t.name = n;
       return t;
     }
@@ -644,12 +629,12 @@ primary2
       }
       return new ast.Node({loc: location(), op: "tuple", parameters: e});
     }
-  / "func" [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:type? [ \t]* "=>" [ \t]* b:(block / expression) {
-      if (b.op) {
-          return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, rhs: b});
+  / "func" [ \t]* "(" [ \t]* p:parameters? ")" [ \t]* t:type? [ \t]* b:(block / ("=>" [ \t]* expression)) {
+      if (b.length > 1 && b[0] == "=>") {
+          return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, rhs: b[2]});
       }
       if (!t) {
-          expected("type following '=>'");
+          expected("return type in lambda expression");
       }
       return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, statements: b});
     }

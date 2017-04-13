@@ -626,7 +626,7 @@ export class CodeGenerator {
                     t = enode.lhs.type as FunctionType;
                 }
                 
-                if (t.hasVariableParameterList()) {
+                if (t.hasEllipsis()) {
                     throw "TODO"
                 } else {
                     for(let pnode of enode.parameters) {

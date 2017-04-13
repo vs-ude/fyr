@@ -40,7 +40,7 @@ func f(x int) {
     }
     f = func(a int, b string) (int, error) {
     }
-    f = func(a int, b string, bool) (x int, y error) {
+    f = func(a int, b string, bo bool) (x int, y error) {
         var z int, x string = foo();
         const w = foo()
         a, _ = foo()
@@ -76,7 +76,7 @@ func f(x int) {
     }
     return a, b
     f(func()=>a+b, 12)
-    f( func(int a) int => {
+    f( func(int a) int {
         return a + b
     });
     var a map<string,bool>

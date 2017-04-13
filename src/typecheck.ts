@@ -163,7 +163,6 @@ export class InterfaceType extends Type {
 export class FunctionParameter implements ScopeElement {
     public name: string;
     public ellipsis: boolean;
-    public optional: boolean;
     public type: Type;
     public loc: Location;
 
@@ -187,9 +186,6 @@ export class FunctionType extends Type {
                 name += "...";
             }
             name += p.type.name;
-            if (p.optional) {
-                name += "?";
-            }
         }
         name += ") => " + this.returnType.name;
         return name;
@@ -206,21 +202,11 @@ export class FunctionType extends Type {
     public requiredParameterCount(): number {
         let i = 0;
         for(let t of this.parameters) {
-            if (!t.optional && !t.ellipsis) {
+            if (!t.ellipsis) {
                 i++;
             }
         }
         return i;
-    }
-
-    public hasVariableParameterList(): boolean {
-        let i = 0;
-        for(let t of this.parameters) {
-            if (t.optional || t.ellipsis) {
-                return true;
-            }
-        }
-        return false;        
     }
 
     public returnType: Type;
@@ -548,27 +534,12 @@ export class TypeChecker {
         } else if (tnode.op == "funcType") {
             let t = new FunctionType();
             t.loc = tnode.loc;
-            let hasOptional = false;
             if (tnode.parameters) {
                 for(let pnode of tnode.parameters) {
                     var p = new FunctionParameter();
                     if (pnode.op == "ellipsisParam") {
                         p.ellipsis = true;
                         pnode = pnode.lhs;
-                    } else if (pnode.op == "defaultParam") {
-                        p.optional = true;
-                        pnode = pnode.lhs;
-                        hasOptional = true;
-                    } else if (hasOptional) {
-                        throw new TypeError("Required function parameter following optional function parameter", pnode.loc);
-                    }
-                    if (pnode.name) {
-                        p.name = pnode.name.value;
-                        for(let param of t.parameters) {
-                            if (param.name == p.name) {
-                                throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
-                            }
-                        }
                     }
                     p.type = this.createType(pnode, scope);
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
@@ -635,13 +606,8 @@ export class TypeChecker {
                         if (pnode.op == "ellipsisParam") {
                             p.ellipsis = true;
                             pnode = pnode.lhs;
-                        } else if (pnode.op == "defaultParam") {
-                            p.optional = true;
-                            pnode = pnode.lhs;
                         }
-                        if (pnode.name) {
-                            p.name = pnode.name.value;
-                        }
+                        p.name = pnode.name.value;
                         p.type = this.createType(pnode, s);
                         p.loc = pnode.loc;
                         ft.parameters.push(p);
@@ -761,25 +727,16 @@ export class TypeChecker {
                 if (pnode.op == "ellipsisParam") {
                     p.ellipsis = true;
                     pnode = pnode.lhs;
-                } else if (pnode.op == "defaultParam") {
-                    p.optional = true;
-                    this.checkExpression(pnode.rhs, f.scope);
-                    pnode = pnode.lhs;
                 }
-                if (pnode.name) {
-                    p.name = pnode.name.value;
-                    for(let param of f.type.parameters) {
-                        if (param.name == p.name) {
-                            throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
-                        }
+                p.name = pnode.name.value;
+                for(let param of f.type.parameters) {
+                    if (param.name == p.name) {
+                        throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
                 p.type = this.createType(pnode, f.scope);
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
-                }
-                if (p.optional) {
-                    this.checkIsAssignableNode(p.type, original_pnode.rhs);
                 }
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
@@ -1474,7 +1431,7 @@ export class TypeChecker {
                 this.checkExpression(snode.rhs, scope);
                 if (snode.op == "+=" && snode.lhs.type == this.t_string) {
                     this.checkIsString(snode.rhs);
-                } else if (snode.lhs.type instanceof PointerType || snode.rhs.type instanceof UnsafePointerType) {
+                } else if (snode.lhs.type instanceof PointerType || snode.lhs.type instanceof UnsafePointerType) {
                     if (snode.op == "*=" || snode.op == "/=") {
                         throw new TypeError("'" + snode.op + "' is an invalid operation on pointers", snode.loc);
                     }
@@ -1939,25 +1896,16 @@ export class TypeChecker {
                         if (pnode.op == "ellipsisParam") {
                             p.ellipsis = true;
                             pnode = pnode.lhs;
-                        } else if (pnode.op == "defaultParam") {
-                            p.optional = true;
-                            this.checkExpression(pnode.rhs, enode.scope);
-                            pnode = pnode.lhs;
                         }
-                        if (pnode.name) {
-                            p.name = pnode.name.value;
-                            for(let param of f.type.parameters) {
-                                if (param.name == p.name) {
-                                    throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
-                                }
+                        p.name = pnode.name.value;
+                        for(let param of f.type.parameters) {
+                            if (param.name == p.name) {
+                                throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                             }
                         }
                         p.type = this.createType(pnode, enode.scope);
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
-                        }
-                        if (p.optional) {
-                            this.checkIsAssignableNode(p.type, original_pnode.rhs);
                         }
                         p.loc = pnode.loc;
                         f.type.parameters.push(p);
