@@ -1459,20 +1459,50 @@ export class TypeChecker {
                 break;
             case "in":
                 this.checkExpression(snode.rhs, scope);
-                // TODO: Check type for enumerability
+                let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
                 if (snode.lhs.op == "tuple") {
-                    this.checkExpression(snode.lhs.parameters[0], scope);
+                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
+                        this.checkExpression(snode.lhs.parameters[0], scope);
+                        this.checkIsLeftHandSide(snode.lhs.parameters[0]);
+                        this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc);
+                    } 
                     this.checkExpression(snode.lhs.parameters[1], scope);
-                    // TODO: Check type
+                    this.checkIsLeftHandSide(snode.lhs.parameters[1]);
+                    this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc);
                 } else {
                     this.checkExpression(snode.lhs, scope);
                     this.checkIsLeftHandSide(snode.lhs);
-                    // TODO: Check type
+                    this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc);
                 }
                 break;
             case "var_in":
             case "const_in":
-                throw "TODO"
+            {
+                this.checkExpression(snode.rhs, scope);
+                let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
+                if (snode.lhs.op == "tuple") {
+                    let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
+                    if (v1.type) {
+                        this.checkIsAssignableType(v1.type, tindex1, snode.loc);
+                    } else {
+                        v1.type = snode.lhs.parameters[0].type;
+                    }
+                    let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
+                    if (v2.type) {
+                        this.checkIsAssignableType(v2.type, tindex1, snode.loc);
+                    } else {
+                        v2.type = snode.lhs.parameters[1].type;
+                    }
+                } else {
+                    let v = this.createVar(snode.lhs, scope, false);
+                    if (v.type) {
+                        this.checkIsAssignableType(v.type, tindex1, snode.loc);
+                    } else {
+                        v.type = snode.lhs.type;
+                    }
+                }
+                break;
+            }
             default:
                 this.checkExpression(snode, scope);
         }
@@ -2126,6 +2156,21 @@ export class TypeChecker {
             return false;
         }
         throw new TypeError("Type " + from.name + " cannot be assigned to type " + to.name, loc);        
+    }
+
+    public checkIsEnumerable(node: Node): [Type, Type] {
+        if (node.type instanceof GenericClassInstanceType) {
+            if (node.type.base == this.t_map) {
+                return [node.type.genericParameterTypes[0], node.type.genericParameterTypes[1]];
+            }
+        } else if (node.type == this.t_string) {
+            return [this.t_int, this.t_byte];
+        } else if (node.type instanceof ArrayType) {
+            return [this.t_int, node.type.elementType];
+        } else if (node.type instanceof SliceType) {
+            return [this.t_int, node.type.elementType];
+        }
+        throw new TypeError("The type " + node.type.name + " is not enumerable", node.loc);
     }
 
     public checkIsIndexable(node: Node, index: number): Type {

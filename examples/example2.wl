@@ -154,5 +154,33 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
     s += "Hallo"
     x += 1   
     var lambda = func(a string, b string) => a + b
+    s = lambda("Foo", "Bar")
+    for (s, j in obj) {
+        continue
+    }
+    for (_, j in obj) {
+        continue
+    }
+    for (s in obj) {
+        break
+    }
+    for (var s string, j json in obj) {
+        continue
+    }
+    for (var _, j json in obj) {
+        continue
+    }
+    for (var s string in obj) {
+        break
+    }
+    for (var a, b in obj) {
+        continue
+    }
+    for (var _, b in obj) {
+        continue
+    }
+    for (var a in obj) {
+        break
+    }
     return (2, "Hallo")
 }

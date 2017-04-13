@@ -371,16 +371,27 @@ varStatement
             }
             return new ast.Node({loc: location(), op: "var", lhs: i});
         }
-        if (a[0] == "in " && i.op == "tuple" && i.parameters.length > 2) {
-            error("too many identifiers left of 'in'");
-        }
-        if (a[0] == "in" && (i.op == "array" || i.op == "object")) {
-            error("array or object not allowed in this context")
-        }
 
         if (a[0] == "in ") {
+            if (i.op == "array" || i.op == "object") {
+                error("array or object not allowed in this context")
+            }
+            if (i.op == "tuple") {
+                if (i.parameters.length > 2) {
+                    error("too many identifiers left of 'in'");
+                }
+                if (i.parameters[0].op != "id") {
+                    error("expression is not allowed on left-hand side of an assignment when used together with 'in'");
+                }
+                if (i.parameters[1].op != "id") {
+                    error("expression is not allowed on left-hand side of an assignment when used together with 'in'");
+                }
+            } else if (i.op != "id") {
+                error("expression is not allowed on left-hand side of an assignment when used together with 'in'");
+            }
             return new ast.Node({loc: location(), op: o + "_in" ,lhs: i, rhs: a[2]});
         }
+
         return new ast.Node({loc: location(), op: o, lhs: i, rhs: a[2]});
     }
 
@@ -406,6 +417,9 @@ varIdentifier
     }
   / e:"..."? [ \t]* i:("_" / identifier) [ \t]* o:"?"? [ \t]* t:type? {
       if (i == "_") {
+          if (t) {
+              error("The placeholder '_' must not have a type");
+          }
           i = new ast.Node({loc: location(), op: "id", value: "_"});
       }
       if (t) {
