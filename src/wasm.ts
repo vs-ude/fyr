@@ -158,6 +158,27 @@ export class BinaryIntInstruction extends Node {
     public intOp: BinaryIntOp;
 }
 
+export type UnaryIntOp = "eqz" | "clz" | "ctz" | "popcnt";
+
+export class UnaryIntInstruction extends Node {
+    constructor(type: "i32" | "i64", op: UnaryIntOp) {
+        super();
+        this.intOp = op;
+        this.type = type;
+    }
+
+    public get op(): string {
+        return this.type + "." + this.intOp;
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + "." + this.intOp;
+    }   
+
+    public type: "i32" | "i64";
+    public intOp: UnaryIntOp;
+}
+
 export type BinaryFloatOp = "add" | "sub" | "mul" | "div" | "eq" | "ne" | "le" | "lt" | "ge" | "gt" | "min" | "max";
 
 export class BinaryFloatInstruction extends Node {
@@ -332,6 +353,26 @@ export class Else extends Node {
     }
 }
 
+export class Block extends Node {
+    public get op(): string {
+        return "block";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "block";
+    }
+}
+
+export class Loop extends Node {
+    public get op(): string {
+        return "loop";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "loop";
+    }
+}
+
 export class End extends Node {
     public get op(): string {
         return "end";
@@ -357,4 +398,38 @@ export class Call extends Node {
     }
 
     public index: number;
+}
+
+export class Br extends Node {
+    constructor(depth: number) {
+        super();
+        this.depth = depth;
+    }
+
+    public get op(): string {
+        return "br";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "br " + this.depth.toString();
+    }
+
+    public depth: number;
+}
+
+export class BrIf extends Node {
+    constructor(depth: number) {
+        super();
+        this.depth = depth;
+    }
+
+    public get op(): string {
+        return "br_if";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "br_if " + this.depth.toString();
+    }
+
+    public depth: number;
 }

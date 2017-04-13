@@ -497,14 +497,17 @@ assignOp
   / "in"
 
 forCondition
-  = left: simpleStatement r:(";" expression? ";" simpleStatement?)? {
+  = left: simpleStatement r:(";" [ \t]* expression? ";" [ \t]* simpleStatement?)? {
       if (r) {
-          return new ast.Node({loc: location(), op: ";;", lhs: left, condition: r[1], rhs: r[3]});
+          return new ast.Node({loc: location(), op: ";;", lhs: left, condition: r[2], rhs: r[5]});
       }
       if (isAssignment(left) && left.op != "in" && left.op != "var_in" && left.op != "const_in") {
         error("assignment is not allowed in the condition branch of a 'for' loop");
       }
       return left;
+    }
+  / ";" e:expression? ";" s:simpleStatement? {
+        return new ast.Node({loc: location(), op: ";;", condition: e, rhs: s});
     }
 
 elseBranch

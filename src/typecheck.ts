@@ -1412,10 +1412,16 @@ export class TypeChecker {
                 forScope.forLoop = true;
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
-                        this.checkStatement(snode.condition.lhs, forScope);
-                        this.checkExpression(snode.condition.condition, forScope);
-                        this.checkTypeEquality(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc);
-                        this.checkStatement(snode.condition.rhs, forScope);
+                        if (snode.condition.lhs) {
+                            this.checkStatement(snode.condition.lhs, forScope);
+                        }
+                        if (snode.condition.condition) {
+                            this.checkExpression(snode.condition.condition, forScope);
+                            this.checkTypeEquality(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc);
+                        }
+                        if (snode.condition.rhs) {
+                            this.checkStatement(snode.condition.rhs, forScope);
+                        }
                     } else {
                         this.checkStatement(snode.condition, forScope);
                     }

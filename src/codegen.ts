@@ -79,6 +79,8 @@ export class CodeGenerator {
 
     public processStatement(f: Function, scope: Scope, snode: Node, wf: wasm.Function, code: Array<wasm.Node>) {
         switch(snode.op) {
+            case "comment":
+                break;
             case "if":
             {
                 this.processScope(wf, snode.scope);
@@ -161,7 +163,71 @@ export class CodeGenerator {
                 } else if (snode.lhs.op == "object") {
                     throw "TODO"                        
                 } else {
-                    throw "Impl error"
+                    throw "TODO"                        
+                }
+                break;
+            }
+            case "/=":
+            case "%=":
+            case ">>=":
+            case "*=":
+            case "-=":
+            case "+=":
+            case "&=":
+            case "&^=":
+            case "^=":
+            case "|=":
+            case "<<=":
+            {
+                if (snode.lhs.op == "id") {
+                    let element = scope.resolveElement(snode.lhs.value);
+                    if (this.isRegisterSize(element.type)) {
+                        this.loadElementOnStack(element, code);
+                        this.processExpression(f, scope, snode.rhs, code);
+                        let storage = this.stackTypeOf(element.type);
+                        if (storage == "i32" || storage == "i64") {
+                            if (snode.op == "+=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "add"));
+                            } else if (snode.op == "-=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "sub"));                                
+                            } else if (snode.op == "*=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "mul"));
+                            } else if (snode.op == "&=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "and"));                                
+                            } else if (snode.op == "|=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "or"));          
+                            } else if (snode.op == "^=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));                                
+                            } else if (snode.op == "<<=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "shl"));                                
+                            } else if (snode.op == "&^=") {
+                                code.push(new wasm.Constant(storage as ("i32" | "i64"), -1));
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "and"));
+                            } else if (snode.op == "/=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), this.isSigned(element.type) ? "div_s" : "div_u"));                                
+                            } else if (snode.op == "%=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), this.isSigned(element.type) ? "rem_s" : "rem_u"));                                
+                            } else if (snode.op == ">>=") {
+                                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), this.isSigned(element.type) ? "shr_s" : "shr_u"));                                
+                            }
+                        } else {
+                            if (snode.op == "+=") {
+                                code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "add"));
+                            } else if (snode.op == "-=") {
+                                code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "sub"));                                
+                            } else if (snode.op == "*=") {
+                                code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "mul"));
+                            } else if (snode.op == "/=") {
+                                code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "div"));                                
+                            }
+                        }
+                        this.storeElementFromStack(element, code);
+                    } else {
+                        throw "TODO string add";
+                    }
+                } else {
+                    throw "TODO"          
                 }
                 break;
             }
@@ -182,6 +248,66 @@ export class CodeGenerator {
                 } else {
                     throw "TODO";
                 }
+                break;
+            }
+            case "for":
+            {
+                this.processScope(wf, snode.scope);
+                if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
+                    this.processStatement(f, snode.scope, snode.condition.lhs, wf, code);
+                }
+                code.push(new wasm.Block());
+                code.push(new wasm.Loop());
+                if (snode.condition) {
+                    if (snode.condition.op == ";;") {
+                        if (snode.condition.condition) {
+                            this.processExpression(f, snode.scope, snode.condition.condition, code);
+                            code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
+                            code.push(new wasm.BrIf(1));         
+                        }
+                    } else if (snode.condition.op == "in") {
+                        throw "TODO"
+                    } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
+                        throw "TODO"
+                    } else {
+                        this.processExpression(f, snode.scope, snode.condition, code);
+                        code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
+                        code.push(new wasm.BrIf(1));
+                    }
+                }
+                code.push(new wasm.Block());
+                for(let s of snode.statements) {
+                    this.processStatement(f, snode.scope, s, wf, code);
+                }
+                code.push(new wasm.End());
+                if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
+                    this.processStatement(f, snode.scope, snode.condition.rhs, wf, code);
+                }
+                code.push(new wasm.Br(0));
+                code.push(new wasm.End());
+                code.push(new wasm.End());
+                break;
+            }
+            case "continue":
+            {
+                let blocks = 0;
+                let s = scope;
+                while(s && !s.forLoop) {
+                    blocks++;
+                    s = s.parent;
+                }
+                code.push(new wasm.Br(blocks));
+                break;
+            }
+            case "break":
+            {
+                let blocks = 2;
+                let s = scope;
+                while(s && !s.forLoop) {
+                    blocks++;
+                    s = s.parent;
+                }
+                code.push(new wasm.Br(blocks));
                 break;
             }
             case "return":
@@ -374,8 +500,7 @@ export class CodeGenerator {
             case "unary!":
             {
                 this.processExpression(f, scope, enode.rhs, code);
-                code.push(new wasm.Constant("i32", 1));
-                code.push(new wasm.BinaryIntInstruction("i32", "xor"));
+                code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
                 break;                
             }
             case "unary+":
