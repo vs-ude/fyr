@@ -40,7 +40,7 @@ export class Module extends Node {
     }
 
     public stackSize = 0;
-    public heapSize = 0;
+    public heapSize = 1;
     public funcs: Array<Function> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
     public dataSize: number = 0;
@@ -300,7 +300,7 @@ export class SetGlobal extends Node {
 }
 
 export class Load extends Node {
-    constructor(type: StackType, asType: null | "8s" | "8u" | "16s" | "16u" | "32s" | "32u" = null, offset: number = 0) {
+    constructor(type: StackType, asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null, offset: number = 0) {
         super();
         this.type = type;
         this.asType = asType;
@@ -317,7 +317,28 @@ export class Load extends Node {
 
     public type: StackType;
     public offset: number;
-    public asType: null | "8s" | "8u" | "16s" | "16u" | "32s" | "32u"; 
+    public asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u"; 
+}
+
+export class Store extends Node {
+    constructor(type: StackType, asType: null | "8"| "16" | "32" = null, offset: number = 0) {
+        super();
+        this.type = type;
+        this.asType = asType;
+        this.offset = offset;
+    }
+
+    public get op(): string {
+        return "store";
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + ".store" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? "offset=" + this.offset.toString() : "");
+    }       
+
+    public type: StackType;
+    public offset: number;
+    public asType: null | "8" | "16" | "32"; 
 }
 
 export class If extends Node {

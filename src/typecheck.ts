@@ -521,7 +521,7 @@ export class TypeChecker {
             t.name = "*" + t.elementType.name;
             return t;
         } else if (tnode.op == "unsafePointerType") {
-            let t = new PointerType(this.createType(tnode.rhs, scope));
+            let t = new UnsafePointerType(this.createType(tnode.rhs, scope));
             t.name = "#" + t.elementType.name;
             return t;
         } else if (tnode.op == "sliceType") {
@@ -2472,7 +2472,7 @@ export class TypeChecker {
     }
 
     public checkIsLeftHandSide(node: Node, doNotThrow: boolean = false): boolean {
-        if (node.op == "id" || node.op == ".") {
+        if (node.op == "id" || node.op == "." || node.op == "unary*") {
             return true;
         }
         if (node.op == "[" && node.type != this.t_string) {

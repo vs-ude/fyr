@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, FunctionType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, Type, UnsafePointerType, FunctionType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as wasm from "./wasm"
 
 export class CodeGenerator {
@@ -156,6 +156,38 @@ export class CodeGenerator {
                     } else {
                         throw "TODO";
                     }
+                } else if (snode.lhs.op == "unary*") {
+                    this.processExpression(f, scope, snode.lhs.rhs, code);
+                    if (this.isRegisterSize(snode.lhs.type)) {
+                        this.processExpression(f, scope, snode.rhs, code);
+                        this.storeHeapWordFromStack(snode.lhs.type, 0, code);
+                    } else {
+                        throw "TODO";
+                    }
+                } else if (snode.lhs.op == "[") {
+                    if (snode.lhs.lhs.type instanceof UnsafePointerType) {
+                        this.processExpression(f, scope, snode.lhs.lhs, code);
+                        if (this.isRegisterSize(snode.lhs.lhs.type.elementType)) {
+                            let size = this.sizeOf(snode.lhs.lhs.type.elementType);
+                            let offset: number = 0;
+                            if (snode.lhs.rhs.op == "int") {
+                                offset = parseInt(snode.lhs.rhs.value) * size;
+                            } else {
+                                this.processExpression(f, scope, snode.lhs.rhs, code);
+                                if (size > 1) {
+                                    code.push(new wasm.Constant("i32", size));
+                                    code.push(new wasm.BinaryIntInstruction("i32", "mul"));                                
+                                }
+                                code.push(new wasm.BinaryIntInstruction("i32", "add"));                   
+                            }
+                            this.processExpression(f, scope, snode.rhs, code);
+                            this.storeHeapWordFromStack(snode.lhs.lhs.type.elementType, offset, code);
+                        } else {
+                            throw "TODO"
+                        }
+                    } else {
+                        throw "TODO"
+                    }
                 } else if (snode.lhs.op == "tuple") {
                     throw "TODO"
                 } else if (snode.lhs.op == "array") {
@@ -239,7 +271,11 @@ export class CodeGenerator {
                     if (this.isRegisterSize(element.type)) {
                         this.loadElementOnStack(element, code);
                         let storage = this.stackTypeOf(element.type);
-                        code.push(new wasm.Constant(storage, 1));
+                        let increment = 1;
+                        if (element.type instanceof UnsafePointerType) {
+                            increment = this.sizeOf(element.type.elementType);
+                        }
+                        code.push(new wasm.Constant(storage, increment));
                         code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), snode.op == "++" ? "add" : "sub"));
                         this.storeElementFromStack(element, code);                        
                     } else {
@@ -351,7 +387,7 @@ export class CodeGenerator {
         switch(enode.op) {
             case "int":
             case "float":
-                if (enode.type == this.tc.t_int8 || enode.type == this.tc.t_int16 || enode.type == this.tc.t_int32) {
+                if (enode.type == this.tc.t_int8 || enode.type == this.tc.t_int16 || enode.type == this.tc.t_int32 || enode.type instanceof UnsafePointerType) {
                     code.push(new wasm.Constant("i32", parseInt(enode.value)));
                 } else if (enode.type == this.tc.t_int64) {
                     code.push(new wasm.Constant("i64", parseInt(enode.value)));                    
@@ -530,6 +566,21 @@ export class CodeGenerator {
                 code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
                 break;
             }
+            case "unary*":
+            {
+                this.processExpression(f, scope, enode.rhs, code);
+                if (enode.rhs.type instanceof UnsafePointerType) {
+                    let storage = this.stackTypeOf(enode.rhs.type.elementType);
+                    if (this.isRegisterSize(enode.rhs.type.elementType)) {
+                        this.loadHeapWordOnStack(enode.rhs.type.elementType, 0, code);
+                    } else {
+                        throw "TODO"
+                    }
+                } else {
+                    throw "TODO"
+                }                                
+                break;
+            }
             case "||":
             {
                 this.processExpression(f, scope, enode.lhs, code);
@@ -590,6 +641,32 @@ export class CodeGenerator {
                 }
                 break;
             }
+            case "[":
+            {
+                if (enode.lhs.type instanceof UnsafePointerType) {
+                    this.processExpression(f, scope, enode.lhs, code);
+                    if (this.isRegisterSize(enode.lhs.type.elementType)) {
+                        let size = this.sizeOf(enode.lhs.type.elementType);
+                        let offset: number = 0;
+                        if (enode.rhs.op == "int") {
+                            offset = parseInt(enode.rhs.value) * size;
+                        } else {
+                            this.processExpression(f, scope, enode.rhs, code);
+                            if (size > 1) {
+                                code.push(new wasm.Constant("i32", size));
+                                code.push(new wasm.BinaryIntInstruction("i32", "mul"));                                
+                            }
+                            code.push(new wasm.BinaryIntInstruction("i32", "add"));                   
+                        }
+                        this.loadHeapWordOnStack(enode.lhs.type.elementType, offset, code);
+                    } else {
+                        throw "TODO";
+                    }
+                } else {
+                    throw "TODO";
+                }
+                break;
+            }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
@@ -643,6 +720,56 @@ export class CodeGenerator {
         }
     }
 
+    public loadHeapWordOnStack(t: Type, offset: number, code: Array<wasm.Node>) {
+        let storage = this.stackTypeOf(t);
+        if (t == this.tc.t_int8) {
+            code.push(new wasm.Load(storage, "8_s", offset));
+        } else if (t == this.tc.t_int16) {
+            code.push(new wasm.Load(storage, "16_s", offset));
+        } else if (t == this.tc.t_int32) {
+            code.push(new wasm.Load(storage, null, offset));
+        } else if (t == this.tc.t_int64) {
+            code.push(new wasm.Load(storage, null, offset));
+        } else if (t == this.tc.t_uint8) {
+            code.push(new wasm.Load(storage, "8_u", offset));
+        } else if (t == this.tc.t_uint16) {
+            code.push(new wasm.Load(storage, "16_u", offset));
+        } else if (t == this.tc.t_uint32) {
+            code.push(new wasm.Load(storage, null, offset));
+        } else if (t == this.tc.t_uint64 || t == this.tc.t_float || t == this.tc.t_double) {
+            code.push(new wasm.Load(storage, null, offset));
+        } else if (t instanceof UnsafePointerType) {
+            code.push(new wasm.Load(storage, null, offset));
+        } else {
+            throw "Implementation error";
+        }
+    }
+
+    public storeHeapWordFromStack(t: Type, offset: number, code: Array<wasm.Node>) {
+        let storage = this.stackTypeOf(t);
+        if (t == this.tc.t_int8) {
+            code.push(new wasm.Store(storage, "8", offset));
+        } else if (t == this.tc.t_int16) {
+            code.push(new wasm.Store(storage, "16", offset));
+        } else if (t == this.tc.t_int32) {
+            code.push(new wasm.Store(storage, null, offset));
+        } else if (t == this.tc.t_int64) {
+            code.push(new wasm.Store(storage, null, offset));
+        } else if (t == this.tc.t_uint8) {
+            code.push(new wasm.Store(storage, "8", offset));
+        } else if (t == this.tc.t_uint16) {
+            code.push(new wasm.Store(storage, "16", offset));
+        } else if (t == this.tc.t_uint32) {
+            code.push(new wasm.Store(storage, null, offset));
+        } else if (t == this.tc.t_uint64 || t == this.tc.t_float || t == this.tc.t_double) {
+            code.push(new wasm.Store(storage, null, offset));
+        } else if (t instanceof UnsafePointerType) {
+            code.push(new wasm.Store(storage, null, offset)); 
+        } else {
+            throw "Implementation error";
+        }
+    }
+
     public isSigned(t: Type): boolean {
         if (t == this.tc.t_int8 || t == this.tc.t_int16 || t == this.tc.t_int32 || t == this.tc.t_int64 || t == this.tc.t_float || t == this.tc.t_double) {
             return true;
@@ -666,11 +793,33 @@ export class CodeGenerator {
         if (t == this.tc.t_double) {
             return "f64";
         }
-        throw "CodeGen: Implementation error: The type does not fit in a register"
+        if (t instanceof UnsafePointerType) {
+            return "i32";
+        }
+        throw "CodeGen: Implementation error: The type does not fit in a register " + t.name;
+    }
+
+   public sizeOf(t: Type): number {
+        if (t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8) {
+            return 1;
+        }
+        if (t == this.tc.t_int16 || t == this.tc.t_uint16) {
+            return 2;
+        }
+        if (t == this.tc.t_int32 || t == this.tc.t_uint32 || t == this.tc.t_float || t instanceof UnsafePointerType) {
+            return 4;
+        }
+        if (t == this.tc.t_int64 || t == this.tc.t_uint64 || t == this.tc.t_double) {
+            return 8;
+        }
+        throw "TODO";
     }
 
     public isRegisterSize(t: Type) {
         if (t == this.tc.t_double || t == this.tc.t_float || t == this.tc.t_int64 || this.tc.t_uint64 || t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
+            return true;
+        }
+        if (t instanceof UnsafePointerType) {
             return true;
         }
         return false;
