@@ -8,6 +8,7 @@ func demo() int {
     if (var y = 10; x == y) {
         x = 1
     }
+    x--
     return fibonacci(6, 0, 1)
 }
 

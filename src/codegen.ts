@@ -165,6 +165,25 @@ export class CodeGenerator {
                 }
                 break;
             }
+            case "--":
+            case "++":
+            {
+                if (snode.lhs.op == "id") {
+                    let element = scope.resolveElement(snode.lhs.value);
+                    if (this.isRegisterSize(element.type)) {
+                        this.loadElementOnStack(element, code);
+                        let storage = this.stackTypeOf(element.type);
+                        code.push(new wasm.Constant(storage, 1));
+                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), snode.op == "++" ? "add" : "sub"));
+                        this.storeElementFromStack(element, code);                        
+                    } else {
+                        throw "TODO pointer increment";
+                    }
+                } else {
+                    throw "TODO";
+                }
+                break;
+            }
             case "return":
                 // TODO: Clean up the FYR stack if required
                 if (!snode.lhs) {
