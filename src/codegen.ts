@@ -8,17 +8,29 @@ export class CodeGenerator {
     }
 
     public processModule(scope: Scope) {
+        let index = 0;
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                this.processFunction(e, true);
+                e.storageLocation = "funcTable";
+                e.storageIndex = index++;
+            } else {
+                throw "CodeGen: Implementation Error " + e
+            }
+        }
+
+        for(let name of scope.elements.keys()) {
+            let e = scope.elements.get(name);
+            if (e instanceof Function) {
+                let f = this.processFunction(e, true);
+                f.index = e.storageIndex;
             } else {
                 throw "CodeGen: Implementation Error " + e
             }
         }
     }
 
-    public processFunction(f: Function, exportFunc: boolean = false) {
+    public processFunction(f: Function, exportFunc: boolean = false): wasm.Function {
         let func = new wasm.Function(f.name);
         this.processScope(func, f.scope);
 
@@ -37,6 +49,7 @@ export class CodeGenerator {
             this.module.exports.set(f.name, func);
         } 
         this.module.funcs.push(func);
+        return func;
     }
 
     public processScope(func: wasm.Function, scope: Scope) {
@@ -400,6 +413,36 @@ export class CodeGenerator {
                     this.loadElementOnStack(element, code);
                 } else {
                     throw "TODO"
+                }
+                break;
+            }
+            case "(":
+            {
+                let f: Function;
+                let t: FunctionType;
+                if (enode.lhs.op == "id") {
+                    let e = scope.resolveElement(enode.lhs.value);
+                    if (e instanceof Function) {
+                        f = e;
+                        t = f.type;
+                    }
+                }
+                if (!f) {
+                    t = enode.lhs.type as FunctionType;
+                }
+                
+                if (t.hasVariableParameterList()) {
+                    throw "TODO"
+                } else {
+                    for(let pnode of enode.parameters) {
+                        this.processExpression(f, scope, pnode, code);
+                    }
+                }
+
+                if (f) {
+                    code.push(new wasm.Call(f.storageIndex));
+                } else {
+                    throw "TODO: call a lambda function"
                 }
                 break;
             }

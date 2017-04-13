@@ -24,7 +24,7 @@ export class Module extends Node {
         for(let k of this.exports.keys()) {
             let v = this.exports.get(k);
             if (v instanceof Function) {
-                s += indent + "    (export \"" + k + "\" (func $" + v.name + "))\n";
+                s += indent + "    (export \"" + k + "\" (func " + v.index + "))\n";
             } else {
                 throw "Implementation error";
             } 
@@ -101,6 +101,7 @@ export class Function extends Node {
     }
 
     public name: string;
+    public index: number;
     public parameters: Array<StackType> = [];
     public locals: Array<StackType> = [];
     public results: Array<StackType> = [];
@@ -339,4 +340,21 @@ export class End extends Node {
     public toWast(indent: string): string {
         return indent + "end";
     }
+}
+
+export class Call extends Node {
+    constructor(index: number) {
+        super();
+        this.index = index;
+    }
+
+    public get op(): string {
+        return "call";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "call " + this.index.toString();
+    }
+
+    public index: number;
 }

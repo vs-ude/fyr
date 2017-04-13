@@ -213,6 +213,16 @@ export class FunctionType extends Type {
         return i;
     }
 
+    public hasVariableParameterList(): boolean {
+        let i = 0;
+        for(let t of this.parameters) {
+            if (t.optional || t.ellipsis) {
+                return true;
+            }
+        }
+        return false;        
+    }
+
     public returnType: Type;
     public parameters: Array<FunctionParameter>;
 }

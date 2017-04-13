@@ -1,4 +1,4 @@
-func demo() bool {
+func demo() int {
     var x = 5
     if (x >= 5) {
         x = 10
@@ -8,8 +8,7 @@ func demo() bool {
     if (var y = 10; x == y) {
         x = 1
     }
-    fibonacci(5, 0, 1)
-    return x == 5 || x < 5
+    return fibonacci(6, 0, 1)
 }
 
 func fibonacci(count int, a int, b int) int {
