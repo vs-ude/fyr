@@ -81,4 +81,5 @@ func f(x int) {
     });
     var a map<string,bool>
     var i int
+    var uptr #int
 }

@@ -182,5 +182,17 @@ func f<A, B is double>(x int, y B, z int, b byte, s string, bo bool, p *string,
     for (var a in obj) {
         break
     }
+    var ptr #byte = 0
+    b == *ptr
+    b == ptr[1]
+    ptr + 5
+    ptr &^ 3
+    ptr++
+    ptr << 2
+    ptr == 0
+    ptr != ptr
+    ptr + x
+    ptr += 5
+    ptr += x
     return (2, "Hallo")
 }
