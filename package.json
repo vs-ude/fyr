@@ -20,7 +20,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "colors": "^1.1.2",
-    "commander": "^2.9.0"
+    "commander": "^2.9.0",
+    "text-encoding": "^0.6.4"
   },
   "devDependencies": {
     "@types/colors": "^1.1.2",

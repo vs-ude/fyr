@@ -58,6 +58,10 @@ func demo5() int16 {
     return b
 }
 
+func strDemo() {
+    "Hallo"
+}
+
 func fibonacci(count int, a int, b int) int {
     if (count == 0) {
         return b;

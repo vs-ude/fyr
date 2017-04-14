@@ -1,3 +1,5 @@
+import * as textEncoding from "text-encoding";
+
 export abstract class Node {
     public abstract get op(): string;
     public abstract toWast(indent: string): string;
@@ -32,11 +34,13 @@ export class Module extends Node {
         return s + indent + ")";
     }
 
-    public addData(value: string): number {
-        let o = this.dataSize;
-        this.data.push(new Data(o, value));
-        this.dataSize += value.length;
-        return o;
+    public addData(value: string): [number, number] {
+        let uint8array: Uint8Array = new textEncoding.TextEncoder("utf-8").encode(value);
+        // TODO: Position on alignment
+        let offset = this.dataSize;
+        this.data.push(new Data(offset, uint8array));
+        this.dataSize += uint8array.length + 2 * 4;
+        return [offset, uint8array.length + 2 * 4];
     }
 
     public stackSize = 0;
@@ -48,7 +52,7 @@ export class Module extends Node {
 }
 
 export class Data extends Node {
-    constructor(offset: number, value: string) {
+    constructor(offset: number, value: Uint8Array) {
         super();
         this.offset = offset;
         this.value = value;
@@ -59,12 +63,27 @@ export class Data extends Node {
     }
 
     public toWast(indent: string): string {
-        let v = "\"" + this.value + "\""; // TODO: Proper encoding
+        let a32 = new Uint32Array([this.value.length]);
+        let a8 = new Uint8Array(a32.buffer);
+        let v = "\"\\" + this.uint8ToHex(a8[0]) + "\\" + this.uint8ToHex(a8[1]) + "\\" + this.uint8ToHex(a8[2]) + "\\" + this.uint8ToHex(a8[3]);
+        v += "\\01\\00\\00\\00"; // Reference count of 1 -> the string is never deallocated
+        for(let i = 0; i < this.value.length; i++) {
+            v += "\\" + this.uint8ToHex(this.value[i]);
+        }
+        v += "\"";
         return indent + "(data (i32.const " + this.offset.toString() + ") " + v + ")";
     }
 
+    private uint8ToHex(x: number) {
+        let s = x.toString(16);
+        if (s.length == 1) {
+            return "0" + s;
+        }
+        return s;
+    }
+
     public offset: number;
-    public value: string;
+    public value: Uint8Array;
 }
 
 export class Function extends Node {
@@ -100,10 +119,14 @@ export class Function extends Node {
         return s + indent + ")";
     }
 
+    public counterRegister(): number {
+        return this.parameters.length;
+    }
+
     public name: string;
     public index: number;
     public parameters: Array<StackType> = [];
-    public locals: Array<StackType> = [];
+    public locals: Array<StackType> = ["i32"]; // One for the counter register
     public results: Array<StackType> = [];
     public statements: Array<Node> = [];
 }
@@ -277,6 +300,23 @@ export class SetLocal extends Node {
 
     public toWast(indent: string): string {
         return indent + "set_local " + this.index.toString();
+    }
+
+    public index: number;
+}
+
+export class TeeLocal extends Node {
+    constructor(index: number) {
+        super();
+        this.index = index;
+    }
+
+    public get op(): string {
+        return "tee_local";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "tee_local " + this.index.toString();
     }
 
     public index: number;

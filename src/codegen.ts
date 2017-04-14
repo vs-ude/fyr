@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, UnsafePointerType, FunctionType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, Type, UnsafePointerType, FunctionType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as wasm from "./wasm"
 
 export class CodeGenerator {
@@ -377,8 +377,21 @@ export class CodeGenerator {
             default:
                 this.processExpression(f, scope, snode, code);
                 if (snode.type != this.tc.t_void) {
-                    // TODO: How much should be dropped?
-                    code.push(new wasm.Drop);
+                    if (this.isRegisterSize(snode.type)) {
+                        code.push(new wasm.Drop);
+                    } else if (snode.type == this.tc.t_string || snode.type instanceof SliceType) {
+                        // TODO: dec ref count
+                        code.push(new wasm.Drop);
+                        code.push(new wasm.Drop);
+                        code.push(new wasm.TeeLocal(wf.counterRegister()));
+                        code.push(new wasm.GetLocal(wf.counterRegister()));
+                        code.push(new wasm.Load("i32", null, 0));
+                        code.push(new wasm.Constant("i32", 1));
+                        code.push(new wasm.BinaryIntInstruction("i32", "add"));
+                        code.push(new wasm.Store("i32", null, 0));                        
+                    } else {
+                        throw "TODO";
+                    }
                 }
         }
     }
@@ -407,9 +420,21 @@ export class CodeGenerator {
                 code.push(new wasm.Constant("i32", enode.value == "true" ? 1 : 0));
                 break;
             case "str":
-                let off = this.module.addData(enode.value);
-                // TODO: Code to load the string
-                throw "TODO";
+                let [off, len] = this.module.addData(enode.value);
+                // Inc reference count
+                code.push(new wasm.Constant('i32', off));
+                code.push(new wasm.Constant('i32', off));
+                code.push(new wasm.Load("i32", null, 0));
+                code.push(new wasm.Constant("i32", 1));
+                code.push(new wasm.BinaryIntInstruction("i32", "add"));
+                code.push(new wasm.Store("i32", null, 0));
+                // Load pointer to memobj
+                code.push(new wasm.Constant('i32', off));
+                // Load pointer to start of string data
+                code.push(new wasm.Constant('i32', off + 2 * 4));
+                // Load size of string
+                code.push(new wasm.Constant('i32', len - 2 * 4));
+                break;
             case "==":
                 if (enode.lhs.type instanceof BasicType) {
                     this.processCompare("eq", f, scope, enode, code);
@@ -816,7 +841,7 @@ export class CodeGenerator {
     }
 
     public isRegisterSize(t: Type) {
-        if (t == this.tc.t_double || t == this.tc.t_float || t == this.tc.t_int64 || this.tc.t_uint64 || t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
+        if (t == this.tc.t_double || t == this.tc.t_float || t == this.tc.t_int64 || t == this.tc.t_uint64 || t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
             return true;
         }
         if (t instanceof UnsafePointerType) {
