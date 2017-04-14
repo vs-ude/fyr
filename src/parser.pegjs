@@ -677,7 +677,15 @@ number "number"
 
 member
   = "." [ \t\n]* i:identifier [ \t]* { return new ast.Node({loc: location(), op: ".", name:i}); }
-  / "[" [ \t\n]* e:expression "]" [ \t]* { return new ast.Node({loc: location(), op: "[", rhs: e}); }
+  / "[" [ \t\n]* e:expression? r:(":" expression?)? "]" [ \t]* {
+      if (!e && !r) {
+          expected("an index or range expression between brackets");
+      }
+      if (r) {
+          e = new ast.Node({loc: location(), "op":":", lhs: e, rhs: r[1]});
+      }
+      return new ast.Node({loc: location(), op: "[", rhs: e});
+    }
   / "(" [ \t\n]* a:arguments? ")" [ \t]* { return new ast.Node({loc: location(), op: "(", parameters: a}); }
   / "<" [ \t]* t:typeList [ \t]* ">" { return new ast.Node({loc: location(), op: "genericInstance", genericParameters: t}); }
 

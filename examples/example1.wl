@@ -82,4 +82,7 @@ func f(x int) {
     var a map<string,bool>
     var i int
     var uptr #int
+    var s = s[1:2]
+    var s = s[a+b:]
+    var s = s[:a+b]
 }
