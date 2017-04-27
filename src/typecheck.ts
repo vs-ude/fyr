@@ -1,6 +1,6 @@
 import {Node, NodeOp, Location} from "./ast"
 
-export type StorageLocation = "local" | "global" | "fyrStack" | "funcTable";
+export type StorageLocation = "local" | "global" | "fyrStackPointer" | "fyrBasePointer" | "wasmStack" | "funcTable";
 
 export interface ScopeElement {
     name: string;

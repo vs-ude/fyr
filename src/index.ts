@@ -35,6 +35,7 @@ function compileModules() {
                 console.log((args[i] + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
                 continue;                
             } else {
+                console.log(ex);
                 throw ex;
             }
         }

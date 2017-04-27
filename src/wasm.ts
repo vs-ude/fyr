@@ -16,17 +16,35 @@ export class Module extends Node {
 
     public toWast(indent: string): string {
         let s = indent + "(module\n";
-        s += indent + "    (memory " + (this.dataSize + this.heapSize + this.stackSize).toString() + ")\n";
+        s += indent + "    (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + ")\n";
         for(let f of this.funcs) {
             s += f.toWast(indent + "    ") + "\n";
         }
         for(let d of this.data) {
             s += d.toWast(indent + "    ") + "\n";
         }
+        let index = this.funcs.length;
         for(let k of this.exports.keys()) {
             let v = this.exports.get(k);
             if (v instanceof Function) {
-                s += indent + "    (export \"" + k + "\" (func " + v.index + "))\n";
+                s += "    (func ";
+                for(let i = 1; i < v.parameters.length; i++) {
+                    s += " (param " + v.parameters[i] + ")";
+                } 
+                for(let p of v.results) {
+                    s += " (result " + p + ")";
+                } 
+                s += "\n        i32.const " + (this.dataSize + this.heapSize).toString() + "\n";
+                for(let i = 1; i < v.parameters.length; i++) {
+                    s += "        get_local " + (i-1).toString() + "\n";
+                }
+                s += "        call " + v.index + "\n";
+                if (v.results.length != 0) {
+                    s += "        return\n";
+                }
+                s += "    )\n";
+                s += indent + "    (export \"" + k + "\" (func " + index.toString() + "))\n";
+                index++;
             } else {
                 throw "Implementation error";
             } 
@@ -36,15 +54,14 @@ export class Module extends Node {
 
     public addData(value: string): [number, number] {
         let uint8array: Uint8Array = new textEncoding.TextEncoder("utf-8").encode(value);
-        // TODO: Position on alignment
         let offset = this.dataSize;
         this.data.push(new Data(offset, uint8array));
-        this.dataSize += uint8array.length + 2 * 4;
-        return [offset, uint8array.length + 2 * 4];
+        this.dataSize += align64(12 + uint8array.length);
+        return [offset, uint8array.length];
     }
 
-    public stackSize = 0;
-    public heapSize = 1;
+    public stackSize = 1 * 65536;
+    public heapSize = 1 * 65536;
     public funcs: Array<Function> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
     public dataSize: number = 0;
@@ -63,10 +80,11 @@ export class Data extends Node {
     }
 
     public toWast(indent: string): string {
-        let a32 = new Uint32Array([this.value.length]);
+        let a32 = new Uint32Array([this.offset + 12, this.offset + 12, this.value.length]);
         let a8 = new Uint8Array(a32.buffer);
         let v = "\"\\" + this.uint8ToHex(a8[0]) + "\\" + this.uint8ToHex(a8[1]) + "\\" + this.uint8ToHex(a8[2]) + "\\" + this.uint8ToHex(a8[3]);
-        v += "\\01\\00\\00\\00"; // Reference count of 1 -> the string is never deallocated
+        v += "\\" + this.uint8ToHex(a8[4]) + "\\" + this.uint8ToHex(a8[5]) + "\\" + this.uint8ToHex(a8[6]) + "\\" + this.uint8ToHex(a8[7]);
+        v += "\\" + this.uint8ToHex(a8[8]) + "\\" + this.uint8ToHex(a8[9]) + "\\" + this.uint8ToHex(a8[10]) + "\\" + this.uint8ToHex(a8[11]);
         for(let i = 0; i < this.value.length; i++) {
             v += "\\" + this.uint8ToHex(this.value[i]);
         }
@@ -119,16 +137,25 @@ export class Function extends Node {
         return s + indent + ")";
     }
 
-    public counterRegister(): number {
+    public spRegister(): number {
+        return 0;
+    }
+
+    public bpRegister(): number {
         return this.parameters.length;
+    }
+
+    public counterRegister(): number {
+        return this.parameters.length + 1;
     }
 
     public name: string;
     public index: number;
-    public parameters: Array<StackType> = [];
-    public locals: Array<StackType> = ["i32"]; // One for the counter register
+    public parameters: Array<StackType> = ["i32"]; // One for the sp
+    public locals: Array<StackType> = ["i32", "i32"]; // One for the bp, one for the counter register
     public results: Array<StackType> = [];
     public statements: Array<Node> = [];
+    public localFyrFrameSize: number = 0;
 }
 
 export class Constant extends Node {
@@ -352,7 +379,7 @@ export class Load extends Node {
     }
 
     public toWast(indent: string): string {
-        return indent + this.type + ".load" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? "offset=" + this.offset.toString() : "");
+        return indent + this.type + ".load" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "");
     }       
 
     public type: StackType;
@@ -373,7 +400,7 @@ export class Store extends Node {
     }
 
     public toWast(indent: string): string {
-        return indent + this.type + ".store" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? "offset=" + this.offset.toString() : "");
+        return indent + this.type + ".store" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "");
     }       
 
     public type: StackType;
@@ -493,4 +520,18 @@ export class BrIf extends Node {
     }
 
     public depth: number;
+}
+
+export class Unreachable extends Node {
+    public get op(): string {
+        return "unreachable";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "unreachable";
+    }
+}
+
+function align64(x: number): number {
+    return (x + 7) & -8;
 }
