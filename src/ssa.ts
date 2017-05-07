@@ -69,25 +69,43 @@ export class Variable {
     }
 
     public name: string;
+    /**
+     * The number of times the value of the variable is used.
+     */
     public readCount: number = 0;
+    /**
+     * The number of times the variable is assigned a value.
+     */
     public writeCount: number = 0;
+    /**
+     * isTemporary is true if the variable has been introduced by the compiler
+     * to hold a temporary value.
+     */
     public isTemporary: boolean = false;
+    /**
+     * usedInMultupleSteps is true, if the variable is used in different 'steps'.
+     * This is only meaningful when used after SMTransformation.transform().
+     */
     public usedInMultipleSteps: boolean = false;
+    /**
+     * isConstant is true if the variable is assigned exactly once
+     * and this value is a constant.
+     * The value is set by Optimizer.optimizeConstants().
+     */
     public isConstant: boolean = false;
     public constantValue: number;
+
+    /**
+     * Internal
+     */
     public _step: Node;
 
     private static counter: number = 0;
 }
 
 export class Node {
-    constructor(assign: Variable | string, kind: NodeKind, type: Type | FunctionType | StructType, args: Array<Variable | string | number>) {
-        if (typeof(assign) == "string") {
-            this.assign = new Variable(assign);
-        } else {
-            this.assign = assign;
-        }
-
+    constructor(assign: Variable, kind: NodeKind, type: Type | FunctionType | StructType, args: Array<Variable | string | number>) {
+        this.assign = assign;
         this.kind = kind;
         this.type = type;
         for(let a of args) {
@@ -259,7 +277,7 @@ export class Builder {
         return n;
     }
 
-    public assign(assign: Variable | string, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
+    public assign(assign: Variable, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
         let n = new Node(assign, kind, type, args);
         if (this._current) {
             this._current.next.push(n);
@@ -272,7 +290,7 @@ export class Builder {
         return n.assign;
     }
 
-    public call(assign: Variable | string, type: FunctionType, args: Array<Variable | string | number>): Variable {
+    public call(assign: Variable, type: FunctionType, args: Array<Variable | string | number>): Variable {
         let n = new Node(assign, "call", type, args);
         if (this._current) {
             this._current.next.push(n);
@@ -775,9 +793,9 @@ export class Wasm32Backend {
         console.log("========= State Machine ==========");
         console.log(n.toString(""));
 
-        this.traverse(n.next[0], n.blockPartner);
+        this.traverse(n.next[0], n.blockPartner, null);
+//        this.analyzeVariableUsage(n, n.blockPartner, null);
         this.stackifySteps();
-        this.analyzeVariableUsage(n, n.blockPartner, null);
 
         console.log("========= Stackified ==========");
         console.log(n.toString(""));
@@ -838,18 +856,38 @@ export class Wasm32Backend {
      * Collects all steps and async calls
      * and remove all 'const' nodes which assign to variables that are SSA.
      */
-    private traverse(start: Node, end: Node) {
+    private traverse(start: Node, end: Node, step: Node) {
         let n = start;
         for( ; n; ) {
+            // Analyze the arguments
+            for(let v of n.args) {
+                if (v instanceof Variable) {
+                    if (v._step) {
+                        v.usedInMultipleSteps = true;
+                    } else {
+                        v._step = step;
+                    }                    
+                }
+            }
+            // Analze the assignment
+            if (n.assign) {
+                if (n.assign._step) {
+                    n.assign.usedInMultipleSteps = true;
+                } else {
+                    n.assign._step = step;
+                }
+            }
+
             if (n == end) {
                 break;
             } else if (n.kind == "step") {
+                step = n;
                 this.stepsByName.set(n.name, this.steps.length);
                 this.steps.push(n);
                 n = n.next[0];
             } else if (n.kind == "if") {
                 if (n.next.length > 1) {
-                    this.traverse(n.next[1], n.blockPartner);
+                    this.traverse(n.next[1], n.blockPartner, step);
                 }
                 n = n.next[0];
             } else if (n.kind == "call_begin") {
@@ -905,6 +943,13 @@ export class Wasm32Backend {
                         n.args[i] = inline;
                         Node.removeNode(inline);
                     }
+                } else if (a instanceof Variable && a.writeCount == 1) {
+                    // Try to inline the computation
+                    let inline = this.findInlineForMultipleReads(n.prev[0], a);
+                    if (inline) {
+                        n.args[i] = inline;
+                        Node.removeNode(inline);
+                    }
                 }
             }
             n = n.prev[0];
@@ -925,8 +970,32 @@ export class Wasm32Backend {
     }
 
     /**
+     * Like 'findInline' but is assures that the variable assigned by the returned node is not
+     * used between 'n' and its assignment.
+     * The variable assignment can then be inlined with a tee.
+     */
+    private findInlineForMultipleReads(n: Node, v: Variable): Node {
+        for( ;n; ) {
+            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+                return null;
+            }
+            for(let a of n.args) {
+                if (a instanceof Variable && a.name == v.name) {
+                    return null;
+                }
+            }
+            if (n.assign.name == v.name) {
+                return n;
+            }
+            n = n.prev[0];
+        }
+        return null;
+    }
+
+    /**
      * Tracks whether a variable is used in multiple steps.
      */
+    /*
     public analyzeVariableUsage(start: Node, end: Node, step: Node) {
         let n = start;
         for(; n; ) {
@@ -957,6 +1026,7 @@ export class Wasm32Backend {
             }
         }
     }
+    */
 
     private emitSteps() {
         for(let i = 0; i < this.steps.length; i++) {
@@ -1187,8 +1257,9 @@ function main() {
     let t2 = b.assign(b.tmp(), "const", "i32", [84]);
     let t1 = b.assign(b.tmp(), "const", "i32", [42]);
     let t = b.assign(b.tmp(), "add", "i32", [t1, t2]);
-    b.ifBlock(t);
     let f1 = new FunctionType([], "i32");
+    b.call(null, f1, [t, t]);
+    b.ifBlock(t);
     let t3 = b.call(b.tmp(), f1, [9]);
     b.assign(b.mem, "store", "i32", [t, 4, t3]);
     b.elseBlock();
