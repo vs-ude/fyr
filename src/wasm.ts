@@ -138,21 +138,21 @@ export class Function extends Node {
     }
 
     public spRegister(): number {
-        return 0;
+        throw "OBSOLETE";
     }
 
     public bpRegister(): number {
-        return this.parameters.length;
+        throw "OBSOLETE";
     }
 
     public counterRegister(): number {
-        return this.parameters.length + 1;
+        throw "OBSOLETE";
     }
 
     public name: string;
     public index: number;
-    public parameters: Array<StackType> = ["i32"]; // One for the sp
-    public locals: Array<StackType> = ["i32", "i32"]; // One for the bp, one for the counter register
+    public parameters: Array<StackType> = [];
+    public locals: Array<StackType> = [];
     public results: Array<StackType> = [];
     public statements: Array<Node> = [];
     public localFyrFrameSize: number = 0;
@@ -522,6 +522,23 @@ export class BrIf extends Node {
     public depth: number;
 }
 
+export class BrTable extends Node {
+    constructor(depths: Array<number>) {
+        super();
+        this.depths = depths;
+    }
+
+    public get op(): string {
+        return "br_table";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "br_table " + this.depths.join(" ");
+    }
+
+    public depths: Array<number>;
+}
+
 export class Unreachable extends Node {
     public get op(): string {
         return "unreachable";
@@ -530,6 +547,23 @@ export class Unreachable extends Node {
     public toWast(indent: string): string {
         return indent + "unreachable";
     }
+}
+
+export class Comment extends Node {
+    constructor(comment: string) {
+        super();
+        this.comment = comment;
+    }
+
+    public get op(): string {
+        return ";;";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + ";; " + this.comment;
+    }
+
+    public comment: string;
 }
 
 function align64(x: number): number {
