@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "call" | "const" | "add";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "declvar" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "call" | "const" | "add";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -43,19 +43,19 @@ function sizeOf(x: Type | StructType): number {
 }
 
 export class FunctionType {
-    constructor(params: Array<Type | StructType>, results: Array<Type | StructType>) {
+    constructor(params: Array<Type | StructType>, result: Type | StructType | null) {
         this.params = params;
-        this.results = results;
+        this.result = result;
     }
 
     public toString(): string {
         let str = "(" + this.params.map(function(t: Type) { return t.toString() }).join(",") + ")";
-        str += " => (" + this.results.map(function(t: Type) { return t.toString() }).join(",") + ")";
+        str += " => (" + (this.result ? this.result.toString() : "") + ")";
         return str;
     }
 
     public params: Array<Type | StructType>;
-    public results: Array<Type | StructType>;
+    public result: Type | StructType | null;
 }
 
 export class Variable {
@@ -73,20 +73,21 @@ export class Variable {
     public writeCount: number = 0;
     public isTemporary: boolean = false;
     public usedInMultipleSteps: boolean = false;
+    public isConstant: boolean = false;
+    public constantValue: number;
     public _step: Node;
 
     private static counter: number = 0;
 }
 
 export class Node {
-    constructor(assign: Array<Variable | string>, kind: NodeKind, type: Type | FunctionType | StructType, args: Array<Variable | string | number>) {
-        for(let a of assign) {
-            if (typeof(a) == "string") {
-                this.assign.push(new Variable(a));
-            } else {
-                this.assign.push(a);
-            }
+    constructor(assign: Variable | string, kind: NodeKind, type: Type | FunctionType | StructType, args: Array<Variable | string | number>) {
+        if (typeof(assign) == "string") {
+            this.assign = new Variable(assign);
+        } else {
+            this.assign = assign;
         }
+
         this.kind = kind;
         this.type = type;
         for(let a of args) {
@@ -100,9 +101,8 @@ export class Node {
 
     public toString(indent: string): string {
         let str = indent;
-        if (this.assign.length > 0) {
-            let names = this.assign.map(function(v: Variable) { return v.name; });
-            str += names.join(", ") + " = ";
+        if (this.assign instanceof Variable) {
+            str += this.assign.name + " = ";
         }
         str += this.kind + " ";
         if (this.name) {
@@ -112,7 +112,15 @@ export class Node {
             str += this.type.toString() + " ";
         }
         if (this.args.length > 0) {
-            let names = this.args.map(function(v: Variable | number) { return typeof(v) == "number" ? v : v.name; });
+            let names = this.args.map(function(v: Variable | number | Node): string {
+                if (v instanceof Variable) {
+                    return v.name;
+                } else if (v instanceof Node) {
+                    return "\n" + indent + "    (" + v.toString("") + ")";
+                } else {
+                    return v.toString();
+                }
+            });
             str += names.join(", ");
         }
         str += "\n";
@@ -193,17 +201,19 @@ export class Node {
     public next: Array<Node> = [];
     public prev: Array<Node> = [];
     public blockPartner: Node; // 'end' for 'if'/'block'/'loop' and either 'if' or 'block' or 'loop' for 'end'.
-    public assign: Array<Variable> = [];
-    public args: Array<Variable | number> = [];
+    public assign: Variable;
+    public args: Array<Variable | number | Node> = [];
     public isAsync: boolean = false;
 }
 
 export class Builder {
     constructor() {
         this._mem = new Variable("mem");
+        this._mem.readCount = 2; // Just to prevent optimizations on this pseudo-variable
+        this._mem.writeCount = 2;
     }
 
-    public define(name: string, params: Array<Type | StructType>, results: Array<Type | StructType>) {
+    public define(name: string, params: Array<Type | StructType>, result: Type | StructType) {
         let n: Node;
         if (this._node) {
             for(let x = this._node; x; x = x.next[0]) {
@@ -214,17 +224,13 @@ export class Builder {
             }
         }
         if (!n) {
-            n = this.declare(name, params, results);
+            n = this.declare(name, params, result);
         }
         this._blocks.push(n);
     }
 
-    public declare(name: string, params: Array<Type | StructType>, results: Array<Type | StructType>): Node {
-        let args: Array<Variable> = [];
-        for(let t of params) {
-            args.push(new Variable());
-        }
-        let n = new Node(args, "define", new FunctionType(params, results), []);
+    public declare(name: string, params: Array<Type | StructType>, result: Type | StructType): Node {
+        let n = new Node(null, "define", new FunctionType(params, result), []);
         n.name = name;
         if (this._current) {
             this._current.next.push(n);
@@ -233,15 +239,15 @@ export class Builder {
             this._node = n;
         }
         this._current = n;
-        let e = new Node([], "end", undefined, []);
+        let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
         n.blockPartner = e;  
         this.countReadsAndWrites(n);
         return n;
     }
     
-    public assign(assign: Variable | string, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
-        let n = new Node([assign], kind, type, args);
+    public declvar(name: string, type: Type | StructType): Node {
+        let n = new Node(new Variable(name), "declvar", type, []);
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -250,10 +256,23 @@ export class Builder {
         }
         this._current = n;
         this.countReadsAndWrites(n);
-        return n.assign[0];
+        return n;
     }
 
-    public call(assign: Array<Variable | string>, type: FunctionType, args: Array<Variable | string | number>) {
+    public assign(assign: Variable | string, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
+        let n = new Node(assign, kind, type, args);
+        if (this._current) {
+            this._current.next.push(n);
+            n.prev.push(this._current);
+        } else {
+            this._node = n;
+        }
+        this._current = n;
+        this.countReadsAndWrites(n);
+        return n.assign;
+    }
+
+    public call(assign: Variable | string, type: FunctionType, args: Array<Variable | string | number>): Variable {
         let n = new Node(assign, "call", type, args);
         if (this._current) {
             this._current.next.push(n);
@@ -266,6 +285,7 @@ export class Builder {
             b.isAsync = true;
         }
         this.countReadsAndWrites(n);
+        return n.assign;
     }
 
     public br(to: Node) {
@@ -275,7 +295,7 @@ export class Builder {
                 continue;
             }
             if (to == this._blocks[i]) {
-                let n = new Node([], "br", undefined, [j]);
+                let n = new Node(null, "br", undefined, [j]);
                 if (this._current) {
                     this._current.next.push(n);
                     n.prev.push(this._current);
@@ -298,7 +318,7 @@ export class Builder {
                 continue;
             }
             if (to == this._blocks[i]) {
-                let n = new Node([], "br_if", undefined, [arg, j]);
+                let n = new Node(null, "br_if", undefined, [arg, j]);
                 if (this._current) {
                     this._current.next.push(n);
                     n.prev.push(this._current);
@@ -347,7 +367,7 @@ export class Builder {
     */
 
     public block(): Node {
-        let n = new Node([], "block", undefined, []);
+        let n = new Node(null, "block", undefined, []);
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -356,14 +376,14 @@ export class Builder {
         }
         this._current = n;
         this._blocks.push(n);
-        let e = new Node([], "end", undefined, []);
+        let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
         n.blockPartner = e;  
         return n;      
     }
 
     public loop() : Node {
-        let n = new Node([], "loop", undefined, []);
+        let n = new Node(null, "loop", undefined, []);
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -372,7 +392,7 @@ export class Builder {
         }
         this._current = n;
         this._blocks.push(n);
-        let e = new Node([], "end", undefined, []);
+        let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
         n.blockPartner = e;  
         return n;      
@@ -389,7 +409,7 @@ export class Builder {
     }
 
     public ifBlock(arg: Variable | string | number) : Node {
-        let n = new Node([], "if", undefined, [arg]);
+        let n = new Node(null, "if", undefined, [arg]);
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -398,7 +418,7 @@ export class Builder {
         }
         this._current = n;
         this._blocks.push(n);
-        let e = new Node([], "end", undefined, []);
+        let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
         n.blockPartner = e;  
         this.countReadsAndWrites(n);
@@ -434,10 +454,10 @@ export class Builder {
     }
 
     private countReadsAndWrites(n: Node) {
-        for(let v of n.assign) {
-            v.writeCount++;
-            if (v.isTemporary && v.writeCount > 1) {
-                throw "Variable " + v.name + " is temporary but assigned more than once";
+        if (n.assign) {
+            n.assign.writeCount++;
+            if (n.assign.isTemporary && n.assign.writeCount > 1) {
+                throw "Variable " + n.assign.name + " is temporary but assigned more than once";
             }
         }
         for(let v of n.args) {
@@ -453,6 +473,73 @@ export class Builder {
     private _current: Node;
 }
 
+export class Optimizer {
+    public optimizeConstants(n: Node) {
+        this._optimizeConstants(n, n.blockPartner);
+    }
+
+    /**
+     * Collects all steps and async calls
+     * and remove all 'const' nodes which assign to variables that are SSA.
+     */
+    private _optimizeConstants(start: Node, end: Node) {
+        let n = start;
+        for( ; n; ) {
+            if (n.kind == "if") {
+                if (n.next.length > 1) {
+                    this._optimizeConstants(n.next[1], n.blockPartner);
+                }
+                n = n.next[0];
+            } else if (n.kind == "const" && n.assign.writeCount == 1) {
+                n.assign.isConstant = true;
+                n.assign.constantValue = n.args[0] as number;
+                let n2 = n.next[0];
+                Node.removeNode(n);
+                n = n2;
+            } else {
+                for(let i = 0; i < n.args.length; i++) {
+                    let a = n.args[i];
+                    if (a instanceof Variable && a.isConstant) {
+                        n.args[i] = a.constantValue;
+                    }
+                }
+                n = n.next[0];
+            }
+            // TODO: Computations on constants can be optimized
+        }
+    }
+
+    public removeDeadCode(n: Node) {
+        this._removeDeadCode(n.blockPartner, n);
+    }
+
+    /**
+     * Traverse the code backwards
+     */
+    private _removeDeadCode(n: Node, end: Node) {
+        for( ;n; ) {
+            // Remove assignments to variables which are not read
+            if (n.kind == "call" && n.assign && n.assign.readCount == 0) {
+                n.assign.writeCount--;
+                n.assign = null;
+            } else if (n.kind == "end" && n.prev[1]) {
+                this._removeDeadCode(n.prev[1], n.blockPartner);
+            } else if (n.kind != "call" && n.assign && n.assign.readCount == 0) {
+                let n2 = n.prev[0];
+                for(let a of n.args) {
+                    if (a instanceof Variable) {
+                        a.readCount--;
+                    }
+                }
+                Node.removeNode(n);
+                n = n2;
+                continue;
+            }
+            n = n.prev[0];
+        }
+    }
+}
+
 /**
  * Transforms control flow with loop/block/br/br_if/if into a state machine using
  * step/goto_step/goto_step_if. This happens in all places where execution could block.
@@ -465,7 +552,7 @@ export class SMTransformer {
         }
         this.transformUpTo(startBlock, startBlock.blockPartner, null, false);
         this.insertNextStepsUpTo(startBlock, startBlock.blockPartner);
-        this.cleanup(startBlock, startBlock.blockPartner, null);
+        this.cleanup(startBlock);
     }
 
     /**
@@ -481,7 +568,7 @@ export class SMTransformer {
             if (n.kind == "block" || n.kind == "loop") {
                 if (n.isAsync) {
                     if (step) {
-                        let end = new Node([], "goto_step", undefined, []);
+                        let end = new Node(null, "goto_step", undefined, []);
                         step = null;
                         Node.insertBetween(n.prev[0], n, end);                        
                     }
@@ -493,7 +580,7 @@ export class SMTransformer {
             } else if (n.kind == "if") {
                 if (n.isAsync) {
                     if (!step) {
-                        step = new Node([], "step", undefined, []);
+                        step = new Node(null, "step", undefined, []);
                         step.name = "s" + this.stepCounter.toString();
                         this.stepCounter++;
                         Node.insertBetween(n.prev[0], n, step);
@@ -509,7 +596,7 @@ export class SMTransformer {
                 }
             } else if (n.kind == "end") {
                 if (step) {
-                    let end = new Node([], "goto_step", undefined, []);
+                    let end = new Node(null, "goto_step", undefined, []);
                     step = null;
                     Node.insertBetween(n.prev[elseClause ? 1 : 0], n, end);                        
                 }
@@ -520,7 +607,7 @@ export class SMTransformer {
                 n = n.next[0];
             } else {
                 if (!step) {
-                    step = new Node([], "step", undefined, []);
+                    step = new Node(null, "step", undefined, []);
                     step.name = "s" + this.stepCounter.toString();
                     this.stepCounter++;
                     Node.insertBetween(n.prev[0], n, step);
@@ -550,8 +637,8 @@ export class SMTransformer {
                 } else if (n.kind == "call") {
                     n.kind = "call_begin";
                     let result = new Node(n.assign, "call_end", n.type, []);
-                    n.assign = [];
-                    let end = new Node([], "goto_step", undefined, []);
+                    n.assign = null;
+                    let end = new Node(null, "goto_step", undefined, []);
                     step = null;
                     Node.insertBetween(n, n.next[0], end);
                     Node.insertBetween(end, end.next[0], result);
@@ -617,30 +704,10 @@ export class SMTransformer {
      * @param end 
      * @param step 
      */
-    public cleanup(start: Node, end: Node, step: Node) {
-        let n = start;
+    public cleanup(n: Node) {
         for(; n; ) {
-            for(let v of n.assign) {
-                if (v._step) {
-                    v.usedInMultipleSteps = true;
-                } else {
-                    v._step = step;
-                }
-            }
-            for(let v of n.args) {
-                if (v instanceof Variable) {
-                    if (v._step) {
-                        v.usedInMultipleSteps = true;
-                    } else {
-                        v._step = step;
-                    }                    
-                }
-            }
-            if (n.kind == "step") {
-                step = n;
-                n = n.next[0];                
-            } else if (n.kind == "if" && n.next.length > 1) {
-                this.cleanup(n.next[1], n.blockPartner, step);
+            if (n.kind == "if" && n.next.length > 1) {
+                this.cleanup(n.next[1]);
                 n = n.next[0];
             } else if ((n.isAsync && (n.kind == "block" || n.kind == "loop") || (n.kind == "end" && n.blockPartner.isAsync && n.blockPartner.kind != "if"))) {
                 let n2 = n.next[0];
@@ -650,7 +717,6 @@ export class SMTransformer {
                 n = n.next[0];                
             }
         }
-
     }
 
     private stepCounter: number = 0;
@@ -701,13 +767,20 @@ end_of_function
 export class Wasm32Backend {
     constructor() {
          this.tr = new SMTransformer();
+         this.module = new wasm.Module();
     }
 
-    public processDefine(n: Node): wasm.Function {
+    public generateFunction(n: Node): wasm.Function {
         this.tr.transform(n);
+        console.log("========= State Machine ==========");
         console.log(n.toString(""));
 
         this.traverse(n.next[0], n.blockPartner);
+        this.stackifySteps();
+        this.analyzeVariableUsage(n, n.blockPartner, null);
+
+        console.log("========= Stackified ==========");
+        console.log(n.toString(""));
         this.emitSteps();
 
         var wf = new wasm.Function(n.name);
@@ -752,6 +825,8 @@ export class Wasm32Backend {
         code.push(new wasm.End());
 
         wf.statements = code;
+        this.module.funcs.push(wf)
+
         return wf;
 //        console.log(wf.toWast(""));
 //        for(let i = 0; i < code.length; i++) {
@@ -760,7 +835,8 @@ export class Wasm32Backend {
     }
 
     /**
-     * Collects all steps and async calls.
+     * Collects all steps and async calls
+     * and remove all 'const' nodes which assign to variables that are SSA.
      */
     private traverse(start: Node, end: Node) {
         let n = start;
@@ -778,9 +854,106 @@ export class Wasm32Backend {
                 n = n.next[0];
             } else if (n.kind == "call_begin") {
                 this.asyncCalls.push(n);
-                n = n.next[0]
+                n = n.next[0];
             } else {
-                n = n.next[0]
+                n = n.next[0];
+            }
+        }
+    }
+
+    private stackifySteps() {
+        for(let i = 0; i < this.steps.length; i++) {
+            let n = this.steps[i];
+            this.stackifyStep(n);
+        }
+    }
+
+    private stackifyStep(start: Node) {
+        let n = start.next[0];
+        for( ; n; ) {
+            if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+                if (n != start) {
+                    this.stackifyStepBackwards(n.prev[0]);
+                    if (n.kind == "end" && n.blockPartner.kind == "if" && n.prev[1]) {
+                        this.stackifyStepBackwards(n.prev[0]);                        
+                    }
+                }
+                if (n.kind == "step" || n.kind == "goto_step") {
+                    break;
+                }
+            }
+            n = n.next[0];
+        }
+    }
+
+    private stackifyStepBackwards(n: Node) {
+        for( ;n; ) {
+            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+                break;
+            }
+            for(let i = 0; i < n.args.length; i++) {
+                let a = n.args[i];
+                if (a instanceof Variable && a.readCount == 1) {
+                    // Try to inline the computation
+                    let inline = this.findInline(n.prev[0], a);
+                    if (inline) {
+                        if (inline.kind == "call_end") {
+                            inline.assign = this._heapStack;
+                        } else {
+                            inline.assign = this._wasmStack;
+                        }
+                        n.args[i] = inline;
+                        Node.removeNode(inline);
+                    }
+                }
+            }
+            n = n.prev[0];
+        }
+    }
+
+    private findInline(n: Node, v: Variable): Node {
+        for( ;n; ) {
+            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+                return null;
+            }
+            if (n.assign.name == v.name) {
+                return n;
+            }
+            n = n.prev[0];
+        }
+        return null;
+    }
+
+    /**
+     * Tracks whether a variable is used in multiple steps.
+     */
+    public analyzeVariableUsage(start: Node, end: Node, step: Node) {
+        let n = start;
+        for(; n; ) {
+            if (n.assign) {
+                if (n.assign._step) {
+                    n.assign.usedInMultipleSteps = true;
+                } else {
+                    n.assign._step = step;
+                }
+            }
+            for(let v of n.args) {
+                if (v instanceof Variable) {
+                    if (v._step) {
+                        v.usedInMultipleSteps = true;
+                    } else {
+                        v._step = step;
+                    }                    
+                }
+            }
+            if (n.kind == "step") {
+                step = n;
+                n = n.next[0];                
+            } else if (n.kind == "if" && n.next.length > 1) {
+                this.analyzeVariableUsage(n.next[1], n.blockPartner, step);
+                n = n.next[0];
+            } else {
+                n = n.next[0];                
             }
         }
     }
@@ -991,6 +1164,8 @@ export class Wasm32Backend {
         return this.steps.indexOf(n);
     }
 
+    public module: wasm.Module;
+
     private stepLocal: number = 0;
     private bpLocal: number = 2;
     private spLocal: number = 1;
@@ -1002,47 +1177,56 @@ export class Wasm32Backend {
     private tr: SMTransformer;
     private paramsFrame: StructType = new StructType();
     private localsFrame: StructType = new StructType();
+    private _heapStack = new Variable("heapStack");
+    private _wasmStack = new Variable("wasmStack");
 }
 
 function main() {
     let b = new Builder();
-    b.define("f1", ["i32", "f32"], ["i32"]);
-    let t = b.assign(b.tmp(), "const", "i32", [42]);
-    t = b.assign(b.tmp(), "add", "i32", [t, t]);
+    b.define("f1", ["i32", "f32"], "i32");
+    let t2 = b.assign(b.tmp(), "const", "i32", [84]);
+    let t1 = b.assign(b.tmp(), "const", "i32", [42]);
+    let t = b.assign(b.tmp(), "add", "i32", [t1, t2]);
     b.ifBlock(t);
-    let f1 = new FunctionType([], []);
-    b.call([], f1, [9]);
-    b.assign(b.mem, "store", "i32", [t, 4, 84]);
+    let f1 = new FunctionType([], "i32");
+    let t3 = b.call(b.tmp(), f1, [9]);
+    b.assign(b.mem, "store", "i32", [t, 4, t3]);
     b.elseBlock();
     b.assign(b.mem, "store", "i32", [t, 8, 0]);
     b.end();
 //    b.ifBlock(t);
     let bl = b.block();
     let lo = b.loop();
-    t = b.assign(b.tmp(), "load", "i32", [t, 4]);
+    let t4 = b.assign(b.tmp(), "load", "i32", [t1, 4]);
+    b.assign(b.mem, "store", "i32", [1234, 0, t4]);
     b.br_if(t, bl);
 //    b.br(bl);
-    b.call([], f1, [10]);
+    b.call(null, f1, [10]);
     b.br(lo);
     b.end();
 //    b.end();
     b.end();
-    let f = new FunctionType(["i32"], ["addr"]);
-    b.call([b.tmp()], f, [8, t]);
-    b.assign(b.tmp(), "const", "i32", [43]);
+    let f = new FunctionType(["i32"], "addr");
+    b.call(b.tmp(), f, [8, t]);
+    let dummy1 = b.assign(b.tmp(), "const", "i32", [44]);
+    let dummy2 = b.assign(b.tmp(), "const", "i32", [45]);
+    b.assign(b.tmp(), "add", "i32", [dummy1, dummy2]);
     b.end();
     console.log(Node.strainToString("", b.node));
-    console.log('===========================');
-//    let tr = new SMTransformer();
-//    tr.transform(b.node);
-//    console.log("---------------- transformed");
-//    tr.transform2(b.node);
-//    console.log("---------------- goto only");
-//    console.log(Node.strainToString("", b.node));
+
+    let opt = new Optimizer();
+    opt.optimizeConstants(b.node);
+    console.log('============ OPTIMIZED Constants ===============');
+    console.log(Node.strainToString("", b.node));
+
+    opt.removeDeadCode(b.node);
+    console.log('============ OPTIMIZED Dead code ===============');
+    console.log(Node.strainToString("", b.node));
+
     let back = new Wasm32Backend();
-    var wf = back.processDefine(b.node);
-    console.log('===========================');
-    console.log(wf.toWast(""));
+    var wf = back.generateFunction(b.node);
+    console.log('============ WAST ===============');
+    console.log(back.module.toWast(""));
 }
 
 main();

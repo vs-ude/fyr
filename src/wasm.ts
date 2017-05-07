@@ -27,6 +27,7 @@ export class Module extends Node {
         for(let k of this.exports.keys()) {
             let v = this.exports.get(k);
             if (v instanceof Function) {
+                /*
                 s += "    (func ";
                 for(let i = 1; i < v.parameters.length; i++) {
                     s += " (param " + v.parameters[i] + ")";
@@ -43,7 +44,8 @@ export class Module extends Node {
                     s += "        return\n";
                 }
                 s += "    )\n";
-                s += indent + "    (export \"" + k + "\" (func " + index.toString() + "))\n";
+                */
+                s += indent + "    (export \"" + k + "\" (func " + v.index.toString() + "))\n";
                 index++;
             } else {
                 throw "Implementation error";
@@ -131,8 +133,15 @@ export class Function extends Node {
             s += " (local " + p + ")";
         } 
         s += "\n";
+        let i = indent;
         for(let st of this.statements) {
-            s += st.toWast(indent + "    ") + "\n";
+            if (st.op == "end") {
+                i = i.substr(0, i.length - 4);
+            }
+            s += st.toWast(i + "    ") + "\n";
+            if (st.op == "block" || st.op == "loop" || st.op == "if" || st.op == "else") {
+                i += "    ";
+            }
         }
         return s + indent + ")";
     }
