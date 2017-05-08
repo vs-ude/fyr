@@ -196,6 +196,49 @@ export class Drop extends Node {
     }   
 }
 
+export type BinaryOp = "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max";
+
+export class BinaryInstruction extends Node {
+    constructor(type: StackType, op: BinaryOp) {
+        super();
+        this.binaryOp = op;
+        this.type = type;
+    }
+
+    public get op(): string {
+        return this.type + "." + this.binaryOp;
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + "." + this.binaryOp;
+    }   
+
+    public type: StackType;
+    public binaryOp: BinaryOp;
+}
+
+export type UnaryOp = "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+
+export class UnaryInstruction extends Node {
+    constructor(type: StackType, op: UnaryOp) {
+        super();
+        this.unaryOp = op;
+        this.type = type;
+    }
+
+    public get op(): string {
+        return this.type + "." + this.unaryOp;
+    }
+
+    public toWast(indent: string): string {
+        return indent + this.type + "." + this.unaryOp;
+    }   
+
+    public type: StackType;
+    public unaryOp: UnaryOp;
+}
+
+
 export type BinaryIntOp = "add" | "sub" | "mul" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u";
 
 export class BinaryIntInstruction extends Node {

@@ -1,20 +1,22 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "declvar" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "call" | "const" | "add";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "addr_of" | "call" | "const" | "add";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
 
-    public addField(name: string, type: Type | StructType) {
+    public addField(name: string, type: Type | StructType): number {
+        let offset = this.size;
         this.fieldOffsetsByName.set(name, this.size);
         this.size += sizeOf(type);
+        return offset;
     }
 
     public fieldOffset(name: string): number {
         return this.fieldOffsetsByName.get(name);
     }
 
-    private fields: Array<Type | StructType>;
+    public fields: Array<Type | StructType>;
     private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
 }
@@ -40,6 +42,24 @@ function sizeOf(x: Type | StructType): number {
         case "f64":
             return 8;
     }
+}
+
+export function compareTypes(t1: Type | StructType, t2: Type | StructType): boolean {
+    if (t1 == t2) {
+        return true;
+    }
+    if (t1 instanceof StructType && t2 instanceof StructType) {
+        if (t1.fields.length != t2.fields.length) {
+            return false;
+        }
+        for(let i = 0; i < t1.fields.length; i++) {
+            if (!compareTypes(t1.fields[i], t2.fields[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 export class FunctionType {
@@ -69,6 +89,7 @@ export class Variable {
     }
 
     public name: string;
+    public type: Type | StructType;
     /**
      * The number of times the value of the variable is used.
      */
@@ -94,6 +115,10 @@ export class Variable {
      */
     public isConstant: boolean = false;
     public constantValue: number;
+    /**
+     * addressable is true if 'addr_of' has been used on this variable.
+     */
+    public addressable: boolean;
 
     /**
      * Internal
@@ -231,8 +256,9 @@ export class Builder {
         this._mem.writeCount = 2;
     }
 
-    public define(name: string, params: Array<Type | StructType>, result: Type | StructType) {
+    public define(name: string, type: FunctionType, params: Array<Variable>, result: Variable) {
         let n: Node;
+        // Check whether a function of this name has already been declared
         if (this._node) {
             for(let x = this._node; x; x = x.next[0]) {
                 if (x.kind == "define" && x.name == name) {
@@ -242,13 +268,13 @@ export class Builder {
             }
         }
         if (!n) {
-            n = this.declare(name, params, result);
+            n = this.declare(name, type, params, result);
         }
         this._blocks.push(n);
     }
 
-    public declare(name: string, params: Array<Type | StructType>, result: Type | StructType): Node {
-        let n = new Node(null, "define", new FunctionType(params, result), []);
+    public declare(name: string, type: FunctionType, params: Array<Variable>, result: Variable | null): Node {
+        let n = new Node(null, "define", type, []);
         n.name = name;
         if (this._current) {
             this._current.next.push(n);
@@ -257,6 +283,21 @@ export class Builder {
             this._node = n;
         }
         this._current = n;
+        if (type.params.length != params.length) {
+            throw "Parameters do not match FunctionType"
+        }
+        if (!!type.result != !!result) {
+            throw "Result variable does not match FunctionType"
+        }
+        for(let i = 0; i < params.length; i++) {
+            let p = params[i];
+            p.type = type.params[i];
+            this.declParam(p);
+        }
+        if (result) {
+            result.type = type.result;
+            this.declResult(result);
+        }
         let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
         n.blockPartner = e;  
@@ -264,8 +305,34 @@ export class Builder {
         return n;
     }
     
-    public declvar(name: string, type: Type | StructType): Node {
-        let n = new Node(new Variable(name), "declvar", type, []);
+    private declParam(v: Variable): Node {
+        let n = new Node(v, "decl_param", v.type, []);
+        if (this._current) {
+            this._current.next.push(n);
+            n.prev.push(this._current);
+        } else {
+            this._node = n;
+        }
+        this._current = n;
+        this.countReadsAndWrites(n);
+        return n;
+    }
+
+    private declResult(v: Variable): Node {
+        let n = new Node(v, "decl_result", v.type, []);
+        if (this._current) {
+            this._current.next.push(n);
+            n.prev.push(this._current);
+        } else {
+            this._node = n;
+        }
+        this._current = n;
+        this.countReadsAndWrites(n);
+        return n;
+    }
+
+    public declVar(v: Variable): Node {
+        let n = new Node(v, "decl_var", v.type, []);
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -279,6 +346,13 @@ export class Builder {
 
     public assign(assign: Variable, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
         let n = new Node(assign, kind, type, args);
+        if (assign && assign.type) {
+            if (!compareTypes(assign.type, type)) {
+                throw "Variable " + assign.name + " used with wrong type";
+            }
+        } else if (assign) {
+            assign.type = type;
+        }
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -292,6 +366,14 @@ export class Builder {
 
     public call(assign: Variable, type: FunctionType, args: Array<Variable | string | number>): Variable {
         let n = new Node(assign, "call", type, args);
+        if (assign && assign.type) {
+            if (!compareTypes(assign.type, type.result)) {
+                throw "Variable " + assign.name + " used with wrong type";
+            }
+        } else if (assign) {
+            assign.type = type.result;
+        }
+
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -483,6 +565,9 @@ export class Builder {
                 v.readCount++;
             }
         }
+        if (n.kind == "addr_of" && n.args[0] instanceof Variable) {
+            (n.args[0] as Variable).addressable = true;
+        }
     }
 
     private _node: Node;
@@ -542,6 +627,8 @@ export class Optimizer {
                 n.assign = null;
             } else if (n.kind == "end" && n.prev[1]) {
                 this._removeDeadCode(n.prev[1], n.blockPartner);
+            } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                // Do nothing by intention
             } else if (n.kind != "call" && n.assign && n.assign.readCount == 0) {
                 let n2 = n.prev[0];
                 for(let a of n.args) {
@@ -740,47 +827,56 @@ export class SMTransformer {
     private stepCounter: number = 0;
 }
 
-/*
-        i32.const 0
-        set_local <step>
-        loop
-        block
-        block
-        block
-           get_local <step>
-           br_table 0 1 2 3
-        end
-        i32.const 0
-        set_local <step>
-        br 2
-        end
-        i32.const 0
-        set_local <step>
-        br 1
-        end
-        i32.const 0
-        set_local <step>
-        br 0
-        end
 
-if_restore_stack then ...
-loop
- block
-  block
-   br_table 0 1 2 // last is default
-  end
-  step 1 ...
-  br_if 1
-  const <next_step>
-  set_local 0
- end
- step 2 ...
- br_if 0
- goto ...
-end
-store_on_stack ...
-end_of_function
-*/
+export type Wasm32StorageType = "local" | "vars" | "params" | "result";
+
+export class Wasm32Storage {
+    public storageType: Wasm32StorageType;
+    public offset: number;
+}
+
+
+class Wasm32LocalVariableList {
+    public clone(): Wasm32LocalVariableList {
+        let l = new Wasm32LocalVariableList();
+        for(let v of this.used) {
+            l.used.push(v);
+        }
+        l.locals = this.locals;
+        return l;
+    }
+
+    public allocate(type: Type): number {
+        let t: wasm.StackType;
+        switch(type) {
+            case "i64":
+            case "s64":
+                t = "i64";
+                break;
+            case "f64":
+                t = "f64";
+                break;
+            case "f32":
+                t = "f32";
+                break;
+            default:
+                t = "i32";
+                break;
+        }
+        for(let i = 0; i < this.locals.length; i++) {
+            if (this.locals[i] == type && !this.used[i]) {
+                this.used[i] = true;
+                return i;
+            }
+        }
+        this.locals.push(t);
+        this.used.push(true);
+        return this.locals.length - 1;
+    }
+
+    public locals: Array<wasm.StackType> = [];
+    public used: Array<boolean> = [];
+}
 
 export class Wasm32Backend {
     constructor() {
@@ -794,33 +890,41 @@ export class Wasm32Backend {
         console.log(n.toString(""));
 
         this.traverse(n.next[0], n.blockPartner, null);
-//        this.analyzeVariableUsage(n, n.blockPartner, null);
         this.stackifySteps();
+        let locals = new Wasm32LocalVariableList();
+        this.analyzeVariableStorage(n, n.blockPartner, locals);
 
         console.log("========= Stackified ==========");
         console.log(n.toString(""));
-        this.emitSteps();
+        for(let v of this.varStorage.keys()) {
+            let s = this.varStorage.get(v);
+            console.log(v.name + " -> ", s.storageType, s.offset);
+        }
 
         var wf = new wasm.Function(n.name);
         wf.parameters.push("i32"); // step_local
         wf.parameters.push("i32"); // sp
         wf.results.push("i32"); // interrupt or complete
         wf.locals.push("i32"); // bp
-        
+        wf.locals = wf.locals.concat(locals.locals);
+
         // Make room to store bp, sp and step upon async calls.
-        this.localsFrame.addField("$bp", "i32");
-        this.localsFrame.addField("$sp", "i32");
-        this.localsFrame.addField("$step", "i32");
+        this.varsFrame.addField("$bp", "i32");
+        this.varsFrame.addField("$sp", "i32");
+        this.varsFrame.addField("$step", "i32");
+
         // Generate function body
         let code: Array<wasm.Node> = [];
-        // Put the locals_frame on the heap_stack and set BP
+        // Put the varsFrame on the heap_stack and set BP
         code.push(new wasm.GetLocal(this.spLocal));
-        code.push(new wasm.Constant("i32", this.localsFrame.size));
+        code.push(new wasm.Constant("i32", this.varsFrame.size));
         code.push(new wasm.BinaryIntInstruction("i32", "sub"));
         code.push(new wasm.TeeLocal(this.spLocal));
         code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
+        
         // Main loop of the function
         code.push(new wasm.Loop());
+        this.emitSteps();
         let targets: Array<number> = [];
         for(let i = 0; i < this.stepCode.length; i++) {
             code.push(new wasm.Block());
@@ -846,10 +950,6 @@ export class Wasm32Backend {
         this.module.funcs.push(wf)
 
         return wf;
-//        console.log(wf.toWast(""));
-//        for(let i = 0; i < code.length; i++) {
-//            console.log(code[i].toWast(""));
-//        }
     }
 
     /**
@@ -902,24 +1002,26 @@ export class Wasm32Backend {
     private stackifySteps() {
         for(let i = 0; i < this.steps.length; i++) {
             let n = this.steps[i];
-            this.stackifyStep(n);
+            this.stackifyStep(n, null);
         }
     }
 
-    private stackifyStep(start: Node) {
+    private stackifyStep(start: Node, end: Node) {
         let n = start.next[0];
-        for( ; n; ) {
+        let prev: Node = null;
+        for( ; n && n != end; ) {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
-                if (n != start) {
-                    this.stackifyStepBackwards(n.prev[0]);
-                    if (n.kind == "end" && n.blockPartner.kind == "if" && n.prev[1]) {
-                        this.stackifyStepBackwards(n.prev[0]);                        
-                    }
+                if (prev) {
+                    this.stackifyStepBackwards(prev);
                 }
                 if (n.kind == "step" || n.kind == "goto_step") {
                     break;
                 }
             }
+            if (n.kind == "if" && n.next[1]) {
+                this.stackifyStep(n.next[1], n.blockPartner);
+            }
+            prev = n;
             n = n.next[0];
         }
     }
@@ -962,6 +1064,9 @@ export class Wasm32Backend {
                 return null;
             }
             if (n.assign.name == v.name) {
+                if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                    return null;
+                }
                 return n;
             }
             n = n.prev[0];
@@ -985,6 +1090,9 @@ export class Wasm32Backend {
                 }
             }
             if (n.assign.name == v.name) {
+                if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                    return null;
+                }
                 return n;
             }
             n = n.prev[0];
@@ -992,41 +1100,54 @@ export class Wasm32Backend {
         return null;
     }
 
-    /**
-     * Tracks whether a variable is used in multiple steps.
-     */
-    /*
-    public analyzeVariableUsage(start: Node, end: Node, step: Node) {
+    private analyzeVariableStorage(start: Node, end: Node, locals: Wasm32LocalVariableList) {
         let n = start;
         for(; n; ) {
+            if (n.kind == "decl_result") {
+                let index = this.paramsFrame.addField(n.assign.name, n.assign.type);
+                let s: Wasm32Storage = {storageType: "result", offset: index};
+                this.varStorage.set(n.assign, s);                
+            } else if (n.kind == "decl_param") {
+                let index = this.paramsFrame.addField(n.assign.name, n.assign.type);
+                let s: Wasm32Storage = {storageType: "params", offset: index};
+                this.varStorage.set(n.assign, s);                
+            }
             if (n.assign) {
-                if (n.assign._step) {
-                    n.assign.usedInMultipleSteps = true;
-                } else {
-                    n.assign._step = step;
-                }
+                this.assignVariableStorage(n.assign, locals);
             }
             for(let v of n.args) {
                 if (v instanceof Variable) {
-                    if (v._step) {
-                        v.usedInMultipleSteps = true;
-                    } else {
-                        v._step = step;
-                    }                    
+                    this.assignVariableStorage(v, locals);
+                } else if (v instanceof Node) {
+                    this.analyzeVariableStorage(v, null, locals);
                 }
             }
-            if (n.kind == "step") {
-                step = n;
-                n = n.next[0];                
-            } else if (n.kind == "if" && n.next.length > 1) {
-                this.analyzeVariableUsage(n.next[1], n.blockPartner, step);
+            if (n.kind == "if" && n.next.length > 1) {
+                this.analyzeVariableStorage(n.next[1], n.blockPartner, locals.clone());
                 n = n.next[0];
             } else {
                 n = n.next[0];                
             }
         }
     }
-    */
+
+    private assignVariableStorage(v: Variable, locals: Wasm32LocalVariableList) {
+        if (v == this._heapStack || v == this._wasmStack || v.name == "mem") {
+            return;
+        }
+        if (this.varStorage.has(v)) {
+            return;
+        }
+        if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && !v.addressable) {
+            let index = locals.allocate(v.type);
+            let s: Wasm32Storage = {storageType: "local", offset: index};
+            this.varStorage.set(v, s);
+        } else {
+            let index = this.varsFrame.addField(v.name, v.type);
+            let s: Wasm32Storage = {storageType: "vars", offset: index};
+            this.varStorage.set(v, s);
+        }
+    }
 
     private emitSteps() {
         for(let i = 0; i < this.steps.length; i++) {
@@ -1245,15 +1366,20 @@ export class Wasm32Backend {
     private asyncCalls: Array<Node> = [];
     private asyncCallCode: Array<Array<wasm.Node>> = [];
     private tr: SMTransformer;
+    private resultFrame: StructType = new StructType();
     private paramsFrame: StructType = new StructType();
-    private localsFrame: StructType = new StructType();
+    private varsFrame: StructType = new StructType();
     private _heapStack = new Variable("heapStack");
     private _wasmStack = new Variable("wasmStack");
+    private varStorage = new Map<Variable, Wasm32Storage>();
 }
 
 function main() {
     let b = new Builder();
-    b.define("f1", ["i32", "f32"], "i32");
+    let r = new Variable("$r");
+    let p1 = new Variable("$1");
+    let p2 = new Variable("$2");
+    b.define("f1", new FunctionType(["i32", "f32"], "i32"), [p1, p2], r);
     let t2 = b.assign(b.tmp(), "const", "i32", [84]);
     let t1 = b.assign(b.tmp(), "const", "i32", [42]);
     let t = b.assign(b.tmp(), "add", "i32", [t1, t2]);
@@ -1261,9 +1387,11 @@ function main() {
     b.call(null, f1, [t, t]);
     b.ifBlock(t);
     let t3 = b.call(b.tmp(), f1, [9]);
-    b.assign(b.mem, "store", "i32", [t, 4, t3]);
+    let t5 = b.assign(b.tmp(), "addr_of", "addr", [t]);
+    b.assign(b.mem, "store", "i32", [t5, 4, t3]);
     b.elseBlock();
-    b.assign(b.mem, "store", "i32", [t, 8, 0]);
+    let t6 = b.assign(b.tmp(), "addr_of", "addr", [t]);
+    b.assign(b.mem, "store", "i32", [t6, 8, 0]);
     b.end();
 //    b.ifBlock(t);
     let bl = b.block();
