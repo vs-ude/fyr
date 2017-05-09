@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "addr_of" | "call" | "const" | "add";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -837,8 +837,12 @@ export class Wasm32Storage {
 
 
 class Wasm32LocalVariableList {
+    constructor(localsUsed: number) {
+        this.localsUsed = localsUsed;
+    }
+
     public clone(): Wasm32LocalVariableList {
-        let l = new Wasm32LocalVariableList();
+        let l = new Wasm32LocalVariableList(this.localsUsed);
         for(let v of this.used) {
             l.used.push(v);
         }
@@ -866,16 +870,17 @@ class Wasm32LocalVariableList {
         for(let i = 0; i < this.locals.length; i++) {
             if (this.locals[i] == type && !this.used[i]) {
                 this.used[i] = true;
-                return i;
+                return this.localsUsed + i;
             }
         }
         this.locals.push(t);
         this.used.push(true);
-        return this.locals.length - 1;
+        return this.localsUsed + this.locals.length - 1;
     }
 
     public locals: Array<wasm.StackType> = [];
     public used: Array<boolean> = [];
+    private localsUsed: number;
 }
 
 export class Wasm32Backend {
@@ -885,14 +890,30 @@ export class Wasm32Backend {
     }
 
     public generateFunction(n: Node): wasm.Function {
+        this.tmpI32Local = -1;
+        this.tmpI64Local = -1;
+        this.tmpF32Local = -1;
+        this.tmpF64Local = -1;
+        this.wf = new wasm.Function(n.name);
+        this.wf.parameters.push("i32"); // step_local
+        this.wf.parameters.push("i32"); // sp
+        this.wf.results.push("i32"); // interrupt or complete
+        this.wf.locals.push("i32"); // bp
+
+        // Make room to store bp, sp and step upon async calls.
+        this.varsFrame.addField("$bp", "i32");
+        this.varsFrame.addField("$sp", "i32");
+        this.varsFrame.addField("$step", "i32");
+
         this.tr.transform(n);
         console.log("========= State Machine ==========");
         console.log(n.toString(""));
 
         this.traverse(n.next[0], n.blockPartner, null);
         this.stackifySteps();
-        let locals = new Wasm32LocalVariableList();
+        let locals = new Wasm32LocalVariableList(this.wf.parameters.length + this.wf.results.length + this.wf.locals.length);
         this.analyzeVariableStorage(n, n.blockPartner, locals);
+        this.wf.locals = this.wf.locals.concat(locals.locals);
 
         console.log("========= Stackified ==========");
         console.log(n.toString(""));
@@ -900,18 +921,6 @@ export class Wasm32Backend {
             let s = this.varStorage.get(v);
             console.log(v.name + " -> ", s.storageType, s.offset);
         }
-
-        var wf = new wasm.Function(n.name);
-        wf.parameters.push("i32"); // step_local
-        wf.parameters.push("i32"); // sp
-        wf.results.push("i32"); // interrupt or complete
-        wf.locals.push("i32"); // bp
-        wf.locals = wf.locals.concat(locals.locals);
-
-        // Make room to store bp, sp and step upon async calls.
-        this.varsFrame.addField("$bp", "i32");
-        this.varsFrame.addField("$sp", "i32");
-        this.varsFrame.addField("$step", "i32");
 
         // Generate function body
         let code: Array<wasm.Node> = [];
@@ -946,10 +955,10 @@ export class Wasm32Backend {
         // End of the main loop
         code.push(new wasm.End());
 
-        wf.statements = code;
-        this.module.funcs.push(wf)
+        this.wf.statements = code;
+        this.module.funcs.push(this.wf)
 
-        return wf;
+        return this.wf;
     }
 
     /**
@@ -1203,7 +1212,7 @@ export class Wasm32Backend {
                 }
                 break;
             } else if (n.kind == "goto_step_if") {
-                // TODO: Parameter
+                this.loadOnWasmStack("i32", n.args[0], true, code);
                 if (n.name == "<end>") {
                     code.push(new wasm.If());
                     code.push(new wasm.Constant("i32", 0));
@@ -1228,122 +1237,255 @@ export class Wasm32Backend {
                 code.push(new wasm.Call(n.args[0] as number));
                 // If the call returned with '1', the call returned async
                 code.push(new wasm.BrIf(depth + additionalDepth - this.asyncCalls.length + this.asyncCallCode.length));
+                n = n.next[0];
+                if (!n || n.kind != "goto_step") {
+                    throw "call_begin must be followed by goto_step";
+                }
+                if (n.name == "<end>") {
+                    throw "goto_step after call_begin must not return";
+                }
+                let nextStep = this.stepNumberFromName(n.name);
+                // Go to the next step?
+                if (nextStep == step + 1) {
+                    // Nothing to do: Just fall through to the next step
+                    n = n.next[0];
+                }
                 let c: Array<wasm.Node> = [];
                 c.push(new wasm.Comment("ASYNC CALL " + this.asyncCallCode.length.toString()));
                 c.push(new wasm.End());
-                c.push(new wasm.Constant("i32", step + 1)); // Next step;
-                // TODO: Put next step in the stack_frame
-                // TODO: Put bp in the stack_frame
-                // TODO: Put sp in the stack_frame
+                c.push(new wasm.GetLocal(this.bpLocal));
+                c.push(new wasm.Constant("i32", nextStep));
+                c.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$step")));
+                c.push(new wasm.GetLocal(this.bpLocal));
+                c.push(new wasm.GetLocal(this.spLocal));
+                c.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$sp")));
+                c.push(new wasm.GetLocal(this.bpLocal));
+                c.push(new wasm.GetLocal(this.bpLocal));
+                c.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$bp")));
                 c.push(new wasm.Constant("i32", 1)); // Return with '1' to indicate that this is an async return
                 c.push(new wasm.Return());
                 this.asyncCallCode.push(c);
-                n = n.next[0];
-                if (n && n.kind == "goto_step" && step + 1 < this.steps.length && this.steps[step + 1].name == n.name) {
-                    n = n.next[0];
-                } else if (n && n.kind == "goto_step" && n.name == "<end>") {
-                    n = n.next[0];
-                    code.push(new wasm.Constant("i32", 0));
-                    code.push(new wasm.Return());
-                }
             } else if (n.kind == "call_end") {
                 // TODO: Read result from stack
-                n = n.next[0];                
-            } else if (n.kind == "const") {
-                let width: wasm.StackType;
-                switch (n.type) {
-                    case "i8":
-                    case "i16":
-                    case "i32":
-                    case "s8":
-                    case "s16":
-                    case "s32":
-                    case "addr":
-                        width = "i32";
-                        break;
-                    case "i64":
-                    case "s64":
-                        width = "i64";
-                        break;
-                    case "f32":
-                        width = "f32";
-                        break;
-                    case "f64":
-                        width = "f64";
-                        break;
-                }
-                code.push(new wasm.Constant(width, n.args[0] as number));
-                // TODO: Store in destination
                 n = n.next[0];
             } else if (n.kind == "store") {
-                // TODO: Load addr
-                // TODO: Load value
-                let width: wasm.StackType;
+                if (n.type instanceof StructType) {
+                    throw "TODO"
+                }
+                if (n.type instanceof FunctionType) {
+                    throw "Implementation error"
+                }
+                this.loadOnWasmStack("addr", n.args[0], true, code);
+                this.loadOnWasmStack(n.type, n.args[2], true, code);
+                let width: wasm.StackType = this.stackTypeOf(n.type);
                 let asWidth: null | "8"| "16" | "32" = null;
                 switch (n.type) {
                     case "i8":
                     case "s8":
                         asWidth = "8";
-                        width = "i32";
                         break;
                     case "i16":
                     case "s16":
                         asWidth = "16";
-                        width = "i32";
-                        break;
-                    case "i32":
-                    case "s32":
-                    case "addr":
-                        width = "i32";
-                        break;
-                    case "i64":
-                    case "s64":
-                        width = "i64";
-                        break;
-                    case "f32":
-                        width = "f32";
-                        break;
-                    case "f64":
-                        width = "f64";
                         break;
                 }
                 code.push(new wasm.Store(width, asWidth, n.args[1] as number));
-                // TODO: Store in destination
                 n = n.next[0];
-            } else if (n.kind == "add") {
-                // TODO: Load args
-                let width: wasm.StackType;
-                switch (n.type) {
-                    case "i8":
-                    case "i16":
-                    case "i32":
-                    case "s8":
-                    case "s16":
-                    case "s32":
-                    case "addr":
-                        code.push(new wasm.BinaryIntInstruction("i32", "add"));
-                        width = "i32";
-                        break;
-                    case "i64":
-                    case "s64":
-                        code.push(new wasm.BinaryIntInstruction("i64", "add"));
-                        width = "i64";
-                        break;
-                    case "f32":
-                        code.push(new wasm.BinaryFloatInstruction("f32", "add"));
-                        width = "f32";
-                        break;
-                    case "f64":
-                        code.push(new wasm.BinaryFloatInstruction("f64", "add"));
-                        width = "f64";
-                        break;
+            } else if (n.kind == "const" || n.kind == "load" || this.isBinaryInstruction(n.kind)) {
+                if (n.type instanceof StructType) {
+                    throw "StructType cannot be used in math"
                 }
-                // TODO: Store in destination
+                if (n.type instanceof FunctionType) {
+                    throw "Implementation error"
+                }
+                this.loadNodeOnWasmStack(n, false, code);
                 n = n.next[0];
             } else {
                 // TODO
                 n = n.next[0];
             }
+        }
+    }
+
+    /**
+     * tee determines whether the value should remain on the stack (the normal case) or whether
+     * the value is assigned to the destination value AND kept on the stack
+     */
+    private loadOnWasmStack(type: Type, n: Node | Variable | number, tee: boolean, code: Array<wasm.Node>) {
+        if (n instanceof Node) {
+            return this.loadNodeOnWasmStack(n, tee, code);
+        } else if (n instanceof Variable) {
+            return this.loadVariableOnWasmStack(type, n, code);
+        } else {
+            return this.loadValueOnWasmStack(type, n, code);
+        }
+    }
+
+    private loadNodeOnWasmStack(n: Node, tee: boolean, code: Array<wasm.Node>) {
+        if (n.kind == "const") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            let width: wasm.StackType = this.stackTypeOf(n.type);
+            if (n.assign != this._wasmStack) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            code.push(new wasm.Constant(width, n.args[0] as number));
+            if (n.assign != this._wasmStack) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, tee, code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "load") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign != this._wasmStack) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.loadOnWasmStack("addr", n.args[0], true, code);
+            let width: wasm.StackType = this.stackTypeOf(n.type);
+            let asWidth: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null;
+            switch (n.type) {
+                case "i8":
+                    asWidth = "8_u";
+                    break;
+                case "s8":
+                    asWidth = "8_s";
+                    break;
+                case "i16":
+                    asWidth = "16_u";
+                    break;
+                case "s16":
+                    asWidth = "16_s";
+                    break;
+            }
+            code.push(new wasm.Load(width, asWidth, n.args[1] as number));
+            if (n.assign != this._wasmStack) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, tee, code);
+            }
+            n = n.next[0];
+        } else if (this.isBinaryInstruction(n.kind)) {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign != this._wasmStack) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.loadOnWasmStack(n.type, n.args[0], true, code);
+            this.loadOnWasmStack(n.type, n.args[1], true, code);
+            let width: wasm.StackType = this.stackTypeOf(n.type);
+            code.push(new wasm.BinaryInstruction(width, n.kind as wasm.BinaryOp));
+            if (n.assign != this._wasmStack) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, tee, code);
+            }
+            n = n.next[0];
+        } else {
+            // TODO
+        }
+    }
+
+    private loadVariableOnWasmStack(type: Type, v: Variable, code: Array<wasm.Node>) {
+        let width: wasm.StackType = this.stackTypeOf(type);
+        let asWidth: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null;
+        switch (type) {
+            case "i8":
+                asWidth = "8_u";
+                break;
+            case "s8":
+                asWidth = "8_s";
+                break;
+            case "i16":
+                asWidth = "16_u";
+                break;
+            case "s16":
+                asWidth = "16_s";
+                break;
+        }        
+        let s = this.varStorage.get(v);
+        switch(s.storageType) {
+            case "local":
+                code.push(new wasm.GetLocal(s.offset));
+                break;
+            case "vars":
+                code.push(new wasm.GetLocal(this.bpLocal));
+                code.push(new wasm.Load(width, asWidth, this.varsFrame.fieldOffset(v.name)));
+                break;                
+            case "params":
+                code.push(new wasm.GetLocal(this.bpLocal));
+                code.push(new wasm.Load(width, asWidth, this.varsFrame.size + this.paramsFrame.fieldOffset(v.name)));
+                break;                
+            case "result":
+                code.push(new wasm.GetLocal(this.bpLocal));
+                code.push(new wasm.Load(width, asWidth, this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name)));
+                break;                
+        }
+    }
+
+    private loadValueOnWasmStack(type: Type, n: number, code: Array<wasm.Node>) {
+        let width: wasm.StackType = this.stackTypeOf(type);
+        code.push(new wasm.Constant(width, n));
+    }
+
+    private storeVariableFromWasmStack1(type: Type, v: Variable, code: Array<wasm.Node>) {
+        let s = this.varStorage.get(v);
+        switch(s.storageType) {
+            case "vars":
+            case "params":
+            case "result":
+                code.push(new wasm.GetLocal(this.bpLocal));
+                break;                
+        }
+    }
+
+    private storeVariableFromWasmStack2(type: Type, v: Variable, tee: boolean, code: Array<wasm.Node>) {
+        let width: wasm.StackType = this.stackTypeOf(type);
+        let asWidth: null | "8"| "16" | "32" = null;
+        switch (type) {
+            case "i8":
+            case "s8":
+                asWidth = "8";
+                break;
+            case "i16":
+            case "s16":
+                asWidth = "16";
+                break;
+        }
+        let s = this.varStorage.get(v);
+        switch(s.storageType) {
+            case "local":
+                if (tee) {
+                    code.push(new wasm.TeeLocal(s.offset));
+                } else {
+                    code.push(new wasm.SetLocal(s.offset));
+                }
+                break;
+            case "vars":
+                if (tee) {
+                    code.push(new wasm.TeeLocal(this.getTmpLocal(width)));
+                }
+                code.push(new wasm.Store(width, asWidth, this.varsFrame.fieldOffset(v.name)));
+                if (tee) {
+                    code.push(new wasm.GetLocal(this.getTmpLocal(width)));
+                }
+                break;                
+            case "params":
+                if (tee) {
+                    code.push(new wasm.TeeLocal(this.getTmpLocal(width)));
+                }
+                code.push(new wasm.Store(width, asWidth, this.varsFrame.size + this.paramsFrame.fieldOffset(v.name)));
+                if (tee) {
+                    code.push(new wasm.GetLocal(this.getTmpLocal(width)));
+                }
+                break;                
+            case "result":
+                if (tee) {
+                    code.push(new wasm.TeeLocal(this.getTmpLocal(width)));
+                }
+                code.push(new wasm.Store(width, asWidth, this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name)));
+                if (tee) {
+                    code.push(new wasm.GetLocal(this.getTmpLocal(width)));
+                }
+                break;                
         }
     }
 
@@ -1353,6 +1495,92 @@ export class Wasm32Backend {
 
     private stepNumber(n: Node): number {
         return this.steps.indexOf(n);
+    }
+
+    private stepNumberFromName(name: string): number {
+        return this.stepsByName.get(name);
+    }
+
+    private isBinaryInstruction(kind: NodeKind): boolean {
+        switch(kind) {
+            case "add":
+            case "sub":
+            case "mul":
+            case "div":
+            case "div_s":
+            case "div_u":
+            case "rem_s":
+            case "rem_u":
+            case "and":
+            case "or":
+            case "xor":
+            case "shl":
+            case "shr_u":
+            case "shr_s":
+            case "rotl":
+            case "rotr":
+            case "eq":
+            case "neq":
+            case "lt_s":
+            case "lt_u":
+            case "le_s":
+            case "le_u":
+            case "gt_s":
+            case "gt_u":
+            case "ge_s":
+            case "ge_u":
+            case "lt":
+            case "gt":
+            case "le":
+            case "ge":
+            case "min":
+            case "max":
+                return true;
+        }
+        return false;
+    }
+
+    private stackTypeOf(t: Type): wasm.StackType {
+        switch(t) {
+            case "i64":
+            case "s64":
+                return "i64";
+            case "f64":
+                return "f64";
+            case "f32":
+                return "f32";
+        }
+        return "i32";
+    }
+
+    private getTmpLocal(type: Type): number {
+        switch(type) {
+            case "i32":
+                if (this.tmpI32Local == -1) {
+                    this.tmpI32Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.wf.locals.push(type);
+                }
+                return this.tmpI32Local;
+            case "i64":
+                if (this.tmpI64Local == -1) {
+                    this.tmpI64Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.wf.locals.push(type);
+                }
+                return this.tmpI64Local;
+            case "f32":
+                if (this.tmpF32Local == -1) {
+                    this.tmpF32Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.wf.locals.push(type);
+                }
+                return this.tmpF32Local;
+            case "f64":
+                if (this.tmpF64Local == -1) {
+                    this.tmpF64Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.wf.locals.push(type);
+                }
+                return this.tmpF64Local;
+        }
+        throw "Implementation error";
     }
 
     public module: wasm.Module;
@@ -1372,6 +1600,11 @@ export class Wasm32Backend {
     private _heapStack = new Variable("heapStack");
     private _wasmStack = new Variable("wasmStack");
     private varStorage = new Map<Variable, Wasm32Storage>();
+    private tmpI32Local: number;
+    private tmpI64Local: number;
+    private tmpF32Local: number;
+    private tmpF64Local: number;
+    private wf: wasm.Function;
 }
 
 function main() {
