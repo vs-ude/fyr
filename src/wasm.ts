@@ -137,6 +137,8 @@ export class Function extends Node {
         for(let st of this.statements) {
             if (st.op == "end") {
                 i = i.substr(0, i.length - 4);
+            } else if (st.op == "else") {
+                i = i.substr(0, i.length - 4);                
             }
             s += st.toWast(i + "    ") + "\n";
             if (st.op == "block" || st.op == "loop" || st.op == "if" || st.op == "else") {
