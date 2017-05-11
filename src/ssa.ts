@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -63,9 +63,10 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
 }
 
 export class FunctionType {
-    constructor(params: Array<Type | StructType>, result: Type | StructType | null) {
+    constructor(params: Array<Type | StructType>, result: Type | StructType | null, isAsync: boolean = true) {
         this.params = params;
         this.result = result;
+        this.isAsync = isAsync;
     }
 
     public toString(): string {
@@ -76,6 +77,7 @@ export class FunctionType {
 
     public params: Array<Type | StructType>;
     public result: Type | StructType | null;
+    public isAsync: boolean;
 }
 
 export class Variable {
@@ -396,7 +398,7 @@ export class Builder {
         }
         this._current = n;
         for(let b of this._blocks) {
-            b.isAsync = true;
+            b.isAsync = b.isAsync || type.isAsync;
         }
         this.countReadsAndWrites(n);
         return n.assign;
@@ -753,7 +755,7 @@ export class SMTransformer {
                         n.blockPartner = n.blockPartner.blockPartner;
                     }
                     n = n.next[0];
-                } else if (n.kind == "call") {
+                } else if (n.kind == "call" && (n.type as FunctionType).isAsync) {
                     n.kind = "call_begin";
                     let result = new Node(n.assign, "call_end", n.type, []);
                     n.assign = null;
@@ -1075,11 +1077,6 @@ export class Wasm32Backend {
                     let inline = this.findInline(n.prev[0], a);
                     if (inline) {
                         inline.assign = null;
-//                        if (inline.kind == "call_end") {
-//                            inline.assign = this._heapStack;
-//                        } else {
-//                            inline.assign = this._wasmStack;
-//                        }
                         n.args[i] = inline;
                         Node.removeNode(inline);
                     }
@@ -1330,23 +1327,44 @@ export class Wasm32Backend {
                     throw "Implementation error"
                 }
                 if (n.type instanceof StructType) {
-                    throw "TODO: Store a struct either from a variable or from the heapStack"
+                    // Get the destination addr
+                    this.emitWordAssign("addr", n.args[0], "wasmStack", code);
+                    if (n.args[1] !== 0) {
+                        this.emitWordAssign("addr", n.args[1], "wasmStack", code);
+                        code.push(new wasm.BinaryInstruction("i32", "add"));
+                    }
+                    // Get the source addr
+                    if (typeof(n.args[2]) == "number") {
+                        throw "Implementation error: number is not a StructType"
+                    }
+                    if (n.args[1] instanceof Variable) {
+                        this.emitAddrOfVariable(n.args[2] as Variable, code);
+                    } else {
+                        this.emitStructAssign1(n.type, n.args[2] as Node, code);
+                    }
+                    // Copy
+                    this.emitCopy(n.type, code);
+                    // Clean up if required
+                    if (n.args[1] instanceof Node) {
+                        this.emitStructAssign2(n.type, n.args[2] as Node, code);
+                    }
+                } else {
+                    this.emitAssign("addr", n.args[0], "wasmStack", code);
+                    this.emitAssign(n.type, n.args[2], "wasmStack", code);
+                    let width: wasm.StackType = this.stackTypeOf(n.type);
+                    let asWidth: null | "8"| "16" | "32" = null;
+                    switch (n.type) {
+                        case "i8":
+                        case "s8":
+                            asWidth = "8";
+                            break;
+                        case "i16":
+                        case "s16":
+                            asWidth = "16";
+                            break;
+                    }
+                    code.push(new wasm.Store(width, asWidth, n.args[1] as number));
                 }
-                this.emitAssign("addr", n.args[0], "wasmStack", code);
-                this.emitAssign(n.type, n.args[2], "wasmStack", code);
-                let width: wasm.StackType = this.stackTypeOf(n.type);
-                let asWidth: null | "8"| "16" | "32" = null;
-                switch (n.type) {
-                    case "i8":
-                    case "s8":
-                        asWidth = "8";
-                        break;
-                    case "i16":
-                    case "s16":
-                        asWidth = "16";
-                        break;
-                }
-                code.push(new wasm.Store(width, asWidth, n.args[1] as number));
                 n = n.next[0];
             } else if (n.kind == "call_end") {
                 if (!(n.type instanceof FunctionType)) {
@@ -1379,7 +1397,7 @@ export class Wasm32Backend {
                 }
                 this.emitAssign(n.type, n, null, code);
                 n = n.next[0];
-            } else if (n.kind == "const" || this.isBinaryInstruction(n.kind)) {
+            } else if (n.kind == "const" || this.isBinaryInstruction(n.kind) || this.isUnaryInstruction(n.kind)) {
                 if (n.type instanceof FunctionType || !n.assign) {
                     throw "Implementation error"
                 }
@@ -1706,8 +1724,22 @@ export class Wasm32Backend {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
             }
             n = n.next[0];
+        } else if (this.isUnaryInstruction(n.kind)) {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
+            let width: wasm.StackType = this.stackTypeOf(n.type);
+            code.push(new wasm.BinaryInstruction(width, n.kind as wasm.BinaryOp));
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
         } else {
-            // TODO
+            throw "Implementation error";
         }
     }
 
@@ -1825,6 +1857,25 @@ export class Wasm32Backend {
         return false;
     }
 
+    private isUnaryInstruction(kind: NodeKind): boolean {
+        switch(kind) {
+            case "eqz":
+            case "clz":
+            case "ctz":
+            case "popcnt":
+            case "neg":
+            case "abs":
+            case "copysign":
+            case "ceil":
+            case "floor":
+            case "trunc":
+            case "nearest":
+            case "sqrt":
+                return true;
+        }
+        return false;
+    }
+
     private stackTypeOf(t: Type): wasm.StackType {
         switch(t) {
             case "i64":
@@ -1883,8 +1934,6 @@ export class Wasm32Backend {
     private resultFrame: StructType = new StructType();
     private paramsFrame: StructType = new StructType();
     private varsFrame: StructType = new StructType();
-//    private _heapStack = new Variable("heapStack");
-//    private _wasmStack = new Variable("wasmStack");
     private varStorage = new Map<Variable, Wasm32Storage>();
     private tmpI32Local: number;
     private tmpI64Local: number;
@@ -1928,7 +1977,8 @@ function main() {
     b.call(b.tmp(), f, [8, t]);
     let dummy1 = b.assign(b.tmp(), "const", "i32", [44]);
     let dummy2 = b.assign(b.tmp(), "const", "i32", [45]);
-    b.assign(b.tmp(), "add", "i32", [dummy1, dummy2]);
+    let t7 = b.assign(b.tmp(), "add", "i32", [dummy1, dummy2]);
+    b.call(null, new FunctionType(["i32"], null, false), [111, t7]);
     b.end();
     console.log(Node.strainToString("", b.node));
 
