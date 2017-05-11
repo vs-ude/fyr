@@ -1370,6 +1370,7 @@ export class Wasm32Backend {
                 if (!(n.type instanceof FunctionType)) {
                     throw "Implementation error"
                 }
+                // TODO: Remove parameters from stack
                 if (!n.type.result) {
                     // Do nothing by intention
                 } else if (!n.assign) {
@@ -1411,7 +1412,7 @@ export class Wasm32Backend {
     }
 
     private emitAssign(type: Type | StructType, n: Node | Variable | number, stack: "heapStack" | "wasmStack" | null, code: Array<wasm.Node>) {
-        if (stack == null && (n instanceof Variable || typeof(n) == "number" || !n.assign)) {
+        if (stack == null && (n instanceof Variable || typeof(n) == "number" || (n.kind != "call" && !n.assign))) {
             throw "Implementation error: No assignment"
         }
 
@@ -1463,6 +1464,47 @@ export class Wasm32Backend {
             // Clean up if required
             if (n instanceof Node) {
                 this.emitStructAssign2(type, n, code);
+            }
+            return;
+        }
+
+        if (n instanceof Node && n.kind == "call" && (n.type as FunctionType).result instanceof StructType) {
+            if (stack == "wasmStack") {
+                throw "Implementation error: StructType on wasmStack is not possible";
+            }
+            if (!(n.type instanceof FunctionType)) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (!(n.type.result instanceof StructType)) {
+                throw "Implementation error.";
+            }
+            if (n.assign) {
+                // Put destination addr on stack
+                this.emitAddrOfVariable(n.assign, code);
+            }
+            // Make room for the result
+            code.push(new wasm.GetLocal(this.spLocal));
+            code.push(new wasm.Constant("i32", sizeOf(n.type.result)));
+            code.push(new wasm.BinaryInstruction("i32", "sub"));
+            code.push(new wasm.SetLocal(this.spLocal));
+            // Put parameters on stack
+            for(let i = 0; i < n.type.params.length; i++) {
+                this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", code);
+            }
+            // Put SP on stack
+            code.push(new wasm.GetLocal(this.spLocal));
+            // Call the function
+            code.push(new wasm.Call(n.args[0] as number));
+            // TODO: Remove parameters from stack
+            if (n.assign) {
+                // Put source addr on stack
+                code.push(new wasm.GetLocal(this.spLocal));
+            } else if (!stack) {
+                // Remove result from stack
+                code.push(new wasm.GetLocal(this.spLocal));
+                code.push(new wasm.Constant("i32", sizeOf(n.type.result)));
+                code.push(new wasm.BinaryInstruction("i32", "add"));
+                code.push(new wasm.TeeLocal(this.spLocal));
             }
             return;
         }
@@ -1738,6 +1780,29 @@ export class Wasm32Backend {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
             }
             n = n.next[0];
+        } else if (n.kind == "call") {
+            if (!(n.type instanceof FunctionType)) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.type.result instanceof StructType) {
+                throw "Implementation error. StructType returns are handled elsewhere";
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type.result as Type, n.assign, code);
+            }
+            for(let i = 0; i < n.type.params.length; i++) {
+                this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", code);
+            }
+            code.push(new wasm.GetLocal(this.spLocal));
+            // Call the function
+            code.push(new wasm.Call(n.args[0] as number));
+            // TODO: Remove parameters from stack
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type.result as Type, n.assign, stack == "wasmStack", code);
+            } else if (!stack) {
+                code.push(new wasm.Drop());
+            }
+            n = n.next[0];            
         } else {
             throw "Implementation error";
         }
