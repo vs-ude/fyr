@@ -1,0 +1,29 @@
+<html>
+    <head>
+        <title>WASM Example</title>
+    </head>
+    <body>
+        <h1>WASM Example</h1>
+        <script>
+            let importObject = {
+                imports: {
+                    logString: function(index, len) {
+                        console.log("TODO", index, len);
+                    },
+                    logNumber: function(n) {
+                        console.log(n);
+                    }
+                }
+            }
+            fetch('example.wasm').then(response =>
+                response.arrayBuffer()
+            ).then(bytes =>
+                WebAssembly.instantiate(bytes, importObject)
+            ).then(results => {
+                console.log("Start main ...");
+                let result = results.instance.exports.main();
+                console.log("Result =", result);
+            });
+        </script>
+    </body>
+</html>

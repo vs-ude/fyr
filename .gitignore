@@ -2,3 +2,4 @@ node_modules
 tmp.*
 old
 out
+examples/*.wasm
