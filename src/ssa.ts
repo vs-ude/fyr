@@ -636,18 +636,56 @@ export class Optimizer {
 
     public removeDeadCode(n: Node) {
         this._removeDeadCode(n.blockPartner, n);
+        this._removeDeadCode2(n, n.blockPartner);
+    }
+
+    /**
+     * Traverse the code forwards and eliminate unreachable code
+     */
+    private _removeDeadCode2(n: Node, end: Node) {
+        let dead: boolean = false;
+        for( ;n && n != end; ) {
+            if (dead) {
+                for(let a of n.args) {
+                    if (a instanceof Variable) {
+                        a.readCount--;
+                    }
+                }
+                if (n.assign) {
+                    n.assign.writeCount--;
+                }
+                let n2 = n.next[0];
+                Node.removeNode(n);
+                n = n2;
+                continue;
+            }
+            if (n.kind == "return" || n.kind == "br") {
+                dead = true;
+            }
+            if (n.kind == "if") {
+                this._removeDeadCode2(n.next[0], n.blockPartner);
+                if (n.next[1]) {
+                    this._removeDeadCode2(n.next[1], n.blockPartner);
+                }
+                n = n.blockPartner;
+            } else if (n.kind == "block" || n.kind == "loop") {
+                this._removeDeadCode2(n.next[0], n.blockPartner);
+                n = n.blockPartner;                
+            }
+            n = n.next[0];
+        }
     }
 
     /**
      * Traverse the code backwards
      */
     private _removeDeadCode(n: Node, end: Node) {
-        for( ;n; ) {
+        for( ;n && n != end; ) {
             // Remove assignments to variables which are not read
             if (n.kind == "call" && n.assign && n.assign.readCount == 0) {
                 n.assign.writeCount--;
                 n.assign = null;
-            } else if (n.kind == "end" && n.prev[1]) {
+            } else if (n.kind == "end" && n.prev[1]) { // The 'end' belongs to an 'if'?
                 this._removeDeadCode(n.prev[1], n.blockPartner);
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var" || n.kind == "return") {
                 // Do nothing by intention
@@ -724,9 +762,14 @@ export class SMTransformer {
                 }
             } else if (n.kind == "end") {
                 if (step) {
-                    let end = new Node(null, "goto_step", undefined, []);
-                    step = null;
-                    Node.insertBetween(n.prev[elseClause ? 1 : 0], n, end);                        
+                    if (n.blockPartner.kind != "if" && n.prev[0].kind == "return") {
+                        // Do nothing by intention
+                        step = null;
+                    } else {
+                        let end = new Node(null, "goto_step", undefined, []);
+                        step = null;
+                        Node.insertBetween(n.prev[elseClause ? 1 : 0], n, end);                        
+                    }
                 }
                 if (n == endNode) {
                     n = null;
@@ -1042,7 +1085,7 @@ export class Wasm32Backend {
         for(let i = 0; i < this.asyncCallCode.length; i++) {
             code.push(new wasm.Block());
         }
-        targets.push(this.stepCode.length);
+        targets.push(this.stepCode.length + 1); // The default target: Exit
         code.push(new wasm.GetLocal(this.stepLocal));
         // Branch to the target steps
         code.push(new wasm.BrTable(targets));
@@ -1132,7 +1175,7 @@ export class Wasm32Backend {
         let n = start.next[0];
 //        let prev: Node = null;
         for( ; n && n != end; ) {
-            if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+            if (n.kind == "return" || n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
                 if (n != start.next[0]) {
                     this.stackifyStepBackwards(n);
                 }
@@ -1140,18 +1183,23 @@ export class Wasm32Backend {
                     break;
                 }
             }
-            if (n.kind == "if" && n.next[1]) {
-                this.stackifyStep(n.next[1], n.blockPartner);
+            if (n.kind == "if") {
+                this.stackifyStep(n, n.blockPartner.next[0]);
+                if (n.next[1]) {
+                    this.stackifyStep(n, n.blockPartner.next[0]);
+                }
+                n = n.blockPartner.next[0];
+            } else {
+    //            prev = n;
+                n = n.next[0];
             }
-//            prev = n;
-            n = n.next[0];
         }
     }
 
     private stackifyStepBackwards(start: Node) {
         let n = start;
         for( ;n; ) {
-            if (n != start && (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end")) {
+            if (n != start && (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return")) {
                 break;
             }
             for(let i = 0; i < n.args.length; i++) {
@@ -1179,7 +1227,7 @@ export class Wasm32Backend {
 
     private findInline(n: Node, v: Variable): Node {
         for( ;n; ) {
-            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
             if (n.assign && n.assign.name == v.name) {
@@ -1200,7 +1248,7 @@ export class Wasm32Backend {
      */
     private findInlineForMultipleReads(n: Node, v: Variable): Node {
         for( ;n; ) {
-            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
+            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
             for(let a of n.args) {
@@ -1443,7 +1491,7 @@ export class Wasm32Backend {
                         throw "Implementation error: number is not a StructType"
                     }
                     if (n.args[1] instanceof Variable) {
-                        this.emitAddrOfVariable(n.args[2] as Variable, code);
+                        this.emitAddrOfVariable(n.args[2] as Variable, false, code);
                     } else {
                         this.emitStructAssign1(n.type, n.args[2] as Node, code);
                     }
@@ -1510,12 +1558,12 @@ export class Wasm32Backend {
                         throw "Implementation error: return is missing an assignment: " + n.toString("");
                     }
                     if (n.type instanceof StructType || this.wfIsAsync) {
-                        // Destination addr
-                        this.emitAddrOfVariable(n.assign, code);
                         if (n.type instanceof StructType) {
+                            // Destination addr
+                            this.emitAddrOfVariable(n.assign, false, code);
                             // Source addr
                             if (n.args[0] instanceof Variable) {
-                                this.emitAddrOfVariable(n.args[0] as Variable, code);
+                                this.emitAddrOfVariable(n.args[0] as Variable, false, code);
                             } else {
                                 this.emitStructAssign1(n.type as StructType, n.args[0] as Node, code);
                             }
@@ -1529,6 +1577,9 @@ export class Wasm32Backend {
                             if (n.type instanceof FunctionType) {
                                 throw "Implementation error";
                             }
+                            // Destination addr
+                            let offset = this.emitAddrOfVariable(n.assign, true, code);
+                            // Put value on stack
                             this.emitWordAssign(n.type as Type, n.args[0], "wasmStack", code);
                             let width = this.stackTypeOf(n.type);
                             let asWidth: null | "8"| "16" | "32" = null;
@@ -1542,7 +1593,8 @@ export class Wasm32Backend {
                                     asWidth = "16";
                                     break;
                             }
-                            code.push(new wasm.Store(width, asWidth, 0));
+                            // Store to heapStack
+                            code.push(new wasm.Store(width, asWidth, offset));
                         }
                     } else {
                         this.emitWordAssign(n.type as Type, n.args[0], "wasmStack", code);
@@ -1578,7 +1630,7 @@ export class Wasm32Backend {
             }
             if (n.assign) {
                 // Put destination addr on stack
-                this.emitAddrOfVariable(n.assign, code);
+                this.emitAddrOfVariable(n.assign, false, code);
             }
             // Make room for the result on the heap stack
             code.push(new wasm.GetLocal(this.spLocal));
@@ -1674,12 +1726,12 @@ export class Wasm32Backend {
             }
             if (n instanceof Node && n.assign) {
                 // Put destination addr on wasm stack
-                this.emitAddrOfVariable(n.assign, code);
+                this.emitAddrOfVariable(n.assign, false, code);
             }
             
             // Compute the source addr
             if (n instanceof Variable) {
-                this.emitAddrOfVariable(n, code);
+                this.emitAddrOfVariable(n, false, code);
             } else {
                 this.emitStructAssign1(type, n, code);
             }
@@ -1759,27 +1811,37 @@ export class Wasm32Backend {
         }
     }
 
-    private emitAddrOfVariable(v: Variable, code: Array<wasm.Node>) {
+    private emitAddrOfVariable(v: Variable, returnOffset: boolean, code: Array<wasm.Node>) {
         let s = this.varStorage.get(v);
         switch(s.storageType) {
             case "vars":
                 code.push(new wasm.GetLocal(this.bpLocal));
+                if (returnOffset) {
+                    return this.varsFrame.fieldOffset(v.name);
+                }
                 code.push(new wasm.Constant("i32", this.varsFrame.fieldOffset(v.name)));
                 code.push(new wasm.BinaryInstruction("i32", "add"));
                 break;                
             case "params":
                 code.push(new wasm.GetLocal(this.bpLocal));
+                if (returnOffset) {
+                    return this.varsFrame.size + this.paramsFrame.fieldOffset(v.name);
+                }
                 code.push(new wasm.Constant("i32", this.varsFrame.size + this.paramsFrame.fieldOffset(v.name)));
                 code.push(new wasm.BinaryInstruction("i32", "add"));
                 break;                
             case "result":
                 code.push(new wasm.GetLocal(this.bpLocal));
+                if (returnOffset) {
+                    return this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name);
+                }
                 code.push(new wasm.Constant("i32", this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name)));
                 code.push(new wasm.BinaryInstruction("i32", "add"));
                 break;      
             default:
                 throw "Implementation error"
         }
+        return 0;
     }
 
     private emitStructAssign1(type: StructType, n: Node, code: Array<wasm.Node>) {
@@ -1861,7 +1923,7 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack1("addr", n.assign, code);
             }
-            this.emitAddrOfVariable(n.args[0] as Variable, code);
+            this.emitAddrOfVariable(n.args[0] as Variable, false, code);
             if (n.assign) {
                 this.storeVariableFromWasmStack2("addr", n.assign, stack == "wasmStack", code);
             }
@@ -2230,6 +2292,7 @@ function main() {
     b.assign(r, "return", "f32", [-1]);
     b.end();
     let t2 = b.assign(b.tmp(), "mul", "f32", [p1, p2]);
+    b.assign(r, "return", "f32", [t2]);
     b.assign(r, "return", "f32", [t2]);
     b.end();
     console.log(Node.strainToString("", b.node));
