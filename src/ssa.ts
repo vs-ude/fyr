@@ -609,13 +609,13 @@ export class Optimizer {
      */
     private _optimizeConstants(start: Node, end: Node) {
         let n = start;
-        for( ; n; ) {
+        for( ; n && n != end; ) {
             if (n.kind == "if") {
                 if (n.next.length > 1) {
                     this._optimizeConstants(n.next[1], n.blockPartner);
                 }
-                n = n.next[0];
-            } else if (n.kind == "const" && n.assign.writeCount == 1) {
+            }
+            if (n.kind == "const" && n.assign.writeCount == 1) {
                 n.assign.isConstant = true;
                 n.assign.constantValue = n.args[0] as number;
                 let n2 = n.next[0];
@@ -635,58 +635,21 @@ export class Optimizer {
     }
 
     public removeDeadCode(n: Node) {
-        this._removeDeadCode(n.blockPartner, n);
+        this._removeDeadCode1(n.blockPartner, n);
         this._removeDeadCode2(n, n.blockPartner);
-    }
-
-    /**
-     * Traverse the code forwards and eliminate unreachable code
-     */
-    private _removeDeadCode2(n: Node, end: Node) {
-        let dead: boolean = false;
-        for( ;n && n != end; ) {
-            if (dead) {
-                for(let a of n.args) {
-                    if (a instanceof Variable) {
-                        a.readCount--;
-                    }
-                }
-                if (n.assign) {
-                    n.assign.writeCount--;
-                }
-                let n2 = n.next[0];
-                Node.removeNode(n);
-                n = n2;
-                continue;
-            }
-            if (n.kind == "return" || n.kind == "br") {
-                dead = true;
-            }
-            if (n.kind == "if") {
-                this._removeDeadCode2(n.next[0], n.blockPartner);
-                if (n.next[1]) {
-                    this._removeDeadCode2(n.next[1], n.blockPartner);
-                }
-                n = n.blockPartner;
-            } else if (n.kind == "block" || n.kind == "loop") {
-                this._removeDeadCode2(n.next[0], n.blockPartner);
-                n = n.blockPartner;                
-            }
-            n = n.next[0];
-        }
     }
 
     /**
      * Traverse the code backwards
      */
-    private _removeDeadCode(n: Node, end: Node) {
+    private _removeDeadCode1(n: Node, end: Node) {
         for( ;n && n != end; ) {
             // Remove assignments to variables which are not read
             if (n.kind == "call" && n.assign && n.assign.readCount == 0) {
                 n.assign.writeCount--;
                 n.assign = null;
             } else if (n.kind == "end" && n.prev[1]) { // The 'end' belongs to an 'if'?
-                this._removeDeadCode(n.prev[1], n.blockPartner);
+                this._removeDeadCode1(n.prev[1], n.blockPartner);
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var" || n.kind == "return") {
                 // Do nothing by intention
             } else if (n.kind != "call" && n.assign && n.assign.readCount == 0) {
@@ -701,6 +664,104 @@ export class Optimizer {
                 continue;
             }
             n = n.prev[0];
+        }
+    }
+
+    /**
+     * Traverse the code forwards and eliminate unreachable code
+     */
+    private _removeDeadCode2(n: Node, end: Node) {
+        let dead: boolean = false;
+        for( ;n && n != end; ) {
+            if (dead) {
+                this.removeDeadNode(n);
+                let n2 = n.next[0];
+                Node.removeNode(n);
+                n = n2;
+                continue;
+            }
+            if (n.kind == "return" || n.kind == "br") {
+                dead = true;
+            }
+            if (n.kind == "if") {
+                if (typeof(n.args[0]) == "number") {
+                    let val = n.args[0] as number;
+                    if (n.next[1]) {
+                        if (!val) {
+                            let next = n.next[1];
+                            n.next[1] = n.next[0];
+                            n.next[0] = next;   
+                            let end = n.blockPartner.prev[1];
+                            n.blockPartner.prev[1] = n.blockPartner.prev[0];
+                            n.blockPartner.prev[0] = end;     
+                        }
+                        let n2 = n.blockPartner.next[0];
+                        this.removeDeadStrain(n.next[1], n.blockPartner);
+                        n.next.splice(1,1);
+                        n.blockPartner.prev.splice(1,1);
+                        this.removeDeadNode(n);
+                        Node.removeNode(n.blockPartner);
+                        Node.removeNode(n);
+                        n = n2;
+                    } else {
+                        if (!val) {
+                            let n2 = n.blockPartner.next[0];
+                            this.removeDeadStrain(n.next[0], n.blockPartner);
+                            this.removeDeadNode(n);
+                            let end = n.blockPartner;
+                            for(let x = n; x != end; ) {
+                                let x2 = x.next[0];
+                                Node.removeNode(x);
+                                x = x2;
+                            }
+                            Node.removeNode(n.blockPartner);
+                            Node.removeNode(n);            
+                            n = n2;                
+                        } else {
+                            let n2 = n.next[0];
+                            if (n2 == n.blockPartner) {
+                                n2 = n2.next[0];
+                            }
+                            Node.removeNode(n.blockPartner);
+                            Node.removeNode(n);
+                            n = n2;                           
+                        }
+                    }
+                    continue;
+                } else {
+                    this._removeDeadCode2(n.next[0], n.blockPartner);
+                    if (n.next[1]) {
+                        this._removeDeadCode2(n.next[1], n.blockPartner);
+                    }
+                    n = n.blockPartner;
+                }
+            } else if (n.kind == "block" || n.kind == "loop") {
+                this._removeDeadCode2(n.next[0], n.blockPartner);
+                n = n.blockPartner;                
+            }
+            n = n.next[0];
+        }
+    }
+
+    private removeDeadStrain(n: Node, end: Node) {
+        for(; n && n != end; ) {
+            let n2 = n.next[0];
+            this.removeDeadNode(n);
+            n = n2;
+        }
+    }
+
+    private removeDeadNode(n: Node) {
+        for(let a of n.args) {
+            if (a instanceof Variable) {
+                a.readCount--;
+            }
+        }
+        if (n.assign) {
+            n.assign.writeCount--;
+        }
+        if (n.kind == "if" && n.next[1]) {
+            this.removeDeadStrain(n.next[1], n.blockPartner);
         }
     }
 }
@@ -729,7 +790,6 @@ export class SMTransformer {
         if (n.kind == "define") {
             n = n.next[0];
         }
-        console.log("SM");
         for( ; n ; ) {
             if (n.kind == "block" || n.kind == "loop") {
                 if (n.isAsync) {
@@ -2290,6 +2350,12 @@ function main() {
     let t1 = b.assign(b.tmp(), "eq", "f32", [p1, p2]);
     b.ifBlock(t1);
     b.assign(r, "return", "f32", [-1]);
+    b.end();
+    let t3 = b.assign(b.tmp(), "const", "i32", [0]);
+    b.ifBlock(t3);
+    b.assign(p1, "neg", "f32", [p1]);
+    b.elseBlock();
+    b.assign(p2, "neg", "f32", [p2]);
     b.end();
     let t2 = b.assign(b.tmp(), "mul", "f32", [p1, p2]);
     b.assign(r, "return", "f32", [t2]);
