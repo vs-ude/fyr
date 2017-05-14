@@ -1091,9 +1091,11 @@ export class Wasm32Backend {
         this.tmpF32Local = -1;
         this.tmpF64Local = -1;
         this.wf = new wasm.Function(n.name);
+        this.wf.index = this.module.funcs.length;
+        this.module.funcs.push(this.wf)
 
-        // Make room to store bp, sp and step upon async calls.
-        this.varsFrame.addField("$bp", "i32");
+        // Make room to store function index, sp and step upon async calls.
+        this.varsFrame.addField("$func", "i32");
         this.varsFrame.addField("$sp", "i32");
         this.varsFrame.addField("$step", "i32");
 
@@ -1135,16 +1137,13 @@ export class Wasm32Backend {
         // Generate function body
         let code: Array<wasm.Node> = [];
         // Put the varsFrame on the heap_stack and set BP
-        if (this.varsFrame.size > 0) {
-            code.push(new wasm.GetLocal(this.spLocal));
-            code.push(new wasm.Constant("i32", this.varsFrame.size));
-            code.push(new wasm.BinaryIntInstruction("i32", "sub"));
-            code.push(new wasm.TeeLocal(this.spLocal));
-            code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
-        } else if (this.resultFrame.size != 0 || this.paramsFrame.size != 0) {
-            code.push(new wasm.GetLocal(this.spLocal));
-            code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
-        }
+        code.push(new wasm.GetLocal(this.spLocal));
+        code.push(new wasm.Constant("i32", this.varsFrame.size));
+        code.push(new wasm.BinaryIntInstruction("i32", "sub"));
+        code.push(new wasm.TeeLocal(this.spLocal));
+        code.push(new wasm.TeeLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
+        code.push(new wasm.Constant("i32", 0));
+        code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$sp")));
 
         // Main loop of the function
         code.push(new wasm.Block());
@@ -1178,14 +1177,77 @@ export class Wasm32Backend {
         code.push(new wasm.GetLocal(this.bpLocal));
         code.push(new wasm.GetLocal(this.spLocal));
         code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$sp")));
+        // Safe parameters on the stack frame
+        let needsCallbackFunction = false;
+        for(let i = 0; i < this.parameterVariables.length; i++) {
+            let v = this.parameterVariables[i];
+            let s = this.varStorage.get(v);
+            if (s.storageType != "local") {
+                continue;
+            }
+            needsCallbackFunction = true;
+            let t = this.stackTypeOf(v.type as Type);
+            let asType: null | "8"| "16" | "32" = null;
+            switch (v.type) {
+                case "i8":
+                case "s8":
+                    asType = "8";
+                    break;
+                case "i16":
+                case "s16":
+                    asType = "16";
+                    break;
+            }
+            code.push(new wasm.GetLocal(this.bpLocal));
+            code.push(new wasm.GetLocal(s.offset));
+            code.push(new wasm.Store(t, asType, this.varsFrame.fieldOffset("$param" + i.toString())));
+        }
         code.push(new wasm.GetLocal(this.bpLocal));
-        code.push(new wasm.GetLocal(this.bpLocal));
-        code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$bp")));
+        code.push(new wasm.GetLocal(this.wf.index + (needsCallbackFunction ? 1 : 0))); // +1 because that is the index of the callback function
+        code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$func")));
         code.push(new wasm.Constant("i32", 1)); // Return with '1' to indicate that this is an async return
         code.push(new wasm.Return());
 
         this.wf.statements = code;
-        this.module.funcs.push(this.wf)
+
+        if (needsCallbackFunction) {
+            let callbackWf = new wasm.Function();
+            callbackWf.parameters.push("i32");
+            callbackWf.results.push("i32");
+            let code: Array<wasm.Node> = [];
+            for(let i = 0; i < this.parameterVariables.length; i++) {
+                let v = this.parameterVariables[i];
+                let s = this.varStorage.get(v);
+                if (s.storageType != "local") {
+                    continue;
+                }
+                let t = this.stackTypeOf(v.type as Type);
+                let asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null;
+                switch (v.type) {
+                    case "i8":
+                        asType = "8_u";
+                        break;
+                    case "s8":
+                        asType = "8_s";
+                        break;
+                    case "i16":
+                        asType = "16_u";
+                        break;
+                    case "s16":
+                        asType = "16_s";
+                        break;
+                }        
+                code.push(new wasm.GetLocal(0));
+                code.push(new wasm.Load(t, asType, this.varsFrame.fieldOffset("$param" + i.toString())));
+            }
+            code.push(new wasm.GetLocal(0));
+            code.push(new wasm.Load("i32", null, this.varsFrame.fieldOffset("$step")));
+            code.push(new wasm.GetLocal(0));
+            code.push(new wasm.Call(this.wf.index));
+            code.push(new wasm.Return());
+            callbackWf.statements = code;
+            this.module.funcs.push(callbackWf)
+        }
 
         return this.wf;
     }
@@ -1362,13 +1424,20 @@ export class Wasm32Backend {
             } else if (n.kind == "decl_param" && (n.type instanceof StructType || n.assign.type == "addr")) {
                 let index = this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "params", offset: index};
-                this.varStorage.set(n.assign, s);                
+                this.varStorage.set(n.assign, s);
+                this.parameterVariables.push(n.assign);                
                 n = n.next[0];                
                 continue;
             } else if (n.kind == "decl_param") {
                 let s: Wasm32Storage = {storageType: "local", offset: this.wf.parameters.length};
-                this.wf.parameters.push(this.stackTypeOf(n.type as Type));
-                this.varStorage.set(n.assign, s);                
+                let t = this.stackTypeOf(n.type as Type);
+                this.wf.parameters.push(t);
+                this.varStorage.set(n.assign, s);
+                if (this.wfIsAsync) {
+                    let n = "$param" + s.offset.toString();
+                    this.varsFrame.addField(n, t);
+                }             
+                this.parameterVariables.push(n.assign);                
                 n = n.next[0];                
                 continue;
             }
@@ -2378,6 +2447,7 @@ export class Wasm32Backend {
     private paramsFrame: StructType = new StructType();
     private varsFrame: StructType = new StructType();
     private varStorage = new Map<Variable, Wasm32Storage>();
+    private parameterVariables: Array<Variable> = [];
     private tmpI32Local: number;
     private tmpI64Local: number;
     private tmpF32Local: number;
