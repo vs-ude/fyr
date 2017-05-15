@@ -51,6 +51,15 @@ export class Module extends Node {
                 throw "Implementation error";
             } 
         }
+
+        if (this.funcTable.length > 0) {
+            s += indent + "    (table " + this.funcTable.length + " anyfunc)\n";
+            s += indent + "    (elem (i32.const 0)";
+            for(let f of this.funcTable) {
+                s += " " + f.index.toString();
+            }
+            s += ")\n";
+        }
         return s + indent + ")";
     }
 
@@ -65,6 +74,7 @@ export class Module extends Node {
     public stackSize = 1 * 65536;
     public heapSize = 1 * 65536;
     public funcs: Array<Function> = [];
+    public funcTable: Array<Function> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
     public dataSize: number = 0;
     public data: Array<Data> = [];

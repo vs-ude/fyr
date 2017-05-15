@@ -1,7 +1,7 @@
 (module
     (import "imports" "mem" (memory 1))
     
-    (type $type_callbackFn (func (param i32) (result i32)))
+    (type $type_callbackFn (func (param i32 i32) (result i32)))
 
     (func $main (result i32)
         f32.const 42
@@ -20,7 +20,7 @@
         return
     )
 
-    (func $resume (param $sp i32) (result i32) (local $func i32)
+    (func $resume (param $sp i32) (result i32)
         block
             ;; Test whether recursion ends, because $sp points inside the top-most frame.
             get_local $sp
@@ -46,6 +46,11 @@
             return
         end
         ;; Call the interrupted function
+        ;; The next step
+        get_local $sp
+        i32.const 4
+        i32.sub
+        i32.load
         ;; The sp
         get_local $sp
         ;; The function index
@@ -53,7 +58,6 @@
         i32.const 12
         i32.sub
         i32.load
-        tee_local $func
         call_indirect $type_callbackFn
         return
     )
@@ -147,18 +151,17 @@
         return
     )
 
-    (func $f1_callback (param i32) (result i32) (local i32)
-        get_local 0
+    (func $f1_callback (param i32) (param i32) (result i32) (local i32)
+        get_local 1
         i32.const 28
         i32.sub
-        set_local 1
-        get_local 1
+        set_local 2
+        get_local 2
         f32.load
-        get_local 1
+        get_local 2
         f32.load offset=4
-        get_local 1
-        i32.load offset=24
         get_local 0
+        get_local 1
         call $f1
         return
     )
