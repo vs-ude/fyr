@@ -22,6 +22,16 @@ export class StructType {
         return this.fieldOffsetsByName.get(name);
     }
 
+    public toDetailedString(): string {
+        let str = "{\n";
+        for(let i = 0; i < this.fields.length; i++) {
+            let f = this.fields[i];
+            str += "    " + f[0] + " " + f[1] + " @" + this.fieldOffset(f[0]) + "\n";
+        }
+        str += "} size=" + this.size.toString();
+        return str;
+    }
+
     public fields: Array<[string, Type | StructType]> = [];
     private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
@@ -1144,7 +1154,7 @@ export class Wasm32Backend {
         console.log("sp -> local " + this.spLocal);
         console.log("bp -> local " + this.bpLocal);
         console.log("step -> local " + this.stepLocal);
-
+        console.log("varsFrame = ", this.varsFrame.toDetailedString());
         // Generate function body
         let code: Array<wasm.Node> = [];
         // Put the varsFrame on the heap_stack and set BP
@@ -1214,7 +1224,7 @@ export class Wasm32Backend {
             code.push(new wasm.Store(t, asType, this.varsFrame.fieldOffset("$param" + i.toString())));
         }
         code.push(new wasm.GetLocal(this.bpLocal));
-        code.push(new wasm.GetLocal(this.wf.index + (needsCallbackFunction ? 1 : 0))); // +1 because that is the index of the callback function
+        code.push(new wasm.Constant("i32", this.wf.index)); // TODO: This must be an index into the table
         code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$func")));
         code.push(new wasm.Constant("i32", 1)); // Return with '1' to indicate that this is an async return
         code.push(new wasm.Return());

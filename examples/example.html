@@ -5,16 +5,20 @@
     <body>
         <h1>WASM Example</h1>
         <script>
+            let memory = new WebAssembly.Memory({initial: 1});
             let importObject = {
                 imports: {
-                    logString: function(index, len) {
-                        console.log("TODO", index, len);
+                    logString(offset, length) {
+                        var bytes = new Uint8Array(memory.buffer, offset, length);
+                        var string = new TextDecoder('utf8').decode(bytes);
+                        console.log(string);
                     },
                     logNumber: function(n) {
                         console.log(n);
-                    }
+                    },
+                    mem: memory
                 }
-            }
+            };
             fetch('example.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
@@ -24,7 +28,8 @@
                 for(let result = results.instance.exports.main(); result != 0; result = results.instance.exports.mainResume()) {
                     console.log("Resuming ...");
                 }
-                console.log("Result =", result);
+                let buf = new Float32Array(memory.buffer, 65532);
+                console.log("Result is", buf[0]);
             });
         </script>
     </body>
