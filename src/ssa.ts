@@ -4,19 +4,25 @@ export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "c
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
-
     public addField(name: string, type: Type | StructType): number {
         let offset = this.size;
         this.fieldOffsetsByName.set(name, this.size);
         this.size += sizeOf(type);
+        this.fields.push([name, type]);
         return offset;
+    }
+
+    public addFields(s: StructType) {
+        for(let f of s.fields) {
+            this.addField(f[0], f[1]);
+        }
     }
 
     public fieldOffset(name: string): number {
         return this.fieldOffsetsByName.get(name);
     }
 
-    public fields: Array<Type | StructType>;
+    public fields: Array<[string, Type | StructType]> = [];
     private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
 }
@@ -53,7 +59,7 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
             return false;
         }
         for(let i = 0; i < t1.fields.length; i++) {
-            if (!compareTypes(t1.fields[i], t2.fields[i])) {
+            if (!compareTypes(t1.fields[i][1], t2.fields[i][1])) {
                 return false;
             }
         }
@@ -1006,6 +1012,10 @@ export class Wasm32Backend {
     constructor() {
          this.tr = new SMTransformer();
          this.module = new wasm.Module();
+         this.varsFrameHeader = new StructType();
+         this.varsFrameHeader.addField("$func", "i32");
+         this.varsFrameHeader.addField("$sp", "i32");
+         this.varsFrameHeader.addField("$step", "i32");
     }
 
     public generateFunction(n: Node): wasm.Function {
@@ -1094,11 +1104,6 @@ export class Wasm32Backend {
         this.wf.index = this.module.funcs.length;
         this.module.funcs.push(this.wf)
 
-        // Make room to store function index, sp and step upon async calls.
-        this.varsFrame.addField("$func", "i32");
-        this.varsFrame.addField("$sp", "i32");
-        this.varsFrame.addField("$step", "i32");
-
         this.tr.transform(n);
         console.log("========= State Machine ==========");
         console.log(Node.strainToString("", n));
@@ -1114,6 +1119,12 @@ export class Wasm32Backend {
         this.wf.results.push("i32"); // interrupt or complete
         this.bpLocal = this.wf.parameters.length;
         this.wf.locals.push("i32"); // bp
+
+        // Make room to store function index, sp and step upon async calls.
+        this.varsFrame.addFields(this.varsFrameHeader);
+//        this.varsFrame.addField("$func", "i32");
+//        this.varsFrame.addField("$sp", "i32");
+//        this.varsFrame.addField("$step", "i32");
 
         for(let v of this.varStorage.keys()) {
             let s = this.varStorage.get(v);
@@ -1588,6 +1599,8 @@ export class Wasm32Backend {
                 c.push(new wasm.End());
                 c.push(new wasm.Constant("i32", nextStep));
                 c.push(new wasm.SetLocal(this.stepLocal));
+                c.push(new wasm.Constant("i32", 0));
+                c.push(new wasm.SetLocal(this.spLocal));
                 c.push(new wasm.Br(this.asyncCalls.length - this.asyncCallCode.length));
                 this.asyncCallCode.push(c);
             } else if (n.kind == "call_begin") {
@@ -2446,6 +2459,7 @@ export class Wasm32Backend {
     private resultFrame: StructType = new StructType();
     private paramsFrame: StructType = new StructType();
     private varsFrame: StructType = new StructType();
+    private varsFrameHeader: StructType = new StructType();
     private varStorage = new Map<Variable, Wasm32Storage>();
     private parameterVariables: Array<Variable> = [];
     private tmpI32Local: number;
@@ -2462,6 +2476,21 @@ function main() {
     point.addField("x", "f32");
     point.addField("y", "f32");
 
+    let b = new Builder();
+    b.define("f1", new FunctionType(["f32", "f32"], "f32", true));
+    let p1 = b.declareParam("f32", "$1");
+    let p2 = b.declareParam("f32", "$2");
+    let r = b.declareResult("f32", "$r");
+    let t1 = b.assign(b.tmp(), "add", "f32", [p1, p2]);
+    b.assign(null, "yield", null, []);
+    let t2 = b.assign(b.tmp(), "add", "f32", [t1, p2]);
+    b.assign(null, "yield", null, []);
+    let t3 = b.assign(b.tmp(), "add", "f32", [t2, p2]);
+    b.assign(r, "return", "f32", [t3]);
+    b.end();
+    console.log(Node.strainToString("", b.node));
+
+    /*
     let b = new Builder();
     b.define("f1", new FunctionType(["f32", "f32"], "f32", true));
     let p1 = b.declareParam("f32", "$1");
@@ -2489,6 +2518,7 @@ function main() {
     b.assign(r, "return", "f32", [t8]);
     b.end();
     console.log(Node.strainToString("", b.node));
+    */
 
     /*
     let b = new Builder();

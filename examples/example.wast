@@ -1,13 +1,57 @@
 (module
     (memory 1)
-    (func $main (result f32)
+    
+    (type $type_callbackFn (func (param i32 i32) (result i32)))
+
+    (func $main (result i32)
         f32.const 42
         f32.const 0.5
         i32.const 0
         i32.const 65532
         call $f1
-        i32.const 65532
-        f32.load
+        ;; i32.const 65532
+        ;; f32.load
+        return
+    )
+
+    (func $mainResume (result i32)
+        i32.const 65524
+        call $resume
+        return
+    )
+
+    (func $resume (param $sp i32) (result i32) (local $func i32) (local $step i32)
+        block
+            ;; Test whether recursion ends, because $sp points inside the top-most frame.
+            get_local $sp
+            i32.load offset=8
+            i32.const 0
+            i32.eq
+            br_if 0
+            block
+                ;; Recursion
+                get_local $sp
+                i32.load offset=8
+                call $resume
+                br_if 0
+                ;; No yield so far. The topmost frame has executed
+                br 1
+            end
+            ;; Tell the caller that a yield has been encountered
+            i32.const 1
+            return
+        end
+        ;; Call the interrupted function
+        ;; The last step
+        get_local $sp
+        i32.load offset=4
+        ;; The sp
+        get_local $sp
+        i32.load offset=8
+        ;; The function index
+        get_local $sp
+        i32.load offset=12
+        call_indirect $type_callbackFn
         return
     )
 
@@ -100,5 +144,21 @@
         return
     )
 
+    (func $f1_callback (param i32) (result i32)
+        get_local 0
+        f32.load
+        get_local 0
+        f32.load offset=4
+        get_local 0
+        i32.load offset=28
+        get_local 0
+        call $f1
+        return
+    )
+
+    (table 1 anyfunc)
+    (elem (i32.const 0) $f1_callback)
+
     (export "main" (func 0))
+    (export "mainResume" (func $mainResume))
 )

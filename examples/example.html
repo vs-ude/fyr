@@ -21,7 +21,9 @@
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
                 console.log("Start main ...");
-                let result = results.instance.exports.main();
+                for(let result = results.instance.exports.main(); result != 0; result = results.instance.exports.mainResume()) {
+                    console.log("Resuming ...");
+                }
                 console.log("Result =", result);
             });
         </script>
