@@ -60,6 +60,26 @@ export class Module extends Node {
             }
             s += ")\n";
         }
+
+        for(let f of this.funcTypes) {
+            s += indent + "    (type " + f.name + " ";
+            if (f.params.length > 0) {
+                s += "(param";
+                for(let t of f.params) {
+                    s += " " + t.toString();
+                }
+                s += ") ";
+            }
+            if (f.results.length > 0) {
+                s += "(result";
+                for(let t of f.results) {
+                    s += " " + t.toString();
+                }
+                s += ") ";
+            }
+            s += ")\n";
+        }
+
         return s + indent + ")";
     }
 
@@ -75,9 +95,22 @@ export class Module extends Node {
     public heapSize = 1 * 65536;
     public funcs: Array<Function> = [];
     public funcTable: Array<Function> = [];
+    public funcTypes: Array<FunctionType> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
     public dataSize: number = 0;
     public data: Array<Data> = [];
+}
+
+export class FunctionType {
+    constructor(name: string, params: Array<StackType>, results: Array<StackType>) {
+        this.name = name;
+        this.params = params;
+        this.results = results;
+    }
+
+    public name: string;
+    public params: Array<StackType> = [];
+    public results: Array<StackType> = [];
 }
 
 export class Data extends Node {

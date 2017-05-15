@@ -1022,6 +1022,7 @@ export class Wasm32Backend {
     constructor() {
          this.tr = new SMTransformer();
          this.module = new wasm.Module();
+         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
          this.varsFrameHeader = new StructType();
          this.varsFrameHeader.addField("$func", "i32");
          this.varsFrameHeader.addField("$sp", "i32");
