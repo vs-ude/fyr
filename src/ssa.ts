@@ -1235,7 +1235,12 @@ export class Wasm32Backend {
             let callbackWf = new wasm.Function();
             callbackWf.parameters.push("i32");
             callbackWf.results.push("i32");
+            callbackWf.locals.push("i32");
             let code: Array<wasm.Node> = [];
+            code.push(new wasm.GetLocal(0));
+            code.push(new wasm.Constant("i32", this.varsFrame.size));
+            code.push(new wasm.BinaryInstruction("i32", "sub"));
+            code.push(new wasm.SetLocal(1));
             for(let i = 0; i < this.parameterVariables.length; i++) {
                 let v = this.parameterVariables[i];
                 let s = this.varStorage.get(v);
@@ -1258,10 +1263,10 @@ export class Wasm32Backend {
                         asType = "16_s";
                         break;
                 }        
-                code.push(new wasm.GetLocal(0));
+                code.push(new wasm.GetLocal(1));
                 code.push(new wasm.Load(t, asType, this.varsFrame.fieldOffset("$param" + i.toString())));
             }
-            code.push(new wasm.GetLocal(0));
+            code.push(new wasm.GetLocal(1));
             code.push(new wasm.Load("i32", null, this.varsFrame.fieldOffset("$step")));
             code.push(new wasm.GetLocal(0));
             code.push(new wasm.Call(this.wf.index));

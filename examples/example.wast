@@ -58,7 +58,7 @@
         return
     )
 
-(func $f1 (param f32) (param f32) (param i32) (param i32) (result i32) (local i32)
+    (func $f1 (param f32) (param f32) (param i32) (param i32) (result i32) (local i32)
         get_local 3
         i32.const 28
         i32.sub
@@ -91,11 +91,11 @@
                                 ;; goto_step s1 
                                 ;; STEP 1
                             end
-                            ;; %1 = add f32 %0, 1
+                            ;; %1 = add f32 %0, $2
                             get_local 4
                             get_local 4
                             f32.load offset=8
-                            f32.const 1
+                            get_local 1
                             f32.add
                             f32.store offset=12
                             ;; yield 
@@ -103,11 +103,11 @@
                             ;; goto_step s2 
                             ;; STEP 2
                         end
-                        ;; $r = return f32 (add f32 %1, 1)
+                        ;; $r = return f32 (add f32 %1, $2)
                         get_local 4
                         get_local 4
                         f32.load offset=12
-                        f32.const 1
+                        get_local 1
                         f32.add
                         f32.store offset=28
                         i32.const 0
@@ -147,19 +147,17 @@
         return
     )
 
-    (func $f1_callback (param i32) (result i32)
+    (func $f1_callback (param i32) (result i32) (local i32)
         get_local 0
         i32.const 28
         i32.sub
+        set_local 1
+        get_local 1
         f32.load
-        get_local 0
-        i32.const 24
-        i32.sub
-        f32.load
-        get_local 0
-        i32.const 4
-        i32.sub
-        i32.load
+        get_local 1
+        f32.load offset=4
+        get_local 1
+        i32.load offset=24
         get_local 0
         call $f1
         return
