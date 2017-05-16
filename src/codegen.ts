@@ -660,25 +660,22 @@ export class CodeGenerator {
                     t = enode.lhs.type as FunctionType;
                 }
                 
+                let args: Array<ssa.Variable | string | number> = [];
+                if (f) {
+                    args.push(this.funcs.get(f).index);
+                }
                 if (t.hasEllipsis()) {
                     throw "TODO"
                 } else {
                     for(let pnode of enode.parameters) {
-                        this.processExpression(f, scope, pnode, wf, code);
+                        args.push(this.processExpression(f, scope, pnode, b, vars));
                     }
                 }
                 
-                // Put fyrStackPointer on the wasm Stack
-                // TODO: Might not be required for some simple functions
-                code.push(new wasm.GetLocal(wf.spRegister()));
                 if (f) {
-                    code.push(new wasm.Call(f.storageIndex));
-                } else {
-                    throw "TODO: call a lambda function"
+                    return b.call(b.tmp(), this.getSSAFunctionType(t), args);
                 }
-
-                // TODO: Remove data from the fyrStack
-                break;
+                throw "TODO: call a lambda function"
             }
             case "[":
             {
