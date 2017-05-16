@@ -6,9 +6,6 @@ export interface ScopeElement {
     name: string;
     type: Type;
     loc: Location;
-
-    storageIndex: number;
-    storageLocation: StorageLocation;
 }
 
 export class Variable implements ScopeElement {
@@ -17,9 +14,6 @@ export class Variable implements ScopeElement {
     public type: Type;
     public loc: Location;
     public isResult: boolean = false;
-
-    public storageIndex: number;
-    public storageLocation: StorageLocation;
 }
 
 export class Function implements ScopeElement {
@@ -34,9 +28,13 @@ export class Function implements ScopeElement {
     public scope: Scope;
     public node: Node;
     public loc: Location;
+}
 
-    public storageIndex: number;
-    public storageLocation: StorageLocation;
+export class FunctionParameter implements ScopeElement {
+    public name: string;
+    public ellipsis: boolean;
+    public type: Type;
+    public loc: Location;
 }
 
 /*
@@ -158,16 +156,6 @@ export class GenericConstraintType extends Type {
 }
 
 export class InterfaceType extends Type {
-}
-
-export class FunctionParameter implements ScopeElement {
-    public name: string;
-    public ellipsis: boolean;
-    public type: Type;
-    public loc: Location;
-
-    public storageIndex: number;
-    public storageLocation: StorageLocation;
 }
 
 export class FunctionType extends Type {

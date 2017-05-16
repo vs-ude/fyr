@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -37,7 +37,7 @@ export class StructType {
     public size: number = 0;
 }
 
-function sizeOf(x: Type | StructType): number {
+export function sizeOf(x: Type | StructType): number {
     if (x instanceof StructType) {
         return x.size;
     }
@@ -144,6 +144,16 @@ export class Variable {
     public _step: Node;
 
     private static counter: number = 0;
+}
+
+export class Pointer {
+    constructor(v: Variable, offset: number) {
+        this.variable = v;
+        this.offset = offset;
+    }
+    
+    public offset: number;
+    public variable: Variable;
 }
 
 export class Node {
@@ -1029,17 +1039,24 @@ export class Wasm32Backend {
          this.varsFrameHeader.addField("$step", "i32");
     }
 
-    public generateFunction(n: Node): wasm.Function {
+    public declareFunction(name: string): wasm.Function {
+        let wf = new wasm.Function(name);
+        wf.index = this.module.funcs.length;
+        this.module.funcs.push(wf);
+        return wf;
+    }
+
+    public generateFunction(n: Node, f: wasm.Function) {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
         if (n.type.isAsync) {
-            return this.generateAsyncFunction(n);
+            return this.generateAsyncFunction(n, f);
         }
-        return this.generateSyncFunction(n);
+        return this.generateSyncFunction(n, f);
     }
 
-    private generateSyncFunction(n: Node): wasm.Function {
+    private generateSyncFunction(n: Node, wf: wasm.Function) {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
@@ -1049,7 +1066,7 @@ export class Wasm32Backend {
         this.tmpI64Local = -1;
         this.tmpF32Local = -1;
         this.tmpF64Local = -1;
-        this.wf = new wasm.Function(n.name);
+        this.wf = wf;
 
         this.traverse(n.next[0], n.blockPartner, null);
         this.stackifyStep(n, null);
@@ -1096,12 +1113,11 @@ export class Wasm32Backend {
         this.emitCode(0, n.next[0], null, code, 0, 0);
 
         this.wf.statements = code;
-        this.module.funcs.push(this.wf)
 
         return this.wf;
     }
 
-    private generateAsyncFunction(n: Node): wasm.Function {
+    private generateAsyncFunction(n: Node, wf: wasm.Function) {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
@@ -1111,9 +1127,7 @@ export class Wasm32Backend {
         this.tmpI64Local = -1;
         this.tmpF32Local = -1;
         this.tmpF64Local = -1;
-        this.wf = new wasm.Function(n.name);
-        this.wf.index = this.module.funcs.length;
-        this.module.funcs.push(this.wf)
+        this.wf = wf;
 
         this.tr.transform(n);
         console.log("========= State Machine ==========");
@@ -2592,7 +2606,8 @@ function main() {
     console.log(Node.strainToString("", b.node));
 
     let back = new Wasm32Backend();
-    var wf = back.generateFunction(b.node);
+    var wf = back.declareFunction(b.node.name);
+    back.generateFunction(b.node, wf);
     console.log('============ WAST ===============');
     console.log(back.module.toWast(""));
 }

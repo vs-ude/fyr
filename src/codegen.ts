@@ -1,5 +1,6 @@
 import {Node, NodeOp} from "./ast"
 import {Function, Type, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
+import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
 export class CodeGenerator {
@@ -12,8 +13,8 @@ export class CodeGenerator {
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                e.storageLocation = "funcTable";
-                e.storageIndex = index++;
+                let wf = this.wasm.declareFunction(e.name);
+                this.funcs.set(e, wf);
             } else {
                 throw "CodeGen: Implementation Error " + e
             }
@@ -22,104 +23,149 @@ export class CodeGenerator {
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                let f = this.processFunction(e, true);
-                f.index = e.storageIndex;
+                let wf = this.funcs.get(e);
+                let f = this.processFunction(e, true, wf);
             } else {
                 throw "CodeGen: Implementation Error " + e
             }
         }
     }
 
-    public processFunction(f: Function, exportFunc: boolean = false): wasm.Function {
-        let func = new wasm.Function(f.name);
-        this.processScope(func, f.scope);
-        // Copy SP to BP
-        // TODO: Not necessary for some simple functions, optimize away
-        func.statements.push(new wasm.GetLocal(func.spRegister()));
-        if (func.localFyrFrameSize > 0) {
-            func.statements.push(new wasm.TeeLocal(func.bpRegister()));
-            func.statements.push(new wasm.Constant("i32", func.localFyrFrameSize));
-            func.statements.push(new wasm.BinaryIntInstruction("i32", "add"));
-            func.statements.push(new wasm.SetLocal(func.spRegister()));
-        } else {
-            func.statements.push(new wasm.SetLocal(func.bpRegister()));
+    private getSSAType(t: Type): ssa.Type | ssa.StructType {
+        if (t == this.tc.t_bool || t == this.tc.t_uint8) {
+            return "i8";
         }
-
-        if (f.type.returnType != this.tc.t_void) {
-            if (this.isRegisterSize(f.type.returnType)) {
-                func.results.push(this.stackTypeOf(f.type.returnType));
-            } else {
-                // TODO
-            }
+        if (t == this.tc.t_int8) {
+            return "s8";
         }
-
-        for(let node of f.node.statements) {
-            this.processStatement(f, f.scope, node, func, func.statements);
+        if (t == this.tc.t_int16) {
+            return "s16";
         }
-        if (exportFunc) {
-            this.module.exports.set(f.name, func);
-        } 
-        this.module.funcs.push(func);
-        return func;
+        if (t == this.tc.t_uint16) {
+            return "i16";
+        }
+        if (t == this.tc.t_int32) {
+            return "s32";
+        }
+        if (t == this.tc.t_uint32) {
+            return "i32";
+        }
+        if (t == this.tc.t_int64) {
+            return "s64";
+        }
+        if (t == this.tc.t_uint64) {
+            return "i64";
+        }
+        if (t == this.tc.t_float) {
+            return "f32";
+        }
+        if (t == this.tc.t_double) {
+            return "f64";
+        }
+        if (t instanceof UnsafePointerType) {
+            return "addr";
+        }
+        // TODO: Struct
+        throw "CodeGen: Implementation error: The type does not fit in a register " + t.name;
     }
 
-    public processScope(wf: wasm.Function, scope: Scope) {
-        // TODO: The order is not deterministic
+    private getSSAFunctionType(t: FunctionType): ssa.FunctionType {
+        let ftype = new ssa.FunctionType([], null, false);
+        for(let p of t.parameters) {
+            ftype.params.push(this.getSSAType(p));
+        }
+        if (t.returnType) {
+            ftype.result = this.getSSAType(t.returnType);
+        }
+        return ftype;
+    }
+
+    public processFunction(f: Function, exportFunc: boolean, wf: wasm.Function) {
+        let b = new ssa.Builder();
+        let vars = new Map<ScopeElement, ssa.Variable>();
+
+        b.define(f.name, this.getSSAFunctionType(f.type));
+        // Declare parameters
+        for(let name of f.scope.elements.keys()) {
+            let e = f.scope.elements.get(name);
+            if (e instanceof FunctionParameter) {
+                let v = b.declareParam(this.getSSAType(e.type), name);
+                vars.set(e, v);
+            }
+        }
+        // Declare result
+        if (f.namedReturnTypes) {
+            for(let name of f.scope.elements.keys()) {
+                let e = f.scope.elements.get(name);
+                if (e instanceof Variable && e.isResult) {
+                    // Create a variable that can be assigned multiple times
+                    let v = b.declareResult(this.getSSAType(e.type), name);
+                    vars.set(e, v);                    
+                }
+            }
+        } else if (f.type.returnType) {
+            b.declareResult(this.getSSAType(f.type.returnType), "$return");
+        }
+
+        this.processScopeVariables(b, vars, f.scope);
+
+        for(let node of f.node.statements) {
+            this.processStatement(f, f.scope, node, b, vars, null);
+        }
+
+        this.wasm.generateFunction(b.node, wf);
+        if (exportFunc) {
+            this.wasm.module.exports.set(f.name, wf);
+        } 
+    }
+
+    public processScopeVariables(b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope) {
+        // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Variable) {
-                if (this.isRegisterSize(e.type)) {
-                    e.storageLocation = "local";
-                    e.storageIndex = wf.parameters.length + wf.locals.length;
-                    wf.locals.push(this.stackTypeOf(e.type));
+                if (e.isResult) {
+                    continue;
+                } else if (e.isConst) {
+                    // Create a SSA that can be assigned only once
+                    let v = b.tmp();
+                    vars.set(e, v);                
                 } else {
-                    e.storageLocation = "fyrBasePointer";
-                    e.storageIndex = wf.localFyrFrameSize;
-                    wf.localFyrFrameSize += 4 + this.sizeOf(e.type); // Space for typecode and data
+                    // Create a variable that can be assigned multiple times
+                    let v = b.declareVar(this.getSSAType(e.type), name);
+                    vars.set(e, v);
                 }
-            } else if (e instanceof FunctionParameter) {
-                if (this.isRegisterSize(e.type)) {
-                    e.storageLocation = "local";
-                    e.storageIndex = wf.parameters.length;
-                    wf.parameters.push(this.stackTypeOf(e.type));
-                } else {
-                    e.storageLocation = "fyrBasePointer";
-                    e.storageIndex = wf.localFyrFrameSize;
-                    wf.localFyrFrameSize += 4 + this.sizeOf(e.type); // Space for typecode and data
-                }
-            } else {
-                throw "CodeGen: Implementation Error " + e
             }
         }
     }
 
-    public processStatement(f: Function, scope: Scope, snode: Node, wf: wasm.Function, code: Array<wasm.Node>) {
+    public processStatement(f: Function, scope: Scope, snode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, blocks: {body: ssa.Node, outer: ssa.Node} | null) {
         switch(snode.op) {
             case "comment":
                 break;
             case "if":
             {
-                this.processScope(wf, snode.scope);
+                this.processScopeVariables(b, vars, snode.scope);
                 if (snode.lhs) {
-                    this.processStatement(f, snode.scope, snode.lhs, wf, code);
+                    this.processStatement(f, snode.scope, snode.lhs, b, vars, blocks);
                 }
-                this.processExpression(f, snode.scope, snode.condition, wf, code);
-                code.push(new wasm.If());
+                let tmp: ssa.Variable = this.processExpression(f, snode.scope, snode.condition, b, vars);
+                b.ifBlock(tmp);
                 for(let st of snode.statements) {
-                    this.processStatement(f, snode.scope, st, wf, code);
+                    this.processStatement(f, snode.scope, st, b, vars, blocks);
                 }
                 if (snode.elseBranch) {
-                    code.push(new wasm.Else());
-                    this.processStatement(f, snode.elseBranch.scope, snode.elseBranch, wf, code);
+                    b.elseBlock();
+                    this.processStatement(f, snode.elseBranch.scope, snode.elseBranch, b, vars, blocks);
                 }
-                code.push(new wasm.End());
+                b.end();
                 break;
             }
             case "else":
             {
-                this.processScope(wf, snode.scope);
+                this.processScopeVariables(b, vars, snode.scope);
                 for(let st of snode.statements) {
-                    this.processStatement(f, snode.scope, st, wf, code);
+                    this.processStatement(f, snode.scope, st, b, vars, blocks);
                 }
                 break;                
             }
@@ -128,15 +174,9 @@ export class CodeGenerator {
                 if (snode.rhs) { // Assignment of an expression value?
                     if (snode.lhs.op == "id") {
                         let element = scope.resolveElement(snode.lhs.value);
-                        if (element.storageLocation == "fyrBasePointer" && this.isLeftHandSide(snode.rhs)) {
-                            this.processLeftHandExpression(f, scope, snode.rhs, wf, false, code);
-                            code.push(new wasm.GetLocal(wf.bpRegister()));
-                            code.push(new wasm.Constant("i32", element.storageIndex));
-                            this.copyElementOnHead(element.type, wf, code);
-                        } else {
-                            this.processExpression(f, scope, snode.rhs, wf, code);
-                            this.storeElementFromStack(element, wf, code);
-                        }
+                        let v = vars.get(element);
+                        let tmp: ssa.Variable = this.processExpression(f, scope, snode.rhs, b, vars);
+                        b.assign(v, "copy", v.type, [tmp]);
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
                     } else if (snode.lhs.op == "array") {
@@ -148,28 +188,10 @@ export class CodeGenerator {
                     }
                 } else { // Assignment of initial value (all zero)
                     if (snode.lhs.op == "id") {
-                        let element = scope.resolveElement(snode.lhs.value);
-                        if (this.isRegisterSize(snode.lhs.type)) {
-                            let storage = this.stackTypeOf(element.type);
-                            code.push(new wasm.Constant(storage, 0));
-                            this.storeElementFromStack(element, wf, code);
-                        } else if (element.type == this.tc.t_string || element.type instanceof SliceType || element.type instanceof ArrayType) {
-                            code.push(new wasm.GetLocal(wf.bpRegister()));
-                            code.push(new wasm.Constant("i32", 0));
-                            code.push(new wasm.Store("i32", null, element.storageIndex));
-                            code.push(new wasm.GetLocal(wf.bpRegister()));
-                            code.push(new wasm.Constant("i32", 0));
-                            code.push(new wasm.Store("i32", null, element.storageIndex + 4));
-                            code.push(new wasm.GetLocal(wf.bpRegister()));
-                            code.push(new wasm.Constant("i32", 0));
-                            code.push(new wasm.Store("i32", null, element.storageIndex + 8));                                                 
-                        } else {
-                            throw "TODO";
-                        }
+                        // Nothing todo here, handled by decl_var.
                     } else {
-                        throw "TODO"                        
+                        throw "TODO"; // TODO: Can this happen at all?
                     }
-                    // TODO: Initialize if required (only on FYR stack)
                 }
                 return;
             }
@@ -182,9 +204,14 @@ export class CodeGenerator {
                 } else if (snode.lhs.op == "object") {
                     throw "TODO"                        
                 } else {
-                    this.processLeftHandExpression(f, scope, snode.lhs, wf, false, code);
-                    this.processExpression(f, scope, snode.rhs, wf, code);
-                    this.processLeftHandAssignment(f, scope, snode.lhs, wf, false, code);
+                    let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
+                    let tmp: ssa.Variable = this.processExpression(f, scope, snode.rhs, b, vars);
+                    // If the left-hand expression returns an address, the resulting value must be stored in memory
+                    if (dest instanceof ssa.Pointer) {
+                        b.assign(b.mem, "store", tmp.type, [dest.variable, dest.offset, tmp]);
+                    } else {
+                        b.assign(dest, "copy", tmp.type, [tmp]);
+                    }
                 }
                 break;
             }
@@ -200,258 +227,203 @@ export class CodeGenerator {
             case "|=":
             case "<<=":
             {
-                this.processLeftHandExpression(f, scope, snode.lhs, wf, true, code);
-                this.processLeftHandValue(f, scope, snode.lhs, wf, code);
-                this.processExpression(f, scope, snode.rhs, wf, code);
+                let storage = this.getSSAType(snode.lhs.type);
+                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
+                let p1: ssa.Variable;
+                let dest: ssa.Variable;
+                if (tmp instanceof ssa.Pointer) {
+                    p1 = b.assign(b.tmp(), "load", storage, [tmp.variable, tmp.offset]);
+                    dest = b.tmp();
+                } else {
+                    p1 = tmp;
+                    dest = tmp;
+                }
+                let p2: ssa.Variable = this.processExpression(f, scope, snode.rhs, b, vars);
                 // TODO: String concatenation
-                let storage = this.stackTypeOf(snode.lhs.type);
                 if (storage == "i32" || storage == "i64") {
                     if (snode.op == "+=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "add"));
+                        b.assign(dest, "add", storage, [p1, p2]);
                     } else if (snode.op == "-=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "sub"));                                
+                        b.assign(dest, "sub", storage, [p1, p2]);
                     } else if (snode.op == "*=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "mul"));
+                        b.assign(dest, "mul", storage, [p1, p2]);
                     } else if (snode.op == "&=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "and"));                                
+                        b.assign(dest, "and", storage, [p1, p2]);
                     } else if (snode.op == "|=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "or"));          
+                        b.assign(dest, "or", storage, [p1, p2]);
                     } else if (snode.op == "^=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));                                
+                        b.assign(dest, "xor", storage, [p1, p2]);
                     } else if (snode.op == "<<=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "shl"));                                
+                        b.assign(dest, "shl", storage, [p1, p2]);
                     } else if (snode.op == "&^=") {
-                        code.push(new wasm.Constant(storage as ("i32" | "i64"), -1));
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "and"));
+                        let x = b.assign(b.tmp(), "xor", storage, [p2, -1]);
+                        b.assign(dest, "and", storage, [p1, x]);
                     } else if (snode.op == "/=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), this.isSigned(snode.lhs.type) ? "div_s" : "div_u"));                                
+                        b.assign(dest, this.isSigned(snode.lhs.type) ? "div_s" : "div_u", storage, [p1, p2]);                                
                     } else if (snode.op == "%=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), this.isSigned(snode.lhs.type) ? "rem_s" : "rem_u"));                                
+                        b.assign(dest, this.isSigned(snode.lhs.type) ? "rem_s" : "rem_u", storage, [p1, p2]);
                     } else if (snode.op == ">>=") {
-                        code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), this.isSigned(snode.lhs.type) ? "shr_s" : "shr_u"));                                
+                        b.assign(dest, this.isSigned(snode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
                     }
                 } else {
                     if (snode.op == "+=") {
-                        code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "add"));
+                        b.assign(dest, "add", storage, [p1, p2]);
                     } else if (snode.op == "-=") {
-                        code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "sub"));                                
+                        b.assign(dest, "sub", storage, [p1, p2]);
                     } else if (snode.op == "*=") {
-                        code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "mul"));
+                        b.assign(dest, "mul", storage, [p1, p2]);
                     } else if (snode.op == "/=") {
-                        code.push(new wasm.BinaryFloatInstruction(storage as ("f32" | "f64"), "div"));                                
+                        b.assign(dest, "div", storage, [p1, p2]);
                     }
                 }
-                this.processLeftHandAssignment(f, scope, snode.lhs, wf, false, code);
+                if (tmp instanceof ssa.Pointer) {
+                    b.assign(b.mem, "store", storage, [tmp.variable, tmp.offset, dest]);
+                }
                 break;
             }
             case "--":
             case "++":
             {
-                this.processLeftHandExpression(f, scope, snode.lhs, wf, true, code);
-                this.processLeftHandValue(f, scope, snode.lhs, wf, code);               
+                let storage = this.getSSAType(snode.lhs.type);
+                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
+                let p1: ssa.Variable;
+                let dest: ssa.Variable;
+                if (tmp instanceof ssa.Pointer) {
+                    p1 = b.assign(b.tmp(), "load", storage, [tmp.variable, tmp.offset]);
+                    dest = b.tmp();
+                } else {
+                    p1 = tmp;
+                    dest = tmp;
+                }
                 if (snode.lhs.type instanceof PointerType) {
                     throw "TODO"
                 } else {
-                    let storage = this.stackTypeOf(snode.lhs.type);
                     let increment = 1;
                     if (snode.lhs.type instanceof UnsafePointerType) {
-                        increment = this.sizeOf(snode.lhs.type.elementType);
+                        increment = ssa.sizeOf(this.getSSAType(snode.lhs.type.elementType));
                     }
-                    code.push(new wasm.Constant(storage, increment));
-                    code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), snode.op == "++" ? "add" : "sub"));
+                    b.assign(dest, snode.op == "++" ? "add" : "sub", storage, [p1, increment]);
                 }
-                this.processLeftHandAssignment(f, scope, snode.lhs, wf, false, code);
+                if (tmp instanceof ssa.Pointer) {
+                    b.assign(b.mem, "store", storage, [tmp.variable, tmp.offset, dest]);
+                }
                 break;
             }
             case "for":
             {
-                this.processScope(wf, snode.scope);
+                this.processScopeVariables(b, vars, snode.scope);
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
-                    this.processStatement(f, snode.scope, snode.condition.lhs, wf, code);
+                    this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
                 }
-                code.push(new wasm.Block());
-                code.push(new wasm.Loop());
+                let outer = b.block();
+                let loop = b.loop();
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.condition) {
-                            this.processExpression(f, snode.scope, snode.condition.condition, wf, code);
-                            code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
-                            code.push(new wasm.BrIf(1));         
+                            let tmp: ssa.Variable = this.processExpression(f, snode.scope, snode.condition.condition, b, vars);
+                            let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
+                            b.br_if(tmp2, outer);
                         }
                     } else if (snode.condition.op == "in") {
                         throw "TODO"
                     } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
                         throw "TODO"
                     } else {
-                        this.processExpression(f, snode.scope, snode.condition, wf, code);
-                        code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
-                        code.push(new wasm.BrIf(1));
+                        let tmp: ssa.Variable = this.processExpression(f, snode.scope, snode.condition.condition, b, vars);
+                        let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
+                        b.br_if(tmp2, outer);
                     }
                 }
-                code.push(new wasm.Block());
+                let body = b.block();
                 for(let s of snode.statements) {
-                    this.processStatement(f, snode.scope, s, wf, code);
+                    this.processStatement(f, snode.scope, s, b, vars, {body: body, outer: outer});
                 }
-                code.push(new wasm.End());
+                b.end();
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
-                    this.processStatement(f, snode.scope, snode.condition.rhs, wf, code);
+                    this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
                 }
-                code.push(new wasm.Br(0));
-                code.push(new wasm.End());
-                code.push(new wasm.End());
+                b.br(loop);
+                b.end();
+                b.end();
                 break;
             }
             case "continue":
             {
-                let blocks = 0;
-                let s = scope;
-                while(s && !s.forLoop) {
-                    blocks++;
-                    s = s.parent;
-                }
-                code.push(new wasm.Br(blocks));
+                b.br(blocks.body);
                 break;
             }
             case "break":
             {
-                let blocks = 2;
-                let s = scope;
-                while(s && !s.forLoop) {
-                    blocks++;
-                    s = s.parent;
-                }
-                code.push(new wasm.Br(blocks));
+                b.br(blocks.outer);
                 break;
             }
             case "return":
                 if (!snode.lhs) {
                     if (f.namedReturnTypes) {
-                        let resultCount = 0;
+                        let args: Array<ssa.Variable | string | number> = [];
                         for(let key of f.scope.elements.keys()) {
                             let v = f.scope.elements.get(key);
                             if (v instanceof Variable && v.isResult) {
-                                if (v.storageLocation == "local") {
-                                    // Load on WASM stack
-                                    code.push(new wasm.GetLocal(v.storageIndex));
-                                }
+                                args.push(vars.get(v));
                             }
                         }
+                        let t = this.getSSAType(f.type.returnType);
+                        let tmp = b.assign(b.tmp(), "struct", t, args);
+                        b.assign(null, "return", t, [tmp]);
+                    } else {
+                        b.assign(null, "return", null, []);
                     }
-                    code.push(new wasm.Return());
-                    return;
-                }
-                if (snode.lhs.type instanceof TupleType) {
-                    throw "TODO";
                 } else {
-                    this.processExpression(f, scope, snode.lhs, wf, code);
-                    code.push(new wasm.Return());
+                    let tmp: ssa.Variable = this.processExpression(f, scope, snode.lhs, b, vars);
+                    b.assign(null, "return", tmp.type, [tmp]);
                 }
                 break;
             default:
-                this.processExpression(f, scope, snode, wf, code);
-                if (snode.type != this.tc.t_void) {
-                    // Remove the value from the stack
-                    if (this.isRegisterSize(snode.type)) {
-                        code.push(new wasm.Drop);
-                    } else  {
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.Constant("i32", this.sizeOf(snode.type)));
-                        code.push(new wasm.BinaryIntInstruction("i32", "sub"));
-                        code.push(new wasm.SetLocal(wf.spRegister()));
-                    }
-                }
+                this.processExpression(f, scope, snode, b, vars);
         }
     }
 
-    public processLeftHandExpression(f: Function, scope: Scope, enode: Node, wf: wasm.Function, readWrite: boolean, code: Array<wasm.Node>): void {
+    public processLeftHandExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | ssa.Pointer {
         switch(enode.op) {
-            case "str":
-            {
-                let [off, len] = this.module.addData(enode.value);
-                code.push(new wasm.Constant("i32", off));
-                if (readWrite) {
-                    throw "Implementation error";
-                }
-                break;
-            }
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
-                if (element.storageLocation == "fyrBasePointer") {
-                    code.push(new wasm.GetLocal(wf.bpRegister()));
-                    if (element.storageIndex != 0) {
-                        code.push(new wasm.Constant("i32", element.storageIndex));
-                        code.push(new wasm.BinaryIntInstruction("i32", "add"));
-                    }
-                    if (readWrite) {
-                        code.push(new wasm.TeeLocal(wf.counterRegister()));
-                        code.push(new wasm.GetLocal(wf.counterRegister()));
-                    }
-                }
-                // Else do nothing by intention
-                break;
+                return vars.get(element);
             }
             case "unary*":
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                if (readWrite) {
-                    code.push(new wasm.TeeLocal(wf.counterRegister()));
-                    code.push(new wasm.GetLocal(wf.counterRegister()));
-                }
-                break;
+                let tmp = this.processExpression(f, scope, enode.rhs, b, vars);
+                return new ssa.Pointer(tmp, 0);
             case "[":
                 if (enode.lhs.type instanceof UnsafePointerType) {
-                    this.processExpression(f, scope, enode.lhs, wf, code); // ptr is on stack
-                    let size = this.sizeOf(enode.lhs.type.elementType);
-                    if (enode.rhs.op != "int") {
-                        this.processExpression(f, scope, enode.rhs, wf, code); // ptr, index is on stack
-                        if (size > 1) {
-                            // TODO: If side is power of 2, shift bits
-                            code.push(new wasm.Constant("i32", size)); // ptr, index, size is on stack
-                            code.push(new wasm.BinaryIntInstruction("i32", "mul")); // ptr, offset is on stack             
-                        }
-                        code.push(new wasm.BinaryIntInstruction("i32", "add")); // ptr is on stack
+                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
+                    let index = this.processExpression(f, scope, enode.rhs, b, vars);
+                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                    let index2 = index;
+                    if (size > 1) {
+                        // TODO: If size is power of 2, shift bits
+                        index2 = b.assign(b.tmp(), "mul", "addr", [index, size]);
                     }
-                    if (readWrite) {
-                        code.push(new wasm.TeeLocal(wf.counterRegister()));
-                        code.push(new wasm.GetLocal(wf.counterRegister())); // ptr, ptr is on stack
-                    }
+                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
                 } else if (enode.lhs.type instanceof PointerType) {
                     throw "TODO"
                 } else if (enode.lhs.type instanceof SliceType || enode.lhs.type == this.tc.t_string) {
-                    let additionalOffset = 0;
-                    // Compute pointer to slice head and put it on the stack twice
-                    if (this.isLeftHandSide(enode.lhs)) {
-                        this.processLeftHandExpression(f, scope, enode.lhs, wf, true, code);
-                    } else {
-                        // Put the slice head on the stack
-                        this.processExpression(f, scope, enode.lhs, wf, code);  // slice head is on the fyr stack
-                        additionalOffset = 4;
-                        code.push(new wasm.GetLocal(wf.spRegister())); // sp
-                        code.push(new wasm.Constant("i32", 4 + 12));
-                        code.push(new wasm.BinaryIntInstruction("i32", "sub"));
-                        code.push(new wasm.TeeLocal(wf.counterRegister())); // ptr to slice head (with additionalOffset 4 because of the type code) is on stack
-                        code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to slice head, ptr to slice head is on stack
-                        code.push(new wasm.GetLocal(wf.counterRegister()));
-                    }
-//                    code.push(new wasm.TeeLocal(wf.counterRegister())); // ptr to slice head is on stack
-//                    code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to slice head, ptr to slice head is on stack
-                    let size = enode.lhs.type instanceof SliceType ? this.sizeOf(enode.lhs.type.elementType) : 1;
-                    let index = 0;
+                    let slice = this.processExpression(f, scope, enode.lhs, b, vars);
+                    let t = this.getSSAType(enode.lhs.type);
+                    let size = ssa.sizeOf(t);
+                    let index: ssa.Variable | number = 0;
                     if (enode.rhs.op == "int") {
                         index = parseInt(enode.rhs.value);
                     } else {
-                        this.processExpression(f, scope, enode.rhs, wf, code); // ptr to slice head, ptr to slice head, index is on stack
-                        code.push(new wasm.SetLocal(wf.counterRegister())); // index is in counter register; ptr to slice head, ptr to slice head is on stack
+                        index = this.processExpression(f, scope, enode.rhs, b, vars);
                     }
-                    // Load max index from slice head and compare to index
+                    // Load length from slice head and compare to index. Index must be less
                     code.push(new wasm.Load("i32", null, additionalOffset + 8)); // ptr to slice head, max-index is on stack
                     if (enode.rhs.op == "int") {
                         code.push(new wasm.Constant("i32", index));
                     } else {
                         code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to slice head, max-index, index is on stack
                     }
-                    code.push(new wasm.BinaryIntInstruction("i32", "le_s")); // ptr to slice head, bool is on stack
+                    code.push(new wasm.BinaryIntInstruction("i32", "lt_s")); // ptr to slice head, bool is on stack
                     code.push(new wasm.If());
                     code.push(new wasm.Unreachable());
                     code.push(new wasm.End());
@@ -483,14 +455,6 @@ export class CodeGenerator {
                         code.push(new wasm.Constant("i32", index * size)); // ptr to first element, offset is on stack
                         code.push(new wasm.BinaryIntInstruction("i32", "add")); // ptr to element is on stack
                     }
-                    if (!this.isLeftHandSide(enode.lhs)) {
-                        // Remove slice head from the fyr stack
-                        code.push(new wasm.SetLocal(wf.spRegister()));
-                    }
-                    if (readWrite) {
-                        code.push(new wasm.TeeLocal(wf.counterRegister()));
-                        code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to element, ptr to element is on stack
-                    }
                 } else if (enode.lhs.type instanceof ArrayType) {
                     throw "TODO";
                 } else if (enode.lhs.type == this.tc.t_json) {
@@ -506,308 +470,145 @@ export class CodeGenerator {
         }
     }
 
-    public processLeftHandValue(f: Function, scope: Scope, enode: Node, wf: wasm.Function, code: Array<wasm.Node>): void {
-        if (enode.op == "id") {
-            let element = scope.resolveElement(enode.value);
-            if (element.storageLocation == "local") {
-                code.push(new wasm.GetLocal(element.storageIndex));
-                return;
-            } else if (element.storageLocation == "global") {
-                code.push(new wasm.GetGlobal(element.storageIndex));
-                return;
-            }
-        }
-        // There is a pointer on the wasm stack
-        if (this.isRegisterSize(enode.type)) {
-            this.loadHeapWordOnStack(enode.type, 0, code);
-        } else if (this.sizeOf(enode.type) == 12) {
-            throw "TODO: Copy data from heap to FYR stack";
-        } else {
-            throw "TODO: Copy data from heap to FYR stack";
-        }
-    }
-
-    public processLeftHandAssignment(f: Function, scope: Scope, enode: Node, wf: wasm.Function, valueOnStack: boolean, code: Array<wasm.Node>): void {
-        switch (enode.op) {
-            case "str":
-                throw "CodeGen: Implementation error, cannot assign to string constant";
-            case "id":
-                let element = scope.resolveElement(enode.value);
-                if (valueOnStack) {
-                    this.storeElementFromStack(element, wf, code);
-                } else {
-                    throw "TODO"
-                }
-                break;
-            case "unary*":
-                if (this.isRegisterSize(enode.type)) {
-                    if (!valueOnStack) {
-                        this.loadHeapWordOnStack(enode.type, 0, code);
-                    }
-                    this.storeHeapWordFromStack(enode.type, 0, code);
-                } else if (this.sizeOf(enode.type) == 12) {
-                    if (valueOnStack) {
-                        // Load ptr in register and copy there from the stack
-                        code.push(new wasm.TeeLocal(wf.counterRegister())); // ptr is on stack and register
-                        code.push(new wasm.GetLocal(wf.spRegister())); // ptr, sp is on stack
-                        code.push(new wasm.Constant("i32", 4 + 12));
-                        code.push(new wasm.BinaryIntInstruction("i32", "sub")); // ptr, sp is on stack
-                        code.push(new wasm.TeeLocal(wf.spRegister())); // ptr, sp is on stack
-                        code.push(new wasm.Load("i32", null, 4)); // ptr, value is on stack
-                        code.push(new wasm.Store("i32", null, 0)); // empty stack
-                        code.push(new wasm.GetLocal(wf.counterRegister()));
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.Load("i32", null, 8)); // ptr, value is on stack
-                        code.push(new wasm.Store("i32", null, 4)); // empty stack
-                        code.push(new wasm.GetLocal(wf.counterRegister()));
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.Load("i32", null, 12)); // ptr, value is on stack
-                        code.push(new wasm.Store("i32", null, 8)); // empty stack
-                    } else {
-                        throw "TODO"
-                    }
-                } else {
-                    throw "TODO: Copy data from FYR stack to address and change FYR stack";
-                }
-                break;
-            case "[":
-                if (enode.lhs.type instanceof UnsafePointerType) {
-                    if (this.isRegisterSize(enode.lhs.type.elementType)) {
-                        let offset: number = 0;
-                        if (enode.rhs.op == "int") {
-                            let size = this.sizeOf(enode.lhs.type.elementType);
-                            offset = parseInt(enode.rhs.value) * size;
-                        }
-                        if (!valueOnStack) {
-                            this.loadHeapWordOnStack(enode.type, 0, code);
-                        }
-                        this.storeHeapWordFromStack(enode.lhs.type.elementType, offset, code);
-                    } else {
-                        throw "TODO"
-                    }
-                } else {
-                    throw "TODO"
-                }
-                break;
-            case ".":
-                throw "TODO"
-            default:
-                throw "CodeGen: Implementation error " + enode.op;
-        }
-    }
-
     public isLeftHandSide(enode: Node): boolean {
         return (enode.op == "[" || enode.op == "." || enode.op == "id" || enode.op == "unary*");
     }
 
-    public processExpression(f: Function, scope: Scope, enode: Node, wf: wasm.Function, code: Array<wasm.Node>): void {
+    public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
         switch(enode.op) {
             case "int":
+                return b.assign(b.tmp(), "copy", this.getSSAType(enode.type), [parseInt(enode.value)]);
             case "float":
-                if (enode.type == this.tc.t_int8 || enode.type == this.tc.t_int16 || enode.type == this.tc.t_int32 || enode.type instanceof UnsafePointerType) {
-                    code.push(new wasm.Constant("i32", parseInt(enode.value)));
-                } else if (enode.type == this.tc.t_int64) {
-                    code.push(new wasm.Constant("i64", parseInt(enode.value)));                    
-                } else if (enode.type == this.tc.t_uint8 || enode.type == this.tc.t_uint16 || enode.type == this.tc.t_uint32) {
-                    code.push(new wasm.Constant("i32", parseInt(enode.value)));
-                } else if (enode.type == this.tc.t_uint64) {
-                    code.push(new wasm.Constant("i64", parseInt(enode.value)));                    
-                } else if (enode.type == this.tc.t_float) {
-                    code.push(new wasm.Constant("f32", parseFloat(enode.value)));
-                } else if (enode.type == this.tc.t_double) {
-                    code.push(new wasm.Constant("f64", parseFloat(enode.value)));
-                } else {
-                    throw "CodeGen: Implementation error";
-                }
-                break;
+                return b.assign(b.tmp(), "copy", this.getSSAType(enode.type), [parseFloat(enode.value)]);
             case "bool":
-                code.push(new wasm.Constant("i32", enode.value == "true" ? 1 : 0));
-                break;
+                return b.assign(b.tmp(), "copy", this.getSSAType(enode.type), [enode.value == "true" ? 1 : 0]);
             case "str":
-                let [off, len] = this.module.addData(enode.value);
-                code.push(new wasm.GetLocal(wf.spRegister()));
-                code.push(new wasm.Constant('i32', 0)); // TODO: Type code
-                code.push(new wasm.Store("i32", null, 0));
-                code.push(new wasm.GetLocal(wf.spRegister()));
-                code.push(new wasm.Constant('i32', off));
-                code.push(new wasm.Store("i32", null, 4));
-                code.push(new wasm.GetLocal(wf.spRegister()));
-                code.push(new wasm.Constant('i32', off));
-                code.push(new wasm.Store("i32", null, 8));
-                code.push(new wasm.GetLocal(wf.spRegister()));
-                code.push(new wasm.Constant('i32', len));
-                code.push(new wasm.Store("i32", null, 12));
-                code.push(new wasm.GetLocal(wf.spRegister()));
-                code.push(new wasm.Constant("i32", 12 + 4));
-                code.push(new wasm.BinaryIntInstruction("i32", "add"));
-                code.push(new wasm.SetLocal(wf.spRegister()));
-                break;
+                let [off, len] = this.wasm.module.addData(enode.value);
+                throw "TODO"
             case "==":
-                if (enode.lhs.type instanceof BasicType) {
-                    this.processCompare("eq", f, scope, enode, wf, code);
-                } else {
-                    throw "TODO"
-                }
-                break;
+                return this.processCompare("eq", f, scope, enode, b, vars);
             case "!=":
-                if (enode.lhs.type instanceof BasicType) {
-                    this.processCompare("ne", f, scope, enode, wf, code);
-                } else {
-                    throw "TODO"
-                }
-                break;
+                return this.processCompare("neq", f, scope, enode, b, vars);
             case "<":
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
-                    this.processCompare("lt", f, scope, enode, wf, code);
-                } else if (this.isSigned(enode.lhs.type)) {
-                    this.processCompare("lt_s", f, scope, enode, wf, code);
-                } else {
-                    this.processCompare("lt_u", f, scope, enode, wf, code);
+                    return this.processCompare("lt", f, scope, enode, b, vars);
                 }
-                break;
+                if (this.isSigned(enode.lhs.type)) {
+                    return this.processCompare("lt_s", f, scope, enode, b, vars);
+                }
+                return this.processCompare("lt_u", f, scope, enode, b, vars);
             case ">":
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
-                    this.processCompare("gt", f, scope, enode, wf, code);
-                } else if (this.isSigned(enode.lhs.type)) {
-                    this.processCompare("gt_s", f, scope, enode, wf, code);
-                } else {
-                    this.processCompare("gt_u", f, scope, enode, wf, code);
+                    return this.processCompare("gt", f, scope, enode, b, vars);
                 }
-                break;
+                if (this.isSigned(enode.lhs.type)) {
+                    return this.processCompare("gt_s", f, scope, enode, b, vars);
+                }
+                return this.processCompare("gt_u", f, scope, enode, b, vars);
             case "<=":
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
-                    this.processCompare("le", f, scope, enode, wf, code);
-                } else if (this.isSigned(enode.lhs.type)) {
-                    this.processCompare("le_s", f, scope, enode, wf, code);
-                } else {
-                    this.processCompare("le_u", f, scope, enode, wf, code);
+                    return this.processCompare("le", f, scope, enode, b, vars);
                 }
-                break;
+                if (this.isSigned(enode.lhs.type)) {
+                    return this.processCompare("le_s", f, scope, enode, b, vars);
+                }
+                return this.processCompare("le_u", f, scope, enode, b, vars);
             case ">=":
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
-                    this.processCompare("ge", f, scope, enode, wf, code);
-                } else if (this.isSigned(enode.lhs.type)) {
-                    this.processCompare("ge_s", f, scope, enode, wf, code);
-                } else {
-                    this.processCompare("ge_u", f, scope, enode, wf, code);
+                    return this.processCompare("ge", f, scope, enode, b, vars);
                 }
-                break;
+                if (this.isSigned(enode.lhs.type)) {
+                    return this.processCompare("ge_s", f, scope, enode, b, vars);
+                }
+                return this.processCompare("ge_u", f, scope, enode, b, vars);
             case "+":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                this.processExpression(f, scope, enode.rhs, wf, code);
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
                 if (enode.lhs.type == this.tc.t_string) {
                     throw "TODO"
-                } else {
-                    let storage = this.stackTypeOf(enode.type);
-                    if (storage == "f32" || storage == "f64") {
-                        code.push(new wasm.BinaryFloatInstruction(storage, "add"))
-                    } else {
-                        code.push(new wasm.BinaryIntInstruction(storage, "add"))
-                    }                    
                 }
-                break;
+                let storage = this.getSSAType(enode.type);
+                return b.assign(b.tmp(), "add", storage, [p1, p2]);
             }
             case "*":
             case "-":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.type);
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.type);
                 let opcode: "mul" | "sub" = enode.op == "*" ? "mul" : "sub";
-                if (storage == "f32" || storage == "f64") {
-                    code.push(new wasm.BinaryFloatInstruction(storage, opcode))
-                } else {
-                    code.push(new wasm.BinaryIntInstruction(storage, opcode))
-                }
-                break;
+                return b.assign(b.tmp(), opcode, storage, [p1, p2]);
             }
             case "/":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.type);
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.type);
                 if (storage == "f32" || storage == "f64") {
-                    code.push(new wasm.BinaryFloatInstruction(storage, "div"))
-                } else {
-                    let opcode: "div_u" | "div_s" = this.isSigned(enode.type) ? "div_s" : "div_u";
-                    code.push(new wasm.BinaryIntInstruction(storage, opcode))
+                    return b.assign(b.tmp(), "div", storage, [p1, p2]);
                 }
-                break;
+                let opcode: "div_u" | "div_s" = this.isSigned(enode.type) ? "div_s" : "div_u";
+                return b.assign(b.tmp(), opcode, storage, [p1, p2]);
             }
             case "%":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.type);
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.type);
                 let opcode: "rem_u" | "rem_s" = this.isSigned(enode.type) ? "rem_s" : "rem_u";
-                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), opcode));
-                break;
+                return b.assign(b.tmp(), opcode, storage, [p1, p2]);
             }
             case "|":
             case "&":
             case "^":
             {
                 let opcode: "or" | "xor" | "and" = enode.op == "|" ? "or" : (enode.op == "&" ? "and" : "xor");
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.type);
-                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), opcode));
-                break;
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.type);
+                return b.assign(b.tmp(), opcode, storage, [p1, p2]);
             }
             case "&^":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.type);
-                code.push(new wasm.Constant(storage as ("i32" | "i64"), -1));
-                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
-                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "and"));
-                break;
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.type);
+                let tmp = b.assign(b.tmp(), "xor", storage, [p2, -1]);
+                return b.assign(b.tmp(), "and", storage, [p1, tmp]);
             }
             case "unary!":
             {
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
-                break;                
+                let p = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.rhs.type);
+                return b.assign(b.tmp(), "eqz", storage, [p]);
             }
             case "unary+":
             {
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                break;                
+                return this.processExpression(f, scope, enode.rhs, b, vars);
             }
             case "unary-":
             {
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.rhs.type);
+                let p = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.rhs.type);
                 if (enode.rhs.type == this.tc.t_float || enode.rhs.type == this.tc.t_double) {
-                    code.push(new wasm.UnaryFloatInstruction(storage as ("f32" | "f64"), "neg"));                    
-                } else {
-                    code.push(new wasm.Constant(storage as ("i32" | "i64"), -1));
-                    code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
-                    code.push(new wasm.Constant(storage as ("i32" | "i64"), 1));
-                    code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "add"));
+                    return b.assign(b.tmp(), "neg", storage, [p]);
                 }
-                break;                
+                let tmp = b.assign(b.tmp(), "xor", storage, [p, -1]);
+                return b.assign(b.tmp(), "add", storage, [tmp, 1]);
             }
             case "unary^":
             {
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                let storage = this.stackTypeOf(enode.rhs.type);
-                code.push(new wasm.Constant(storage as ("i32" | "i64"), -1));
-                code.push(new wasm.BinaryIntInstruction(storage as ("i32" | "i64"), "xor"));
-                break;
+                let p = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.rhs.type);
+                return b.assign(b.tmp(), "xor", storage, [p, -1]);
             }
             case "unary*":
             {
-                this.processExpression(f, scope, enode.rhs, wf, code);
+                let p = this.processExpression(f, scope, enode.rhs, b, vars);
                 if (enode.rhs.type instanceof UnsafePointerType) {
-                    let storage = this.stackTypeOf(enode.rhs.type.elementType);
-                    if (this.isRegisterSize(enode.rhs.type.elementType)) {
-                        this.loadHeapWordOnStack(enode.rhs.type.elementType, 0, code);
-                    } else {
-                        throw "TODO"
-                    }
+                    let storage = this.getSSAType(enode.rhs.type.elementType);
+                    return b.assign(b.tmp(), "load", storage, [p, 0]);
                 } else if (enode.rhs.type instanceof PointerType) {
                     throw "TODO"
                 }                                
@@ -815,58 +616,34 @@ export class CodeGenerator {
             }
             case "||":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                code.push(new wasm.If(["i32"]));
-                code.push(new wasm.Constant("i32", 1));
-                code.push(new wasm.Else());
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                code.push(new wasm.End());
-                break;
+                let result = b.tmp();
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                // TODO: Use if-expressions in IR
+                b.ifBlock(p1);
+                b.assign(result, "copy", "i8", [1]);
+                b.elseBlock();
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                b.assign(result, "copy", "i8", [p2]);
+                b.end();
+                return result;
             }
             case "&&":
             {
-                this.processExpression(f, scope, enode.lhs, wf, code);
-                code.push(new wasm.If(["i32"]));
-                this.processExpression(f, scope, enode.rhs, wf, code);
-                code.push(new wasm.Else());
-                code.push(new wasm.Constant("i32", 0));
-                code.push(new wasm.End());
-                break;
+                let result = b.tmp();
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                // TODO: Use if-expressions in IR
+                b.ifBlock(p1);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                b.assign(result, "copy", "i8", [p2]);
+                b.elseBlock();
+                b.assign(result, "copy", "i8", [0]);
+                b.end();
+                return result;
             }
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
-                if (element.storageLocation == "local") {
-                    code.push(new wasm.GetLocal(element.storageIndex));
-                } else if (element.storageLocation == "global") {
-                    code.push(new wasm.GetGlobal(element.storageIndex));
-                } else {
-                    let size = this.sizeOf(element.type);
-                    if (size == 12) {
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.GetLocal(wf.bpRegister()));
-                        code.push(new wasm.Load("i32", null, element.storageIndex));
-                        code.push(new wasm.Store("i32", null, 0));
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.GetLocal(wf.bpRegister()));
-                        code.push(new wasm.Load("i32", null, element.storageIndex + 4));
-                        code.push(new wasm.Store("i32", null, 4));
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.GetLocal(wf.bpRegister()));
-                        code.push(new wasm.Load("i32", null, element.storageIndex + 8));
-                        code.push(new wasm.Store("i32", null, 8));
-                        code.push(new wasm.GetLocal(wf.spRegister()));
-                        code.push(new wasm.Constant("i32", 12));
-                        code.push(new wasm.BinaryIntInstruction("i32", "add"));
-                        code.push(new wasm.SetLocal(wf.spRegister()));                        
-                    } else {
-                        code.push(new wasm.GetLocal(wf.bpRegister()));
-                        code.push(new wasm.Constant("i32", element.storageIndex));
-                        code.push(new wasm.BinaryIntInstruction("i32", "add"));
-                        throw "TODO: Call memcpy";
-                    }
-                }
-                break;
+                return vars.get(element);
             }
             case "(":
             {
@@ -905,120 +682,23 @@ export class CodeGenerator {
             }
             case "[":
             {
-                this.processLeftHandExpression(f, scope, enode, wf, false, code);
-                this.processLeftHandValue(f, scope, enode, wf, code);
-                break;
+                let ptr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
+                let storage = this.getSSAType(enode.type);
+                return b.assign(b.tmp(), "load", storage, [ptr.variable, ptr.offset]);
             }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
     }
 
-    private processCompare(opcode: wasm.BinaryFloatOp | wasm.BinaryIntOp, f: Function, scope: Scope, enode: Node, wf: wasm.Function, code: Array<wasm.Node>) {
-        this.processExpression(f, scope, enode.lhs, wf, code);
-        this.processExpression(f, scope, enode.rhs, wf, code);
+    private processCompare(opcode: ssa.NodeKind, f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
+        let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+        let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
         if (enode.lhs.type == this.tc.t_string) {
             throw "TODO"
         } else {
-            let storage = this.stackTypeOf(enode.type);
-            if (storage == "f32" || storage == "f64") {
-                code.push(new wasm.BinaryFloatInstruction(storage, opcode as wasm.BinaryFloatOp))
-            } else {
-                code.push(new wasm.BinaryIntInstruction(storage, opcode as wasm.BinaryIntOp))
-            }                    
-        }
-    }
-
-    public storeElementFromStack(e: ScopeElement, wf: wasm.Function, code: Array<wasm.Node>) {
-        if (e instanceof FunctionParameter || e instanceof Variable) {
-            if (e.storageLocation == "local") {
-                code.push(new wasm.SetLocal(e.storageIndex));
-            } else if (e.storageLocation == "global") {
-                code.push(new wasm.SetGlobal(e.storageIndex));
-            } else {
-                let size = this.sizeOf(e.type);
-                code.push(new wasm.GetLocal(wf.spRegister()));
-                code.push(new wasm.Constant("i32", 4 + size));
-                code.push(new wasm.BinaryIntInstruction("i32", "sub"));
-                code.push(new wasm.SetLocal(wf.spRegister()));       
-                if (size == 12) {
-                    code.push(new wasm.GetLocal(wf.bpRegister()));
-                    code.push(new wasm.GetLocal(wf.spRegister()));
-                    code.push(new wasm.Load("i32", null, 4));
-                    code.push(new wasm.Store("i32", null, e.storageIndex));
-                    code.push(new wasm.GetLocal(wf.bpRegister()));
-                    code.push(new wasm.GetLocal(wf.spRegister()));
-                    code.push(new wasm.Load("i32", null, 8));
-                    code.push(new wasm.Store("i32", null, e.storageIndex + 4));
-                    code.push(new wasm.GetLocal(wf.bpRegister()));
-                    code.push(new wasm.GetLocal(wf.spRegister()));
-                    code.push(new wasm.Load("i32", null, 12));
-                    code.push(new wasm.Store("i32", null, e.storageIndex +8));
-                } else {
-                    throw "TODO call memcpy"
-                }                 
-            }
-        }
-    }
-
-    public copyElementOnHead(t: Type, wf: wasm.Function, code: Array<wasm.Node>) {
-        let size = this.sizeOf(t);
-        if (size == 12) {
-            if (size == 12) {
-                throw "TODO"
-            }
-        } else {
-            throw "TODO"
-        }
-    }
-
-    public loadHeapWordOnStack(t: Type, offset: number, code: Array<wasm.Node>) {
-        let storage = this.stackTypeOf(t);
-        if (t == this.tc.t_int8) {
-            code.push(new wasm.Load(storage, "8_s", offset));
-        } else if (t == this.tc.t_int16) {
-            code.push(new wasm.Load(storage, "16_s", offset));
-        } else if (t == this.tc.t_int32) {
-            code.push(new wasm.Load(storage, null, offset));
-        } else if (t == this.tc.t_int64) {
-            code.push(new wasm.Load(storage, null, offset));
-        } else if (t == this.tc.t_uint8 || t == this.tc.t_bool) {
-            code.push(new wasm.Load(storage, "8_u", offset));
-        } else if (t == this.tc.t_uint16) {
-            code.push(new wasm.Load(storage, "16_u", offset));
-        } else if (t == this.tc.t_uint32) {
-            code.push(new wasm.Load(storage, null, offset));
-        } else if (t == this.tc.t_uint64 || t == this.tc.t_float || t == this.tc.t_double) {
-            code.push(new wasm.Load(storage, null, offset));
-        } else if (t instanceof UnsafePointerType) {
-            code.push(new wasm.Load(storage, null, offset));
-        } else {
-            throw "Implementation error";
-        }
-    }
-
-    public storeHeapWordFromStack(t: Type, offset: number, code: Array<wasm.Node>) {
-        let storage = this.stackTypeOf(t);
-        if (t == this.tc.t_int8) {
-            code.push(new wasm.Store(storage, "8", offset));
-        } else if (t == this.tc.t_int16) {
-            code.push(new wasm.Store(storage, "16", offset));
-        } else if (t == this.tc.t_int32) {
-            code.push(new wasm.Store(storage, null, offset));
-        } else if (t == this.tc.t_int64) {
-            code.push(new wasm.Store(storage, null, offset));
-        } else if (t == this.tc.t_uint8) {
-            code.push(new wasm.Store(storage, "8", offset));
-        } else if (t == this.tc.t_uint16) {
-            code.push(new wasm.Store(storage, "16", offset));
-        } else if (t == this.tc.t_uint32) {
-            code.push(new wasm.Store(storage, null, offset));
-        } else if (t == this.tc.t_uint64 || t == this.tc.t_float || t == this.tc.t_double) {
-            code.push(new wasm.Store(storage, null, offset));
-        } else if (t instanceof UnsafePointerType) {
-            code.push(new wasm.Store(storage, null, offset)); 
-        } else {
-            throw "Implementation error";
+            let storage = this.getSSAType(enode.type);
+            return b.assign(b.tmp(), opcode, storage, [p1, p2]);
         }
     }
 
@@ -1032,55 +712,8 @@ export class CodeGenerator {
         throw "CodeGen: Implementation error: signed check on non number type"       
     }
 
-    public stackTypeOf(t: Type): wasm.StackType {
-        if (t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
-            return "i32";
-        }
-        if (t == this.tc.t_int64 || t == this.tc.t_uint64) {
-            return "i64";
-        }
-        if (t == this.tc.t_float) {
-            return "f32";
-        }
-        if (t == this.tc.t_double) {
-            return "f64";
-        }
-        if (t instanceof UnsafePointerType) {
-            return "i32";
-        }
-        throw "CodeGen: Implementation error: The type does not fit in a register " + t.name;
-    }
-
-   public sizeOf(t: Type): number {
-        if (t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8) {
-            return 1;
-        }
-        if (t == this.tc.t_int16 || t == this.tc.t_uint16) {
-            return 2;
-        }
-        if (t == this.tc.t_int32 || t == this.tc.t_uint32 || t == this.tc.t_float || t instanceof UnsafePointerType) {
-            return 4;
-        }
-        if (t == this.tc.t_int64 || t == this.tc.t_uint64 || t == this.tc.t_double) {
-            return 8;
-        }
-        if (t == this.tc.t_string || t instanceof ArrayType || t instanceof SliceType) {
-            return 12;
-        }
-        throw "TODO";
-    }
-
-    public isRegisterSize(t: Type) {
-        if (t == this.tc.t_double || t == this.tc.t_float || t == this.tc.t_int64 || t == this.tc.t_uint64 || t == this.tc.t_bool || t == this.tc.t_int8 || t == this.tc.t_uint8 ||t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32) {
-            return true;
-        }
-        if (t instanceof UnsafePointerType) {
-            return true;
-        }
-        return false;
-    }
-
-    public module: wasm.Module = new wasm.Module();
-
+    private optimizer: ssa.Optimizer;
+    private wasm: ssa.Wasm32Backend;
     private tc: TypeChecker;
+    private funcs: Map<Function, wasm.Function> = new Map<Function, wasm.Function>();
 }

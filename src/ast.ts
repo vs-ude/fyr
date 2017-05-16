@@ -137,20 +137,3 @@ export class Node {
     public type: Type;
     public scope: Scope;
 }
-
-/*
-function f(a, b) {
-
-}
-
-// function t<A,B>() {
-
-// }
-
-var t;
-var u;
-var v;
-//type u = {};
-//type v = {};
-f(t < u, v > 1+2);
-*/
