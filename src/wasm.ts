@@ -83,7 +83,7 @@ export class Module extends Node {
         return s + indent + ")";
     }
 
-    public addData(value: string): [number, number] {
+    public addString(value: string): [number, number] {
         let uint8array: Uint8Array = new textEncoding.TextEncoder("utf-8").encode(value);
         let offset = this.dataSize;
         this.data.push(new Data(offset, uint8array));

@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -32,9 +32,14 @@ export class StructType {
         return str;
     }
 
+    public toString(): string {
+        return this.name;
+    }
+
     public fields: Array<[string, Type | StructType]> = [];
     private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
+    public name: string;
 }
 
 export function sizeOf(x: Type | StructType): number {
@@ -133,6 +138,8 @@ export class Variable {
      */
     public isConstant: boolean = false;
     public constantValue: number;
+    public isCopy: boolean = false;
+    public copiedValue: Variable;
     /**
      * addressable is true if 'addr_of' has been used on this variable.
      */
@@ -151,7 +158,7 @@ export class Pointer {
         this.variable = v;
         this.offset = offset;
     }
-    
+
     public offset: number;
     public variable: Variable;
 }
@@ -188,6 +195,8 @@ export class Node {
                     return v.name;
                 } else if (v instanceof Node) {
                     return "(" + v.toString("") + ")";
+                } else if (v === null || v === undefined) {
+                    return "<null>";
                 } else {
                     return v.toString();
                 }
@@ -438,9 +447,9 @@ export class Builder {
     public br(to: Node) {
         let j = 0;
         for(let i = this._blocks.length - 1; i >= 0; i--) {
-            if (this._blocks[i].kind == "if" || this._blocks[i].kind == "define") {
-                continue;
-            }
+//            if (this._blocks[i].kind == "if" || this._blocks[i].kind == "define") {
+//                continue;
+//            }
             if (to == this._blocks[i]) {
                 let n = new Node(null, "br", undefined, [j]);
                 if (this._current) {
@@ -461,9 +470,9 @@ export class Builder {
     public br_if(arg: Variable | string | number, to: Node) {
         let j = 0;
         for(let i = this._blocks.length - 1; i >= 0; i--) {
-            if (this._blocks[i].kind == "if" || this._blocks[i].kind == "define") {
-                continue;
-            }
+//            if (this._blocks[i].kind == "if" || this._blocks[i].kind == "define") {
+//                continue;
+//            }
             if (to == this._blocks[i]) {
                 let n = new Node(null, "br_if", undefined, [arg, j]);
                 if (this._current) {
@@ -549,10 +558,11 @@ export class Builder {
         if (this._blocks.length == 0) {
             throw "end without opening block";
         }
-        let n = this._blocks.pop();
-        this._current.next.push(n.blockPartner);
-        n.blockPartner.prev.push(this._current);
-        this._current = n.blockPartner;
+        let block = this._blocks.pop();
+        let end = block.blockPartner;
+        this._current.next.push(end);
+        end.prev.push(this._current);
+        this._current = end;
     }
 
     public ifBlock(arg: Variable | string | number) : Node {
@@ -614,6 +624,8 @@ export class Builder {
         }
         if (n.kind == "addr_of" && n.args[0] instanceof Variable) {
             (n.args[0] as Variable).addressable = true;
+        } else if (n.kind == "decl_param" || n.kind == "decl_result") {
+            n.assign.readCount = 1; // Avoid that assignments to the variable are treated as dead code
         }
     }
 
@@ -629,8 +641,7 @@ export class Optimizer {
     }
 
     /**
-     * Collects all steps and async calls
-     * and remove all 'const' nodes which assign to variables that are SSA.
+     * Removes all 'const' nodes which assign to variables that are SSA.
      */
     private _optimizeConstants(start: Node, end: Node) {
         let n = start;
@@ -665,10 +676,16 @@ export class Optimizer {
     }
 
     /**
-     * Traverse the code backwards
+     * Traverse the code backwards and remove assignment which assign to variables
+     * that are never read.
      */
     private _removeDeadCode1(n: Node, end: Node) {
         for( ;n && n != end; ) {
+            if (n.assign && n.assign.isCopy) {
+                n.assign.writeCount--;
+                n.assign = n.assign.copiedValue;
+                n.assign.writeCount++;
+            }
             // Remove assignments to variables which are not read
             if (n.kind == "call" && n.assign && n.assign.readCount == 0) {
                 n.assign.writeCount--;
@@ -677,13 +694,25 @@ export class Optimizer {
                 this._removeDeadCode1(n.prev[1], n.blockPartner);
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var" || n.kind == "return") {
                 // Do nothing by intention
+            } else if (n.kind == "copy" && n.args[0] instanceof Variable && (n.args[0] as Variable).writeCount == 1 && (n.args[0] as Variable).readCount == 1) {
+                let v = n.args[0] as Variable;
+                v.isCopy = true;
+                v.copiedValue = n.assign;
+                n.assign.writeCount--;
+                v.readCount--;
+                let n2 = n.prev[0];
+                Node.removeNode(n);
+                n = n2;
+                continue;
             } else if (n.kind != "call" && n.assign && n.assign.readCount == 0) {
+                console.log("REMOVE", n.toString(""), n.assign);
                 let n2 = n.prev[0];
                 for(let a of n.args) {
                     if (a instanceof Variable) {
                         a.readCount--;
                     }
                 }
+                n.assign.writeCount--;
                 Node.removeNode(n);
                 n = n2;
                 continue;
@@ -1817,6 +1846,13 @@ export class Wasm32Backend {
                 }
                 code.push(new wasm.Return());
                 n = n.next[0];
+            } else if (n.kind == "trap") {
+                code.push(new wasm.Unreachable());
+                n = n.next[0];
+            } else if (n.kind == "copy") {
+                throw "TODO";
+            } else if (n.kind == "struct") {
+                throw "TODO";
             } else {
                 // TODO: This clause should never trigger
                 n = n.next[0];
@@ -2612,4 +2648,4 @@ function main() {
     console.log(back.module.toWast(""));
 }
 
-main();
+// main();

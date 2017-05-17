@@ -6,6 +6,17 @@ import * as wasm from "./wasm"
 export class CodeGenerator {
     constructor(tc: TypeChecker) {
         this.tc = tc;
+        this.wasm = new ssa.Wasm32Backend();
+        this.optimizer = new ssa.Optimizer();
+        this.stringHeader = new ssa.StructType();
+        this.stringHeader.name = "string";
+        this.stringHeader.addField("ptr", "addr");
+        this.stringHeader.addField("length", "i32");
+        this.sliceHeader = new ssa.StructType();
+        this.sliceHeader.name = "slice";
+        this.sliceHeader.addField("alloc_ptr", "addr");
+        this.sliceHeader.addField("data_ptr", "addr");
+        this.sliceHeader.addField("length", "i32");
     }
 
     public processModule(scope: Scope) {
@@ -24,15 +35,18 @@ export class CodeGenerator {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
                 let wf = this.funcs.get(e);
-                let f = this.processFunction(e, true, wf);
+                let n = this.processFunction(e, true, wf);
             } else {
                 throw "CodeGen: Implementation Error " + e
             }
         }
+
+        console.log('============ WASM ===============');
+        console.log(this.wasm.module.toWast(""));
     }
 
     private getSSAType(t: Type): ssa.Type | ssa.StructType {
-        if (t == this.tc.t_bool || t == this.tc.t_uint8) {
+        if (t == this.tc.t_bool || t == this.tc.t_uint8 || t == this.tc.t_byte) {
             return "i8";
         }
         if (t == this.tc.t_int8) {
@@ -65,6 +79,12 @@ export class CodeGenerator {
         if (t instanceof UnsafePointerType) {
             return "addr";
         }
+        if (t == this.tc.t_string) {
+            return this.stringHeader;
+        }
+        if (t instanceof SliceType) {
+            return this.sliceHeader;
+        }
         // TODO: Struct
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.name;
     }
@@ -72,15 +92,15 @@ export class CodeGenerator {
     private getSSAFunctionType(t: FunctionType): ssa.FunctionType {
         let ftype = new ssa.FunctionType([], null, false);
         for(let p of t.parameters) {
-            ftype.params.push(this.getSSAType(p));
+            ftype.params.push(this.getSSAType(p.type));
         }
-        if (t.returnType) {
+        if (t.returnType != this.tc.t_void) {
             ftype.result = this.getSSAType(t.returnType);
         }
         return ftype;
     }
 
-    public processFunction(f: Function, exportFunc: boolean, wf: wasm.Function) {
+    public processFunction(f: Function, exportFunc: boolean, wf: wasm.Function): ssa.Node {
         let b = new ssa.Builder();
         let vars = new Map<ScopeElement, ssa.Variable>();
 
@@ -103,7 +123,7 @@ export class CodeGenerator {
                     vars.set(e, v);                    
                 }
             }
-        } else if (f.type.returnType) {
+        } else if (f.type.returnType != this.tc.t_void) {
             b.declareResult(this.getSSAType(f.type.returnType), "$return");
         }
 
@@ -112,11 +132,23 @@ export class CodeGenerator {
         for(let node of f.node.statements) {
             this.processStatement(f, f.scope, node, b, vars, null);
         }
+        b.end();
+
+        console.log(ssa.Node.strainToString("", b.node));                
+
+        this.optimizer.optimizeConstants(b.node);
+        console.log('============ OPTIMIZED Constants ===============');
+        console.log(ssa.Node.strainToString("", b.node));
+
+        this.optimizer.removeDeadCode(b.node);
+        console.log('============ OPTIMIZED Dead code ===============');
+        console.log(ssa.Node.strainToString("", b.node));
 
         this.wasm.generateFunction(b.node, wf);
         if (exportFunc) {
             this.wasm.module.exports.set(f.name, wf);
         } 
+        return b.node;
     }
 
     public processScopeVariables(b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope) {
@@ -149,7 +181,7 @@ export class CodeGenerator {
                 if (snode.lhs) {
                     this.processStatement(f, snode.scope, snode.lhs, b, vars, blocks);
                 }
-                let tmp: ssa.Variable = this.processExpression(f, snode.scope, snode.condition, b, vars);
+                let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars);
                 b.ifBlock(tmp);
                 for(let st of snode.statements) {
                     this.processStatement(f, snode.scope, st, b, vars, blocks);
@@ -175,7 +207,7 @@ export class CodeGenerator {
                     if (snode.lhs.op == "id") {
                         let element = scope.resolveElement(snode.lhs.value);
                         let v = vars.get(element);
-                        let tmp: ssa.Variable = this.processExpression(f, scope, snode.rhs, b, vars);
+                        let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
                         b.assign(v, "copy", v.type, [tmp]);
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
@@ -205,12 +237,12 @@ export class CodeGenerator {
                     throw "TODO"                        
                 } else {
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
-                    let tmp: ssa.Variable = this.processExpression(f, scope, snode.rhs, b, vars);
+                    let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                     if (dest instanceof ssa.Pointer) {
-                        b.assign(b.mem, "store", tmp.type, [dest.variable, dest.offset, tmp]);
+                        b.assign(b.mem, "store", this.getSSAType(snode.rhs.type), [dest.variable, dest.offset, tmp]);
                     } else {
-                        b.assign(dest, "copy", tmp.type, [tmp]);
+                        b.assign(dest, "copy", this.getSSAType(snode.rhs.type), [tmp]);
                     }
                 }
                 break;
@@ -238,9 +270,19 @@ export class CodeGenerator {
                     p1 = tmp;
                     dest = tmp;
                 }
-                let p2: ssa.Variable = this.processExpression(f, scope, snode.rhs, b, vars);
+                let p2 = this.processExpression(f, scope, snode.rhs, b, vars);
                 // TODO: String concatenation
-                if (storage == "i32" || storage == "i64") {
+                if (storage == "f32" || storage == "f64") {
+                    if (snode.op == "+=") {
+                        b.assign(dest, "add", storage, [p1, p2]);
+                    } else if (snode.op == "-=") {
+                        b.assign(dest, "sub", storage, [p1, p2]);
+                    } else if (snode.op == "*=") {
+                        b.assign(dest, "mul", storage, [p1, p2]);
+                    } else if (snode.op == "/=") {
+                        b.assign(dest, "div", storage, [p1, p2]);
+                    }
+                } else {
                     if (snode.op == "+=") {
                         b.assign(dest, "add", storage, [p1, p2]);
                     } else if (snode.op == "-=") {
@@ -264,16 +306,6 @@ export class CodeGenerator {
                         b.assign(dest, this.isSigned(snode.lhs.type) ? "rem_s" : "rem_u", storage, [p1, p2]);
                     } else if (snode.op == ">>=") {
                         b.assign(dest, this.isSigned(snode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
-                    }
-                } else {
-                    if (snode.op == "+=") {
-                        b.assign(dest, "add", storage, [p1, p2]);
-                    } else if (snode.op == "-=") {
-                        b.assign(dest, "sub", storage, [p1, p2]);
-                    } else if (snode.op == "*=") {
-                        b.assign(dest, "mul", storage, [p1, p2]);
-                    } else if (snode.op == "/=") {
-                        b.assign(dest, "div", storage, [p1, p2]);
                     }
                 }
                 if (tmp instanceof ssa.Pointer) {
@@ -320,7 +352,7 @@ export class CodeGenerator {
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.condition) {
-                            let tmp: ssa.Variable = this.processExpression(f, snode.scope, snode.condition.condition, b, vars);
+                            let tmp = this.processExpression(f, snode.scope, snode.condition.condition, b, vars);
                             let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                             b.br_if(tmp2, outer);
                         }
@@ -329,7 +361,7 @@ export class CodeGenerator {
                     } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
                         throw "TODO"
                     } else {
-                        let tmp: ssa.Variable = this.processExpression(f, snode.scope, snode.condition.condition, b, vars);
+                        let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars);
                         let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                         b.br_if(tmp2, outer);
                     }
@@ -374,8 +406,8 @@ export class CodeGenerator {
                         b.assign(null, "return", null, []);
                     }
                 } else {
-                    let tmp: ssa.Variable = this.processExpression(f, scope, snode.lhs, b, vars);
-                    b.assign(null, "return", tmp.type, [tmp]);
+                    let tmp = this.processExpression(f, scope, snode.lhs, b, vars);
+                    b.assign(null, "return", this.getSSAType(snode.lhs.type), [tmp]);
                 }
                 break;
             default:
@@ -392,7 +424,7 @@ export class CodeGenerator {
             }
             case "unary*":
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars);
-                return new ssa.Pointer(tmp, 0);
+                return new ssa.Pointer(tmp as ssa.Variable, 0);
             case "[":
                 if (enode.lhs.type instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
@@ -405,56 +437,50 @@ export class CodeGenerator {
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
                 } else if (enode.lhs.type instanceof PointerType) {
-                    throw "TODO"
-                } else if (enode.lhs.type instanceof SliceType || enode.lhs.type == this.tc.t_string) {
-                    let slice = this.processExpression(f, scope, enode.lhs, b, vars);
+                    throw "TODO";
+                } else if (enode.lhs.type instanceof SliceType) {
+                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                    let head = this.processExpression(f, scope, enode.lhs, b, vars);
                     let t = this.getSSAType(enode.lhs.type);
-                    let size = ssa.sizeOf(t);
+                    let index: ssa.Variable | number = 0;
+                    if (enode.rhs.op == "int") {
+                        index = parseInt(enode.rhs.value) * size;
+                    } else {
+                        index = this.processExpression(f, scope, enode.rhs, b, vars);
+                    }
+                    let head_addr = b.assign(b.tmp(), "addr_of", "addr", [head]);
+                    let len = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("length")]);
+                    // Compare 'index' with 'len'
+                    let cmp = b.assign(b.tmp(), "ge", "i32", [index, len]);
+                    b.ifBlock(cmp);
+                    b.assign(null, "trap", null, []);
+                    b.end();
+                    let ptr = b.assign(b.tmp(), "load", "addr", [head_addr, this.sliceHeader.fieldOffset("data_ptr")]);
+                    if (typeof(index) == "number") {
+                        return new ssa.Pointer(ptr, index);
+                    }
+                    return b.assign(b.tmp(), "add", "addr", [ptr, index]);
+                } else if (enode.lhs.type == this.tc.t_string) {
+                    let head = this.processExpression(f, scope, enode.lhs, b, vars);
+                    let t = this.getSSAType(enode.lhs.type);
                     let index: ssa.Variable | number = 0;
                     if (enode.rhs.op == "int") {
                         index = parseInt(enode.rhs.value);
                     } else {
                         index = this.processExpression(f, scope, enode.rhs, b, vars);
                     }
-                    // Load length from slice head and compare to index. Index must be less
-                    code.push(new wasm.Load("i32", null, additionalOffset + 8)); // ptr to slice head, max-index is on stack
-                    if (enode.rhs.op == "int") {
-                        code.push(new wasm.Constant("i32", index));
-                    } else {
-                        code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to slice head, max-index, index is on stack
+                    let head_addr = b.assign(b.tmp(), "addr_of", "addr", [head]);
+                    let len = b.assign(b.tmp(), "load", "i32", [head_addr, this.stringHeader.fieldOffset("length")]);
+                    // Compare 'index' with 'len'
+                    let cmp = b.assign(b.tmp(), "ge", "i32", [index, len]);
+                    b.ifBlock(cmp);
+                    b.assign(null, "trap", null, []);
+                    b.end();
+                    let ptr = b.assign(b.tmp(), "load", "addr", [head_addr, this.stringHeader.fieldOffset("ptr")]);
+                    if (typeof(index) == "number") {
+                        return new ssa.Pointer(ptr, index);
                     }
-                    code.push(new wasm.BinaryIntInstruction("i32", "lt_s")); // ptr to slice head, bool is on stack
-                    code.push(new wasm.If());
-                    code.push(new wasm.Unreachable());
-                    code.push(new wasm.End());
-                    // Index must be equal to or larger than 0
-                    if (enode.rhs.op != "int") {
-                        code.push(new wasm.Constant("i32", 0)); // ptr to slice head, 0 is on stack
-                        code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to slice head, 0, index is on stack
-                        code.push(new wasm.BinaryIntInstruction("i32", "gt_s")); // ptr to slice head, bool is on stack
-                        code.push(new wasm.If());
-                        code.push(new wasm.Unreachable());
-                        code.push(new wasm.End());
-                    }
-                    // Load pointer to first slice element
-                    code.push(new wasm.Load("i32", null, additionalOffset + 4)); // ptr to first element is on stack
-                    // Check for zero pointer
-                    code.push(new wasm.UnaryIntInstruction("i32", "eqz"));
-                    code.push(new wasm.If());
-                    code.push(new wasm.Unreachable());
-                    code.push(new wasm.End());                    
-                    code.push(new wasm.Load("i32", null, additionalOffset + 4)); // ptr to first element is on stack
-                    if (enode.rhs.op != "int") {
-                        code.push(new wasm.GetLocal(wf.counterRegister())); // ptr to first element, index is on stack
-                        if (size > 1) {
-                            code.push(new wasm.Constant("i32", size)); // ptr to first element, index, size is on stack
-                            code.push(new wasm.BinaryIntInstruction("i32", "mul")); // ptr to first element, offset is on stack
-                        }
-                        code.push(new wasm.BinaryIntInstruction("i32", "add")); // ptr to element is on stack
-                    } else if (index != 0) {
-                        code.push(new wasm.Constant("i32", index * size)); // ptr to first element, offset is on stack
-                        code.push(new wasm.BinaryIntInstruction("i32", "add")); // ptr to element is on stack
-                    }
+                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 0);
                 } else if (enode.lhs.type instanceof ArrayType) {
                     throw "TODO";
                 } else if (enode.lhs.type == this.tc.t_json) {
@@ -462,7 +488,6 @@ export class CodeGenerator {
                 } else {
                     throw "TODO"; // TODO: map
                 }
-                break;
             case ".":
                 throw "TODO"
             default:
@@ -474,17 +499,17 @@ export class CodeGenerator {
         return (enode.op == "[" || enode.op == "." || enode.op == "id" || enode.op == "unary*");
     }
 
-    public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
+    public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
         switch(enode.op) {
             case "int":
-                return b.assign(b.tmp(), "copy", this.getSSAType(enode.type), [parseInt(enode.value)]);
+                return parseInt(enode.value);
             case "float":
-                return b.assign(b.tmp(), "copy", this.getSSAType(enode.type), [parseFloat(enode.value)]);
+                return parseFloat(enode.value);
             case "bool":
-                return b.assign(b.tmp(), "copy", this.getSSAType(enode.type), [enode.value == "true" ? 1 : 0]);
+                return enode.value == "true" ? 1 : 0;
             case "str":
-                let [off, len] = this.wasm.module.addData(enode.value);
-                throw "TODO"
+                let [off, len] = this.wasm.module.addString(enode.value);
+                return b.assign(b.tmp(), "struct", this.stringHeader, [off, len]);
             case "==":
                 return this.processCompare("eq", f, scope, enode, b, vars);
             case "!=":
@@ -686,6 +711,7 @@ export class CodeGenerator {
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
+        throw "Unreachable";
     }
 
     private processCompare(opcode: ssa.NodeKind, f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
@@ -694,7 +720,7 @@ export class CodeGenerator {
         if (enode.lhs.type == this.tc.t_string) {
             throw "TODO"
         } else {
-            let storage = this.getSSAType(enode.type);
+            let storage = this.getSSAType(enode.lhs.type);
             return b.assign(b.tmp(), opcode, storage, [p1, p2]);
         }
     }
@@ -713,4 +739,6 @@ export class CodeGenerator {
     private wasm: ssa.Wasm32Backend;
     private tc: TypeChecker;
     private funcs: Map<Function, wasm.Function> = new Map<Function, wasm.Function>();
+    private stringHeader: ssa.StructType;
+    private sliceHeader: ssa.StructType;
 }

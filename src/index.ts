@@ -19,15 +19,15 @@ function compileModules() {
 		var arg = path.resolve(args[i]);
 //        console.log("Compiling " + arg + "...");
         let code = fs.readFileSync(arg, 'utf8');
-        try {
+//        try {
             let mnode = parser.parse(code);
 //            console.log(fnode.stringify(""));
             let tc = new typecheck.TypeChecker();
             let scope = tc.checkModule(mnode);
             let cg = new codegen.CodeGenerator(tc);
             cg.processModule(scope);
-            console.log(cg.module.toWast(""));
-        } catch(ex) {
+//            console.log(cg.module.toWast(""));
+/*        } catch(ex) {
             if (ex instanceof parser.SyntaxError) {
                 console.log((args[i] + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
                 continue;
@@ -38,7 +38,7 @@ function compileModules() {
                 console.log(ex);
                 throw ex;
             }
-        }
+        } */
     }
 }
 
