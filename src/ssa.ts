@@ -704,8 +704,9 @@ export class Optimizer {
                 Node.removeNode(n);
                 n = n2;
                 continue;
+            } else if (n.kind == "copy" && typeof(n.args[0]) == "number") {
+                n.kind = "const";
             } else if (n.kind != "call" && n.assign && n.assign.readCount == 0) {
-                console.log("REMOVE", n.toString(""), n.assign);
                 let n2 = n.prev[0];
                 for(let a of n.args) {
                     if (a instanceof Variable) {
@@ -1079,6 +1080,24 @@ export class Wasm32Backend {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
+        this.steps = [];
+        this.stepCode = [];
+        this.stepsByName = new Map<string, number>();
+        this.asyncCalls = [];
+        this.asyncCallCode = [];
+        this.resultFrame = new StructType();
+        this.paramsFrame = new StructType();
+        this.varsFrame = new StructType();
+        this.varsFrameHeader = new StructType();
+        this.varStorage = new Map<Variable, Wasm32Storage>();
+        this.parameterVariables = [];
+        this.returnVariables = [];
+        this.tmpI32Local = -1;
+        this.tmpI64Local = -1;
+        this.tmpF32Local = -1;
+        this.tmpF64Local = -1;
+        this.wf = f;
+
         if (n.type.isAsync) {
             return this.generateAsyncFunction(n, f);
         }
@@ -1091,11 +1110,6 @@ export class Wasm32Backend {
         }
 
         this.wfIsAsync = false;
-        this.tmpI32Local = -1;
-        this.tmpI64Local = -1;
-        this.tmpF32Local = -1;
-        this.tmpF64Local = -1;
-        this.wf = wf;
 
         this.traverse(n.next[0], n.blockPartner, null);
         this.stackifyStep(n, null);
@@ -1152,11 +1166,6 @@ export class Wasm32Backend {
         }
 
         this.wfIsAsync = true;
-        this.tmpI32Local = -1;
-        this.tmpI64Local = -1;
-        this.tmpF32Local = -1;
-        this.tmpF64Local = -1;
-        this.wf = wf;
 
         this.tr.transform(n);
         console.log("========= State Machine ==========");
@@ -1488,12 +1497,14 @@ export class Wasm32Backend {
                 let index = this.resultFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "result", offset: index};
                 this.varStorage.set(n.assign, s);
+                this.returnVariables.push(n.assign);
                 n = n.next[0];                
                 continue;
             } else if (n.kind == "decl_result") {
                 let s: Wasm32Storage = {storageType: "local_result", offset: this.wf.results.length};
                 this.wf.results.push(this.stackTypeOf(n.type as Type));
                 this.varStorage.set(n.assign, s);
+                this.returnVariables.push(n.assign);
                 n = n.next[0];                
                 continue;
             } else if (n.kind == "decl_param" && (n.type instanceof StructType || n.assign.type == "addr")) {
@@ -1601,8 +1612,10 @@ export class Wasm32Backend {
                 n = n.blockPartner.next[0];
             } else if (n.kind == "br") {
                 code.push(new wasm.Br(n.args[0] as number));
+                n = n.next[0];
             } else if (n.kind == "br_if") {
                 code.push(new wasm.BrIf(n.args[0] as number));
+                n = n.next[0];
             } else if (n.kind == "block") {
                 code.push(new wasm.Loop());
                 this.emitCode(step, n.next[0], n.blockPartner, code, depth, additionalDepth + 1);
@@ -1794,37 +1807,43 @@ export class Wasm32Backend {
                 this.emitAssign(n.type.result, n, null, code);
                 n = n.next[0];
             } else if (n.kind == "return") {
-                if (n.args.length != 0) {
-                    if (!n.assign) {
-                        throw "Implementation error: return is missing an assignment: " + n.toString("");
+                if (n.type instanceof FunctionType) {
+                    throw "Implementation error";
+                }
+                if (n.args.length == 1 && !this.wfIsAsync && !(n.type instanceof StructType)) {
+                    if (this.returnVariables.length != 1) {
+                        throw "return with one parameter, but function has no return type"
                     }
-                    if (n.type instanceof StructType || this.wfIsAsync) {
-                        if (n.type instanceof StructType) {
+                    this.emitWordAssign(n.type as Type, n.args[0], "wasmStack", code);
+                } else {
+                    if (this.returnVariables.length != n.args.length) {
+                        throw "number of return values does not match with return type"
+                    }
+                    for(let i = 0; i < n.args.length; i++) {
+                        let t = this.returnVariables[i].type;
+                        if (t instanceof StructType) {
                             // Destination addr
-                            this.emitAddrOfVariable(n.assign, false, code);
+                            this.emitAddrOfVariable(this.returnVariables[i], false, code);
                             // Source addr
                             if (n.args[0] instanceof Variable) {
-                                this.emitAddrOfVariable(n.args[0] as Variable, false, code);
+                                this.emitAddrOfVariable(n.args[i] as Variable, false, code);
                             } else {
-                                this.emitStructAssign1(n.type as StructType, n.args[0] as Node, code);
+                                this.emitStructAssign1(t, n.args[i] as Node, code);
                             }
                             // Copy
-                            this.emitCopy(n.type as Type | StructType, code);
+                            this.emitCopy(t, code);
                             // Cleanup
                             if (n.args[0] instanceof Node) {
-                                this.emitStructAssign2(n.type as StructType, n.args[0] as Node, null, code);
-                            }
+                                this.emitStructAssign2(t, n.args[i] as Node, null, code);
+                            }                        
                         } else {
-                            if (n.type instanceof FunctionType) {
-                                throw "Implementation error";
-                            }
                             // Destination addr
-                            let offset = this.emitAddrOfVariable(n.assign, true, code);
+                            let offset = this.emitAddrOfVariable(this.returnVariables[0], true, code);
                             // Put value on stack
                             this.emitWordAssign(n.type as Type, n.args[0], "wasmStack", code);
-                            let width = this.stackTypeOf(n.type);
+                            let width = this.stackTypeOf(t);
                             let asWidth: null | "8"| "16" | "32" = null;
-                            switch (n.type) {
+                            switch (t) {
                                 case "i8":
                                 case "s8":
                                     asWidth = "8";
@@ -1837,8 +1856,6 @@ export class Wasm32Backend {
                             // Store to heapStack
                             code.push(new wasm.Store(width, asWidth, offset));
                         }
-                    } else {
-                        this.emitWordAssign(n.type as Type, n.args[0], "wasmStack", code);
                     }
                 }
                 if (this.wfIsAsync) {
@@ -1850,11 +1867,22 @@ export class Wasm32Backend {
                 code.push(new wasm.Unreachable());
                 n = n.next[0];
             } else if (n.kind == "copy") {
-                throw "TODO";
+                if (n.type instanceof FunctionType) {
+                    throw "Implementation error"
+                }
+                this.emitAssign(n.type, n, null, code);
+                n = n.next[0];
             } else if (n.kind == "struct") {
-                throw "TODO";
+                if (!(n.type instanceof StructType)) {
+                    throw "Implementation error"
+                }
+                this.emitAssign(n.type, n, null, code);
+                n = n.next[0];
+            } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                n = n.next[0];                
             } else {
                 // TODO: This clause should never trigger
+//                throw "TODO " + n.toString("");
                 n = n.next[0];
             }
         }
@@ -1931,6 +1959,54 @@ export class Wasm32Backend {
             return;
         }
 
+        // This is an optimization. The default would construct the struct on
+        // the stack and then copy it to the assignment
+        if (n instanceof Node && n.kind == "struct" && n.assign && !stack) {
+            if (!(type instanceof StructType)) {
+                throw "Implementation error";
+            }
+
+            // Compute the field values and store them
+            for(let i = 0; i < type.fields.length; i++) {
+                let f = type.fields[i];
+                let name: string = f[0];
+                let t: Type | StructType = f[1];
+                // Compute the value
+                if (t instanceof StructType) {
+                    // Compute the destination addr
+                    let offset = this.emitAddrOfVariable(n.assign, true, code);
+                    code.push(new wasm.Constant("i32", offset + type.fieldOffset(name)));
+                    code.push(new wasm.BinaryInstruction("i32", "add"));
+                    // Compute the source addr
+                    if (n.args[i] instanceof Variable) {
+                        this.emitAddrOfVariable(n.args[i] as Variable, false, code);
+                    } else {
+                        this.emitStructAssign1(t, n.args[i] as Node, code);
+                    }
+                    this.emitCopy(t, code);
+                    this.emitStructAssign2(t, n.args[i] as Node, null, code);
+                } else {
+                    // Compute the destination addr
+                    let offset = this.emitAddrOfVariable(n.assign, true, code);
+                    this.emitWordAssign(t, n.args[i], "wasmStack", code);
+                    let width: wasm.StackType = this.stackTypeOf(t);
+                    let asWidth: null | "8"| "16" | "32" = null;
+                    switch (t) {
+                        case "i8":
+                        case "s8":
+                            asWidth = "8";
+                            break;
+                        case "i16":
+                        case "s16":
+                            asWidth = "16";
+                            break;
+                    }
+                    code.push(new wasm.Store(width, asWidth, type.fieldOffset(name)));
+                }
+            }
+            return;
+        }
+
         // An expression of type StructType?
         if (type instanceof StructType) {
             if (stack == "wasmStack") {
@@ -1939,13 +2015,8 @@ export class Wasm32Backend {
             if (typeof(n) == "number") {
                 throw "Implementation error: A number cannot be of type StructType";
             }
-            if (n instanceof Node && (n.kind != "call_end" && n.kind != "load")) {
+            if (n instanceof Node && (n.kind != "call_end" && n.kind != "load" && n.kind != "copy" && n.kind != "struct")) {
                 throw "Implementation error: Node " + n.kind + " cannot yield a StructType";
-            }
-
-            // If the desired value is already on the stack and it is not assigned to some variable -> do nothing
-            if (n instanceof Node && n.kind == "call_end" && stack == "heapStack" && !n.assign) {
-                return;
             }
 
             if (n instanceof Node && n.kind == "call_end") {
@@ -1966,8 +2037,14 @@ export class Wasm32Backend {
                 }
             }
 
+            // This is an optimization.
+            // If the desired value is already on the stack and it is not assigned to some variable -> do nothing
+            if (n instanceof Node && n.kind == "call_end" && stack == "heapStack" && !n.assign) {
+                return;
+            }
+
             // Compute the destination addr
-            if (stack == "heapStack") {
+            if (stack == "heapStack" && (!(n instanceof Node) || n.kind != "call_end")) { // In case of call_end, the stuff is already on the stack
                 code.push(new wasm.GetLocal(this.spLocal));
                 code.push(new wasm.Constant("i32", sizeOf(type)));
                 code.push(new wasm.BinaryInstruction("i32", "sub"));
@@ -1990,7 +2067,7 @@ export class Wasm32Backend {
             }
 
             // Copy
-            if (stack == "heapStack") {
+            if (stack == "heapStack" && (!(n instanceof Node) || n.kind != "call_end")) { // In case of call_end, the stuff is already on the stack
                 this.emitCopy(type, code);
             }
             if (n instanceof Node && n.assign) {
@@ -2066,28 +2143,41 @@ export class Wasm32Backend {
         switch(s.storageType) {
             case "vars":
                 code.push(new wasm.GetLocal(this.bpLocal));
+                let offset = this.varsFrame.fieldOffset(v.name);
                 if (returnOffset) {
-                    return this.varsFrame.fieldOffset(v.name);
+                    return offset;
                 }
-                code.push(new wasm.Constant("i32", this.varsFrame.fieldOffset(v.name)));
-                code.push(new wasm.BinaryInstruction("i32", "add"));
+                if (offset != 0) {
+                    code.push(new wasm.Constant("i32", offset));
+                    code.push(new wasm.BinaryInstruction("i32", "add"));
+                }
                 break;                
             case "params":
+            {
                 code.push(new wasm.GetLocal(this.bpLocal));
+                let offset = this.varsFrame.size + this.paramsFrame.fieldOffset(v.name);
                 if (returnOffset) {
-                    return this.varsFrame.size + this.paramsFrame.fieldOffset(v.name);
+                    return offset;
                 }
-                code.push(new wasm.Constant("i32", this.varsFrame.size + this.paramsFrame.fieldOffset(v.name)));
-                code.push(new wasm.BinaryInstruction("i32", "add"));
+                if (offset != 0) {
+                    code.push(new wasm.Constant("i32", offset));
+                    code.push(new wasm.BinaryInstruction("i32", "add"));
+                }
                 break;                
+            }
             case "result":
+            {
                 code.push(new wasm.GetLocal(this.bpLocal));
+                let offset = this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name);
                 if (returnOffset) {
-                    return this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name);
+                    return offset;
                 }
-                code.push(new wasm.Constant("i32", this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name)));
-                code.push(new wasm.BinaryInstruction("i32", "add"));
-                break;      
+                if (offset != 0) {
+                    code.push(new wasm.Constant("i32", offset));
+                    code.push(new wasm.BinaryInstruction("i32", "add"));
+                }
+                break;
+            }      
             default:
                 throw "Implementation error"
         }
@@ -2101,18 +2191,45 @@ export class Wasm32Backend {
         } else if (n.kind == "load") {
             // Put the addr of the data on the wasm stack
             this.emitAssign("addr", n.args[0], "wasmStack", code);
+        } else if (n.kind == "copy") {
+            if (n.args[0] instanceof Variable) {
+                this.emitAddrOfVariable(n.args[0] as Variable, false, code);
+            } else if (n.args[0] instanceof Node) {
+                this.emitAssign((n.args[0] as Node).type as Type | StructType, n.args[0], "heapStack", code);
+            } else {
+                throw "Implementation error";
+            }
+        } else if (n.kind == "struct") {
+            // Put the struct on the heap stack
+            for(let i = 0; i < type.fields.length; i++) {
+                // TODO: Alignment
+                let f = type.fields[i];
+                let name: string = f[0];
+                let t: Type | StructType = f[1];
+                this.emitAssign(t, n.args[i], "heapStack", code);
+            }
+            // Put the addr of the data on the wasm stack
+            code.push(new wasm.GetLocal(this.spLocal));
         } else {
             throw "Implementation error: Node does not support StructType: " + n.toString("");
         }
     }
 
     private emitStructAssign2(type: StructType, n: Node, stack: "heapStack" | null, code: Array<wasm.Node>) {
-        if (!stack && n.kind == "call_end") {
+        if (!stack && (n.kind == "call_end" || n.kind == "struct")) {
             // Remove the result from the stack
             code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.Constant("i32", sizeOf(type)));
             code.push(new wasm.BinaryInstruction("i32", "add"));
             code.push(new wasm.SetLocal(this.spLocal));
+        } else if (!stack && n.kind == "copy") {
+            if (n.args[0] instanceof Node) {
+                // Remove the result from the stack
+                code.push(new wasm.GetLocal(this.spLocal));
+                code.push(new wasm.Constant("i32", sizeOf(type)));
+                code.push(new wasm.BinaryInstruction("i32", "add"));
+                code.push(new wasm.SetLocal(this.spLocal));
+            }
         }
     }
 
@@ -2294,6 +2411,18 @@ export class Wasm32Backend {
             this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
             let width: wasm.StackType = this.stackTypeOf(n.type);
             code.push(new wasm.BinaryInstruction(width, n.kind as wasm.BinaryOp));
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "copy") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
             }
@@ -2517,22 +2646,23 @@ export class Wasm32Backend {
 
     public module: wasm.Module;
 
+    private tr: SMTransformer;
     private copyFunctionIndex: number = 0; // TODO
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;
-    private steps: Array<Node> = [];
-    private stepCode: Array<Array<wasm.Node>> = [];
-    private stepsByName: Map<string, number> = new Map<string, number>();
-    private asyncCalls: Array<Node> = [];
-    private asyncCallCode: Array<Array<wasm.Node>> = [];
-    private tr: SMTransformer;
-    private resultFrame: StructType = new StructType();
-    private paramsFrame: StructType = new StructType();
-    private varsFrame: StructType = new StructType();
-    private varsFrameHeader: StructType = new StructType();
-    private varStorage = new Map<Variable, Wasm32Storage>();
-    private parameterVariables: Array<Variable> = [];
+    private steps: Array<Node>;
+    private stepCode: Array<Array<wasm.Node>>;
+    private stepsByName: Map<string, number>;
+    private asyncCalls: Array<Node>;
+    private asyncCallCode: Array<Array<wasm.Node>>;
+    private resultFrame: StructType;
+    private paramsFrame: StructType;
+    private varsFrame: StructType;
+    private varsFrameHeader: StructType;
+    private varStorage: Map<Variable, Wasm32Storage>;
+    private parameterVariables: Array<Variable>;
+    private returnVariables: Array<Variable> ;
     private tmpI32Local: number;
     private tmpI64Local: number;
     private tmpF32Local: number;
