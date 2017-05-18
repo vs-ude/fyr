@@ -1392,65 +1392,43 @@ export class Wasm32Backend {
 
     private stackifyStep(start: Node, end: Node) {
         let n = start.next[0];
-//        let prev: Node = null;
         for( ; n && n != end; ) {
-            if (n.kind == "return" || n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end") {
-                if (n != start.next[0]) {
-                    this.stackifyStepBackwards(n);
+            if (n.kind == "addr_of") {
+                n = n.next[0];
+            } else {
+                if (n.kind == "if" && n.next[1]) {
+                    this.stackifyStep(n.next[1], n.blockPartner);
+                }
+                for(let i = 0; i < n.args.length; i++) {
+                    let a = n.args[i];
+                    if (a instanceof Variable && a.readCount == 1) {
+                        // Try to inline the computation
+                        let inline = this.findInline(n.prev[0], a);
+                        if (inline && (inline.kind != "call_end" || n.kind == "return" || n.kind == "store")) {
+                            inline.assign = null;
+                            n.args[i] = inline;
+                            Node.removeNode(inline);
+                        }
+                    } else if (a instanceof Variable && a.writeCount == 1) {
+                        // Try to inline the computation
+                        let inline = this.findInlineForMultipleReads(n.prev[0], a);
+                        if (inline && (inline.kind != "call_end" || n.kind == "return" || n.kind == "store")) {
+                            n.args[i] = inline;
+                            Node.removeNode(inline);
+                        }
+                    }
                 }
                 if (n.kind == "step" || n.kind == "goto_step") {
                     break;
                 }
-            }
-            if (n.kind == "if") {
-                this.stackifyStep(n, n.blockPartner.next[0]);
-                if (n.next[1]) {
-                    this.stackifyStep(n, n.blockPartner.next[0]);
-                }
-                n = n.blockPartner.next[0];
-            } else {
-    //            prev = n;
                 n = n.next[0];
             }
         }
     }
 
-    private stackifyStepBackwards(start: Node) {
-        let n = start;
-        for( ;n; ) {
-            if (n != start && (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return")) {
-                break;
-            }
-            if (n.kind == "addr_of") {
-                n = n.prev[0];
-                continue;
-            }
-            for(let i = 0; i < n.args.length; i++) {
-                let a = n.args[i];
-                if (a instanceof Variable && a.readCount == 1) {
-                    // Try to inline the computation
-                    let inline = this.findInline(n.prev[0], a);
-                    if (inline) {
-                        inline.assign = null;
-                        n.args[i] = inline;
-                        Node.removeNode(inline);
-                    }
-                } else if (a instanceof Variable && a.writeCount == 1) {
-                    // Try to inline the computation
-                    let inline = this.findInlineForMultipleReads(n.prev[0], a);
-                    if (inline) {
-                        n.args[i] = inline;
-                        Node.removeNode(inline);
-                    }
-                }
-            }
-            n = n.prev[0];
-        }
-    }
-
     private findInline(n: Node, v: Variable): Node {
         for( ;n; ) {
-            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
+            if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
             if (n.assign && n.assign.name == v.name) {
@@ -1471,7 +1449,7 @@ export class Wasm32Backend {
      */
     private findInlineForMultipleReads(n: Node, v: Variable): Node {
         for( ;n; ) {
-            if (n.kind == "step" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
+            if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
             for(let a of n.args) {
@@ -1614,10 +1592,11 @@ export class Wasm32Backend {
                 code.push(new wasm.Br(n.args[0] as number));
                 n = n.next[0];
             } else if (n.kind == "br_if") {
-                code.push(new wasm.BrIf(n.args[0] as number));
+                this.emitAssign("i32", n.args[0], "wasmStack", code);
+                code.push(new wasm.BrIf(n.args[1] as number));
                 n = n.next[0];
             } else if (n.kind == "block") {
-                code.push(new wasm.Loop());
+                code.push(new wasm.Block());
                 this.emitCode(step, n.next[0], n.blockPartner, code, depth, additionalDepth + 1);
                 code.push(new wasm.End());
                 n = n.blockPartner.next[0];
