@@ -1,5 +1,6 @@
 <html>
     <head>
+        <meta charset="UTF-8"> 
         <title>WASM Example</title>
     </head>
     <body>
@@ -19,7 +20,7 @@
                     mem: memory
                 }
             };
-            fetch('example.wasm').then(response =>
+            /* fetch('example.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
                 WebAssembly.instantiate(bytes, importObject)
@@ -30,6 +31,18 @@
                 }
                 let buf = new Float32Array(memory.buffer, 65532);
                 console.log("Result is", buf[0]);
+            }); */
+
+            fetch('example3.wasm').then(response =>
+                response.arrayBuffer()
+            ).then(bytes =>
+                WebAssembly.instantiate(bytes, importObject)
+            ).then(results => {
+                console.log("demo = ", results.instance.exports.demo());
+                console.log("demo2 = ", results.instance.exports.demo2());
+                console.log("demo3 = ", results.instance.exports.demo3());
+                console.log("demo4 = ", results.instance.exports.demo4());
+                console.log("demo5 = ", results.instance.exports.demo5());
             });
         </script>
     </body>

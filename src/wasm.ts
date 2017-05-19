@@ -62,7 +62,7 @@ export class Module extends Node {
         }
 
         for(let f of this.funcTypes) {
-            s += indent + "    (type " + f.name + " ";
+            s += indent + "    (type " + f.name + " (func ";
             if (f.params.length > 0) {
                 s += "(param";
                 for(let t of f.params) {
@@ -77,7 +77,7 @@ export class Module extends Node {
                 }
                 s += ") ";
             }
-            s += ")\n";
+            s += "))\n";
         }
 
         return s + indent + ")";

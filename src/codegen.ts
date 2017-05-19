@@ -721,6 +721,12 @@ export class CodeGenerator {
             throw "TODO"
         } else {
             let storage = this.getSSAType(enode.lhs.type);
+            if (p1 === 0 && opcode == "eq" && storage != "f32" && storage != "f64") {
+                return b.assign(b.tmp(), "eqz", storage, [p2]);
+            }
+            if (p2 === 0 && opcode == "eq" && storage != "f32" && storage != "f64") {
+                return b.assign(b.tmp(), "eqz", storage, [p1]);
+            }
             return b.assign(b.tmp(), opcode, storage, [p1, p2]);
         }
     }
