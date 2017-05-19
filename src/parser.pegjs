@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "import" || n == "export" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
             return true;
         }
         return false;
@@ -17,7 +17,7 @@
 }
 
 module
-  = m:(comments / func / $("\n"+))* {
+  = m:(comments / func / import / $("\n"+))* {
         let result = [];
         for(let i = 0; i < m.length; i++) {
             let x = m[i];
@@ -26,9 +26,21 @@ module
                     x.comments = m[i-1];
                 }
                 result.push(x);
+            } else if (x.op == "import") {
+                result.push(x);                
             }
         }
         return new ast.Node({loc: location(), op: "module", statements: result});
+    }
+
+import
+  = "import" [ \t]* "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" [ \t]* "from" [ \t]+ m:string [ \t]* "\n" [ \t]* {
+      return new ast.Node({loc: location(), op: "import", parameters:e, rhs:m});
+    }
+
+importElement
+  = "func" [ \t]* n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:type? [ \t]* "\n" [ \t]* {
+      return new ast.Node({loc: location(), op: "funcType", parameters: t, rhs: f, name: n});
     }
 
 func

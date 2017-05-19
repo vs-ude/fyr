@@ -16,6 +16,18 @@ export class Module extends Node {
 
     public toWast(indent: string): string {
         let s = indent + "(module\n";
+
+        for(let f of this.funcImports) {
+            s += indent + "    (func $" + f.name + " (import \"" + f.from + "\" \"" + f.name + "\") ";
+            for(let p of f.type.params) {
+                s += " (param " + p + ")";
+            } 
+            for(let p of f.type.results) {
+                s += " (result " + p + ")";
+            } 
+            s += ")\n";
+        }
+
         s += indent + "    (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + ")\n";
         for(let f of this.funcs) {
             s += f.toWast(indent + "    ") + "\n";
@@ -91,14 +103,39 @@ export class Module extends Node {
         return [offset, uint8array.length];
     }
 
+    public addFunction(f: Function) {
+        f.index = this.funcIndex++;
+        this.funcs.push(f);
+    }
+
+    public addFunctionImport(f: FunctionImport) {
+        f.index = this.funcIndex++;
+        this.funcImports.push(f);
+    }
+
     public stackSize = 1 * 65536;
     public heapSize = 1 * 65536;
+    public funcIndex: number = 0;
     public funcs: Array<Function> = [];
     public funcTable: Array<Function> = [];
     public funcTypes: Array<FunctionType> = [];
+    public funcImports: Array<FunctionImport> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
     public dataSize: number = 0;
     public data: Array<Data> = [];
+}
+
+export class FunctionImport {
+    constructor(name: string, from: string, type: FunctionType) {
+        this.name = name;
+        this.from = from;
+        this.type = type;
+    }
+
+    public name: string;
+    public from: string;
+    public type: FunctionType;
+    public index: number;
 }
 
 export class FunctionType {
@@ -191,25 +228,12 @@ export class Function extends Node {
         return s + indent + ")";
     }
 
-    public spRegister(): number {
-        throw "OBSOLETE";
-    }
-
-    public bpRegister(): number {
-        throw "OBSOLETE";
-    }
-
-    public counterRegister(): number {
-        throw "OBSOLETE";
-    }
-
     public name: string;
     public index: number;
     public parameters: Array<StackType> = [];
     public locals: Array<StackType> = [];
     public results: Array<StackType> = [];
     public statements: Array<Node> = [];
-    public localFyrFrameSize: number = 0;
 }
 
 export class Constant extends Node {

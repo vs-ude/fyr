@@ -1069,10 +1069,31 @@ export class Wasm32Backend {
          this.varsFrameHeader.addField("$step", "i32");
     }
 
+    public importFunction(name: string, from: string, type: FunctionType): wasm.FunctionImport {
+        let wt = new wasm.FunctionType(name, [], []);
+        let hasHeapFrame = false;
+        for(let p of type.params) {
+            if (p instanceof StructType) {
+                hasHeapFrame = true;
+            } else {
+                wt.params.push(this.stackTypeOf(p))
+            }
+        }
+        if (type.result) {
+            if (type.result instanceof StructType) {
+                hasHeapFrame = true;
+            } else {
+                wt.results.push(this.stackTypeOf(type.result));
+            }
+        }
+        let f = new wasm.FunctionImport(name, from, wt);
+        this.module.addFunctionImport(f);
+        return f;
+    }
+
     public declareFunction(name: string): wasm.Function {
         let wf = new wasm.Function(name);
-        wf.index = this.module.funcs.length;
-        this.module.funcs.push(wf);
+        this.module.addFunction(wf);
         return wf;
     }
 

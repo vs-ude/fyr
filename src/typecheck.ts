@@ -28,6 +28,8 @@ export class Function implements ScopeElement {
     public scope: Scope;
     public node: Node;
     public loc: Location;
+    public isImported: boolean;
+    public importFromModule: string;
 }
 
 export class FunctionParameter implements ScopeElement {
@@ -773,10 +775,76 @@ export class TypeChecker {
         return v;
     }
 
+    private createImport(inode: Node, scope: Scope) {
+        for(let n of inode.parameters) {
+            if (n.op == "funcType") {
+                this.createFunctionImport(inode, n, scope);
+            } else {
+                throw "Implementation error in import " + n.op;
+            }
+        }
+    }
+
+    private createFunctionImport(inode: Node, fnode: Node, scope: Scope) {
+        var f: Function = new Function();
+        f.isImported = true;
+        f.importFromModule = inode.rhs.value;
+        f.name = fnode.name.value;
+        f.scope.parent = scope;
+        f.node = fnode;
+        f.loc = fnode.loc;
+        f.type = new FunctionType();
+        f.type.loc = fnode.loc;
+        let i = 0;
+        if (fnode.parameters) {
+            for(let pnode of fnode.parameters) {
+                let original_pnode = pnode;
+                var p = new FunctionParameter();
+                p.name = "p" + i.toString();
+                i++;
+                p.type = this.createType(pnode, f.scope);
+                p.loc = pnode.loc;
+                f.type.parameters.push(p);
+                f.scope.registerElement(p.name, p);
+            }
+        }
+        if (fnode.rhs) {
+            f.type.returnType = this.createType(fnode.rhs, f.scope);
+            if (fnode.rhs.op == "tupleType") {
+                for(let i = 0; i < fnode.rhs.parameters.length; i++) {
+                    let pnode = fnode.rhs.parameters[i];
+                    if (pnode.name) {
+                        let v = new Variable();
+                        v.isResult = true;
+                        v.loc = pnode.loc;
+                        v.name = "p" + i.toString();
+                        i++;
+                        v.name = pnode.name.value;
+                        v.type = (f.type.returnType as TupleType).types[i];
+                        f.scope.registerElement(v.name, v);
+                        f.namedReturnTypes = true;
+                    }
+                }
+            }
+        } else {
+            f.type.returnType = this.t_void;
+        }
+        scope.registerElement(f.name, f);
+        return f;
+    }
+
     public checkModule(mnode: Node): Scope {
         let scope = this.createScope();
         for(let fnode of mnode.statements) {
-            this.createFunction(fnode, scope);
+            if (fnode.op == "func") {
+                this.createFunction(fnode, scope);
+            } else if (fnode.op == "import") {
+                this.createImport(fnode, scope);
+            } else if (fnode.op == "comment") {
+                // Do nothing by intention
+            } else {
+                throw "Implementation error " + fnode.op;
+            }
         }
         for(let key of scope.elements.keys()) {
             let e = scope.elements.get(key);

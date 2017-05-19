@@ -24,17 +24,25 @@ export class CodeGenerator {
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                let wf = this.wasm.declareFunction(e.name);
-                this.funcs.set(e, wf);
+                if (e.isImported) {
+                    let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
+                    this.funcs.set(e, wf);
+                } else {
+                    let wf = this.wasm.declareFunction(e.name);
+                    this.funcs.set(e, wf);
+                }
             } else {
-                throw "CodeGen: Implementation Error " + e
+                throw "CodeGen: Implementation Error " + e;
             }
         }
 
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                let wf = this.funcs.get(e);
+                if (e.isImported) {
+                    continue;
+                }
+                let wf = this.funcs.get(e) as wasm.Function;
                 let n = this.processFunction(e, true, wf);
             } else {
                 throw "CodeGen: Implementation Error " + e
@@ -744,7 +752,7 @@ export class CodeGenerator {
     private optimizer: ssa.Optimizer;
     private wasm: ssa.Wasm32Backend;
     private tc: TypeChecker;
-    private funcs: Map<Function, wasm.Function> = new Map<Function, wasm.Function>();
+    private funcs: Map<Function, wasm.Function | wasm.FunctionImport> = new Map<Function, wasm.Function | wasm.FunctionImport>();
     private stringHeader: ssa.StructType;
     private sliceHeader: ssa.StructType;
 }

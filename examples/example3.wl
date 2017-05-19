@@ -1,3 +1,7 @@
+import {
+    func logNumber(int)
+} from "foo"
+
 func demo() int {
     var x = 5
     if (x >= 5) {
