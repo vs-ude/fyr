@@ -16,10 +16,16 @@ export class Variable implements ScopeElement {
     public isResult: boolean = false;
 }
 
+export type CallingConvention = "fyr" | "host";
+
 export class Function implements ScopeElement {
     constructor() {
         this.scope = new Scope(null);
         this.scope.func = this;
+    }
+
+    public get isImported(): boolean {
+        return this.importFromModule !== undefined;
     }
 
     public name: string;
@@ -28,8 +34,8 @@ export class Function implements ScopeElement {
     public scope: Scope;
     public node: Node;
     public loc: Location;
-    public isImported: boolean;
     public importFromModule: string;
+    public callingConvention: CallingConvention = "fyr";
 }
 
 export class FunctionParameter implements ScopeElement {
@@ -787,7 +793,7 @@ export class TypeChecker {
 
     private createFunctionImport(inode: Node, fnode: Node, scope: Scope) {
         var f: Function = new Function();
-        f.isImported = true;
+        f.callingConvention = "host";
         f.importFromModule = inode.rhs.value;
         f.name = fnode.name.value;
         f.scope.parent = scope;

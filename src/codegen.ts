@@ -25,7 +25,7 @@ export class CodeGenerator {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
                 if (e.isImported) {
-                    let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
+                    let wf = this.wasm.importFunction(e.name, e.importFromModule, e.callingConvention, this.getSSAFunctionType(e.type));
                     this.funcs.set(e, wf);
                 } else {
                     let wf = this.wasm.declareFunction(e.name);
@@ -706,7 +706,9 @@ export class CodeGenerator {
                 }
                 
                 if (f) {
-                    return b.call(b.tmp(), this.getSSAFunctionType(t), args);
+                    let ft = this.getSSAFunctionType(t);
+                    ft.callingConvention = f.callingConvention;
+                    return b.call(b.tmp(), ft, args);
                 }
                 throw "TODO: call a lambda function"
             }

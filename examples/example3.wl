@@ -1,6 +1,6 @@
 import {
     func logNumber(int)
-} from "foo"
+} from "imports"
 
 func demo() int {
     var x = 5
@@ -9,6 +9,7 @@ func demo() int {
     } else {
         x = 4
     }
+    logNumber(x)
     if (var y = 10; x == y) {
         x = 1
     }

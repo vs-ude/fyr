@@ -83,6 +83,8 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
     return false;
 }
 
+export type CallingConvention = "fyr" | "host";
+
 export class FunctionType {
     constructor(params: Array<Type | StructType>, result: Type | StructType | null, isAsync: boolean = true) {
         this.params = params;
@@ -99,6 +101,7 @@ export class FunctionType {
     public params: Array<Type | StructType>;
     public result: Type | StructType | null;
     public isAsync: boolean;
+    public callingConvention: CallingConvention = "fyr";
 }
 
 export class Variable {
@@ -1069,7 +1072,7 @@ export class Wasm32Backend {
          this.varsFrameHeader.addField("$step", "i32");
     }
 
-    public importFunction(name: string, from: string, type: FunctionType): wasm.FunctionImport {
+    public importFunction(name: string, from: string, conv: CallingConvention, type: FunctionType): wasm.FunctionImport {
         let wt = new wasm.FunctionType(name, [], []);
         let hasHeapFrame = false;
         for(let p of type.params) {
@@ -1085,6 +1088,9 @@ export class Wasm32Backend {
             } else {
                 wt.results.push(this.stackTypeOf(type.result));
             }
+        }
+        if (hasHeapFrame || conv == "fyr") {
+            wt.params.push("i32");
         }
         let f = new wasm.FunctionImport(name, from, wt);
         this.module.addFunctionImport(f);
@@ -1923,8 +1929,10 @@ export class Wasm32Backend {
                     this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", code);                    
                 }
             }
-            // Put SP on wasm stack
-            code.push(new wasm.GetLocal(this.spLocal));
+            if (n.type.callingConvention == "fyr" || paramSize > 0 || n.type.result instanceof StructType) {
+                // Put SP on wasm stack
+                code.push(new wasm.GetLocal(this.spLocal));
+            }
             // Call the function
             code.push(new wasm.Call(n.args[0] as number));
             if (n.assign) {
@@ -2437,19 +2445,23 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type.result as Type, n.assign, code);
             }
+            let paramSize = 0;
             for(let i = 0; i < n.type.params.length; i++) {
                 if (n.type.params[i] instanceof StructType || n.type.params[i] == "addr") {
+                    paramSize += sizeOf(n.type.params[i]);
                     this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", code);
                 } else {
                     this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", code);                    
                 }
             }
-            code.push(new wasm.GetLocal(this.spLocal));
+            if (n.type.callingConvention == "fyr" || paramSize > 0) {
+                code.push(new wasm.GetLocal(this.spLocal));
+            }
             // Call the function
             code.push(new wasm.Call(n.args[0] as number));
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type.result as Type, n.assign, stack == "wasmStack", code);
-            } else if (stack == null) {
+            } else if (stack == null && n.type.result) {
                 // Remove parameter from wasm stack
                 code.push(new wasm.Drop());
             }
