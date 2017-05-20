@@ -10,6 +10,7 @@ func demo() int {
         x = 4
     }
     logNumber(x)
+    yield
     if (var y = 10; x == y) {
         x = 1
     }

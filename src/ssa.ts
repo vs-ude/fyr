@@ -83,13 +83,13 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
     return false;
 }
 
-export type CallingConvention = "fyr" | "host";
+export type CallingConvention = "fyr" | "fyrCoroutine" | "host";
 
 export class FunctionType {
-    constructor(params: Array<Type | StructType>, result: Type | StructType | null, isAsync: boolean = true) {
+    constructor(params: Array<Type | StructType>, result: Type | StructType | null, conv: CallingConvention = "fyr") {
         this.params = params;
         this.result = result;
-        this.isAsync = isAsync;
+        this.callingConvention = conv;
     }
 
     public toString(): string {
@@ -100,7 +100,6 @@ export class FunctionType {
 
     public params: Array<Type | StructType>;
     public result: Type | StructType | null;
-    public isAsync: boolean;
     public callingConvention: CallingConvention = "fyr";
 }
 
@@ -329,7 +328,7 @@ export class Builder {
     public declare(name: string, type: FunctionType): Node {
         let n = new Node(null, "define", type, []);
         n.name = name;
-        n.isAsync = type.isAsync;
+        n.isAsync = type.callingConvention == "fyrCoroutine";
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -441,7 +440,7 @@ export class Builder {
         }
         this._current = n;
         for(let b of this._blocks) {
-            b.isAsync = b.isAsync || type.isAsync;
+            b.isAsync = b.isAsync || type.callingConvention == "fyrCoroutine";
         }
         this.countReadsAndWrites(n);
         return n.assign;
@@ -923,7 +922,7 @@ export class SMTransformer {
                         n.blockPartner = n.blockPartner.blockPartner;
                     }
                     n = n.next[0];
-                } else if (n.kind == "call" && (n.type as FunctionType).isAsync) {
+                } else if (n.kind == "call" && (n.type as FunctionType).callingConvention == "fyrCoroutine") {
                     n.kind = "call_begin";
                     let result = new Node(n.assign, "call_end", n.type, []);
                     n.assign = null;
@@ -1072,7 +1071,7 @@ export class Wasm32Backend {
          this.varsFrameHeader.addField("$step", "i32");
     }
 
-    public importFunction(name: string, from: string, conv: CallingConvention, type: FunctionType): wasm.FunctionImport {
+    public importFunction(name: string, from: string, type: FunctionType): wasm.FunctionImport {
         let wt = new wasm.FunctionType(name, [], []);
         let hasHeapFrame = false;
         for(let p of type.params) {
@@ -1089,7 +1088,7 @@ export class Wasm32Backend {
                 wt.results.push(this.stackTypeOf(type.result));
             }
         }
-        if (hasHeapFrame || conv == "fyr") {
+        if (hasHeapFrame || type.callingConvention == "fyr" || type.callingConvention == "fyrCoroutine") {
             wt.params.push("i32");
         }
         let f = new wasm.FunctionImport(name, from, wt);
@@ -1125,7 +1124,7 @@ export class Wasm32Backend {
         this.tmpF64Local = -1;
         this.wf = f;
 
-        if (n.type.isAsync) {
+        if (n.type.callingConvention == "fyrCoroutine") {
             return this.generateAsyncFunction(n, f);
         }
         return this.generateSyncFunction(n, f);
@@ -2690,7 +2689,7 @@ function main() {
     point.addField("y", "f32");
 
     let b = new Builder();
-    b.define("f1", new FunctionType(["f32", "f32"], "f32", true));
+    b.define("f1", new FunctionType(["f32", "f32"], "f32", "fyrCoroutine"));
     let p1 = b.declareParam("f32", "$1");
     let p2 = b.declareParam("f32", "$2");
     let r = b.declareResult("f32", "$r");

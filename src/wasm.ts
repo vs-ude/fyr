@@ -28,10 +28,16 @@ export class Module extends Node {
             s += ")\n";
         }
 
-        s += indent + "    (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + ")\n";
+        if (this.memoryImport) {
+            s += indent + "    (import \"" + this.memoryImport.ns + "\" \"" + this.memoryImport.obj + "\" (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + "))\n";
+        } else {
+            s += indent + "    (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + ")\n";            
+        }
+        
         for(let f of this.funcs) {
             s += f.toWast(indent + "    ") + "\n";
         }
+
         for(let d of this.data) {
             s += d.toWast(indent + "    ") + "\n";
         }
@@ -113,6 +119,10 @@ export class Module extends Node {
         this.funcImports.push(f);
     }
 
+    public importMemory(ns: string, obj: string) {
+        this.memoryImport = {ns: ns, obj: obj};
+    }
+
     public stackSize = 1 * 65536;
     public heapSize = 1 * 65536;
     public funcIndex: number = 0;
@@ -121,8 +131,10 @@ export class Module extends Node {
     public funcTypes: Array<FunctionType> = [];
     public funcImports: Array<FunctionImport> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
-    public dataSize: number = 0;
-    public data: Array<Data> = [];
+
+    private dataSize: number = 0;
+    private data: Array<Data> = [];
+    private memoryImport: {ns: string, obj: string};
 }
 
 export class FunctionImport {

@@ -38,7 +38,10 @@
             ).then(bytes =>
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
-                console.log("demo = ", results.instance.exports.demo());
+                console.log("demo = ", results.instance.exports.demo(0, 65532));
+                console.log("demo = ", results.instance.exports.demo(1, 65532));
+                let buf = new Int32Array(memory.buffer, 65532);
+                console.log("demo result is", buf[0]);
                 console.log("demo2 = ", results.instance.exports.demo2());
                 console.log("demo3 = ", results.instance.exports.demo3());
                 console.log("demo4 = ", results.instance.exports.demo4());

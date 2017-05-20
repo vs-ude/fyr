@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "import" || n == "export" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
             return true;
         }
         return false;
@@ -254,6 +254,9 @@ statement
       return new ast.Node({loc: location(), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
   }
   / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block { return new ast.Node({loc: location(), op: "for", condition: f ? f[2] : undefined, statements:b}); }
+  / "yield" {
+      return new ast.Node({loc: location(), op: "yield"});
+    }
   / s: simpleStatement { 
       if (s.op == "in" || s.op == "var_in" || s.op == "const_in") {
           error("'in' is allowed inside a for loop header only");

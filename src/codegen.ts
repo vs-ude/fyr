@@ -7,6 +7,7 @@ export class CodeGenerator {
     constructor(tc: TypeChecker) {
         this.tc = tc;
         this.wasm = new ssa.Wasm32Backend();
+        this.wasm.module.importMemory("imports", "mem");
         this.optimizer = new ssa.Optimizer();
         this.stringHeader = new ssa.StructType();
         this.stringHeader.name = "string";
@@ -25,7 +26,7 @@ export class CodeGenerator {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
                 if (e.isImported) {
-                    let wf = this.wasm.importFunction(e.name, e.importFromModule, e.callingConvention, this.getSSAFunctionType(e.type));
+                    let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
                     this.funcs.set(e, wf);
                 } else {
                     let wf = this.wasm.declareFunction(e.name);
@@ -98,7 +99,7 @@ export class CodeGenerator {
     }
 
     private getSSAFunctionType(t: FunctionType): ssa.FunctionType {
-        let ftype = new ssa.FunctionType([], null, false);
+        let ftype = new ssa.FunctionType([], null, t.callingConvention);
         for(let p of t.parameters) {
             ftype.params.push(this.getSSAType(p.type));
         }
@@ -418,6 +419,9 @@ export class CodeGenerator {
                     b.assign(null, "return", this.getSSAType(snode.lhs.type), [tmp]);
                 }
                 break;
+            case "yield":
+                b.assign(null, "yield", null, []);
+                break;
             default:
                 this.processExpression(f, scope, snode, b, vars);
         }
@@ -707,7 +711,6 @@ export class CodeGenerator {
                 
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
-                    ft.callingConvention = f.callingConvention;
                     return b.call(b.tmp(), ft, args);
                 }
                 throw "TODO: call a lambda function"

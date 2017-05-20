@@ -16,7 +16,7 @@ export class Variable implements ScopeElement {
     public isResult: boolean = false;
 }
 
-export type CallingConvention = "fyr" | "host";
+export type CallingConvention = "fyr" | "fyrCoroutine" | "host";
 
 export class Function implements ScopeElement {
     constructor() {
@@ -35,7 +35,6 @@ export class Function implements ScopeElement {
     public node: Node;
     public loc: Location;
     public importFromModule: string;
-    public callingConvention: CallingConvention = "fyr";
 }
 
 export class FunctionParameter implements ScopeElement {
@@ -207,6 +206,7 @@ export class FunctionType extends Type {
 
     public returnType: Type;
     public parameters: Array<FunctionParameter>;
+    public callingConvention: CallingConvention = "fyr";
 }
 
 export class GenericFunctionType extends FunctionType implements GenericType {
@@ -692,7 +692,7 @@ export class TypeChecker {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
         }
-        var f: Function = new Function();
+        let f: Function = new Function();
         f.name = fnode.name.value;
         f.scope.parent = scope;
         f.node = fnode;
@@ -792,20 +792,20 @@ export class TypeChecker {
     }
 
     private createFunctionImport(inode: Node, fnode: Node, scope: Scope) {
-        var f: Function = new Function();
-        f.callingConvention = "host";
+        let f: Function = new Function();
         f.importFromModule = inode.rhs.value;
         f.name = fnode.name.value;
         f.scope.parent = scope;
         f.node = fnode;
         f.loc = fnode.loc;
         f.type = new FunctionType();
+        f.type.callingConvention = "host";
         f.type.loc = fnode.loc;
         let i = 0;
         if (fnode.parameters) {
             for(let pnode of fnode.parameters) {
                 let original_pnode = pnode;
-                var p = new FunctionParameter();
+                let p = new FunctionParameter();
                 p.name = "p" + i.toString();
                 i++;
                 p.type = this.createType(pnode, f.scope);
@@ -860,6 +860,28 @@ export class TypeChecker {
                 throw "Implementation error " + e;
             }
         }
+
+        // Determine which functions could block and hence needs special coroutine treatment.
+        let changes = false;
+        do {
+            for(let f of this.callGraph.keys()) {
+                if (f.type.callingConvention == "fyrCoroutine") {
+                    continue;
+                }
+                if (!this.callGraph.has(f)) {
+                    continue;
+                }
+                let arr = this.callGraph.get(f);
+                for(let a of arr) {
+                    if (a.callingConvention == "fyrCoroutine") {
+                        f.type.callingConvention = "fyrCoroutine";
+                        changes = true;
+                        break;
+                    }
+                }
+            }
+        } while(changes);
+
         return scope;
     }
 
@@ -1587,6 +1609,12 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "yield":
+            {
+                let f = scope.envelopingFunction();
+                f.type.callingConvention = "fyrCoroutine";
+                break;
+            }
             default:
                 this.checkExpression(snode, scope);
         }
@@ -1610,7 +1638,7 @@ export class TypeChecker {
                 break;
             case "id":
                 // TODO: ellipsis, optional
-                var element = scope.resolveElement(enode.value);
+                let element = scope.resolveElement(enode.value);
                 if (!element) {
                     throw new TypeError("Unknown identifier " + enode.value, enode.loc);
                 }
@@ -1904,6 +1932,15 @@ export class TypeChecker {
                     throw "TODO: Derive the generic parameters"
                 }
                 enode.type = ft.returnType;
+                let f = scope.envelopingFunction();
+                let calls: Array<FunctionType>;
+                if (this.callGraph.has(f)) {
+                    calls = this.callGraph.get(f);
+                    calls.push(ft);
+                } else {
+                    calls = [ft];
+                    this.callGraph.set(f, calls);
+                }
                 break;
             case "genericInstance":
                 this.checkExpression(enode.lhs, scope);
@@ -1919,7 +1956,7 @@ export class TypeChecker {
                 enode.type = t;
                 break;
             case "array":
-                {
+            {
                 let types: Array<Type> = [];
                 for(let p of enode.parameters) {
                     this.checkExpression(p, scope);
@@ -1927,10 +1964,10 @@ export class TypeChecker {
                 }
                 let t = new ArrayLiteralType(types);
                 enode.type = t;
-                }
-                break;
+            }
+            break;
             case "object":
-                {
+            {
                 let types = new Map<string, Type>();
                 for(let p of enode.parameters) {
                     this.checkExpression(p.lhs, scope);
@@ -1938,11 +1975,11 @@ export class TypeChecker {
                 }
                 let t = new ObjectLiteralType(types);
                 enode.type = t;
-                }
-                break;
+            }
+            break;
             case "=>":
             {
-                var f = new Function();
+                let f = new Function();
                 f.loc = enode.loc;
                 f.node = enode;
                 f.scope = new Scope(scope);
@@ -2515,6 +2552,8 @@ export class TypeChecker {
     public t_json: ClassType;
     public t_void: Type;
     public t_error: InterfaceType;
+
+    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
 }
 
 export class TypeError {
