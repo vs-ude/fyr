@@ -143,15 +143,15 @@ export class CodeGenerator {
         }
         b.end();
 
-        console.log(ssa.Node.strainToString("", b.node));                
+//        console.log(ssa.Node.strainToString("", b.node));                
 
-        this.optimizer.optimizeConstants(b.node);
-        console.log('============ OPTIMIZED Constants ===============');
-        console.log(ssa.Node.strainToString("", b.node));
+//        this.optimizer.optimizeConstants(b.node);
+//        console.log('============ OPTIMIZED Constants ===============');
+//        console.log(ssa.Node.strainToString("", b.node));
 
-        this.optimizer.removeDeadCode(b.node);
-        console.log('============ OPTIMIZED Dead code ===============');
-        console.log(ssa.Node.strainToString("", b.node));
+//        this.optimizer.removeDeadCode(b.node);
+//        console.log('============ OPTIMIZED Dead code ===============');
+//        console.log(ssa.Node.strainToString("", b.node));
 
         this.wasm.generateFunction(b.node, wf);
         if (exportFunc) {

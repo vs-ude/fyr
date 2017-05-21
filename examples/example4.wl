@@ -1,3 +1,13 @@
+type Rect3D struct extends Rect {
+    z int
+}
+
+type Rect struct {
+    x int
+    y int
+    parent #Rect
+}
+
 func strFunc(x byte, y int) {
 //    var str string
     var str2 = "Hallo"

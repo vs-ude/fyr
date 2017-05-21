@@ -1,7 +1,7 @@
 {
-  "name": "weblang",
+  "name": "fyr",
   "version": "0.0.1",
-  "description": "An experimental compiler",
+  "description": "An experimental compiler for WebAssembly",
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
@@ -12,6 +12,7 @@
     "clean": "rm lib/*"
   },
   "keywords": [
+    "fyr",
     "wasm",
     "webassembly",
     "compiler"

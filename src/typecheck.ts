@@ -44,13 +44,18 @@ export class FunctionParameter implements ScopeElement {
     public loc: Location;
 }
 
-/*
-export class TypeDef implements ScopeElement {
+export class Typedef implements ScopeElement {
+    public instantiate(): Type {
+        return this._tc.instantiateTypedef(this);
+    }
     public name: string;
     public type: Type;
     public loc: Location;
+    public node: Node;
+    public scope: Scope;
+    public _tc: TypeChecker;
+    public _mark: boolean;
 }
-*/
 
 export class Scope {
     constructor(parent: Scope) {
@@ -77,6 +82,9 @@ export class Scope {
                 return this.parent.resolveType(name);
             }
             return null;
+        } else if (t instanceof Typedef) {
+            let newt = t.instantiate();
+            return newt;
         }
         return t;
     }
@@ -85,26 +93,28 @@ export class Scope {
      * @param name
      * @param element 
      */
-    public registerType(name: string, type: Type, loc: Location = null) {
+    public registerType(name: string, type: Type, loc: Location = null): void {
         if (this.elements.has(name)) {
             // TODO: Output file name
             throw new TypeError("Duplicate type " + name + "." + this.elements.get(name).loc ? "Already defined in " + this.elements.get(name).loc.start.line : "", loc);
         }
         this.types.set(name, type);
-        return null;
+    }
+
+    public replaceType(name: string, type: Type): void {
+        this.types.set(name, type);
     }
 
     /**
      * @param name
      * @param element 
      */
-    public registerElement(name: string, element: ScopeElement) {
+    public registerElement(name: string, element: ScopeElement): void {
         if (this.elements.has(name)) {
             // TODO: Output file name
             throw new TypeError("Duplicate identifier " + name + ", already defined in " + this.elements.get(name).loc.start.line, element.loc);
         }
         this.elements.set(name, element);
-        return null;
     }
 
     public envelopingFunction(): Function {
@@ -146,6 +156,10 @@ export interface GenericInstanceType {
 export abstract class Type {
     public name: string;
     public loc: Location;
+
+    public toString(): string {
+        return this.name
+    }
 }
 
 export class BasicType extends Type {
@@ -163,6 +177,46 @@ export class GenericConstraintType extends Type {
 }
 
 export class InterfaceType extends Type {
+    // TODO
+}
+
+export class StructType extends Type {
+    public field(name: string): StructField {
+        for(let f of this.fields) {
+            if (f.name == name) {
+                return f;
+            }
+        }
+        if (this.extends) {
+            return this.extends.field(name);
+        }
+        return null;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        let str = "struct{";
+        str += this.fields.join(",");
+        str += "}";
+        return str;
+    }
+
+    public extends: StructType;
+    public fields: Array<StructField> = [];
+}
+
+export class StructField {
+    public toString(): string {
+        if (!this.name) {
+            return this.type.toString();
+        }
+        return this.name + " " + this.type.toString();
+    }
+
+    public name: string;
+    public type: Type;
 }
 
 export class FunctionType extends Type {
@@ -171,7 +225,10 @@ export class FunctionType extends Type {
         this.parameters = [];
     }
 
-    public get name(): string {
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
         let name = "("
         for(let p of this.parameters) {
             if (name != "(") {
@@ -180,9 +237,9 @@ export class FunctionType extends Type {
             if (p.ellipsis) {
                 name += "...";
             }
-            name += p.type.name;
+            name += p.type.toString();
         }
-        name += ") => " + this.returnType.name;
+        name += ") => " + this.returnType.toString();
         return name;
     }
 
@@ -216,6 +273,8 @@ export class GenericFunctionType extends FunctionType implements GenericType {
         this.genericParameterTypes = [];
     }
 
+    // TODO: toString()
+
     public genericParameterNames: Array<string>;
     public genericParameterTypes: Array<Type>;
     public node: Node;
@@ -226,6 +285,8 @@ export class GenericFunctionInstanceType extends FunctionType {
         super();
         this.genericParameterTypes = [];
     }
+
+    // TODO: toString()
 
     public base: GenericFunctionType;
     public genericParameterTypes: Array<Type>;    
@@ -242,6 +303,8 @@ export class GenericClassType extends ClassType implements GenericType {
         this.genericParameterNames = [];
     }
 
+    // TODO: toString()
+
     public genericParameterTypes: Array<Type>;
     public genericParameterNames: Array<string>;
 }
@@ -252,6 +315,19 @@ export class GenericClassInstanceType extends ClassType {
         this.genericParameterTypes = [];
     }
 
+    public toString(): string {
+        let str = this.base.toString() + "<";
+        for(let i = 0; i < this.genericParameterTypes.length; i++) {
+            if (i == 0) {
+                str += this.genericParameterTypes[i].toString();
+            } else {
+                str += "," + this.genericParameterTypes[i].toString();
+            }
+        }
+        str += ">"
+        return str;
+    }
+
     public base: GenericClassType;
     public genericParameterTypes: Array<Type>;    
 }
@@ -260,7 +336,13 @@ export class PointerType extends Type {
     constructor(elementType: Type) {
         super();
         this.elementType = elementType;
-        this.name = "*" + this.elementType.name;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "*" + this.elementType.toString();
     }
 
     public elementType: Type;
@@ -270,7 +352,13 @@ export class UnsafePointerType extends Type {
     constructor(elementType: Type) {
         super();
         this.elementType = elementType;
-        this.name = "#" + this.elementType.name;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "#" + this.elementType.toString();
     }
 
     public elementType: Type;
@@ -281,7 +369,13 @@ export class ArrayType extends Type {
         super();
         this.elementType = elementType;
         this.size = size;
-        this.name = "[" + size.toString() + "]" + this.elementType.name;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "[" + this.size.toString() + "]" + this.elementType.toString();
     }
 
     public elementType: Type;
@@ -292,7 +386,13 @@ export class SliceType extends Type {
     constructor(elementType: Type) {
         super();
         this.elementType = elementType;
-        this.name = "[]" + this.elementType.name;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "[]" + this.elementType.name;
     }
 
     public elementType: Type;
@@ -304,13 +404,13 @@ export class ArrayLiteralType extends Type {
         this.types = types;        
     }
 
-    public get name() : string {
+    public toString() : string {
         let name = "literal[";
         for(let t of this.types) {
             if (name == "literal[") {
-                name += t.name;
+                name += t.toString();
             } else {
-                name += "," + t.name;
+                name += "," + t.toString();
             }
         }
         name += "]";
@@ -326,13 +426,13 @@ export class ObjectLiteralType extends Type {
         this.types = types;        
     }
 
-    public get name() : string {
+    public toString() : string {
         let name = "literal{";
         for(let t of this.types.keys()) {
             if (name == "literal{") {
-                name += t + ": " + this.types.get(t).name;
+                name += t + ": " + this.types.get(t).toString();
             } else {
-                name += "," + t + ": " + this.types.get(t).name;
+                name += "," + t + ": " + this.types.get(t).toString();
             }
         }
         name += "}";
@@ -348,13 +448,16 @@ export class TupleType extends Type {
         this.types = types;
     }
 
-    public get name(): string {
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
         let name = "(";
         for(let t of this.types) {
             if (name == "(") {
-                name += t.name;
+                name += t.toString();
             } else {
-                name += "," + t.name;
+                name += "," + t.toString();
             }
         }
         name += ")";
@@ -370,13 +473,13 @@ export class TupleLiteralType extends Type {
         this.types = types;
     }
 
-    public get name(): string {
+    public toString(): string {
         let name = "literal(";
         for(let t of this.types) {
             if (name == "literal(") {
-                name += t.name;
+                name += t.toString();
             } else {
-                name += "," + t.name;
+                name += "," + t.toString();
             }
         }
         name += ")";
@@ -389,13 +492,16 @@ export class TupleLiteralType extends Type {
 export class OrType extends Type {
     public types: Array<Type> = [];
 
-    public get name(): string {
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
         let name = "";
         for(let v of this.types) {
             if (name == "") {
-                name += v.name;
+                name += v.toString();
             } else {
-                name += " | " + v.name;
+                name += " | " + v.toString();
             }
         }
         return name;
@@ -405,13 +511,16 @@ export class OrType extends Type {
 export class AndType extends Type {
     public types: Array<Type> = [];
 
-    public get name(): string {
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
         let name = "";
         for(let v of this.types) {
             if (name == "") {
-                name += v.name;
+                name += v.toString();
             } else {
-                name += " & " + v.name;
+                name += " & " + v.toString();
             }
         }
         return name;
@@ -421,7 +530,10 @@ export class AndType extends Type {
 export class StringEnumType extends Type {
     public values: Map<string, number> = new Map<string, number>();
 
-    public get name(): string {
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
         let name = "";
         for(let v of this.values.keys()) {
             if (name == "") {
@@ -491,7 +603,7 @@ export class TypeChecker {
         return s;
     }
 
-    public createType(tnode: Node, scope: Scope): Type {
+    public createType(tnode: Node, scope: Scope, noStructBody: boolean = false): Type {
         if (tnode.op == "basicType") {
             let t = scope.resolveType(tnode.value);
             if (!t) {
@@ -500,15 +612,15 @@ export class TypeChecker {
             return t;
         } else if (tnode.op == "pointerType") {
             let t = new PointerType(this.createType(tnode.rhs, scope));
-            t.name = "*" + t.elementType.name;
+//            t.name = "*" + t.elementType.name;
             return t;
         } else if (tnode.op == "unsafePointerType") {
             let t = new UnsafePointerType(this.createType(tnode.rhs, scope));
-            t.name = "#" + t.elementType.name;
+//            t.name = "#" + t.elementType.name;
             return t;
         } else if (tnode.op == "sliceType") {
             let t = new SliceType(this.createType(tnode.rhs, scope));
-            t.name = "[]" + t.elementType.name;
+//            t.name = "[]" + t.elementType.name;
             return t
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
@@ -525,7 +637,7 @@ export class TypeChecker {
             }
             // TODO: Check range before parseInt
             let t = new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
-            t.name = "[" + t.size.toString() + "]" + t.elementType.name;
+//            t.name = "[" + t.size.toString() + "]" + t.elementType.name;
             return t;
         } else if (tnode.op == "funcType") {
             let t = new FunctionType();
@@ -562,25 +674,25 @@ export class TypeChecker {
             if (baset instanceof GenericClassType) {
                 let ct = new GenericClassInstanceType();
                 if (baset.genericParameterTypes.length != tnode.genericParameters.length) {
-                    throw new TypeError("Supplied parameters do not match generic parameter types of " + baset.name, tnode.loc);
+                    throw new TypeError("Supplied parameters do not match generic parameter types of " + baset.toString(), tnode.loc);
                 }
                 let mapping = new Map<Type, Type>();
                 ct.loc = tnode.loc;
                 ct.base = baset;
-                ct.name = baset.name + "<";
+//                ct.name = baset.name + "<";
                 for(let i = 0; i < tnode.genericParameters.length; i++) {
                     let pnode = tnode.genericParameters[i];
                     let pt = this.createType(pnode, scope);
                     ct.genericParameterTypes.push(pt);
                     // TODO: Check that pt extends baset.genericParameterTypes[i]
                     mapping.set(pt, baset.genericParameterTypes[i]);
-                    if (i == 0) {
-                        ct.name += pt.name;
-                    } else {
-                        ct.name += "," + pt.name;
-                    }
+//                    if (i == 0) {
+//                        ct.name += pt.name;
+//                    } else {
+//                        ct.name += "," + pt.name;
+//                    }
                 }
-                ct.name += ">"
+//                ct.name += ">"
                 // TODO: Instantiate the type of ct, e.g. all function signatures and properties.
                 return ct;
             } else if (baset instanceof GenericFunctionType) {
@@ -614,7 +726,7 @@ export class TypeChecker {
                 }
                 return ft;
             }
-            throw new TypeError("Type " + baset.name + " is not a generic type", tnode.loc);
+            throw new TypeError("Type " + baset.toString() + " is not a generic type", tnode.loc);
         } else if (tnode.op == "orType") {
             let stringCount = 0;
             let stringEnumCount = 0;
@@ -684,10 +796,44 @@ export class TypeChecker {
                 t.types.push(pt);
             }
             return t;
+        } else if (tnode.op == "structType") {
+            if (noStructBody) {
+                return new StructType();
+            }
+            return this.createStructType(tnode, scope);
         }
         throw "TODO type " + tnode.op
     }
     
+    private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
+        if (!s) {
+            s = new StructType();
+        }
+        if (tnode.lhs) {
+            let ext: Type = this.createType(tnode.lhs, scope);
+            if (!(ext instanceof StructType)) {
+                throw new TypeError("Struct can only extend another struct", tnode.lhs.loc);
+            }
+            s.extends = ext;
+            // TODO: Avoid circular dependencies
+        }
+        for(let fnode of tnode.parameters) {
+            if (fnode.op != "structField") {
+                throw "Implementation error";
+            }
+            if (s.field(fnode.lhs.value)) {
+                throw new TypeError("Duplicate field name " + fnode.lhs.value, fnode.lhs.loc);
+            }
+            // TODO: Check for duplicate names
+            let field = new StructField();
+            field.name = fnode.lhs.value;
+            field.type = this.createType(fnode.rhs, scope);
+            s.fields.push(field);
+        }
+
+        return s;
+    }
+
     public createFunction(fnode: Node, scope: Scope): Function {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
@@ -781,6 +927,34 @@ export class TypeChecker {
         return v;
     }
 
+    private createTypedef(tnode: Node, scope: Scope): Typedef {
+        let t = new Typedef();
+        t.loc = tnode.loc;
+        t.name = tnode.lhs.value;
+        t.node = tnode;
+        t.scope = scope;
+        t._tc = this;
+        scope.registerType(t.name, t);
+        return t;
+    }
+
+    public instantiateTypedef(t: Typedef): Type {
+        if (t._mark) {
+            throw new TypeError("Recursive type definition of " + t.name, t.node.loc);
+        }
+        if (t.node.rhs.op == "structType") {
+            t.type = new StructType();
+        } else if (t.node.rhs.op == "interfaceType") {
+            t.type = new InterfaceType();
+        } else {
+            t._mark = true;
+            t.type = this.createType(t.node.rhs, t.scope);
+            t._mark = false;
+        }
+        t.scope.replaceType(t.name, t.type);
+        return t.type;
+    }
+
     private createImport(inode: Node, scope: Scope) {
         for(let n of inode.parameters) {
             if (n.op == "funcType") {
@@ -846,18 +1020,41 @@ export class TypeChecker {
                 this.createFunction(fnode, scope);
             } else if (fnode.op == "import") {
                 this.createImport(fnode, scope);
+            } else if (fnode.op == "typedef") {
+                this.createTypedef(fnode, scope);
             } else if (fnode.op == "comment") {
                 // Do nothing by intention
             } else {
                 throw "Implementation error " + fnode.op;
             }
         }
+
+        let typedefs: Array<Typedef> = [];
+
+        // Instantiate the typedefs.
+        // Only the body of structs is not instantiated here to allow for recursion in StructType.
+        for(let key of scope.types.keys()) {
+            let e = scope.types.get(key);
+            if (e instanceof Typedef && !e.type) {
+                typedefs.push(e);
+                this.instantiateTypedef(e);
+            }
+        }
+
+        // Check fields of structs and interfaces
+        for(let t of typedefs) {
+            if (t.type instanceof StructType) {
+                this.createStructType(t.node.rhs, t.scope, t.type);
+            } else if (t.type instanceof InterfaceType) {
+                // TODO
+            }
+        }
+
+        // Check function bodies
         for(let key of scope.elements.keys()) {
             let e = scope.elements.get(key);
             if (e instanceof Function) {
                 this.checkFunctionBody(e);
-            } else {
-                throw "Implementation error " + e;
             }
         }
 
@@ -885,7 +1082,7 @@ export class TypeChecker {
         return scope;
     }
 
-    public checkFunctionBody(f: Function) {
+    private checkFunctionBody(f: Function) {
         if (f.node.statements) {
             for(let snode of f.node.statements) {
                 this.checkStatement(snode, f.scope);
@@ -1913,7 +2110,7 @@ export class TypeChecker {
                 if (enode.parameters) {
                     if (ft.parameters.length != enode.parameters.length) {
                         if (ft.requiredParameterCount() > enode.parameters.length || (enode.parameters.length > ft.parameters.length && !ft.hasEllipsis())) {
-                            throw new TypeError("Supplied parameters do not match function signature " + ft.name, enode.loc);
+                            throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), enode.loc);
                         }
                     }
                     for(let i = 0; i < enode.parameters.length; i++) {
@@ -1926,7 +2123,7 @@ export class TypeChecker {
                         }
                     }
                 } else if (ft.parameters.length != 0) {
-                    throw new TypeError("Supplied parameters do not match function signature " + ft.name, enode.loc);                    
+                    throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), enode.loc);                    
                 }
                 if (enode.lhs.type instanceof GenericFunctionType) {
                     throw "TODO: Derive the generic parameters"
@@ -2100,7 +2297,7 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between integer number and " + t.name, loc);                
+                throw new TypeError("Type mismatch between integer number and " + t.toString(), loc);                
             case "float":
                 // TODO: Check range
                 if (t == this.t_float || t == this.t_double) {
@@ -2115,7 +2312,7 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between floating point number and " + t.name, loc);                
+                throw new TypeError("Type mismatch between floating point number and " + t.toString(), loc);                
             case "str":
                 if (t == this.t_string || t == this.t_json) {
                     node.type = t;
@@ -2141,7 +2338,7 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between string and " + t.name, loc);   
+                throw new TypeError("Type mismatch between string and " + t.toString(), loc);   
             case "array":
                 let at: ArrayLiteralType = node.type as ArrayLiteralType;
                 if (t instanceof ArrayType) {
@@ -2166,7 +2363,7 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between array literal and " + t.name, loc);
+                throw new TypeError("Type mismatch between array literal and " + t.toString(), loc);
             case "tuple":
                 let tt: TupleLiteralType = node.type as TupleLiteralType;
                 if (t instanceof TupleType) {
@@ -2182,7 +2379,7 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between tuple literal and " + t.name, loc);                
+                throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
                 let ot = node.type as ObjectLiteralType;
                 if (t instanceof GenericClassInstanceType && t.base == this.t_map && t.genericParameterTypes[0] == this.t_string) {
@@ -2199,7 +2396,7 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between object literal and " + t.name, loc);
+                throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             default:
                 throw "Implementation error";
         }
@@ -2292,7 +2489,7 @@ export class TypeChecker {
         if (!doThrow) {
             return false;
         }
-        throw new TypeError("Type " + from.name + " cannot be assigned to type " + to.name, loc);        
+        throw new TypeError("Type " + from.toString() + " cannot be assigned to type " + to.toString(), loc);        
     }
 
     public checkIsEnumerable(node: Node): [Type, Type] {
@@ -2509,7 +2706,7 @@ export class TypeChecker {
         }
 
         if (doThrow) {
-            throw new TypeError("Type mismatch between " + a.name + " and " + b.name, loc);
+            throw new TypeError("Type mismatch between " + a.toString() + " and " + b.toString(), loc);
         }
         return false;
     }

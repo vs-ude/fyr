@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "type" | n == "struct" | n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
             return true;
         }
         return false;
@@ -17,7 +17,7 @@
 }
 
 module
-  = m:(comments / func / import / $("\n"+))* {
+  = m:(comments / func / import / typedef / $("\n"+))* {
         let result = [];
         for(let i = 0; i < m.length; i++) {
             let x = m[i];
@@ -26,11 +26,16 @@ module
                     x.comments = m[i-1];
                 }
                 result.push(x);
-            } else if (x.op == "import") {
+            } else if (x.op == "import" || x.op == "typedef") {
                 result.push(x);                
             }
         }
         return new ast.Node({loc: location(), op: "module", statements: result});
+    }
+
+typedef
+  = "type" [ \t]+ i:identifier [ \t]+ t:type {
+      return new ast.Node({loc: location(), op: "typedef", lhs: i, rhs: t});
     }
 
 import
@@ -169,6 +174,10 @@ primitiveType
       i.op = "basicType";
       return i;
     }
+  / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* "\n" {
+        let ext = e ? e[2] : null;
+        return new ast.Node({loc: location(), op: "structType", parameters: f, lhs: ext})
+    }
 
 namedType
   = n:identifier [ \t]* t:type {
@@ -191,6 +200,11 @@ returnType
       }
       return new ast.Node({loc: location(), op: "tupleType", parameters: result});
     }
+
+structField
+  = [ \t]* i:identifier [ \t]+ t:type [ \t]* "\n" {
+      return new ast.Node({loc: location(), op: "structField", lhs: i, rhs: t});
+  }
 
 typeList
   = t:type r:([ \t]* "," [ \t]* type)* [ \t]* {
