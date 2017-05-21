@@ -930,7 +930,7 @@ export class TypeChecker {
     private createTypedef(tnode: Node, scope: Scope): Typedef {
         let t = new Typedef();
         t.loc = tnode.loc;
-        t.name = tnode.lhs.value;
+        t.name = tnode.name.value;
         t.node = tnode;
         t.scope = scope;
         t._tc = this;
@@ -951,6 +951,7 @@ export class TypeChecker {
             t.type = this.createType(t.node.rhs, t.scope);
             t._mark = false;
         }
+        t.type.name = t.name;
         t.scope.replaceType(t.name, t.type);
         return t.type;
     }
@@ -1014,14 +1015,23 @@ export class TypeChecker {
     }
 
     public checkModule(mnode: Node): Scope {
+        let typedefs: Array<Typedef> = [];
+
         let scope = this.createScope();
+        for(let fnode of mnode.statements) {
+            if (fnode.op == "typedef") {
+                let t = this.createTypedef(fnode, scope);
+                typedefs.push(t);
+            }
+        }
+
         for(let fnode of mnode.statements) {
             if (fnode.op == "func") {
                 this.createFunction(fnode, scope);
             } else if (fnode.op == "import") {
                 this.createImport(fnode, scope);
             } else if (fnode.op == "typedef") {
-                this.createTypedef(fnode, scope);
+                // Do nothing by intention
             } else if (fnode.op == "comment") {
                 // Do nothing by intention
             } else {
@@ -1029,15 +1039,11 @@ export class TypeChecker {
             }
         }
 
-        let typedefs: Array<Typedef> = [];
-
         // Instantiate the typedefs.
         // Only the body of structs is not instantiated here to allow for recursion in StructType.
-        for(let key of scope.types.keys()) {
-            let e = scope.types.get(key);
-            if (e instanceof Typedef && !e.type) {
-                typedefs.push(e);
-                this.instantiateTypedef(e);
+        for(let t of typedefs) {
+            if (!t.type) {
+                this.instantiateTypedef(t);
             }
         }
 

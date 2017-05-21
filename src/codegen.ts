@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
+import {Function, Type, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
@@ -94,8 +94,17 @@ export class CodeGenerator {
         if (t instanceof SliceType) {
             return this.sliceHeader;
         }
+        if (t instanceof StructType) {
+            let s = new ssa.StructType();
+            s.name = t.name;
+            for(let f of t.fields) {
+                s.addField(f.name, this.getSSAType(f.type));
+            }
+            console.log("STRUCT", s.name, s.size, t.fields);
+            return s;
+        }
         // TODO: Struct
-        throw "CodeGen: Implementation error: The type does not fit in a register " + t.name;
+        throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
     }
 
     private getSSAFunctionType(t: FunctionType): ssa.FunctionType {

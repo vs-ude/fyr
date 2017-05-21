@@ -2658,7 +2658,7 @@ export class Wasm32Backend {
     public module: wasm.Module;
 
     private tr: SMTransformer;
-    private copyFunctionIndex: number = 0; // TODO
+    private copyFunctionIndex: number = 111; // TODO
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;

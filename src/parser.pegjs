@@ -35,7 +35,7 @@ module
 
 typedef
   = "type" [ \t]+ i:identifier [ \t]+ t:type {
-      return new ast.Node({loc: location(), op: "typedef", lhs: i, rhs: t});
+      return new ast.Node({loc: location(), op: "typedef", name: i, rhs: t});
     }
 
 import

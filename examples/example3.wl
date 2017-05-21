@@ -74,3 +74,13 @@ func fibonacci(count int, a int, b int) int {
     }
     return fibonacci(count - 1, b, a + b)
 }
+
+type Rect struct {
+    x int
+    y int
+}
+
+func demoRect(x int, y int) Rect {
+    var r Rect
+    return r    
+}
