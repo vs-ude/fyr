@@ -178,10 +178,11 @@ export class CodeGenerator {
                 } else if (e.isConst) {
                     // Create a SSA that can be assigned only once
                     let v = b.tmp();
-                    vars.set(e, v);                
+                    v.type = e.heapAlloc ? "addr" : this.getSSAType(e.type);
+                    vars.set(e, v);
                 } else {
                     // Create a variable that can be assigned multiple times
-                    let v = b.declareVar(this.getSSAType(e.type), name);
+                    let v = b.declareVar(e.heapAlloc ? "addr" : this.getSSAType(e.type), name);
                     vars.set(e, v);
                 }
             }
@@ -222,8 +223,12 @@ export class CodeGenerator {
             {
                 if (snode.rhs) { // Assignment of an expression value?
                     if (snode.lhs.op == "id") {
-                        let element = scope.resolveElement(snode.lhs.value);
+                        let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let v = vars.get(element);
+                        if (element.heapAlloc) {
+                            let storage = this.getSSAType(element.type);
+                            b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                        }
                         let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
                         b.assign(v, "copy", v.type, [tmp]);
                     } else if (snode.lhs.op == "tuple") {
@@ -237,7 +242,13 @@ export class CodeGenerator {
                     }
                 } else { // Assignment of initial value (all zero)
                     if (snode.lhs.op == "id") {
-                        // Nothing todo here, handled by decl_var.
+                        let element = scope.resolveElement(snode.lhs.value) as Variable;
+                        let v = vars.get(element);
+                        if (element.heapAlloc) {
+                            let storage = this.getSSAType(element.type);
+                            b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                        }
+                        // Nothing else todo here, handled by decl_var.
                     } else {
                         throw "TODO"; // TODO: Can this happen at all?
                     }
@@ -440,6 +451,9 @@ export class CodeGenerator {
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
+                if (element instanceof Variable && element.heapAlloc) {
+                    return new ssa.Pointer(vars.get(element), 0);
+                }
                 return vars.get(element);
             }
             case "unary*":
@@ -510,12 +524,15 @@ export class CodeGenerator {
                 }
             case ".":
             {
-                let obj = this.processExpression(f, scope, enode.lhs, b, vars);
+                let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                 if (enode.lhs.type instanceof StructType) {
                     let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
-                    let obj_addr = b.assign(b.tmp(), "addr_of", "addr", [obj]);
-                    let field = enode.lhs.type.field(enode.name.value);
-                    return new ssa.Pointer(obj_addr, s.fieldOffset(field.name));
+                    if (ptr instanceof ssa.Pointer) {
+                        ptr.offset += s.fieldOffset(enode.name.value);
+                        return ptr;
+                    }
+                    let ptr2 = b.assign(b.tmp(), "addr_of", "addr", [ptr]);
+                    return new ssa.Pointer(ptr2, s.fieldOffset(enode.name.value));
                 } else {
                     throw "TODO"
                 }
@@ -712,6 +729,9 @@ export class CodeGenerator {
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
+                if (element instanceof Variable && element.heapAlloc) {
+                    return b.assign(b.tmp(), "load", this.getSSAType(element.type), [vars.get(element), 0]);
+                }
                 return vars.get(element);
             }
             case "(":

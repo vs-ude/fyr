@@ -14,6 +14,7 @@ export class Variable implements ScopeElement {
     public type: Type;
     public loc: Location;
     public isResult: boolean = false;
+    public heapAlloc: boolean = false;
 }
 
 export type CallingConvention = "fyr" | "fyrCoroutine" | "host";
@@ -1917,7 +1918,7 @@ export class TypeChecker {
                 break;
             case "unary&":
                 this.checkExpression(enode.rhs, scope);
-                this.checkIsAdressable(enode.rhs);
+                this.checkIsAdressable(enode.rhs, scope);
                 enode.type = new PointerType(enode.rhs.type);
                 break;
             case "+":                                             
@@ -2572,20 +2573,25 @@ export class TypeChecker {
         throw new TypeError("The type " + node.type.name + " is not indexable", node.loc);
     }
 
-    public checkIsAdressable(node: Node) {
+    public checkIsAdressable(node: Node, scope: Scope) {
         switch (node.op) {
             case "id":
-                return;
+                let element = scope.resolveElement(node.value);
+                if (element instanceof Variable) {
+                    element.heapAlloc = true;
+                    return;
+                }
+                throw new TypeError("Cannot take an address of identifier " + node.value, node.loc);
             case ".":
-                this.checkIsAdressable(node.lhs);
+                this.checkIsAdressable(node.lhs, scope);
                 return;
             case "[":
-                this.checkIsAdressable(node.lhs);
+                this.checkIsAdressable(node.lhs, scope);
                 if (node.lhs.type instanceof ArrayType || node.lhs.type instanceof SliceType || node.lhs.type instanceof TupleType) {
                     return;
                 }
         }
-        throw new TypeError("Cannot take an adress of an immediate", node.loc);
+        throw new TypeError("Cannot take an address of an immediate", node.loc);
     }
 
     public checkIsPointer(node: Node) {

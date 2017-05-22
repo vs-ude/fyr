@@ -14,3 +14,8 @@ func demoRect(x int, y int) *Rect {
     logNumber(r.y)
     return &r    
 }
+
+func demoVector() {
+    var vec [3]int
+    vec[0] = 1
+}

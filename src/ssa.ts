@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -1884,11 +1884,20 @@ export class Wasm32Backend {
                 this.emitAssign(n.type, n, null, code);
                 n = n.next[0];
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
-                n = n.next[0];                
+                n = n.next[0];
+            } else if (n.kind == "alloc") {
+                if (n.type != "addr") {
+                    throw "Implementation error"
+                }
+                this.emitAssign(n.type, n, null, code);
+                n = n.next[0];
+            } else if (n.kind == "end") {
+                // Nothing to do
+                n = n.next[0];
             } else {
                 // TODO: This clause should never trigger
-//                throw "TODO " + n.toString("");
-                n = n.next[0];
+                throw "TODO " + n.toString("");
+//                n = n.next[0];
             }
         }
     }
@@ -2293,7 +2302,17 @@ export class Wasm32Backend {
     }
 
     private emitWordNode(n: Node, stack: "wasmStack" | null, code: Array<wasm.Node>) {
-        if (n.kind == "addr_of") {
+        if (n.kind == "alloc") {
+            if (n.assign) {
+                this.storeVariableFromWasmStack1("addr", n.assign, code);
+            }
+            this.emitWordAssign("i32", n.args[0], "wasmStack", code);
+            code.push(new wasm.Call(this.allocFunctionIndex));
+            if (n.assign) {
+                this.storeVariableFromWasmStack2("addr", n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "addr_of") {
             if (n.assign) {
                 this.storeVariableFromWasmStack1("addr", n.assign, code);
             }
@@ -2659,6 +2678,7 @@ export class Wasm32Backend {
 
     private tr: SMTransformer;
     private copyFunctionIndex: number = 111; // TODO
+    private allocFunctionIndex: number = 112; // TODO
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;
