@@ -82,5 +82,8 @@ type Rect struct {
 
 func demoRect(x int, y int) Rect {
     var r Rect
+    r.x = x
+    r.y = y;
+    logNumber(r.y);   
     return r    
 }

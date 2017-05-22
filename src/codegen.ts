@@ -100,7 +100,6 @@ export class CodeGenerator {
             for(let f of t.fields) {
                 s.addField(f.name, this.getSSAType(f.type));
             }
-            console.log("STRUCT", s.name, s.size, t.fields);
             return s;
         }
         // TODO: Struct
@@ -152,15 +151,15 @@ export class CodeGenerator {
         }
         b.end();
 
-//        console.log(ssa.Node.strainToString("", b.node));                
+        console.log(ssa.Node.strainToString("", b.node));                
 
-//        this.optimizer.optimizeConstants(b.node);
-//        console.log('============ OPTIMIZED Constants ===============');
-//        console.log(ssa.Node.strainToString("", b.node));
+        this.optimizer.optimizeConstants(b.node);
+        console.log('============ OPTIMIZED Constants ===============');
+        console.log(ssa.Node.strainToString("", b.node));
 
-//        this.optimizer.removeDeadCode(b.node);
-//        console.log('============ OPTIMIZED Dead code ===============');
-//        console.log(ssa.Node.strainToString("", b.node));
+        this.optimizer.removeDeadCode(b.node);
+        console.log('============ OPTIMIZED Dead code ===============');
+        console.log(ssa.Node.strainToString("", b.node));
 
         this.wasm.generateFunction(b.node, wf);
         if (exportFunc) {
@@ -510,7 +509,17 @@ export class CodeGenerator {
                     throw "TODO"; // TODO: map
                 }
             case ".":
-                throw "TODO"
+            {
+                let obj = this.processExpression(f, scope, enode.lhs, b, vars);
+                if (enode.lhs.type instanceof StructType) {
+                    let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
+                    let obj_addr = b.assign(b.tmp(), "addr_of", "addr", [obj]);
+                    let field = enode.lhs.type.field(enode.name.value);
+                    return new ssa.Pointer(obj_addr, s.fieldOffset(field.name));
+                } else {
+                    throw "TODO"
+                }
+            }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
@@ -720,7 +729,10 @@ export class CodeGenerator {
                 
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
-                    return b.call(b.tmp(), ft, args);
+//                    if (t.returnType != this.tc.t_void) {
+                        return b.call(b.tmp(), ft, args);
+//                    }
+//                    return b.call(null, ft, args);
                 }
                 throw "TODO: call a lambda function"
             }
@@ -729,6 +741,12 @@ export class CodeGenerator {
                 let ptr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "load", storage, [ptr.variable, ptr.offset]);
+            }
+            case ".":
+            {
+                let expr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
+                let storage = this.getSSAType(enode.type);
+                return b.assign(b.tmp(), "load", storage, [expr.variable, expr.offset]);
             }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
