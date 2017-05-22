@@ -7,10 +7,10 @@ type Rect struct {
     y int
 }
 
-func demoRect(x int, y int) Rect {
+func demoRect(x int, y int) *Rect {
     var r Rect
     r.x = x
-    r.y = y;
-    logNumber(r.y);   
-    return r    
+    r.y = y
+    logNumber(r.y)
+    return &r    
 }

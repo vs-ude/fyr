@@ -167,6 +167,9 @@ primitiveType
   / "#" [ \t]* t:type {
       return new ast.Node({loc: location(), op: "unsafePointerType", rhs: t});
     }
+  / "@" [ \t]* t:type {
+      return new ast.Node({loc: location(), op: "guardedPointerType", rhs: t});
+    }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {
           return new ast.Node({loc: location(), op: "genericType", genericParameters: g[3], lhs: i});

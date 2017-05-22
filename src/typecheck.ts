@@ -364,6 +364,22 @@ export class UnsafePointerType extends Type {
     public elementType: Type;
 }
 
+export class GuardedPointerType extends Type {
+    constructor(elementType: Type) {
+        super();
+        this.elementType = elementType;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "@" + this.elementType.toString();
+    }
+
+    public elementType: Type;
+}
+
 export class ArrayType extends Type {
     constructor(elementType: Type, size: number) {
         super();

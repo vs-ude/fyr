@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
+import {Function, Type, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
@@ -85,7 +85,7 @@ export class CodeGenerator {
         if (t == this.tc.t_double) {
             return "f64";
         }
-        if (t instanceof UnsafePointerType) {
+        if (t instanceof UnsafePointerType || t instanceof PointerType) {
             return "addr";
         }
         if (t == this.tc.t_string) {
@@ -344,7 +344,7 @@ export class CodeGenerator {
                     p1 = tmp;
                     dest = tmp;
                 }
-                if (snode.lhs.type instanceof PointerType) {
+                if (snode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO"
                 } else {
                     let increment = 1;
@@ -456,7 +456,7 @@ export class CodeGenerator {
                         index2 = b.assign(b.tmp(), "mul", "addr", [index, size]);
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
-                } else if (enode.lhs.type instanceof PointerType) {
+                } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 } else if (enode.lhs.type instanceof SliceType) {
                     let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
@@ -665,9 +665,23 @@ export class CodeGenerator {
                     let storage = this.getSSAType(enode.rhs.type.elementType);
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
                 } else if (enode.rhs.type instanceof PointerType) {
+                    let storage = this.getSSAType(enode.rhs.type.elementType);
+                    return b.assign(b.tmp(), "load", storage, [p, 0]);
+                } else if (enode.rhs.type instanceof GuardedPointerType) {
                     throw "TODO"
                 }                                
                 break;
+            }
+            case "unary&":
+            {
+                let p = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
+                if (p instanceof ssa.Pointer) {
+                    if (p.offset == 0) {
+                        return p.variable;
+                    }
+                    return b.assign(b.tmp(), "add", "addr", [p.variable, p.offset]);
+                }
+                return b.assign(b.tmp(), "addr_of", "addr", [p]);                
             }
             case "||":
             {
