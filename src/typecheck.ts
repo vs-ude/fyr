@@ -2124,7 +2124,17 @@ export class TypeChecker {
                         throw new TypeError("Index inside a tuple must be a constant number", enode.lhs.loc);
                     }
                     index = parseInt(enode.rhs.value);
-                }  
+                    if (index < 0 || index >= enode.lhs.type.types.length) {
+                        throw new TypeError("Index out of range", enode.rhs.loc);
+                    }
+                } else if (enode.lhs.type instanceof ArrayType) {
+                    if (enode.rhs.op == "int") {
+                        index = parseInt(enode.rhs.value);
+                        if (index < 0 || index >= enode.lhs.type.size) {
+                            throw new TypeError("Index out of range", enode.rhs.loc);
+                        }
+                    }                    
+                }
                 let elementType = this.checkIsIndexable(enode.lhs, index);
                 // TODO: In case of a map, lhs must equal the map type
                 if (enode.lhs.type instanceof GenericClassInstanceType && enode.lhs.type.base == this.t_map) {

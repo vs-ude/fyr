@@ -98,8 +98,14 @@ export class CodeGenerator {
             let s = new ssa.StructType();
             s.name = t.name;
             for(let f of t.fields) {
-                s.addField(f.name, this.getSSAType(f.type));
+                s.addField(f.name, this.getSSAType(f.type), 1);
             }
+            return s;
+        }
+        if (t instanceof ArrayType) {
+            let s = new ssa.StructType();
+            s.name = t.name;
+            s.addField("data", this.getSSAType(t.elementType), t.size);
             return s;
         }
         // TODO: Struct
@@ -467,7 +473,7 @@ export class CodeGenerator {
                     let index2 = index;
                     if (size > 1) {
                         // TODO: If size is power of 2, shift bits
-                        index2 = b.assign(b.tmp(), "mul", "addr", [index, size]);
+                        index2 = b.assign(b.tmp(), "mul", "i32", [index, size]);
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
@@ -480,7 +486,10 @@ export class CodeGenerator {
                     if (enode.rhs.op == "int") {
                         index = parseInt(enode.rhs.value) * size;
                     } else {
-                        index = this.processExpression(f, scope, enode.rhs, b, vars);
+                        let tmp_index = this.processExpression(f, scope, enode.rhs, b, vars);
+                        if (size != 1) {
+                            index = b.assign(b.tmp(), "mul", "i32", [tmp_index, size]);
+                        }
                     }
                     let head_addr = b.assign(b.tmp(), "addr_of", "addr", [head]);
                     let len = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("length")]);
@@ -516,7 +525,37 @@ export class CodeGenerator {
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 0);
                 } else if (enode.lhs.type instanceof ArrayType) {
-                    throw "TODO";
+                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                    let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    let t = this.getSSAType(enode.lhs.type);
+                    let index: ssa.Variable | number = 0;
+                    if (enode.rhs.op == "int") {
+                        index = parseInt(enode.rhs.value) * size;
+                    } else {
+                        index = this.processExpression(f, scope, enode.rhs, b, vars);
+                    }
+                    // Compare 'index' with 'len'
+                    if (typeof(index) == "number") {
+                        if (index < 0 || index >= enode.lhs.type.size * size) {
+                            throw "Implementation error " + index + " " +enode.lhs.type.size ;
+                        }
+                    } else {
+                        let cmp = b.assign(b.tmp(), "ge", "i32", [index, enode.lhs.type.size]);
+                        b.ifBlock(cmp);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
+                    if (typeof(index) == "number") {
+                        if (ptr instanceof ssa.Pointer) {
+                            ptr.offset += index;
+                            return ptr;
+                        }
+                        return new ssa.Pointer(ptr, index);
+                    }
+                    if (ptr instanceof ssa.Pointer) {
+                        return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr.variable, index]), ptr.offset);
+                    }
+                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 0);
                 } else if (enode.lhs.type == this.tc.t_json) {
                     throw "TODO";
                 } else {

@@ -4,17 +4,18 @@ export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "c
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
-    public addField(name: string, type: Type | StructType): number {
+    public addField(name: string, type: Type | StructType, count: number = 1): number {
+        // TODO: Alignment
         let offset = this.size;
         this.fieldOffsetsByName.set(name, this.size);
-        this.size += sizeOf(type);
-        this.fields.push([name, type]);
+        this.size += count * sizeOf(type); // TODO: Include aligned size
+        this.fields.push([name, type, count]);
         return offset;
     }
 
     public addFields(s: StructType) {
         for(let f of s.fields) {
-            this.addField(f[0], f[1]);
+            this.addField(f[0], f[1], f[2]);
         }
     }
 
@@ -33,10 +34,13 @@ export class StructType {
     }
 
     public toString(): string {
-        return this.name;
+        if (this.name) {
+            return this.name;
+        }
+        return "struct{...}";
     }
 
-    public fields: Array<[string, Type | StructType]> = [];
+    public fields: Array<[string, Type | StructType, number]> = [];
     private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
     public name: string;

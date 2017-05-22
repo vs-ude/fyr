@@ -18,4 +18,5 @@ func demoRect(x int, y int) *Rect {
 func demoVector() {
     var vec [3]int
     vec[0] = 1
+    vec[1] = 2
 }
