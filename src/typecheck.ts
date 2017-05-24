@@ -1840,6 +1840,11 @@ export class TypeChecker {
             }
             default:
                 this.checkExpression(snode, scope);
+                if (snode.type instanceof ArrayLiteralType || snode.type instanceof ObjectLiteralType || snode.type instanceof TupleLiteralType) {
+                    if (!snode.type.inferredType) {
+                        throw new TypeError("Cannot infer type", snode.loc);
+                    }
+                }
         }
     }
 
@@ -2451,6 +2456,16 @@ export class TypeChecker {
                     }
                     ot.inferredType = t;
                     return true;
+                } else if (t instanceof StructType) {
+                    for(let pnode of node.parameters) {
+                        let field = t.field(pnode.name.value);
+                        if (!field) {
+                            throw new TypeError("Unknown field " + pnode.name.value + " in " + t.toString(), pnode.name.loc);
+                        }
+                        this.checkIsAssignableNode(field.type, pnode.lhs);
+                    }
+                    ot.inferredType = t;
+                    return true;                    
                 } else if (t == this.t_json) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(this.t_json, pnode.rhs);

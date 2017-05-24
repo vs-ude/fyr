@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
+import {Function, Type, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
@@ -114,7 +114,9 @@ export class CodeGenerator {
             }
             return s;            
         }
-        // TODO: Struct
+        if (t instanceof ArrayLiteralType || t instanceof ObjectLiteralType || t instanceof TupleLiteralType) {
+            return this.getSSAType(t.inferredType);
+        }
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
     }
 
@@ -623,6 +625,28 @@ export class CodeGenerator {
             case "str":
                 let [off, len] = this.wasm.module.addString(enode.value);
                 return off;
+            case "object":
+            {
+                let ot = enode.type as ObjectLiteralType;
+                if (!ot.inferredType) {
+                    throw "Implementation error";
+                }
+                if (ot.inferredType instanceof StructType) {
+                    let st = this.getSSAType(ot.inferredType) as ssa.StructType; // This returns a struct type
+                    let args: Array<string | ssa.Variable | number> = [];
+                    let fieldValues = new Map<string, Node>();
+                    for(let p of enode.parameters) {
+                        fieldValues.set(p.name.value, p.lhs);
+                    }
+                    for(let i = 0; i < st.fields.length; i++) {
+                        let p = fieldValues.get(st.fields[i][0]);
+                        let v = this.processExpression(f, scope, p, b, vars);
+                        args.push(v);
+                    }
+                    return b.assign(b.tmp(), "struct", st, args);                
+                }
+                throw "TODO";
+            }
             case "tuple":
             {
                 let tt = enode.type as TupleLiteralType;

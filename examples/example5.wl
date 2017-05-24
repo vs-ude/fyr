@@ -41,3 +41,12 @@ func demoString() byte {
     var str = "Hallo"
     return str[1]
 }
+
+func demoObjectLiteral() Rect {
+    var r Rect = {x: 42, y: 333}
+    return r
+}
+
+func demoObjectLiteral2() Rect {
+    return {x: 42, y: 333}
+}
