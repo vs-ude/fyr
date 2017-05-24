@@ -105,7 +105,7 @@ export class Module extends Node {
         let uint8array: Uint8Array = new textEncoding.TextEncoder("utf-8").encode(value);
         let offset = this.dataSize;
         this.data.push(new Data(offset, uint8array));
-        this.dataSize += align64(12 + uint8array.length);
+        this.dataSize += align64(4 + uint8array.length);
         return [offset, uint8array.length];
     }
 
@@ -174,11 +174,9 @@ export class Data extends Node {
     }
 
     public toWast(indent: string): string {
-        let a32 = new Uint32Array([this.offset + 12, this.offset + 12, this.value.length]);
+        let a32 = new Uint32Array([this.value.length]);
         let a8 = new Uint8Array(a32.buffer);
         let v = "\"\\" + this.uint8ToHex(a8[0]) + "\\" + this.uint8ToHex(a8[1]) + "\\" + this.uint8ToHex(a8[2]) + "\\" + this.uint8ToHex(a8[3]);
-        v += "\\" + this.uint8ToHex(a8[4]) + "\\" + this.uint8ToHex(a8[5]) + "\\" + this.uint8ToHex(a8[6]) + "\\" + this.uint8ToHex(a8[7]);
-        v += "\\" + this.uint8ToHex(a8[8]) + "\\" + this.uint8ToHex(a8[9]) + "\\" + this.uint8ToHex(a8[10]) + "\\" + this.uint8ToHex(a8[11]);
         for(let i = 0; i < this.value.length; i++) {
             v += "\\" + this.uint8ToHex(this.value[i]);
         }

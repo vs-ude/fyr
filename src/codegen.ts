@@ -9,10 +9,6 @@ export class CodeGenerator {
         this.wasm = new ssa.Wasm32Backend();
         this.wasm.module.importMemory("imports", "mem");
         this.optimizer = new ssa.Optimizer();
-        this.stringHeader = new ssa.StructType();
-        this.stringHeader.name = "string";
-        this.stringHeader.addField("ptr", "addr");
-        this.stringHeader.addField("length", "i32");
         this.sliceHeader = new ssa.StructType();
         this.sliceHeader.name = "slice";
         this.sliceHeader.addField("alloc_ptr", "addr");
@@ -89,7 +85,7 @@ export class CodeGenerator {
             return "addr";
         }
         if (t == this.tc.t_string) {
-            return this.stringHeader;
+            return "addr";
         }
         if (t instanceof SliceType) {
             return this.sliceHeader;
@@ -514,7 +510,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "add", "addr", [ptr, index]);
                 } else if (enode.lhs.type == this.tc.t_string) {
-                    let head = this.processExpression(f, scope, enode.lhs, b, vars);
+                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     let t = this.getSSAType(enode.lhs.type);
                     let index: ssa.Variable | number = 0;
                     if (enode.rhs.op == "int") {
@@ -522,18 +518,21 @@ export class CodeGenerator {
                     } else {
                         index = this.processExpression(f, scope, enode.rhs, b, vars);
                     }
-                    let head_addr = b.assign(b.tmp(), "addr_of", "addr", [head]);
-                    let len = b.assign(b.tmp(), "load", "i32", [head_addr, this.stringHeader.fieldOffset("length")]);
+                    let len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
                     // Compare 'index' with 'len'
                     let cmp = b.assign(b.tmp(), "ge", "i32", [index, len]);
-                    b.ifBlock(cmp);
+                    let zero = b.assign(b.tmp(), "eqz", "addr", [ptr]);
+                    let trap = b.assign(b.tmp(), "or", "i32", [cmp, zero]);
+                    b.ifBlock(trap);
                     b.assign(null, "trap", null, []);
                     b.end();
-                    let ptr = b.assign(b.tmp(), "load", "addr", [head_addr, this.stringHeader.fieldOffset("ptr")]);
                     if (typeof(index) == "number") {
-                        return new ssa.Pointer(ptr, index);
+                        if (typeof(ptr) == "number") {
+                            return new ssa.Pointer(b.assign(b.tmp(), "const", "addr", [ptr + index]), 0);
+                        }
+                        return new ssa.Pointer(ptr, 4 + index);
                     }
-                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 0);
+                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 4);
                 } else if (enode.lhs.type instanceof ArrayType) {
                     let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
@@ -623,7 +622,7 @@ export class CodeGenerator {
                 return enode.value == "true" ? 1 : 0;
             case "str":
                 let [off, len] = this.wasm.module.addString(enode.value);
-                return b.assign(b.tmp(), "struct", this.stringHeader, [off, len]);
+                return off;
             case "tuple":
             {
                 let tt = enode.type as TupleLiteralType;
@@ -928,6 +927,5 @@ export class CodeGenerator {
     private wasm: ssa.Wasm32Backend;
     private tc: TypeChecker;
     private funcs: Map<Function, wasm.Function | wasm.FunctionImport> = new Map<Function, wasm.Function | wasm.FunctionImport>();
-    private stringHeader: ssa.StructType;
     private sliceHeader: ssa.StructType;
 }

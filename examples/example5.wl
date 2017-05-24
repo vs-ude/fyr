@@ -33,6 +33,11 @@ func demoArrayLiteral() int16 {
 }
 
 func demoTupleLiteral() (int16, string) {
-    var tuple (int16, string) = (42, "Hallo")
+    var tuple (int16, string) = (42, "Hallo!")
     return tuple
+}
+
+func demoString() byte {
+    var str = "Hallo"
+    return str[1]
 }
