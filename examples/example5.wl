@@ -32,7 +32,7 @@ func demoArrayLiteral() int16 {
     return arr[0]
 }
 
-func demoTupleLiteral() int16 {
+func demoTupleLiteral() (int16, string) {
     var tuple (int16, string) = (42, "Hallo")
-    return tuple[0]
+    return tuple
 }
