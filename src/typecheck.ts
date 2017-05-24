@@ -435,6 +435,7 @@ export class ArrayLiteralType extends Type {
     }
 
     public types: Array<Type>;
+    public inferredType: Type;
 }
 
 export class ObjectLiteralType extends Type {
@@ -456,6 +457,7 @@ export class ObjectLiteralType extends Type {
         return name;
     }
 
+    public inferredType: Type;
     public types: Map<string, Type>;
 }
 
@@ -503,6 +505,7 @@ export class TupleLiteralType extends Type {
         return name;
     }
 
+    public inferredType: Type;
     public types: Array<Type>;
 }
 
@@ -2305,17 +2308,21 @@ export class TypeChecker {
             for(let pnode of node.parameters) {
                 this.defaultLiteralType(pnode);
             }
+            node.type.inferredType = this.t_json;
             return this.t_json;
         } else if (node.type instanceof TupleLiteralType) {
             let types: Array<Type> = [];
             for(let pnode of node.parameters) {
                 types.push(this.defaultLiteralType(pnode));
             }
-            return new TupleType(types);
+            let tt = new TupleType(types);
+            node.type.inferredType = tt;
+            return tt;
         } else if (node.type instanceof ObjectLiteralType) {
             for(let pnode of node.parameters) {
                 this.defaultLiteralType(pnode.lhs);
             }
+            node.type.inferredType = this.t_json;
             return this.t_json;
         }
         return node.type;
@@ -2400,16 +2407,19 @@ export class TypeChecker {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(t.elementType, pnode);
                     }
+                    at.inferredType = t;
                     return true;
                 } else if (t instanceof SliceType) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(t.elementType, pnode);
                     }
+                    at.inferredType = t;
                     return true;
                 } else if (t == this.t_json) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(this.t_json, pnode);
                     }
+                    at.inferredType = t;
                     return true;
                 }
                 if (!doThrow) {
@@ -2426,6 +2436,7 @@ export class TypeChecker {
                         let pnode = node.parameters[i];
                         this.checkIsAssignableNode(t.types[i], pnode);
                     }
+                    tt.inferredType = t;
                     return true;                    
                 }
                 if (!doThrow) {
@@ -2438,11 +2449,13 @@ export class TypeChecker {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode((t as GenericClassInstanceType).genericParameterTypes[1], pnode.lhs);
                     }
+                    ot.inferredType = t;
                     return true;
                 } else if (t == this.t_json) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(this.t_json, pnode.rhs);
                     }
+                    ot.inferredType = t;
                     return true;
                 }
                 if (!doThrow) {

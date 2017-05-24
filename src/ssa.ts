@@ -1991,37 +1991,41 @@ export class Wasm32Backend {
                 let f = type.fields[i];
                 let name: string = f[0];
                 let t: Type | StructType = f[1];
-                // Compute the value
-                if (t instanceof StructType) {
-                    // Compute the destination addr
-                    let offset = this.emitAddrOfVariable(n.assign, true, code);
-                    code.push(new wasm.Constant("i32", offset + type.fieldOffset(name)));
-                    code.push(new wasm.BinaryInstruction("i32", "add"));
-                    // Compute the source addr
-                    if (n.args[i] instanceof Variable) {
-                        this.emitAddrOfVariable(n.args[i] as Variable, false, code);
+                let size = sizeOf(t);
+                let arrOffset = 0;
+                for(let j = 0; j < f[2]; j++, arrOffset += size) {
+                    // Compute the value
+                    if (t instanceof StructType) {
+                        // Compute the destination addr
+                        let offset = this.emitAddrOfVariable(n.assign, true, code);
+                        code.push(new wasm.Constant("i32", offset + type.fieldOffset(name) + arrOffset));
+                        code.push(new wasm.BinaryInstruction("i32", "add"));
+                        // Compute the source addr
+                        if (n.args[i] instanceof Variable) {
+                            this.emitAddrOfVariable(n.args[i] as Variable, false, code);
+                        } else {
+                            this.emitStructAssign1(t, n.args[i] as Node, code);
+                        }
+                        this.emitCopy(t, code);
+                        this.emitStructAssign2(t, n.args[i] as Node, null, code);
                     } else {
-                        this.emitStructAssign1(t, n.args[i] as Node, code);
+                        // Compute the destination addr
+                        let offset = this.emitAddrOfVariable(n.assign, true, code);
+                        this.emitWordAssign(t, n.args[i], "wasmStack", code);
+                        let width: wasm.StackType = this.stackTypeOf(t);
+                        let asWidth: null | "8"| "16" | "32" = null;
+                        switch (t) {
+                            case "i8":
+                            case "s8":
+                                asWidth = "8";
+                                break;
+                            case "i16":
+                            case "s16":
+                                asWidth = "16";
+                                break;
+                        }
+                        code.push(new wasm.Store(width, asWidth, type.fieldOffset(name) + arrOffset));
                     }
-                    this.emitCopy(t, code);
-                    this.emitStructAssign2(t, n.args[i] as Node, null, code);
-                } else {
-                    // Compute the destination addr
-                    let offset = this.emitAddrOfVariable(n.assign, true, code);
-                    this.emitWordAssign(t, n.args[i], "wasmStack", code);
-                    let width: wasm.StackType = this.stackTypeOf(t);
-                    let asWidth: null | "8"| "16" | "32" = null;
-                    switch (t) {
-                        case "i8":
-                        case "s8":
-                            asWidth = "8";
-                            break;
-                        case "i16":
-                        case "s16":
-                            asWidth = "16";
-                            break;
-                    }
-                    code.push(new wasm.Store(width, asWidth, type.fieldOffset(name)));
                 }
             }
             return;

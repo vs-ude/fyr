@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
+import {Function, Type, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
@@ -550,12 +550,13 @@ export class CodeGenerator {
                             ptr.offset += index;
                             return ptr;
                         }
-                        return new ssa.Pointer(ptr, index);
+                        return new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ptr]), index);
                     }
                     if (ptr instanceof ssa.Pointer) {
                         return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr.variable, index]), ptr.offset);
                     }
-                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 0);
+                    let ptr2 = b.assign(b.tmp(), "addr_of", "addr", [ptr]);
+                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr2, index]), 0);
                 } else if (enode.lhs.type == this.tc.t_json) {
                     throw "TODO";
                 } else {
@@ -596,6 +597,34 @@ export class CodeGenerator {
             case "str":
                 let [off, len] = this.wasm.module.addString(enode.value);
                 return b.assign(b.tmp(), "struct", this.stringHeader, [off, len]);
+            case "array":
+            {
+                let at = enode.type as ArrayLiteralType;
+                if (!at.inferredType) {
+                    throw "Implementation error";
+                }
+                if (at.inferredType instanceof SliceType) {
+                    let et = this.getSSAType(at.inferredType.elementType);
+                    let esize = ssa.sizeOf(et);
+                    let ptr = b.assign(b.tmp(), "alloc", "addr", [enode.parameters.length * esize]);
+                    for(let i = 0; i < enode.parameters.length; i++) {
+                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
+                        b.assign(null, "store", et, [ptr, i * esize, v]);
+                    }
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, ptr, enode.parameters.length]);
+                } else if (at.inferredType instanceof ArrayType) {
+                    let st = this.getSSAType(at.inferredType); // This returns a struct type
+                    let args: Array<string | ssa.Variable | number> = [];
+                    for(let i = 0; i < enode.parameters.length; i++) {
+                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
+                        args.push(v);
+                    }
+                    return b.assign(b.tmp(), "struct", st, args);
+                } else if (at.inferredType == this.tc.t_json) {
+                    throw "TODO";
+                }
+                throw "Implementation error";
+            }
             case "==":
                 return this.processCompare("eq", f, scope, enode, b, vars);
             case "!=":
