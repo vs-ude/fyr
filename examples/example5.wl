@@ -22,12 +22,17 @@ func demoVector() int {
     return vec[0]
 }
 
-// func demoSliceLiteral() int16 {
-//    var arr []int16 = [3, 5, 8]
-//    return arr[0]
-//}
+func demoSliceLiteral() int16 {
+    var arr []int16 = [3, 5, 8]
+    return arr[0]
+}
 
 func demoArrayLiteral() int16 {
     var arr [3]int16 = [3, 5, 8]
     return arr[0]
+}
+
+func demoTupleLiteral() int16 {
+    var tuple (int16, string) = (42, "Hallo")
+    return tuple[0]
 }

@@ -1,5 +1,5 @@
 import {Node, NodeOp} from "./ast"
-import {Function, Type, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
+import {Function, Type, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
@@ -107,6 +107,16 @@ export class CodeGenerator {
             s.name = t.name;
             s.addField("data", this.getSSAType(t.elementType), t.size);
             return s;
+        }
+        if (t instanceof TupleType) {
+            let s = new ssa.StructType();
+            s.name = t.name;
+            let i = 0;
+            for(let el of t.types) {
+                s.addField("t" + i.toString(), this.getSSAType(el));
+                i++;
+            }
+            return s;            
         }
         // TODO: Struct
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
@@ -557,6 +567,23 @@ export class CodeGenerator {
                     }
                     let ptr2 = b.assign(b.tmp(), "addr_of", "addr", [ptr]);
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr2, index]), 0);
+                } else if (enode.lhs.type instanceof TupleType) {
+                    let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    let t = this.getSSAType(enode.lhs.type) as ssa.StructType;
+                    let index: ssa.Variable | number = 0;
+                    if (enode.rhs.op != "int") {
+                        throw "Implementation error";
+                    }
+                    let i = parseInt(enode.rhs.value);
+                    if (i < 0 || i >= enode.lhs.type.types.length) {
+                        throw "Implementation error";
+                    }
+                    let offset = t.fieldOffset("t" + i.toString());
+                    if (ptr instanceof ssa.Pointer) {
+                        ptr.offset += index;
+                        return ptr;
+                    }
+                    return new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ptr]), offset);
                 } else if (enode.lhs.type == this.tc.t_json) {
                     throw "TODO";
                 } else {
@@ -597,6 +624,20 @@ export class CodeGenerator {
             case "str":
                 let [off, len] = this.wasm.module.addString(enode.value);
                 return b.assign(b.tmp(), "struct", this.stringHeader, [off, len]);
+            case "tuple":
+            {
+                let tt = enode.type as TupleLiteralType;
+                if (!tt.inferredType || !(tt.inferredType instanceof TupleType)) {
+                    throw "Implementation error";
+                }
+                let st = this.getSSAType(tt.inferredType); // This returns a struct type
+                let args: Array<string | ssa.Variable | number> = [];
+                for(let i = 0; i < enode.parameters.length; i++) {
+                    let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
+                    args.push(v);
+                }
+                return b.assign(b.tmp(), "struct", st, args);                
+            }
             case "array":
             {
                 let at = enode.type as ArrayLiteralType;
