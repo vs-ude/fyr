@@ -2306,6 +2306,8 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "typeCast":
+                throw "TODO";
             case "ellipsisId":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
             case "optionalId":

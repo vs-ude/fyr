@@ -916,6 +916,8 @@ export class CodeGenerator {
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "load", storage, [expr.variable, expr.offset]);
             }
+            case "typeCast":
+                throw "TODO";
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
