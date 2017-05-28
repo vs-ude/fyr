@@ -50,3 +50,12 @@ func demoObjectLiteral() Rect {
 func demoObjectLiteral2() Rect {
     return {x: 42, y: 333}
 }
+
+//func demoObjectLiteral3() Rect {
+//    return {y: 333}
+//}
+
+func demoObjectLiteral4() *Rect {
+    var r *Rect = &{x: 42, y: 333}
+    return r
+}

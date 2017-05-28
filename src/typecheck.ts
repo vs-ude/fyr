@@ -1926,7 +1926,7 @@ export class TypeChecker {
                 break;
             case "unary&":
                 this.checkExpression(enode.rhs, scope);
-                this.checkIsAdressable(enode.rhs, scope);
+                this.checkIsAddressable(enode.rhs, scope);
                 enode.type = new PointerType(enode.rhs.type);
                 break;
             case "+":                                             
@@ -2354,7 +2354,7 @@ export class TypeChecker {
                     node.type = t;
                     return true;                    
                 }
-                if (t instanceof PointerType || t instanceof UnsafePointerType) {
+                if (t instanceof UnsafePointerType) {
                     node.type = t;
                     return true;
                 }
@@ -2475,6 +2475,11 @@ export class TypeChecker {
                 }
                 if (!doThrow) {
                     return false;
+                }
+                throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
+            case "unary&":
+                if (t instanceof PointerType || t instanceof UnsafePointerType) {
+                    return this.unifyLiterals(t.elementType, node.rhs, loc, doThrow);
                 }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             default:
@@ -2611,25 +2616,38 @@ export class TypeChecker {
         throw new TypeError("The type " + node.type.name + " is not indexable", node.loc);
     }
 
-    public checkIsAdressable(node: Node, scope: Scope) {
+    public checkIsAddressable(node: Node, scope: Scope, direct: boolean = true): boolean {
         switch (node.op) {
             case "id":
                 let element = scope.resolveElement(node.value);
                 if (element instanceof Variable) {
                     element.heapAlloc = true;
-                    return;
+                    return true;
                 }
-                throw new TypeError("Cannot take an address of identifier " + node.value, node.loc);
+                break;
             case ".":
-                this.checkIsAdressable(node.lhs, scope);
-                return;
+                return this.checkIsAddressable(node.lhs, scope, false);
             case "[":
-                this.checkIsAdressable(node.lhs, scope);
-                if (node.lhs.type instanceof ArrayType || node.lhs.type instanceof SliceType || node.lhs.type instanceof TupleType) {
-                    return;
+                if (node.lhs.type instanceof SliceType) {
+                    return true;
+                }
+                if (node.lhs.type instanceof ArrayType || node.lhs.type instanceof TupleType) {
+                    return this.checkIsAddressable(node.lhs, scope, false);
+                }
+                break;
+            case "bool":
+            case "int":
+            case "float":
+            case "str":
+            case "array":
+            case "tuple":
+            case "object":
+                // "&{x:1, y:2}" is allowed whereas "&({x:1, y:2}.x)"" is not allowed.
+                if (direct) {
+                    return false;
                 }
         }
-        throw new TypeError("Cannot take an address of an immediate", node.loc);
+        throw new TypeError("Cannot take address of intermediate value", node.loc);
     }
 
     public checkIsPointer(node: Node) {

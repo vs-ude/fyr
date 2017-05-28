@@ -119,6 +119,9 @@ export class Node {
         if (this.op == "int" || this.op == "float" || this.op == "str" || this.op == "array" || this.op == "object" || this.op == "tuple") {
             return true;
         }
+        if (this.op == "unary&" && this.rhs.isUnifyableLiteral()) {
+            return true;
+        }
         return false;
     }
 

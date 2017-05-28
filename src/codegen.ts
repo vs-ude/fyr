@@ -639,9 +639,13 @@ export class CodeGenerator {
                         fieldValues.set(p.name.value, p.lhs);
                     }
                     for(let i = 0; i < st.fields.length; i++) {
-                        let p = fieldValues.get(st.fields[i][0]);
-                        let v = this.processExpression(f, scope, p, b, vars);
-                        args.push(v);
+                        if (!fieldValues.has(st.fields[i][0])) {
+                            args.push(0);
+                        } else {
+                            let p = fieldValues.get(st.fields[i][0]);
+                            let v = this.processExpression(f, scope, p, b, vars);
+                            args.push(v);
+                        }
                     }
                     return b.assign(b.tmp(), "struct", st, args);                
                 }
@@ -823,14 +827,22 @@ export class CodeGenerator {
             }
             case "unary&":
             {
-                let p = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
-                if (p instanceof ssa.Pointer) {
-                    if (p.offset == 0) {
-                        return p.variable;
+                if (this.tc.checkIsAddressable(enode.rhs, scope)) {
+                    let p = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
+                    if (p instanceof ssa.Pointer) {
+                        if (p.offset == 0) {
+                            return p.variable;
+                        }
+                        return b.assign(b.tmp(), "add", "addr", [p.variable, p.offset]);
                     }
-                    return b.assign(b.tmp(), "add", "addr", [p.variable, p.offset]);
+                    return b.assign(b.tmp(), "addr_of", "addr", [p]);                
                 }
-                return b.assign(b.tmp(), "addr_of", "addr", [p]);                
+                // Make a copy of a literal
+                let p = this.processExpression(f, scope, enode.rhs, b, vars);
+                let s = this.getSSAType(enode.rhs.type);
+                let copy = b.assign(b.tmp(), "alloc", "addr", [ssa.sizeOf(s)]);
+                b.assign(b.mem, "store", s, [copy, 0, p]);
+                return copy;
             }
             case "||":
             {
