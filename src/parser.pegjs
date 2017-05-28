@@ -624,13 +624,48 @@ multiplicative2
   / ">>" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: ">>", rhs:right}); }
 
 unary
-  = "+" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary+", rhs:p}); }
+  = t: typedLiteral { return t; }
+  / c: typeCast { return c; }
+  / "+" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary+", rhs:p}); }
   / "-" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary-", rhs:p}); }
   / "!" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary!", rhs:p}); }
   / "^" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary^", rhs:p}); }
   / "*" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary*", rhs:p}); }
   / "&" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary&", rhs:p}); }
   / p: primary { return p; }
+
+typedLiteral
+  = "[" [ \t]* e:expression? "]" [ \t]* t:type [ \t]* l: array {
+      if (e) {
+          l.lhs = new ast.Node({loc: location(), op: "arrayType", rhs: t, lhs: e});
+      } else {
+          l.lhs = new ast.Node({loc: location(), op: "sliceType", rhs: t});
+      }
+      return l;
+    }
+  / "(" [ \t]* t:typeList [ \t]* ")" [ \t]* l: tuple {
+      l.lhs = new ast.Node({loc: location(), op: "tupleType", parameters: t});
+      return l;
+    }
+  / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* l: object {
+        let ext = e ? e[2] : null;
+        l.lhs = new ast.Node({loc: location(), op: "structType", parameters: f, lhs: ext});
+        return l;
+    }
+  / i :identifier l:object {
+      i.op = "basicType";
+      l.lhs = i;
+      return l;
+  }
+
+typeCast
+  = "(" [ \t]* t:type [ \t]* ")" [ \t]* e: primary {
+        if (e.op == "array" || e.op == "tuple" || e.op == "object") {
+            e.lhs = t;
+            return e;
+        }
+        return new ast.Node({loc: location(), op: "typeCast", lhs: t, rhs: e});
+    }
 
 primary
   = [ \t\n]* p:primary2 [ \t]* m:member* {
@@ -681,6 +716,13 @@ array
 object
   = "{" [ \t\n]* e:keyValueList? [ \t]* "}" {
       return new ast.Node({loc: location(), op: "object", parameters: e});
+    }
+
+tuple
+  = "(" [ \t\n]* e: expressionList ")" & {
+      return e.length > 1
+    } {
+        return new ast.Node({loc: location(), op: "tuple", parameters: e});
     }
 
 keyValueList

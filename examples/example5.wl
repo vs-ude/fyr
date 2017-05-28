@@ -32,13 +32,38 @@ func demoSliceLiteral() int16 {
     return arr[0]
 }
 
+func demoSliceLiteral2() int16 {
+    var arr = []int16[3, 5, 8]
+    return arr[0]
+}
+
+func demoSliceLiteral3() int16 {
+    var arr = ([]int16)[3, 5, 8]
+    return arr[0]
+}
+
 func demoArrayLiteral() int16 {
     var arr [3]int16 = [3, 5, 8]
     return arr[0]
 }
 
+func demoArrayLiteral2() int16 {
+    var arr = [3]int16[3, 5, 8]
+    return arr[0]
+}
+
+func demoArrayLiteral3() int16 {
+    var arr = ([3]int16)[3, 5, 8]
+    return arr[0]
+}
+
 func demoTupleLiteral() (int16, string) {
     var tuple (int16, string) = (42, "Hallo!")
+    return tuple
+}
+
+func demoTupleLiteral2() (int16, string) {
+    var tuple = (int16, string)(42, "Hallo!")
     return tuple
 }
 
@@ -78,6 +103,6 @@ type Dummy struct {
     y int
 }
 
-func demoObjectLiteral7() *Point | *Dummy {
-    return &{x: 42, y:33}
+func demoObjectLiteral7() *Point {
+   return &Point{x: 42, y:33}
 }

@@ -435,7 +435,6 @@ export class ArrayLiteralType extends Type {
     }
 
     public types: Array<Type>;
-    public inferredType: Type;
 }
 
 export class ObjectLiteralType extends Type {
@@ -457,7 +456,6 @@ export class ObjectLiteralType extends Type {
         return name;
     }
 
-    public inferredType: Type;
     public types: Map<string, Type>;
 }
 
@@ -505,7 +503,6 @@ export class TupleLiteralType extends Type {
         return name;
     }
 
-    public inferredType: Type;
     public types: Array<Type>;
 }
 
@@ -574,7 +571,7 @@ export class TypeChecker {
         this.t_any = new GenericConstraintType("any");
         this.t_null = new BasicType("null");
         this.t_int8 = new BasicType("int8");
-        this.t_int16 = new BasicType("int8");
+        this.t_int16 = new BasicType("int16");
         this.t_int32 = new BasicType("int32");
         this.t_int = this.t_int32;
         this.t_int64 = new BasicType("int64");
@@ -1841,9 +1838,7 @@ export class TypeChecker {
             default:
                 this.checkExpression(snode, scope);
                 if (snode.type instanceof ArrayLiteralType || snode.type instanceof ObjectLiteralType || snode.type instanceof TupleLiteralType) {
-                    if (!snode.type.inferredType) {
-                        throw new TypeError("Cannot infer type", snode.loc);
-                    }
+                    throw new TypeError("Cannot infer type", snode.loc);
                 }
         }
     }
@@ -2211,6 +2206,10 @@ export class TypeChecker {
                 }
                 let t = new TupleLiteralType(types);
                 enode.type = t;
+                if (enode.lhs) {
+                    let ct = this.createType(enode.lhs, scope);
+                    this.unifyLiterals(ct, enode, enode.loc);
+                }
                 break;
             case "array":
             {
@@ -2221,8 +2220,12 @@ export class TypeChecker {
                 }
                 let t = new ArrayLiteralType(types);
                 enode.type = t;
+                if (enode.lhs) {
+                    let ct = this.createType(enode.lhs, scope);
+                    this.unifyLiterals(ct, enode, enode.loc);
+                }
+                break;
             }
-            break;
             case "object":
             {
                 let types = new Map<string, Type>();
@@ -2232,8 +2235,12 @@ export class TypeChecker {
                 }
                 let t = new ObjectLiteralType(types);
                 enode.type = t;
+                if (enode.lhs) {
+                    let ct = this.createType(enode.lhs, scope);
+                    this.unifyLiterals(ct, enode, enode.loc);
+                }
+                break;
             }
-            break;
             case "=>":
             {
                 let f = new Function();
@@ -2313,7 +2320,7 @@ export class TypeChecker {
             for(let pnode of node.parameters) {
                 this.defaultLiteralType(pnode);
             }
-            node.type.inferredType = this.t_json;
+            node.type = this.t_json;
             return this.t_json;
         } else if (node.type instanceof TupleLiteralType) {
             let types: Array<Type> = [];
@@ -2321,13 +2328,13 @@ export class TypeChecker {
                 types.push(this.defaultLiteralType(pnode));
             }
             let tt = new TupleType(types);
-            node.type.inferredType = tt;
+            node.type = tt;
             return tt;
         } else if (node.type instanceof ObjectLiteralType) {
             for(let pnode of node.parameters) {
                 this.defaultLiteralType(pnode.lhs);
             }
-            node.type.inferredType = this.t_json;
+            node.type = this.t_json;
             return this.t_json;
         }
         return node.type;
@@ -2414,27 +2421,26 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between string and " + t.toString(), loc);   
             case "array":
-                let at: ArrayLiteralType = node.type as ArrayLiteralType;
                 if (t instanceof ArrayType) {
-                    if (at.types.length != t.size) {
+                    if (node.parameters.length != t.size) {
                         throw new TypeError("Mismatch in array size", node.loc);                                                
                     }
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(t.elementType, pnode);
                     }
-                    at.inferredType = t;
+                    node.type = t;
                     return true;
                 } else if (t instanceof SliceType) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(t.elementType, pnode);
                     }
-                    at.inferredType = t;
+                    node.type = t;
                     return true;
                 } else if (t == this.t_json) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(this.t_json, pnode);
                     }
-                    at.inferredType = t;
+                    node.type = t;
                     return true;
                 }
                 if (!doThrow) {
@@ -2442,16 +2448,15 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between array literal and " + t.toString(), loc);
             case "tuple":
-                let tt: TupleLiteralType = node.type as TupleLiteralType;
                 if (t instanceof TupleType) {
-                    if (tt.types.length != t.types.length) {
+                    if (node.parameters.length != t.types.length) {
                         throw new TypeError("Mismatch in tuple length", node.loc);                                                
                     }
                     for(let i = 0; i < node.parameters.length; i++) {
                         let pnode = node.parameters[i];
                         this.checkIsAssignableNode(t.types[i], pnode);
                     }
-                    tt.inferredType = t;
+                    node.type = t;
                     return true;                    
                 }
                 if (!doThrow) {
@@ -2459,12 +2464,11 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
-                let ot = node.type as ObjectLiteralType;
                 if (t instanceof GenericClassInstanceType && t.base == this.t_map && t.genericParameterTypes[0] == this.t_string) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode((t as GenericClassInstanceType).genericParameterTypes[1], pnode.lhs);
                     }
-                    ot.inferredType = t;
+                    node.type = t;
                     return true;
                 } else if (t instanceof StructType) {
                     for(let pnode of node.parameters) {
@@ -2474,13 +2478,13 @@ export class TypeChecker {
                         }
                         this.checkIsAssignableNode(field.type, pnode.lhs);
                     }
-                    ot.inferredType = t;
+                    node.type = t;
                     return true;                    
                 } else if (t == this.t_json) {
                     for(let pnode of node.parameters) {
                         this.checkIsAssignableNode(this.t_json, pnode.rhs);
                     }
-                    ot.inferredType = t;
+                    node.type = t;
                     return true;
                 }
                 if (!doThrow) {

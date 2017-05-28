@@ -114,9 +114,6 @@ export class CodeGenerator {
             }
             return s;            
         }
-        if (t instanceof ArrayLiteralType || t instanceof ObjectLiteralType || t instanceof TupleLiteralType) {
-            return this.getSSAType(t.inferredType);
-        }
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
     }
 
@@ -627,12 +624,8 @@ export class CodeGenerator {
                 return off;
             case "object":
             {
-                let ot = enode.type as ObjectLiteralType;
-                if (!ot.inferredType) {
-                    throw "Implementation error";
-                }
-                if (ot.inferredType instanceof StructType) {
-                    let st = this.getSSAType(ot.inferredType) as ssa.StructType; // This returns a struct type
+                if (enode.type instanceof StructType) {
+                    let st = this.getSSAType(enode.type) as ssa.StructType; // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     let fieldValues = new Map<string, Node>();
                     for(let p of enode.parameters) {
@@ -658,11 +651,7 @@ export class CodeGenerator {
             }
             case "tuple":
             {
-                let tt = enode.type as TupleLiteralType;
-                if (!tt.inferredType || !(tt.inferredType instanceof TupleType)) {
-                    throw "Implementation error";
-                }
-                let st = this.getSSAType(tt.inferredType); // This returns a struct type
+                let st = this.getSSAType(enode.type); // This returns a struct type
                 let args: Array<string | ssa.Variable | number> = [];
                 for(let i = 0; i < enode.parameters.length; i++) {
                     let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
@@ -672,12 +661,8 @@ export class CodeGenerator {
             }
             case "array":
             {
-                let at = enode.type as ArrayLiteralType;
-                if (!at.inferredType) {
-                    throw "Implementation error";
-                }
-                if (at.inferredType instanceof SliceType) {
-                    let et = this.getSSAType(at.inferredType.elementType);
+                if (enode.type instanceof SliceType) {
+                    let et = this.getSSAType(enode.type.elementType);
                     let esize = ssa.sizeOf(et);
                     let ptr = b.assign(b.tmp(), "alloc", "addr", [enode.parameters.length * esize]);
                     for(let i = 0; i < enode.parameters.length; i++) {
@@ -685,15 +670,15 @@ export class CodeGenerator {
                         b.assign(null, "store", et, [ptr, i * esize, v]);
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, ptr, enode.parameters.length]);
-                } else if (at.inferredType instanceof ArrayType) {
-                    let st = this.getSSAType(at.inferredType); // This returns a struct type
+                } else if (enode.type instanceof ArrayType) {
+                    let st = this.getSSAType(enode.type); // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
                         args.push(v);
                     }
                     return b.assign(b.tmp(), "struct", st, args);
-                } else if (at.inferredType == this.tc.t_json) {
+                } else if (enode.type == this.tc.t_json) {
                     throw "TODO";
                 }
                 throw "Implementation error";

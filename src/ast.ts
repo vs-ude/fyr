@@ -26,7 +26,7 @@ export type Location = {
     end: LocationPoint;
 }
 
-export type NodeOp = "typedef" | "structField" | "structType" | "interfaceType" | "yield" | "guardedPointerType" | "unsafePointerType" | "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "ellipsisParam" | "strType" | "genericType" | "genericInstance" | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "const_in" | "var" | "const" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | "(" | "import";
+export type NodeOp = "typeCast" | "typedef" | "structField" | "structType" | "interfaceType" | "yield" | "guardedPointerType" | "unsafePointerType" | "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "ellipsisParam" | "strType" | "genericType" | "genericInstance" | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "const_in" | "var" | "const" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | "(" | "import";
 
 export class Node {
     constructor(config?: NodeConfig) {
@@ -116,7 +116,13 @@ export class Node {
     }
 
     public isUnifyableLiteral(): boolean {
-        if (this.op == "int" || this.op == "float" || this.op == "str" || this.op == "array" || this.op == "object" || this.op == "tuple") {
+        if (this.op == "int" || this.op == "float" || this.op == "str") {
+            return true;
+        }
+        if (this.op == "array" || this.op == "object" || this.op == "tuple") {
+            if (this.lhs) { // a typed literal?
+                return false;
+            } 
             return true;
         }
         if (this.op == "unary&" && this.rhs.isUnifyableLiteral()) {
