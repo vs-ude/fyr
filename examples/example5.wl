@@ -2,13 +2,18 @@ import {
     func logNumber(int)
 } from "imports"
 
-type Rect struct {
+type Point struct {
     x int
     y int
 }
 
-func demoRect(x int, y int) *Rect {
-    var r Rect
+type Rect struct {
+    p1 Point
+    p2 Point
+}
+
+func demoPoint(x int, y int) *Point {
+    var r Point
     r.x = x
     r.y = y
     logNumber(r.y)
@@ -42,20 +47,28 @@ func demoString() byte {
     return str[1]
 }
 
-func demoObjectLiteral() Rect {
-    var r Rect = {x: 42, y: 333}
+func demoObjectLiteral() Point {
+    var r Point = {x: 42, y: 333}
     return r
 }
 
-func demoObjectLiteral2() Rect {
+func demoObjectLiteral2() Point {
     return {x: 42, y: 333}
 }
 
-//func demoObjectLiteral3() Rect {
-//    return {y: 333}
-//}
+func demoObjectLiteral3() Point {
+    return {y: 333}
+}
 
-func demoObjectLiteral4() *Rect {
-    var r *Rect = &{x: 42, y: 333}
+func demoObjectLiteral4() *Point {
+    var r *Point = &{x: 42, y: 333}
     return r
+}
+
+func demoObjectLiteral5() *Rect {
+    return &{p1: {x: 555, y: 666}, p2: {x: 777, y: 888}}
+}
+
+func demoObjectLiteral6() *Rect {
+    return &{p2: {x: 777, y: 888}}
 }

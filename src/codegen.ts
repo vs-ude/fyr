@@ -640,7 +640,12 @@ export class CodeGenerator {
                     }
                     for(let i = 0; i < st.fields.length; i++) {
                         if (!fieldValues.has(st.fields[i][0])) {
-                            args.push(0);
+                            if (st.fields[i][1] instanceof ssa.StructType) {
+                                // Generate a zero struct
+                                args.push(this.generateZeroStruct(b, st.fields[i][1] as ssa.StructType));
+                            } else {
+                                args.push(0);
+                            }
                         } else {
                             let p = fieldValues.get(st.fields[i][0]);
                             let v = this.processExpression(f, scope, p, b, vars);
@@ -957,6 +962,18 @@ export class CodeGenerator {
             return false;
         }
         throw "CodeGen: Implementation error: signed check on non number type"       
+    }
+
+    private generateZeroStruct(b: ssa.Builder, st: ssa.StructType): ssa.Variable {
+        let args = [];
+        for(let f of st.fields) {
+            if (f[1] instanceof ssa.StructType) {
+                args.push(this.generateZeroStruct(b, f[1] as ssa.StructType));
+            } else {
+                args.push(0);
+            }
+        }
+        return b.assign(b.tmp(), "struct", st, args);
     }
 
     private optimizer: ssa.Optimizer;
