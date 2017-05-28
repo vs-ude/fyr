@@ -72,3 +72,12 @@ func demoObjectLiteral5() *Rect {
 func demoObjectLiteral6() *Rect {
     return &{p2: {x: 777, y: 888}}
 }
+
+type Dummy struct {
+    x int
+    y int
+}
+
+func demoObjectLiteral7() *Point | *Dummy {
+    return &{x: 42, y:33}
+}

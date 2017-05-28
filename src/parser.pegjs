@@ -161,13 +161,13 @@ primitiveType
       }
       return new ast.Node({loc: location(), op: "funcType", parameters: t, rhs: f});      
     }
-  / "*" [ \t]* t:type {
+  / "*" [ \t]* t:primitiveType {
       return new ast.Node({loc: location(), op: "pointerType", rhs: t});
     }
-  / "#" [ \t]* t:type {
+  / "#" [ \t]* t:primitiveType {
       return new ast.Node({loc: location(), op: "unsafePointerType", rhs: t});
     }
-  / "@" [ \t]* t:type {
+  / "@" [ \t]* t:primitiveType {
       return new ast.Node({loc: location(), op: "guardedPointerType", rhs: t});
     }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {

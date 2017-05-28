@@ -2335,10 +2335,20 @@ export class TypeChecker {
 
     private unifyLiterals(t: Type, node: Node, loc: Location, doThrow: boolean = true): boolean {
         if (t instanceof OrType) {
+            let count = 0;
             for(let o of t.types) {
                 if (this.unifyLiterals(o, node, loc, false)) {
-                    return true;
+                    count++;
                 }
+            }
+            if (count == 1) {
+                return true;
+            }
+            if (count > 1) {
+                if (doThrow) {
+                    throw new TypeError("Ambiguous type inference", node.loc);
+                }
+                return false;
             }
         }
 
