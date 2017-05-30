@@ -392,21 +392,25 @@ export class CodeGenerator {
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
                 } else if (snode.condition && (snode.condition.op == "in" || snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
-                    let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
-                    let sliceHeaderAddr = b.assign(b.tmp(), "addr_of", "addr", [sliceHeader]);
-                    ptr = b.assign(b.tmp(), "load", "addr", [sliceHeaderAddr, this.sliceHeader.fieldOffset("data_ptr")]);
-                    len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr, this.sliceHeader.fieldOffset("length")]);
-                    // Initialize a counter with 0
-                    counter = b.declareVar("i32", "$counter");
-                    b.assign(counter, "const", "i32", [0]);
-                    if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
-                        // Allocate memory for the variable if required
-                        let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
-                        let v = vars.get(element);
-                        if (element.heapAlloc) {
-                            let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                    if (snode.condition.rhs.type instanceof SliceType) {
+                        let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
+                        let sliceHeaderAddr = b.assign(b.tmp(), "addr_of", "addr", [sliceHeader]);
+                        ptr = b.assign(b.tmp(), "load", "addr", [sliceHeaderAddr, this.sliceHeader.fieldOffset("data_ptr")]);
+                        len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr, this.sliceHeader.fieldOffset("length")]);
+                        // Initialize a counter with 0
+                        counter = b.declareVar("i32", "$counter");
+                        b.assign(counter, "const", "i32", [0]);
+                        if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
+                            // Allocate memory for the variable if required
+                            let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
+                            let v = vars.get(element);
+                            if (element.heapAlloc) {
+                                let storage = this.getSSAType(element.type);
+                                b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                            }
                         }
+                    } else {
+                        throw "TODO"
                     }
                 }
                 let outer = b.block();
@@ -419,21 +423,40 @@ export class CodeGenerator {
                             b.br_if(tmp2, outer);
                         }
                     } else if (snode.condition.op == "in") {
-                        throw "TODO"
-                    } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
-                        let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
-                        let v = vars.get(element);
-                        let storage = this.getSSAType(element.type);
-                        let index = b.assign(b.tmp(), "mul", "i32", [counter, ssa.sizeOf(storage)]);
-                        let addr = b.assign(b.tmp(), "add", "addr", [ptr, index]);
-                        if (element.heapAlloc) {
-                            let tmp = b.assign(b.tmp(), "load", storage, [addr, 0]);
-                            b.assign(b.mem, "store", storage, [v, 0, tmp]);
+                        // TODO: map, runes in a string
+                        if (snode.condition.rhs.type instanceof SliceType) {
+                            let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
+                            let storage = this.getSSAType(snode.condition.lhs.type);
+                            let index = b.assign(b.tmp(), "mul", "i32", [counter, ssa.sizeOf(storage)]);
+                            let addr = b.assign(b.tmp(), "add", "addr", [ptr, index]);
+                            let val = b.assign(b.tmp(), "load", storage, [addr, 0]);
+                            // If the left-hand expression returns an address, the resulting value must be stored in memory
+                            if (dest instanceof ssa.Pointer) {
+                                b.assign(b.mem, "store", storage, [dest.variable, dest.offset, val]);
+                            } else {
+                                b.assign(dest, "copy", storage, [val]);
+                            }
                         } else {
-                            b.assign(v, "load", storage, [addr, 0]);
+                            throw "TODO";
                         }
-                        let end = b.assign(b.tmp(), "eq", "i32", [len, counter]);
-                        b.br_if(end, outer);
+                    } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
+                        if (snode.condition.rhs.type instanceof SliceType) {
+                            let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
+                            let v = vars.get(element);
+                            let storage = this.getSSAType(element.type);
+                            let index = b.assign(b.tmp(), "mul", "i32", [counter, ssa.sizeOf(storage)]);
+                            let addr = b.assign(b.tmp(), "add", "addr", [ptr, index]);
+                            if (element.heapAlloc) {
+                                let tmp = b.assign(b.tmp(), "load", storage, [addr, 0]);
+                                b.assign(b.mem, "store", storage, [v, 0, tmp]);
+                            } else {
+                                b.assign(v, "load", storage, [addr, 0]);
+                            }
+                            let end = b.assign(b.tmp(), "eq", "i32", [len, counter]);
+                            b.br_if(end, outer);
+                        } else {
+                            throw "TODO"
+                        }
                     } else {
                         let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars);
                         let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);

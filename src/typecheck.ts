@@ -2356,6 +2356,7 @@ export class TypeChecker {
                 this.defaultLiteralType(pnode.lhs);
                 let f = new StructField();
                 f.type = pnode.lhs.type;
+                f.name = pnode.name.value;
                 (node.type as StructType).fields.push(f);
             }
             return node.type;
