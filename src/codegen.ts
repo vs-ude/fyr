@@ -385,29 +385,67 @@ export class CodeGenerator {
             }
             case "for":
             {
+                let valElement: Variable;
+                let val: ssa.Variable;
                 let counter: ssa.Variable;
                 let ptr: ssa.Variable;
                 let len: ssa.Variable;
                 this.processScopeVariables(b, vars, snode.scope);
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
-                } else if (snode.condition && (snode.condition.op == "in" || snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
+                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
                     if (snode.condition.rhs.type instanceof SliceType) {
+                        // Load the slice header
                         let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
                         let sliceHeaderAddr = b.assign(b.tmp(), "addr_of", "addr", [sliceHeader]);
                         ptr = b.assign(b.tmp(), "load", "addr", [sliceHeaderAddr, this.sliceHeader.fieldOffset("data_ptr")]);
                         len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr, this.sliceHeader.fieldOffset("length")]);
-                        // Initialize a counter with 0
-                        counter = b.declareVar("i32", "$counter");
-                        b.assign(counter, "const", "i32", [0]);
-                        if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
-                            // Allocate memory for the variable if required
-                            let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
-                            let v = vars.get(element);
+                        // Allocate variables
+                        if (snode.condition.lhs.op == "tuple") {
+                            // Initialize the counter with 0
+                            let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;
+                            counter = vars.get(element);
                             if (element.heapAlloc) {
                                 let storage = this.getSSAType(element.type);
-                                b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                                b.assign(counter, "alloc", "addr", [ssa.sizeOf(storage)]);
+                                b.assign(b.mem, "store", "s32", [counter, 0, 0]);
+                            } else {
+                                b.assign(counter, "const", "s32", [0]);
                             }
+                            // Allocate memory for the variable if required
+                            valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
+                            val = vars.get(valElement);
+                            if (valElement.heapAlloc) {
+                                let storage = this.getSSAType(valElement.type);
+                                b.assign(val, "alloc", "addr", [ssa.sizeOf(storage)]);
+                            }
+                        } else {
+                            // Initialize a counter with 0
+                            counter = b.declareVar("s32", "$counter");
+                            b.assign(counter, "const", "s32", [0]);
+                            // Allocate memory for the variable if required
+                            valElement = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
+                            val = vars.get(valElement);
+                            if (valElement.heapAlloc) {
+                                let storage = this.getSSAType(valElement.type);
+                                b.assign(val, "alloc", "addr", [ssa.sizeOf(storage)]);
+                            }
+                        }
+                    } else {
+                        throw "TODO"
+                    }
+                } else if (snode.condition && snode.condition.op == "in") {
+                    if (snode.condition.rhs.type instanceof SliceType) {
+                        // Load the slice header
+                        let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
+                        let sliceHeaderAddr = b.assign(b.tmp(), "addr_of", "addr", [sliceHeader]);
+                        ptr = b.assign(b.tmp(), "load", "addr", [sliceHeaderAddr, this.sliceHeader.fieldOffset("data_ptr")]);
+                        len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr, this.sliceHeader.fieldOffset("length")]);
+                        if (snode.condition.lhs.op == "tuple") {
+                            throw "TODO: Initialize counter";
+                        } else {
+                            counter = b.declareVar("s32", "$counter");
+                            b.assign(counter, "const", "s32", [0]);                            
                         }
                     } else {
                         throw "TODO"
@@ -427,7 +465,7 @@ export class CodeGenerator {
                         if (snode.condition.rhs.type instanceof SliceType) {
                             let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
                             let storage = this.getSSAType(snode.condition.lhs.type);
-                            let index = b.assign(b.tmp(), "mul", "i32", [counter, ssa.sizeOf(storage)]);
+                            let index = b.assign(b.tmp(), "mul", "s32", [counter, ssa.sizeOf(storage)]);
                             let addr = b.assign(b.tmp(), "add", "addr", [ptr, index]);
                             let val = b.assign(b.tmp(), "load", storage, [addr, 0]);
                             // If the left-hand expression returns an address, the resulting value must be stored in memory
@@ -441,18 +479,16 @@ export class CodeGenerator {
                         }
                     } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
                         if (snode.condition.rhs.type instanceof SliceType) {
-                            let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
-                            let v = vars.get(element);
-                            let storage = this.getSSAType(element.type);
-                            let index = b.assign(b.tmp(), "mul", "i32", [counter, ssa.sizeOf(storage)]);
+                            let storage = this.getSSAType(valElement.type);
+                            let index = b.assign(b.tmp(), "mul", "s32", [counter, ssa.sizeOf(storage)]);
                             let addr = b.assign(b.tmp(), "add", "addr", [ptr, index]);
-                            if (element.heapAlloc) {
+                            if (valElement.heapAlloc) {
                                 let tmp = b.assign(b.tmp(), "load", storage, [addr, 0]);
-                                b.assign(b.mem, "store", storage, [v, 0, tmp]);
+                                b.assign(b.mem, "store", storage, [val, 0, tmp]);
                             } else {
-                                b.assign(v, "load", storage, [addr, 0]);
+                                b.assign(val, "load", storage, [addr, 0]);
                             }
-                            let end = b.assign(b.tmp(), "eq", "i32", [len, counter]);
+                            let end = b.assign(b.tmp(), "eq", "s32", [len, counter]);
                             b.br_if(end, outer);
                         } else {
                             throw "TODO"
@@ -470,8 +506,22 @@ export class CodeGenerator {
                 b.end();
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
                     this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
-                } else if (snode.condition && (snode.condition.op == "in" || snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
-                    b.assign(counter, "add", "i32", [counter, 1]);
+                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
+                    if (snode.condition.rhs.type instanceof SliceType) {
+                        b.assign(counter, "add", "s32", [counter, 1]);
+                    } else {
+                        throw "TODO"
+                    }
+                } else if (snode.condition && snode.condition.op == "in") {
+                    if (snode.condition.rhs.type instanceof SliceType) {
+                        if (snode.condition.lhs.op == "tuple") {
+                            throw "TODO: Increment counter";
+                        } else {
+                            b.assign(counter, "add", "s32", [counter, 1]);
+                        }
+                    } else {
+                        throw "TODO"
+                    }
                 }
                 b.br(loop);
                 b.end();

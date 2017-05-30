@@ -1813,13 +1813,13 @@ export class TypeChecker {
                     if (v1.type) {
                         this.checkIsAssignableType(v1.type, tindex1, snode.loc);
                     } else {
-                        v1.type = snode.lhs.parameters[0].type;
+                        v1.type = tindex1
                     }
                     let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
                     if (v2.type) {
-                        this.checkIsAssignableType(v2.type, tindex1, snode.loc);
+                        this.checkIsAssignableType(v2.type, tindex2, snode.loc);
                     } else {
-                        v2.type = snode.lhs.parameters[1].type;
+                        v2.type = tindex2;
                     }
                 } else {
                     let v = this.createVar(snode.lhs, scope, false);
