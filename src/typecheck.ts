@@ -1142,6 +1142,7 @@ export class TypeChecker {
             if (!v.type) {
                 if (rtype instanceof ArrayLiteralType || rtype instanceof TupleLiteralType || rtype instanceof ObjectLiteralType) {
                     v.type = this.defaultLiteralType(rnode);
+                    console.log("DEFAULT LIT TYPE", v.type.toString());
                 } else {
                     v.type = rtype;
                 }
@@ -2324,8 +2325,23 @@ export class TypeChecker {
             for(let pnode of node.parameters) {
                 this.defaultLiteralType(pnode);
             }
-            node.type = this.t_json;
-            return this.t_json;
+            if (node.parameters.length == 0) {
+                node.type = this.t_json;
+            } else {
+                let t = node.parameters[0].type;
+                for(let i = 1; i < node.parameters.length; i++) {
+                    if (!this.checkIsAssignableType(t, node.parameters[i].type, node.loc, false, false)) {
+                        if (!(t instanceof OrType)) {
+                            let o = new OrType();
+                            o.types.push(t);
+                            t = o;
+                        } 
+                        (t as OrType).types.push(node.parameters[i].type);
+                    }
+                }
+                node.type = new SliceType(t);
+            }
+            return node.type;
         } else if (node.type instanceof TupleLiteralType) {
             let types: Array<Type> = [];
             for(let pnode of node.parameters) {
@@ -2335,11 +2351,15 @@ export class TypeChecker {
             node.type = tt;
             return tt;
         } else if (node.type instanceof ObjectLiteralType) {
-            for(let pnode of node.parameters) {
+            node.type = new StructType();
+            for(let i = 0; i < node.parameters.length; i++) {
+                let pnode = node.parameters[i];
                 this.defaultLiteralType(pnode.lhs);
+                let f = new StructField();
+                f.type = pnode.lhs.type;
+                (node.type as StructType).fields.push(f);
             }
-            node.type = this.t_json;
-            return this.t_json;
+            return node.type;
         }
         return node.type;
     }
