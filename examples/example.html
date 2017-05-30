@@ -6,7 +6,7 @@
     <body>
         <h1>WASM Example</h1>
         <script>
-            let memory = new WebAssembly.Memory({initial: 1});
+            let memory = new WebAssembly.Memory({initial: 100});
             let importObject = {
                 imports: {
                     logString(offset, length) {
@@ -33,6 +33,7 @@
                 console.log("Result is", buf[0]);
             }); */
 
+            /*
             fetch('example3.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
@@ -46,6 +47,18 @@
                 console.log("demo3 = ", results.instance.exports.demo3());
                 console.log("demo4 = ", results.instance.exports.demo4());
                 console.log("demo5 = ", results.instance.exports.demo5());
+            });
+            */
+
+            fetch('example6b.wasm').then(response =>
+                response.arrayBuffer()
+            ).then(bytes =>
+                WebAssembly.instantiate(bytes, importObject)
+            ).then(results => {
+                let t0 = performance.now();
+                results.instance.exports.measureRecursion(0, 100 * 65536);
+                let t1 = performance.now();
+                console.log("Measurment is ", t1 - t0, "ms");
             });
         </script>
     </body>

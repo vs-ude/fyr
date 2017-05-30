@@ -2309,6 +2309,11 @@ export class Wasm32Backend {
         }
     }
 
+    /**
+     * Emits code for Node 'n'. The result of the node is a word-type (i.e. it fits on the WASM stack).
+     * The result is either assigned to a variable or put on the wasm stack or both or no
+     * assignment happens at all.
+     */
     private emitWordNode(n: Node, stack: "wasmStack" | null, code: Array<wasm.Node>) {
         if (n.kind == "alloc") {
             if (n.assign) {
@@ -2339,7 +2344,8 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type.result, n.assign, code);
             }
-            // Size of parameters on the heap stack
+            // Size of parameters on the heap stack.
+            // In the case of 'call_end' all parameters are on the heap stack.
             let paramSize = 0;
             let f = n.type as FunctionType;
             for(let i = 0; i < f.params.length; i++) {
@@ -2366,7 +2372,7 @@ export class Wasm32Backend {
                         break;
                 }
                 code.push(new wasm.GetLocal(this.spLocal));
-                code.push(new wasm.Load(width, asWidth, n.args[1] as number + paramSize));
+                code.push(new wasm.Load(width, asWidth, paramSize));
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type.result, n.assign, stack == "wasmStack", code);

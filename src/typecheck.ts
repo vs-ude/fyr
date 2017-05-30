@@ -264,7 +264,8 @@ export class FunctionType extends Type {
 
     public returnType: Type;
     public parameters: Array<FunctionParameter>;
-    public callingConvention: CallingConvention = "fyr";
+//    public callingConvention: CallingConvention = "fyr";
+    public callingConvention: CallingConvention = "fyrCoroutine";
 }
 
 export class GenericFunctionType extends FunctionType implements GenericType {
