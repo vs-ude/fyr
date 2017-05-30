@@ -1142,7 +1142,6 @@ export class TypeChecker {
             if (!v.type) {
                 if (rtype instanceof ArrayLiteralType || rtype instanceof TupleLiteralType || rtype instanceof ObjectLiteralType) {
                     v.type = this.defaultLiteralType(rnode);
-                    console.log("DEFAULT LIT TYPE", v.type.toString());
                 } else {
                     v.type = rtype;
                 }
@@ -1827,7 +1826,7 @@ export class TypeChecker {
                     if (v.type) {
                         this.checkIsAssignableType(v.type, tindex1, snode.loc);
                     } else {
-                        v.type = snode.lhs.type;
+                        v.type = tindex1;
                     }
                 }
                 break;

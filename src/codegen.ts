@@ -239,9 +239,12 @@ export class CodeGenerator {
                         if (element.heapAlloc) {
                             let storage = this.getSSAType(element.type);
                             b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                            let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
+                            b.assign(b.mem, "store", storage, [v, 0, tmp]);
+                        } else {
+                            let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
+                            b.assign(v, "copy", v.type, [tmp]);
                         }
-                        let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
-                        b.assign(v, "copy", v.type, [tmp]);
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
                     } else if (snode.lhs.op == "array") {
@@ -382,9 +385,29 @@ export class CodeGenerator {
             }
             case "for":
             {
+                let counter: ssa.Variable;
+                let ptr: ssa.Variable;
+                let len: ssa.Variable;
                 this.processScopeVariables(b, vars, snode.scope);
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
+                } else if (snode.condition && (snode.condition.op == "in" || snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
+                    let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
+                    let sliceHeaderAddr = b.assign(b.tmp(), "addr_of", "addr", [sliceHeader]);
+                    ptr = b.assign(b.tmp(), "load", "addr", [sliceHeaderAddr, this.sliceHeader.fieldOffset("data_ptr")]);
+                    len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr, this.sliceHeader.fieldOffset("length")]);
+                    // Initialize a counter with 0
+                    counter = b.declareVar("i32", "$counter");
+                    b.assign(counter, "const", "i32", [0]);
+                    if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
+                        // Allocate memory for the variable if required
+                        let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
+                        let v = vars.get(element);
+                        if (element.heapAlloc) {
+                            let storage = this.getSSAType(element.type);
+                            b.assign(v, "alloc", "addr", [ssa.sizeOf(storage)]);
+                        }
+                    }
                 }
                 let outer = b.block();
                 let loop = b.loop();
@@ -398,7 +421,19 @@ export class CodeGenerator {
                     } else if (snode.condition.op == "in") {
                         throw "TODO"
                     } else if (snode.condition.op == "var_in" || snode.condition.op == "const_in") {
-                        throw "TODO"
+                        let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
+                        let v = vars.get(element);
+                        let storage = this.getSSAType(element.type);
+                        let index = b.assign(b.tmp(), "mul", "i32", [counter, ssa.sizeOf(storage)]);
+                        let addr = b.assign(b.tmp(), "add", "addr", [ptr, index]);
+                        if (element.heapAlloc) {
+                            let tmp = b.assign(b.tmp(), "load", storage, [addr, 0]);
+                            b.assign(b.mem, "store", storage, [v, 0, tmp]);
+                        } else {
+                            b.assign(v, "load", storage, [addr, 0]);
+                        }
+                        let end = b.assign(b.tmp(), "eq", "i32", [len, counter]);
+                        b.br_if(end, outer);
                     } else {
                         let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars);
                         let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
@@ -412,6 +447,8 @@ export class CodeGenerator {
                 b.end();
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
                     this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
+                } else if (snode.condition && (snode.condition.op == "in" || snode.condition.op == "var_in" || snode.condition.op == "const_in")) {
+                    b.assign(counter, "add", "i32", [counter, 1]);
                 }
                 b.br(loop);
                 b.end();
