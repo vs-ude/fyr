@@ -20,6 +20,13 @@
                     mem: memory
                 }
             };
+
+            function recursion(a) {
+                if (a == 0) {
+                    return 0;
+                }
+                return a + recursion(a-1);
+            }
             /* fetch('example.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
@@ -50,14 +57,27 @@
             });
             */
 
-            fetch('example6b.wasm').then(response =>
+            fetch('example6.wasm').then(response =>
+//            fetch('example6b.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
                 let t0 = performance.now();
-                results.instance.exports.measureRecursion(0, 100 * 65536);
+                for(let j = 0; j < 10; j++) {
+                    for(let i = 0; i < 100000; i++) {
+                        recursion(1000);
+                    }
+                }
                 let t1 = performance.now();
+                console.log("Measurment of JS is ", t1 - t0, "ms");
+
+                t0 = performance.now();
+                for(let j = 0; j < 10; j++) {
+//                    results.instance.exports.measureRecursion(0, 100 * 65536);
+                    results.instance.exports.measureRecursion();
+                }
+                t1 = performance.now();
                 console.log("Measurment is ", t1 - t0, "ms");
             });
         </script>

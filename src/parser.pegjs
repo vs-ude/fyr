@@ -205,7 +205,7 @@ returnType
     }
 
 structField
-  = [ \t]* i:identifier [ \t]+ t:type [ \t]* "\n" {
+  = [ \t]* i:identifier [ \t]+ t:type [ \t]* semicolon {
       return new ast.Node({loc: location(), op: "structField", lhs: i, rhs: t});
   }
 

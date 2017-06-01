@@ -18,7 +18,7 @@ function compileModules() {
 	for(var i = 0; i < args.length - 1; i++) {
 		var arg = path.resolve(args[i]);
 //        console.log("Compiling " + arg + "...");
-        let code = fs.readFileSync(arg, 'utf8');
+        let code = fs.readFileSync(arg, 'utf8') + "\n";
         try {
             let mnode = parser.parse(code);
 //            console.log(fnode.stringify(""));
