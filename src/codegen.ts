@@ -1055,7 +1055,29 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "load", storage, [expr.variable, expr.offset]);
             }
             case "typeCast":
-                throw "TODO";
+            {
+                let expr = this.processExpression(f, scope, enode.rhs, b, vars);
+                let t = enode.type;
+                let s = this.getSSAType(t);
+                let s2 = this.getSSAType(enode.rhs.type);
+                if (this.tc.checkIsIntType(t) && enode.rhs.type instanceof UnsafePointerType) {
+                    if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
+                        return expr;
+                    }
+                    throw "TODO"
+                } else if (this.tc.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
+                    if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
+                        return expr;
+                    }
+                    throw "TODO"
+                } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
+                    return expr;
+                } else if (this.tc.checkIsIntType(t) && this.tc.checkIsIntNumber(enode.rhs)) {
+                    throw "TODO"
+                } else {
+                    throw "TODO: conversion not implemented";
+                }
+            }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }

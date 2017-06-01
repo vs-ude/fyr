@@ -1515,7 +1515,7 @@ export class Wasm32Backend {
                 this.returnVariables.push(n.assign);
                 n = n.next[0];                
                 continue;
-            } else if (n.kind == "decl_param" && (n.type instanceof StructType || n.assign.type == "addr")) {
+            } else if (n.kind == "decl_param" && n.type instanceof StructType) {
                 let index = this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "params", offset: index};
                 this.varStorage.set(n.assign, s);

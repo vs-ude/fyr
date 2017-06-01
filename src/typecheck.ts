@@ -2315,7 +2315,22 @@ export class TypeChecker {
                 break;
             }
             case "typeCast":
-                throw "TODO";
+            {
+                let t = this.createType(enode.lhs, scope);
+                this.checkExpression(enode.rhs, scope);
+                if (this.checkIsIntType(t) && enode.rhs.type instanceof UnsafePointerType) {
+                    enode.type = t;
+                } else if (this.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
+                    enode.type = t;
+                } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
+                    enode.type = t;
+                } else if (this.checkIsIntType(t) && this.checkIsIntNumber(enode.rhs)) {
+                    enode.type = t;
+                } else {
+                    throw "TODO: conversion not possible or not implemented";
+                }
+                break;
+            }
             case "ellipsisId":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
             case "optionalId":
@@ -2611,7 +2626,7 @@ export class TypeChecker {
                 }
             }
         } else if (to instanceof PointerType || to instanceof UnsafePointerType) {
-            if (from == this.t_int) {
+            if (from == this.t_int || from == this.t_uint) {
                 return true;
             }
         }
@@ -2670,6 +2685,9 @@ export class TypeChecker {
                 }
                 break;
             case ".":
+                if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+                    return true;
+                }
                 return this.checkIsAddressable(node.lhs, scope, false);
             case "[":
                 if (node.lhs.type instanceof SliceType) {
@@ -2729,11 +2747,21 @@ export class TypeChecker {
         throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
     }
 
-    public checkIsIntNumber(node: Node) {
+    public checkIsIntNumber(node: Node, doThrow: boolean = true): boolean {
         if (node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64 || node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
-            return;
+            return true;
         }
-        throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
+        if (doThrow) {
+            throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
+        }
+        return false;
+    }
+
+    public checkIsIntType(type: Type): boolean {
+        if (type == this.t_int8 || type == this.t_int16 || type == this.t_int32 || type == this.t_int64 || type == this.t_uint8 || type == this.t_uint16 || type == this.t_uint32 || type == this.t_uint64) {
+            return true;
+        }
+        return false;
     }
 
     public checkIsIntOrPointerNumber(node: Node) {
