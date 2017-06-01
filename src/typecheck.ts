@@ -2103,19 +2103,25 @@ export class TypeChecker {
             case ".":
             {
                 this.checkExpression(enode.lhs, scope);
-                if (enode.lhs.type instanceof StructType) {
+                let type: Type = enode.lhs.type;
+                if (type instanceof PointerType || type instanceof UnsafePointerType) {
+                    type = type.elementType;
+                } else if (type instanceof GuardedPointerType) {
+                    throw "TODO";
+                }
+                if (type instanceof StructType) {
                     let name = enode.name.value;
-                    let field = enode.lhs.type.field(name);
+                    let field = type.field(name);
                     if (!field) {
-                        throw new TypeError("Unknown field " + name + " in " + enode.lhs.type.toString(), enode.name.loc);
+                        throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
                     }
                     enode.type = field.type;
-                } else if (enode.lhs.type instanceof InterfaceType) {
+                } else if (type instanceof InterfaceType) {
                     throw "TODO"
-                } else if (enode.lhs.type instanceof ClassType) {
+                } else if (type instanceof ClassType) {
                     throw "TODO"
                 } else {
-                    throw new TypeError("Member access is not possible on type " + enode.lhs.type.toString(), enode.lhs.loc);
+                    throw new TypeError("Member access is not possible on type " + type.toString(), enode.lhs.loc);
                 }
                 break;
             }

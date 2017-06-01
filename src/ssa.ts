@@ -408,7 +408,7 @@ export class Builder {
 
     public assign(assign: Variable, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
         let n = new Node(assign, kind, type, args);
-        if (assign && assign.type) {
+        if (assign && assign.type && assign != this.mem) {
             if (!compareTypes(assign.type, type)) {
                 throw "Variable " + assign.name + " used with wrong type";
             }

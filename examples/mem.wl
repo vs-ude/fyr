@@ -12,3 +12,20 @@ type Block struct {
 type Free struct {
     next #Free
 }
+
+func initializeBlock(b #Block) {
+    for(var i = 0; i < 5; i++) {
+        b.free[i] = 0
+    }
+    for(var i = 5; i < 11; i++) {
+        b.free[i] = 1 << (5 + i)
+    }
+}
+
+func allocInBlock(b #Block, size int) #void {
+    return 0
+}
+
+func freeInBlock(b #Block, ptr #void) {
+
+}

@@ -699,6 +699,20 @@ export class CodeGenerator {
                 }
             case ".":
             {
+                if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
+                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
+                    if (enode.lhs.type.elementType instanceof StructType) {
+                        let s = this.getSSAType(enode.lhs.type.elementType) as ssa.StructType;
+                        if (ptr instanceof ssa.Variable) {
+                            return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
+                        }
+                        return b.assign(b.tmp(), "add", "addr", [ptr, s.fieldOffset(enode.name.value)]);
+                    } else {
+                        throw "TODO interface and class"
+                    }                    
+                } else if (enode.lhs.type instanceof GuardedPointerType) {
+                    throw "TODO";
+                }
                 let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                 if (enode.lhs.type instanceof StructType) {
                     let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
@@ -709,7 +723,7 @@ export class CodeGenerator {
                     let ptr2 = b.assign(b.tmp(), "addr_of", "addr", [ptr]);
                     return new ssa.Pointer(ptr2, s.fieldOffset(enode.name.value));
                 } else {
-                    throw "TODO"
+                    throw "TODO interface and class"
                 }
             }
             default:
@@ -969,6 +983,20 @@ export class CodeGenerator {
                 b.assign(result, "copy", "i8", [0]);
                 b.end();
                 return result;
+            }
+            case ">>":
+            {
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.lhs.type);
+                return b.assign(b.tmp(), this.isSigned(enode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
+            }
+            case "<<":
+            {
+                let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
+                let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                let storage = this.getSSAType(enode.lhs.type);
+                return b.assign(b.tmp(), "shl", storage, [p1, p2]);
             }
             case "id":
             {
