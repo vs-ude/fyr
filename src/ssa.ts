@@ -1164,6 +1164,7 @@ export class Wasm32Backend {
         }
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
+/*
         console.log("========= Stackified ==========");
         console.log(Node.strainToString("", n));
         for(let v of this.varStorage.keys()) {
@@ -1172,6 +1173,7 @@ export class Wasm32Backend {
         }
         console.log("sp -> local " + this.spLocal);
         console.log("bp -> local " + this.bpLocal);
+*/
 
         // Generate function body
         let code: Array<wasm.Node> = [];
@@ -1202,8 +1204,8 @@ export class Wasm32Backend {
         this.wfIsAsync = true;
 
         this.tr.transform(n);
-        console.log("========= State Machine ==========");
-        console.log(Node.strainToString("", n));
+//        console.log("========= State Machine ==========");
+//        console.log(Node.strainToString("", n));
 
         this.traverse(n.next[0], n.blockPartner, null);
         this.stackifySteps();
@@ -1232,6 +1234,7 @@ export class Wasm32Backend {
         }
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
+/*
         console.log("========= Stackified ==========");
         console.log(Node.strainToString("", n));
         for(let v of this.varStorage.keys()) {
@@ -1242,6 +1245,8 @@ export class Wasm32Backend {
         console.log("bp -> local " + this.bpLocal);
         console.log("step -> local " + this.stepLocal);
         console.log("varsFrame = ", this.varsFrame.toDetailedString());
+*/
+
         // Generate function body
         let code: Array<wasm.Node> = [];
         // Put the varsFrame on the heap_stack and set BP
@@ -1520,6 +1525,7 @@ export class Wasm32Backend {
                 n = n.next[0];                
                 continue;
             } else if (n.kind == "decl_param" && n.type instanceof StructType) {
+                // TODO: Pointers must be passed on the stack as well
                 let index = this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "params", offset: index};
                 this.varStorage.set(n.assign, s);
@@ -1710,7 +1716,8 @@ export class Wasm32Backend {
                     if (n.type.params[i-1] instanceof FunctionType) {
                         throw "Implementation error"
                     }
-                    if (n.type.params[i-1] instanceof StructType || n.type.params[i-1] == "addr") {
+                    // TODO: Pointers must be passed on the stack
+                    if (n.type.params[i-1] instanceof StructType /* || n.type.params[i-1] == "addr" */) {
                         this.emitAssign(n.type.params[i-1], n.args[i], "heapStack", code);
                     } else {
                         this.emitAssign(n.type.params[i-1], n.args[i], "wasmStack", code);                        
@@ -1944,7 +1951,8 @@ export class Wasm32Backend {
             // Put parameters on wasm/heap stack
             let paramSize = 0;
             for(let i = 0; i < n.type.params.length; i++) {
-                if (n.type.params[i] instanceof StructType || n.type.params[i] == "addr") {
+                // TODO: Pointers must be passed on the stack, too
+                if (n.type.params[i] instanceof StructType /* || n.type.params[i] == "addr" */) {
                     paramSize += sizeOf(n.type.params[i]);
                     this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", code);
                 } else {
@@ -2513,7 +2521,8 @@ export class Wasm32Backend {
             }
             let paramSize = 0;
             for(let i = 0; i < n.type.params.length; i++) {
-                if (n.type.params[i] instanceof StructType || n.type.params[i] == "addr") {
+                // TODO: Pointers must be pased on the stack
+                if (n.type.params[i] instanceof StructType /* || n.type.params[i] == "addr" */) {
                     paramSize += sizeOf(n.type.params[i]);
                     this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", code);
                 } else {

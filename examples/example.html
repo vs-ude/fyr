@@ -57,6 +57,7 @@
             });
             */
 
+            /*
             fetch('example6.wasm').then(response =>
 //            fetch('example6b.wasm').then(response =>
                 response.arrayBuffer()
@@ -80,6 +81,20 @@
                 t1 = performance.now();
                 console.log("Measurment is ", t1 - t0, "ms");
             });
+            */
+
+            fetch('mem.wasm').then(response =>
+                response.arrayBuffer()
+            ).then(bytes =>
+                WebAssembly.instantiate(bytes, importObject)
+            ).then(results => {
+                results.instance.exports.initializeRootBlock(1 << 16);
+                results.instance.exports.initializeBlock(1 << 16, 2 * (1 << 16));
+                console.log(results.instance.exports.alloc(1 << 16, 1200));
+                console.log(results.instance.exports.alloc(1 << 16, 500));
+                console.log(results.instance.exports.alloc(1 << 16, 501));
+            });
+
         </script>
     </body>
 </html>

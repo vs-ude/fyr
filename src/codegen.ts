@@ -46,7 +46,7 @@ export class CodeGenerator {
             }
         }
 
-        console.log('============ WASM ===============');
+//        console.log('============ WASM ===============');
         console.log(this.wasm.module.toWast(""));
     }
 
@@ -162,15 +162,15 @@ export class CodeGenerator {
         }
         b.end();
 
-        console.log(ssa.Node.strainToString("", b.node));                
+//        console.log(ssa.Node.strainToString("", b.node));                
 
         this.optimizer.optimizeConstants(b.node);
-        console.log('============ OPTIMIZED Constants ===============');
-        console.log(ssa.Node.strainToString("", b.node));
+//        console.log('============ OPTIMIZED Constants ===============');
+//        console.log(ssa.Node.strainToString("", b.node));
 
         this.optimizer.removeDeadCode(b.node);
-        console.log('============ OPTIMIZED Dead code ===============');
-        console.log(ssa.Node.strainToString("", b.node));
+//        console.log('============ OPTIMIZED Dead code ===============');
+//        console.log(ssa.Node.strainToString("", b.node));
 
         this.wasm.generateFunction(b.node, wf);
         if (exportFunc) {
@@ -599,20 +599,24 @@ export class CodeGenerator {
                     let t = this.getSSAType(enode.lhs.type);
                     let index: ssa.Variable | number = 0;
                     if (enode.rhs.op == "int") {
-                        index = parseInt(enode.rhs.value) * size;
+                        index = parseInt(enode.rhs.value);
                     } else {
-                        let tmp_index = this.processExpression(f, scope, enode.rhs, b, vars);
-                        if (size != 1) {
-                            index = b.assign(b.tmp(), "mul", "i32", [tmp_index, size]);
-                        }
+                        index = this.processExpression(f, scope, enode.rhs, b, vars);
                     }
                     let head_addr = b.assign(b.tmp(), "addr_of", "addr", [head]);
                     let len = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("length")]);
                     // Compare 'index' with 'len'
-                    let cmp = b.assign(b.tmp(), "ge", "i32", [index, len]);
+                    let cmp = b.assign(b.tmp(), this.isSigned(enode.rhs.type) ? "ge_s" : "ge_u", "i32", [index, len]);
                     b.ifBlock(cmp);
                     b.assign(null, "trap", null, []);
                     b.end();
+                    if (size != 1) {
+                        if (typeof(index) == "number") {
+                            index *= size;
+                        } else {
+                            index = b.assign(b.tmp(), "mul", "i32", [index, size]);
+                        }
+                    }
                     let ptr = b.assign(b.tmp(), "load", "addr", [head_addr, this.sliceHeader.fieldOffset("data_ptr")]);
                     if (typeof(index) == "number") {
                         return new ssa.Pointer(ptr, index);
@@ -629,7 +633,7 @@ export class CodeGenerator {
                     }
                     let len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
                     // Compare 'index' with 'len'
-                    let cmp = b.assign(b.tmp(), "ge", "i32", [index, len]);
+                    let cmp = b.assign(b.tmp(), this.isSigned(enode.rhs.type) ? "ge_s" : "ge_u", "i32", [index, len]);
                     let zero = b.assign(b.tmp(), "eqz", "addr", [ptr]);
                     let trap = b.assign(b.tmp(), "or", "i32", [cmp, zero]);
                     b.ifBlock(trap);
@@ -658,17 +662,21 @@ export class CodeGenerator {
                             throw "Implementation error " + index + " " +enode.lhs.type.size ;
                         }
                     } else {
-                        let cmp = b.assign(b.tmp(), "ge", "i32", [index, enode.lhs.type.size]);
+                        let cmp = b.assign(b.tmp(), this.isSigned(enode.rhs.type) ? "ge_s" : "ge_u", "i32", [index, enode.lhs.type.size]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
                         b.end();
                     }
                     if (typeof(index) == "number") {
+                        index *= size;
                         if (ptr instanceof ssa.Pointer) {
                             ptr.offset += index;
                             return ptr;
                         }
                         return new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ptr]), index);
+                    }
+                    if (size != 1) {
+                        index = b.assign(b.tmp(), "mul", "i32", [index, size]);
                     }
                     if (ptr instanceof ssa.Pointer) {
                         return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr.variable, index]), ptr.offset);
@@ -1065,17 +1073,29 @@ export class CodeGenerator {
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
                     } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
-                        return b.assign(b.tmp(), "wrap", s2, [expr]);
+                        if (ssa.sizeOf(s2) == 8) {
+                            return b.assign(b.tmp(), "wrap", s2, [expr]);
+                        }
+                        return expr;
                     }
-                    return b.assign(b.tmp(), "extend", s2, [expr]);
+                    if (ssa.sizeOf(s) == 8) {
+                        return b.assign(b.tmp(), "extend", s2, [expr]);
+                    }
+                    return expr;
                 } else if (this.tc.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
                     // Convert integer to pointer
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
                     } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
-                        return b.assign(b.tmp(), "wrap", s2, [expr]);
+                        if (ssa.sizeOf(s2) == 8) {
+                            return b.assign(b.tmp(), "wrap", s2, [expr]);
+                        }
+                        return expr;
                     }
-                    return b.assign(b.tmp(), "extend", s2, [expr]);
+                    if (ssa.sizeOf(s) == 8) {
+                        return b.assign(b.tmp(), "extend", s2, [expr]);
+                    }
+                    return expr;
                 } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
                     // Convert pointers
                     return expr;
@@ -1084,9 +1104,15 @@ export class CodeGenerator {
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
                     } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
-                        return b.assign(b.tmp(), "wrap", s2, [expr]);
+                        if (ssa.sizeOf(s2) == 8) {
+                            return b.assign(b.tmp(), "wrap", s2, [expr]);
+                        }
+                        return expr;
                     }
-                    return b.assign(b.tmp(), "extend", s2, [expr]);
+                    if (ssa.sizeOf(s) == 8) {
+                        return b.assign(b.tmp(), "extend", s2, [expr]);
+                    }
+                    return expr;
                 } else {
                     throw "TODO: conversion not implemented";
                 }

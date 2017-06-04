@@ -37,7 +37,7 @@ func initializeBlock(r #RootBlock, b #Block) {
 
 func split(r #RootBlock, f #Free, index uint) {
     index--
-    var f2 #Free = (uint)f + (1 << index)
+    var f2 #Free = (uint)f + (1 << (index + 5))
     f2.next = r.free[index]
     r.free[index] = f2
 }
