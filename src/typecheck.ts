@@ -2058,12 +2058,22 @@ export class TypeChecker {
                     }
                     enode.op = "int";
                 } else if (enode.lhs.op == "int") {
+                    if (enode.op == "<<" || enode.op == ">>") {
+                        this.checkIsUnsignedNumber(enode.rhs);
+                    }
                     this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
                 } else if (enode.rhs.op == "int") {
-                    this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
+                    if (enode.op == "<<" || enode.op == ">>") {
+                        this.unifyLiterals(this.t_uint, enode.rhs, enode.loc);
+                    } else {
+                        this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
+                    }
                 } else {
+                    if (enode.op == "<<" || enode.op == ">>") {
+                        this.checkIsUnsignedNumber(enode.rhs);
+                    }
                     if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
-                        this.checkTypeEquality(this.t_int, enode.rhs.type, enode.rhs.loc);
+                        this.checkTypeEquality(this.t_uint, enode.rhs.type, enode.rhs.loc);
                     } else {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
                     }
@@ -2731,6 +2741,13 @@ export class TypeChecker {
             return;
         }
         throw new TypeError("Expected a signed numeric type, but got " + node.type.name, node.loc);
+    }
+
+    public checkIsUnsignedNumber(node: Node) {
+        if (node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
+            return;
+        }
+        throw new TypeError("Expected an unsigned numeric type, but got " + node.type.name, node.loc);
     }
 
     public checkIsBool(node: Node) {
