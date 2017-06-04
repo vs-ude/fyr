@@ -1474,7 +1474,6 @@ export class Wasm32Backend {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
-            // TODO: Check identity, not the name
             if (n.assign == v) {
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
                     return null;
@@ -1500,7 +1499,7 @@ export class Wasm32Backend {
                 return null;
             }
             for(let a of n.args) {
-                if (a instanceof Variable && a.name == v.name) {
+                if (a instanceof Variable && a == v) {
                     return null;
                 }
             }
