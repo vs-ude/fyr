@@ -670,6 +670,33 @@ export class BrTable extends Node {
     public depths: Array<number>;
 }
 
+export class Wrap extends Node {
+    public get op(): string {
+        return "wrap";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "i32.wrap/i64";
+    }
+}
+
+export class Extend extends Node {
+    constructor(signed: boolean) {
+        super();
+        this.signed = signed;
+    }
+
+    public get op(): string {
+        return "extend";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "i64.wrap/i32_" + (this.signed ? "_s" : "_u");
+    }
+
+    private signed: boolean;
+}
+
 export class Unreachable extends Node {
     public get op(): string {
         return "unreachable";

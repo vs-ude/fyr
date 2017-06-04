@@ -1,6 +1,6 @@
 import * as wasm from "./wasm"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64";
 
 export class StructType {
@@ -44,6 +44,10 @@ export class StructType {
     private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
     public name: string;
+}
+
+export function isSigned(x: Type): boolean {
+    return x == "s8" || x == "s16" || x == "s32" || x == "s64";
 }
 
 export function sizeOf(x: Type | StructType): number {
@@ -1803,6 +1807,12 @@ export class Wasm32Backend {
                 }
                 this.emitAssign(n.type, n, null, code);
                 n = n.next[0];
+            } else if (n.kind == "wrap" || n.kind == "extend") {
+                if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
+                    throw "Implementation error"
+                }
+                this.emitAssign(n.type, n, null, code);
+                n = n.next[0];
             } else if (n.kind == "const" || this.isBinaryInstruction(n.kind) || this.isUnaryInstruction(n.kind)) {
                 if (n.type instanceof FunctionType || !n.assign) {
                     throw "Implementation error"
@@ -2451,6 +2461,30 @@ export class Wasm32Backend {
             this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
             let width: wasm.StackType = this.stackTypeOf(n.type);
             code.push(new wasm.BinaryInstruction(width, n.kind as wasm.BinaryOp));
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "extend") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            code.push(new wasm.Extend(isSigned(n.type)));
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "wrap") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            code.push(new wasm.Wrap());
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
             }

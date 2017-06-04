@@ -222,7 +222,7 @@ typeList
     }
 
 block
-  = "{" [ \t]* "\n" [ \t\n]* s:(statementOrComment)* "}" [ \t]* {
+  = "{" [ \t]* newline [ \t\n]* s:(statementOrComment)* "}" [ \t]* {
       return s;
   }
 
@@ -241,6 +241,10 @@ comments
       }
       return undefined;
     }
+
+newline
+  = "\n"
+  / comment
 
 comment
   = "//" c:$([^\n]*) "\n" { return new ast.Node({loc: location(), op: "comment", value: c}); }
@@ -747,6 +751,7 @@ keyValue
 
 number "number"
   = digits:$([0-9]* "." [0-9]+) { return new ast.Node({loc: location(), op: "float", value: digits}); }
+  / "0x" digits:$([0-9a-f]+) { return new ast.Node({loc: location(), op: "int", value: "0x" + digits}); }
   / digits:$([0-9]+) { return new ast.Node({loc: location(), op: "int", value: digits}); }
 
 member

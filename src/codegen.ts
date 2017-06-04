@@ -1061,19 +1061,32 @@ export class CodeGenerator {
                 let s = this.getSSAType(t);
                 let s2 = this.getSSAType(enode.rhs.type);
                 if (this.tc.checkIsIntType(t) && enode.rhs.type instanceof UnsafePointerType) {
+                    // Convert pointer to integer
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
+                    } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
+                        return b.assign(b.tmp(), "wrap", s2, [expr]);
                     }
-                    throw "TODO"
+                    return b.assign(b.tmp(), "extend", s2, [expr]);
                 } else if (this.tc.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
+                    // Convert integer to pointer
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
+                    } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
+                        return b.assign(b.tmp(), "wrap", s2, [expr]);
                     }
-                    throw "TODO"
+                    return b.assign(b.tmp(), "extend", s2, [expr]);
                 } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
+                    // Convert pointers
                     return expr;
                 } else if (this.tc.checkIsIntType(t) && this.tc.checkIsIntNumber(enode.rhs)) {
-                    throw "TODO"
+                    // Convert between integers
+                    if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
+                        return expr;
+                    } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
+                        return b.assign(b.tmp(), "wrap", s2, [expr]);
+                    }
+                    return b.assign(b.tmp(), "extend", s2, [expr]);
                 } else {
                     throw "TODO: conversion not implemented";
                 }
