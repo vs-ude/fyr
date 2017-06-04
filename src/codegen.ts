@@ -818,7 +818,7 @@ export class CodeGenerator {
             case "==":
                 return this.processCompare("eq", f, scope, enode, b, vars);
             case "!=":
-                return this.processCompare("neq", f, scope, enode, b, vars);
+                return this.processCompare("ne", f, scope, enode, b, vars);
             case "<":
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
                     return this.processCompare("lt", f, scope, enode, b, vars);
