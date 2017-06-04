@@ -1490,7 +1490,7 @@ export class Wasm32Backend {
 
     /**
      * Like 'findInline' but is assures that the variable assigned by the returned node is not
-     * used between 'n' and its assignment.
+     * read between 'n' and its assignment.
      * The variable assignment can then be inlined with a tee.
      */
     private findInlineForMultipleReads(n: Node, v: Variable, doNotInline: Array<Variable>): Node {
@@ -1498,10 +1498,8 @@ export class Wasm32Backend {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
-            for(let a of n.args) {
-                if (a instanceof Variable && a == v) {
-                    return null;
-                }
+            if (this.readsFromVariable(n, v)) {
+                return null;
             }
             if (n.assign == v) {
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
@@ -1524,6 +1522,19 @@ export class Wasm32Backend {
         for(let a of n.args) {
             if (a instanceof Node) {
                 if (this.assignsToVariable(a, vars)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private readsFromVariable(n: Node, v: Variable): boolean {
+        for(let a of n.args) {
+            if (a instanceof Variable && a == v) {
+                return true;
+            } else if (a instanceof Node) {
+                if (this.readsFromVariable(a, v)) {
                     return true;
                 }
             }
