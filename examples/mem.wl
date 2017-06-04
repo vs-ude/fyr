@@ -57,8 +57,8 @@ func split(r #RootBlock, f #Free, index uint) {
     }
     r.free[index] = f2
     // Mark the the new free area as the beginning of an area
-    var block #Block = (uint)f &^ 0xffff
-    var block_nr = ((uint)f & 0xffff) >> 5
+    var block #Block = (uint)f2 &^ 0xffff
+    var block_nr = ((uint)f2 & 0xffff) >> 5
     block.area[block_nr >> 3] |= (byte)(1 << (block_nr & 7))
 }
 
@@ -124,8 +124,9 @@ func alloc(r #RootBlock, size int) #void {
     return alloc(r, size)
 }
 
-func freeInBlock(r #RootBlock, block #Block, ptr #void) {
+func free(r #RootBlock, ptr #void) {
     // Compute start of block
+    var block #Block = (uint)ptr &^ 0xffff
     var block_nr = ((uint)ptr & 0xffff) >> 5
     for(var i uint = 0; i < 11; i++) {
         if (block.area[block_nr >> 3] & (byte)(1 << (block_nr & 7)) == 1) {

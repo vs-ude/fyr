@@ -1438,11 +1438,12 @@ export class Wasm32Backend {
                 if (n.kind == "if" && n.next[1]) {
                     this.stackifyStep(n.next[1], n.blockPartner);
                 }
+                let doNotInline: Array<Variable> = [];
                 for(let i = 0; i < n.args.length; i++) {
                     let a = n.args[i];
                     if (a instanceof Variable && a.readCount == 1) {
                         // Try to inline the computation
-                        let inline = this.findInline(n.prev[0], a);
+                        let inline = this.findInline(n.prev[0], a, doNotInline);
                         if (inline && (inline.kind != "call_end" || n.kind == "return" || n.kind == "store")) {
                             inline.assign = null;
                             n.args[i] = inline;
@@ -1450,11 +1451,14 @@ export class Wasm32Backend {
                         }
                     } else if (a instanceof Variable && a.writeCount == 1) {
                         // Try to inline the computation
-                        let inline = this.findInlineForMultipleReads(n.prev[0], a);
+                        let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline);
                         if (inline && (inline.kind != "call_end" || n.kind == "return" || n.kind == "store")) {
                             n.args[i] = inline;
                             Node.removeNode(inline);
                         }
+                    }
+                    if (a instanceof Variable) {
+                        doNotInline.push(a);
                     }
                 }
                 if (n.kind == "step" || n.kind == "goto_step") {
@@ -1465,13 +1469,17 @@ export class Wasm32Backend {
         }
     }
 
-    private findInline(n: Node, v: Variable): Node {
+    private findInline(n: Node, v: Variable, doNotInline: Array<Variable>): Node {
         for( ;n; ) {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
             }
+            // TODO: Check identity, not the name
             if (n.assign && n.assign.name == v.name) {
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                    return null;
+                }
+                if (this.assignsToVariable(n, doNotInline)) {
                     return null;
                 }
                 return n;
@@ -1486,7 +1494,7 @@ export class Wasm32Backend {
      * used between 'n' and its assignment.
      * The variable assignment can then be inlined with a tee.
      */
-    private findInlineForMultipleReads(n: Node, v: Variable): Node {
+    private findInlineForMultipleReads(n: Node, v: Variable, doNotInline: Array<Variable>): Node {
         for( ;n; ) {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
@@ -1496,8 +1504,12 @@ export class Wasm32Backend {
                     return null;
                 }
             }
+            // TODO: Check identity, not the name
             if (n.assign && n.assign.name == v.name) {
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                    return null;
+                }
+                if (this.assignsToVariable(n, doNotInline)) {
                     return null;
                 }
                 return n;
@@ -1505,6 +1517,20 @@ export class Wasm32Backend {
             n = n.prev[0];
         }
         return null;
+    }
+
+    private assignsToVariable(n: Node, vars: Array<Variable>): boolean {
+        if (vars.indexOf(n.assign) != -1) {
+            return true;
+        }
+        for(let a of n.args) {
+            if (a instanceof Node) {
+                if (this.assignsToVariable(a, vars)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private analyzeVariableStorage(start: Node, end: Node, locals: Wasm32LocalVariableList) {

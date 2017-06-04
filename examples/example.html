@@ -91,9 +91,15 @@
                 results.instance.exports.initializeRootBlock(1 << 16);
                 results.instance.exports.initializeBlock(1 << 16, 2 * (1 << 16));
                 console.log(results.instance.exports.alloc(1 << 16, 1200));
-                console.log(results.instance.exports.alloc(1 << 16, 500));
+                let area1 = results.instance.exports.alloc(1 << 16, 500);
+                console.log("Area1", area1);
                 console.log(results.instance.exports.alloc(1 << 16, 501));
                 console.log(results.instance.exports.alloc(1 << 16, 502));
+                console.log("Freeing", area1)
+                results.instance.exports.free(1 << 16, area1);
+                console.log("Freed", area1)
+                let area5 = results.instance.exports.alloc(1 << 16, 503);
+                console.log(area5);
             });
 
         </script>
