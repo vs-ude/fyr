@@ -1475,7 +1475,7 @@ export class Wasm32Backend {
                 return null;
             }
             // TODO: Check identity, not the name
-            if (n.assign && n.assign.name == v.name) {
+            if (n.assign == v) {
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
                     return null;
                 }
@@ -1504,8 +1504,7 @@ export class Wasm32Backend {
                     return null;
                 }
             }
-            // TODO: Check identity, not the name
-            if (n.assign && n.assign.name == v.name) {
+            if (n.assign == v) {
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
                     return null;
                 }
