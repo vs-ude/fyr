@@ -498,11 +498,12 @@ export class SetGlobal extends Node {
 }
 
 export class Load extends Node {
-    constructor(type: StackType, asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null, offset: number = 0) {
+    constructor(type: StackType, asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null, offset: number = 0, align: number | null = null) {
         super();
         this.type = type;
         this.asType = asType;
         this.offset = offset;
+        this.align = align;
     }
 
     public get op(): string {
@@ -510,20 +511,22 @@ export class Load extends Node {
     }
 
     public toWast(indent: string): string {
-        return indent + this.type + ".load" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "");
+        return indent + this.type + ".load" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "") + (this.align !== null ? " align=" + this.align.toString() : "");
     }       
 
     public type: StackType;
     public offset: number;
     public asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u"; 
+    public align: number;
 }
 
 export class Store extends Node {
-    constructor(type: StackType, asType: null | "8"| "16" | "32" = null, offset: number = 0) {
+    constructor(type: StackType, asType: null | "8"| "16" | "32" = null, offset: number = 0, align: number | null = null) {
         super();
         this.type = type;
         this.asType = asType;
         this.offset = offset;
+        this.align = align;
     }
 
     public get op(): string {
@@ -531,12 +534,13 @@ export class Store extends Node {
     }
 
     public toWast(indent: string): string {
-        return indent + this.type + ".store" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "");
+        return indent + this.type + ".store" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "") + (this.align !== null ? " align=" + this.align.toString() : "");
     }       
 
     public type: StackType;
     public offset: number;
     public asType: null | "8" | "16" | "32"; 
+    public align: number;
 }
 
 export class If extends Node {

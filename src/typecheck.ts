@@ -1638,17 +1638,20 @@ export class TypeChecker {
                     }
                 } else {
                     this.checkExpression(snode.lhs, scope);
-                    if (snode.lhs.op == "tuple") {
+/*                    if (snode.lhs.op == "tuple") {
                         if (!(f.type.returnType instanceof TupleType)) {
                             throw new TypeError("Mismatch in return type", snode.loc);                            
+                        }
+                        if (f.type.returnType.types.length != snode.lhs.parameters.length) {
+                            throw new TypeError("Mismatch in return type. Tuples have different length", snode.loc);                                
                         }
                         for(let i = 0; i < snode.lhs.parameters.length; i++) {
                             let pnode = snode.lhs.parameters[i];
                             this.checkIsAssignableNode(f.type.returnType.types[i], pnode);
                         }
-                    } else {
-                        this.checkIsAssignableNode(f.type.returnType, snode.lhs);
-                    }
+                    } else { */
+                    this.checkIsAssignableNode(f.type.returnType, snode.lhs);
+//                    }
                 }
                 break;
             case "break":
@@ -2912,7 +2915,7 @@ export class TypeChecker {
             return true;
         }
         if (node.op == "[" && node.type != this.t_string) {
-            return true;
+            return this.checkIsLeftHandSide(node.lhs, doNotThrow);
         }
         if (doNotThrow) {
             return false;
