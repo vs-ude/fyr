@@ -46,6 +46,33 @@ export class StructType {
     public name: string;
 }
 
+export function alignmentOf(x: Type | StructType): number {
+    if (x instanceof StructType) {
+        if (x.fields.length == 0) {
+            return 1;
+        }
+        return alignmentOf(x.fields[0][1]);
+    }
+    switch(x) {
+        case "i8":
+        case "s8":
+            return 1;
+        case "i16":
+        case "s16":
+            return 2;
+        case "i32":
+        case "s32":
+        case "addr":
+        case "ptr":
+        case "f32":
+            return 4;
+        case "i64":
+        case "s64":
+        case "f64":
+            return 8;
+    }
+}
+
 export function isSigned(x: Type): boolean {
     return x == "s8" || x == "s16" || x == "s32" || x == "s64";
 }
@@ -1072,14 +1099,16 @@ class Wasm32LocalVariableList {
 }
 
 export class Wasm32Backend {
-    constructor() {
-         this.tr = new SMTransformer();
-         this.module = new wasm.Module();
-         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
-         this.varsFrameHeader = new StructType();
-         this.varsFrameHeader.addField("$func", "i32");
-         this.varsFrameHeader.addField("$sp", "i32");
-         this.varsFrameHeader.addField("$step", "i32");
+    constructor(emitIR: boolean, emitIRFunction: string | null) {
+        this.emitIR = emitIR;
+        this.emitIRFunction = emitIRFunction;
+        this.tr = new SMTransformer();
+        this.module = new wasm.Module();
+        this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
+        this.varsFrameHeader = new StructType();
+        this.varsFrameHeader.addField("$func", "i32");
+        this.varsFrameHeader.addField("$sp", "i32");
+        this.varsFrameHeader.addField("$step", "i32");
     }
 
     public importFunction(name: string, from: string, type: FunctionType): wasm.FunctionImport {
@@ -1167,16 +1196,16 @@ export class Wasm32Backend {
         }
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
-/*
-        console.log("========= Stackified ==========");
-        console.log(Node.strainToString("", n));
-        for(let v of this.varStorage.keys()) {
-            let s = this.varStorage.get(v);
-            console.log(v.name + " -> ", s.storageType, s.offset);
+        if (this.emitIR || this.emitIRFunction == wf.name) {
+            console.log("========= Stackified ==========");
+            console.log(Node.strainToString("", n));
+            for(let v of this.varStorage.keys()) {
+                let s = this.varStorage.get(v);
+                console.log(v.name + " -> ", s.storageType, s.offset);
+            }
+            console.log("sp -> local " + this.spLocal);
+            console.log("bp -> local " + this.bpLocal);
         }
-        console.log("sp -> local " + this.spLocal);
-        console.log("bp -> local " + this.bpLocal);
-*/
 
         // Generate function body
         let code: Array<wasm.Node> = [];
@@ -1237,18 +1266,18 @@ export class Wasm32Backend {
         }
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
-/*
-        console.log("========= Stackified ==========");
-        console.log(Node.strainToString("", n));
-        for(let v of this.varStorage.keys()) {
-            let s = this.varStorage.get(v);
-            console.log(v.name + " -> ", s.storageType, s.offset);
+        if (this.emitIR || this.emitIRFunction == wf.name) {
+            console.log("========= Stackified ==========");
+            console.log(Node.strainToString("", n));
+            for(let v of this.varStorage.keys()) {
+                let s = this.varStorage.get(v);
+                console.log(v.name + " -> ", s.storageType, s.offset);
+            }
+            console.log("sp -> local " + this.spLocal);
+            console.log("bp -> local " + this.bpLocal);
+            console.log("step -> local " + this.stepLocal);
+            console.log("varsFrame = ", this.varsFrame.toDetailedString());
         }
-        console.log("sp -> local " + this.spLocal);
-        console.log("bp -> local " + this.bpLocal);
-        console.log("step -> local " + this.stepLocal);
-        console.log("varsFrame = ", this.varsFrame.toDetailedString());
-*/
 
         // Generate function body
         let code: Array<wasm.Node> = [];
@@ -2196,22 +2225,29 @@ export class Wasm32Backend {
 
     private emitCopy(type: Type | StructType, code: Array<wasm.Node>) {
         let size = sizeOf(type);
+        let align = alignmentOf(type);
         switch (size) {
             case 1:
-                code.push(new wasm.Load("i32", "8_u", 0));
-                code.push(new wasm.Store("i32", "8", 0));
+                code.push(new wasm.Load("i32", "8_u", 0, align));
+                code.push(new wasm.Store("i32", "8", 0, align));
                 break;
             case 2:
-                code.push(new wasm.Load("i32", "16_u", 0));
-                code.push(new wasm.Store("i32", "16", 0));
+                code.push(new wasm.Load("i32", "16_u", 0, align));
+                code.push(new wasm.Store("i32", "16", 0, align));
                 break;
             case 4:
-                code.push(new wasm.Load("i32", null, 0));
-                code.push(new wasm.Store("i32", null, 0));
+                code.push(new wasm.Load("i32", null, 0, align));
+                code.push(new wasm.Store("i32", null, 0, align));
                 break;
             case 8:
-                code.push(new wasm.Load("i64", null, 0, 4));
-                code.push(new wasm.Store("i64", null, 0, 4));
+                code.push(new wasm.Load("i64", null, 0, align));
+                code.push(new wasm.Store("i64", null, 0, align));
+                break;
+            case 12:
+                code.push(new wasm.Load("i64", null, 0, align));
+                code.push(new wasm.Store("i64", null, 0, align));
+                code.push(new wasm.Load("i32", null, 0, align));
+                code.push(new wasm.Store("i32", null, 0, align));
                 break;
             default:
                 code.push(new wasm.Constant("i32", sizeOf(type)));
@@ -2797,6 +2833,8 @@ export class Wasm32Backend {
     private tmpF64Local: number;
     private wf: wasm.Function;
     private wfIsAsync: boolean;
+    private emitIR: boolean;
+    private emitIRFunction: string | null;
 }
 
 function main() {
@@ -2899,7 +2937,7 @@ function main() {
     console.log('============ OPTIMIZED Dead code ===============');
     console.log(Node.strainToString("", b.node));
 
-    let back = new Wasm32Backend();
+    let back = new Wasm32Backend(true, null);
     var wf = back.declareFunction(b.node.name);
     back.generateFunction(b.node, wf);
     console.log('============ WAST ===============');

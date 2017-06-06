@@ -9,7 +9,7 @@ export class CodeGenerator {
         this.emitIR = emitIR;
         this.emitNoWasm = emitNoWasm;
         this.emitFunction = emitFunction;
-        this.wasm = new ssa.Wasm32Backend();
+        this.wasm = new ssa.Wasm32Backend(emitIR, emitFunction);
         this.wasm.module.importMemory("imports", "mem");
         this.optimizer = new ssa.Optimizer();
         this.sliceHeader = new ssa.StructType();
@@ -51,6 +51,7 @@ export class CodeGenerator {
 
 //        console.log('============ WASM ===============');
         if (!this.emitNoWasm) {
+            console.log("FUCK, ", this.emitNoWasm)
             console.log(this.wasm.module.toWast(""));
         }
     }
