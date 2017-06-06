@@ -2174,7 +2174,7 @@ export class Wasm32Backend {
                 this.emitStructAssign1(type, n, code);
             }
             if (n instanceof Node && n.assign && stack) {
-                code.push(new wasm.SetLocal(this.getTmpLocal("i32")));
+                code.push(new wasm.TeeLocal(this.getTmpLocal("i32")));
             }
 
             // Copy
@@ -2772,25 +2772,25 @@ export class Wasm32Backend {
         switch(type) {
             case "i32":
                 if (this.tmpI32Local == -1) {
-                    this.tmpI32Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.tmpI32Local = this.wf.parameters.length + this.wf.locals.length;
                     this.wf.locals.push(type);
                 }
                 return this.tmpI32Local;
             case "i64":
                 if (this.tmpI64Local == -1) {
-                    this.tmpI64Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.tmpI64Local = this.wf.parameters.length + this.wf.locals.length;
                     this.wf.locals.push(type);
                 }
                 return this.tmpI64Local;
             case "f32":
                 if (this.tmpF32Local == -1) {
-                    this.tmpF32Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.tmpF32Local = this.wf.parameters.length + this.wf.locals.length;
                     this.wf.locals.push(type);
                 }
                 return this.tmpF32Local;
             case "f64":
                 if (this.tmpF64Local == -1) {
-                    this.tmpF64Local = this.wf.parameters.length + this.wf.results.length + this.wf.locals.length;
+                    this.tmpF64Local = this.wf.parameters.length + this.wf.locals.length;
                     this.wf.locals.push(type);
                 }
                 return this.tmpF64Local;

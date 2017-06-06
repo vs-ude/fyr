@@ -51,7 +51,6 @@ export class CodeGenerator {
 
 //        console.log('============ WASM ===============');
         if (!this.emitNoWasm) {
-            console.log("FUCK, ", this.emitNoWasm)
             console.log(this.wasm.module.toWast(""));
         }
     }
