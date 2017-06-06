@@ -89,7 +89,7 @@
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
                 console.log("Init root ...")
-                results.instance.exports.initializeRootBlock(1 << 16, 100 * 65536);
+                results.instance.exports.initializeRootBlock(1 << 16, 98, 100 * 65536);
                 console.log("Init block ...");
                 results.instance.exports.initializeBlock(1 << 16, 2 * (1 << 16), 100 * 65536);
                 console.log("alloc 1200 ...");

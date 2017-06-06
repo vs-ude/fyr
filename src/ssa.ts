@@ -653,9 +653,9 @@ export class Builder {
     private countReadsAndWrites(n: Node) {
         if (n.assign) {
             n.assign.writeCount++;
-            if (n.assign.isTemporary && n.assign.writeCount > 1) {
-                throw "Variable " + n.assign.name + " is temporary but assigned more than once";
-            }
+//            if (n.assign.isTemporary && n.assign.writeCount > 1) {
+//                throw "Variable " + n.assign.name + " is temporary but assigned more than once";
+//            }
         }
         for(let v of n.args) {
             if (v instanceof Variable) {

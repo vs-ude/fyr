@@ -3,10 +3,23 @@ import {
 } from "imports"
 
 type RootBlock struct {
-    // Pointers to free blocks of size 1 << (5 + i).
-    free  [11]#Free  // 11 * 4 = 44 Bytes
+    // Pointers to free areas of size 1 << (5 + i).
+    freeAreas  [11]#FreeArea  // 11 * 4 = 44 Bytes
+    dummy int32               // Alignment
+    // Pointers to free block sequences of "(1 << i) <= count < (1 << (i+1))" blocks.
+    // The largest allocatable size is 2GB
+    freeBlocks [15]#FreeBlock // 15 * 4 Bytes = 60 Bytes
+    dummy2 int32              // Alignment
+    blocks [8192]byte         // 65536 * 1 Bit = 8192 Bytes
 }
 
+type FreeBlock struct {
+    next #FreeBlock
+    prev #FreeBlock
+    count uint // Number of blocks in the sequence
+}
+
+// Blocks are 64KB large and split into smaller areas.
 type Block struct {
     // One bit per block. If 1, the block is the beginning of an area.
     // Areas are split (if necessary) upon allocation, and rejoined upon free.
@@ -21,15 +34,32 @@ type Block struct {
     data  [65536 - 256 - 512]byte
 }
 
-type Free struct {
-    next #Free
-    prev #Free
+type FreeArea struct {
+    next #FreeArea
+    prev #FreeArea
     size uint
 }
 
-func initializeRootBlock(r #RootBlock) {
+// blockCount is the number of free blocks, not including the root block.
+func initializeRootBlock(r #RootBlock, blockCount uint) {
     for(var i = 0; i < 11; i++) {
-        r.free[i] = 0
+        r.freeAreas[i] = 0
+    }
+    // Create a linked list of all blocks
+    var b #FreeBlock = ((uint)r &^ 0xffff) + (1 << 16)
+    var prev #FreeBlock
+    for(var i uint = 0; i < blockCount; i++) {
+        b.prev = prev
+        b.next = (uint)b + 1 << 16
+        prev = b
+        b = b.next
+    }
+    for(var i uint = 0; i < 15; i++) {
+        if (1 << i <= blockCount && blockCount < 1 << (i+1)) {
+            r.freeBlocks[i] = b
+        } else {
+            r.freeBlocks[i] = 0
+        }
     }
 }
 
@@ -43,34 +73,39 @@ func initializeBlock(r #RootBlock, b #Block) {
     // Mark the first 1024 byte area as in-use.
     b.mark[0] = 3
     for(var i uint = 5; i < 11; i++) {
-        var f #Free = 1 << (5 + i) + (uint)b
-        f.next = r.free[i]
+        var f #FreeArea = 1 << (5 + i) + (uint)b
+        f.next = r.freeAreas[i]
         f.prev = 0
         f.size = 1 << (5 + i)
         if (f.next != 0) {
             f.next.prev = f
         }
-        r.free[i] = f
+        r.freeAreas[i] = f
         var area_nr = 1 << i
         logNumber((int)f)
         b.area[area_nr >> 3] |= (byte)(1 << (area_nr & 7))
     }
 }
 
-func split(r #RootBlock, f #Free, index uint) {
+func split(r #RootBlock, f #FreeArea, index uint) {
     index--
     // Split the free area and add the upper half to the free-list
-    var f2 #Free = (uint)f + (1 << (index + 5))
-    f2.next = r.free[index]
+    var f2 #FreeArea = (uint)f + (1 << (index + 5))
+    f2.next = r.freeAreas[index]
     f2.prev = 0
     if (f2.next != 0) {
         f2.next.prev = f2
     }
-    r.free[index] = f2
+    r.freeAreas[index] = f2
     // Mark the the new free area as the beginning of an area
     var block #Block = (uint)f2 &^ 0xffff
     var area_nr = ((uint)f2 & 0xffff) >> 5
     block.area[area_nr >> 3] |= (byte)(1 << (area_nr & 7))
+}
+
+func allocBlocks(r #RootBlock, count uint) #void {
+    // TODO
+    return 0
 }
 
 // epoch is either 1 (binary 01) or 2 (binary 10) to indicate the current GC epoch.
@@ -79,7 +114,8 @@ func alloc(r #RootBlock, size uint, epoch uint) #void {
     // Determine the granularity
     var index uint
     if (size > 1<<15) {             // Needs entire blocks
-        // TODO: allocate a sequence of blocks
+        // allocate a sequence of blocks
+        return allocBlocks(r, (size + 0xffff) / (1<<16)) 
     } else if (size > 1 << 14) {    // 32k
         index = 10
     } else if (size > 1 << 13) {    // 16k
@@ -108,11 +144,11 @@ func alloc(r #RootBlock, size uint, epoch uint) #void {
     var targetIndex = index
     for(; index < 11; index++) {
         // Get a free area of the requested or larger size
-        var f = r.free[index]
+        var f = r.freeAreas[index]
         if (f == 0) {
             continue
         }
-        r.free[index] = f.next
+        r.freeAreas[index] = f.next
         if (f.next != 0) {
             f.next.prev = 0
         }
@@ -141,8 +177,8 @@ func alloc(r #RootBlock, size uint, epoch uint) #void {
         return (#void)f
     }
 
-    // Nothing free
-    // TODO: Add one more block and allocate again
+    // Nothing free. Add one more block and allocate again
+    initializeBlock(r, (#Block)allocBlocks(r, 1))
     return alloc(r, size, epoch)
 }
 
@@ -164,7 +200,7 @@ func free(r #RootBlock, ptr #void) {
             block.mark[area_nr >> 2] &^= (byte)(3 << ((area_nr & 3) << 1))
 
             // Comnpute the address of the free area
-            var f #Free = (uint)block + area_nr << 5
+            var f #FreeArea = (uint)block + area_nr << 5
 
             // Try to merge with a buddy, but only up to a size of 16k. 32k areas are not merged, because each block has only one
             for(; index < 10; index++) {
@@ -175,14 +211,14 @@ func free(r #RootBlock, ptr #void) {
                     break
                 }
                 // Remove the buddy from the free list
-                var f_buddy #Free = (uint)block + buddy_area_nr << 5
+                var f_buddy #FreeArea = (uint)block + buddy_area_nr << 5
                 if (f_buddy.next != 0) {
                     f_buddy.next.prev = f_buddy.prev
                 }
                 if (f_buddy.prev != 0) {
                     f_buddy.prev.next = f_buddy.next
                 } else {
-                    r.free[index] = f_buddy.next
+                    r.freeAreas[index] = f_buddy.next
                 }
                 // Take the area with the smaller area_nr
                 if (buddy_area_nr < area_nr) {
@@ -195,12 +231,12 @@ func free(r #RootBlock, ptr #void) {
             }
 
             // Add the area to the free list
-            f.next = r.free[index]
+            f.next = r.freeAreas[index]
             f.prev = 0
             if (f.next != 0) {
                 f.next.prev = f
             }
-            r.free[index] = f
+            r.freeAreas[index] = f
 
             return
         }
