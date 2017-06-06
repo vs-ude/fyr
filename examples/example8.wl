@@ -14,6 +14,11 @@ func ptr1() byte {
     return x[idx()]
 }
 
+func ptr1b() byte {
+    var x = "Hallo"
+    return x[42]
+}
+
 func ptr2() {
     var arr = [1,2,3]
     arr[idx()] = idx()

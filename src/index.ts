@@ -24,7 +24,7 @@ function compileModules() {
 //            console.log(fnode.stringify(""));
             let tc = new typecheck.TypeChecker();
             let scope = tc.checkModule(mnode);
-            let cg = new codegen.CodeGenerator(tc);
+            let cg = new codegen.CodeGenerator(tc, program.emitIr, !program.emitNoWasm, program.emitIrFunction);
             cg.processModule(scope);
 //            console.log(cg.module.toWast(""));
         } catch(ex) {
@@ -45,6 +45,9 @@ function compileModules() {
 program
 	.version(pkg.version)
 	.usage('[options] [command] <module ...>')
+    .option('-r, --emit-ir', "Emit IR code")
+    .option('-f, --emit-ir-function <name>', "Emit IR code only for one function", null)
+    .option('-W, --emit-no-wasm', "Do not emit WASM code")
 
 program
 	.command('compile')

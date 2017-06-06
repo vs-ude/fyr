@@ -4,8 +4,11 @@ import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
 export class CodeGenerator {
-    constructor(tc: TypeChecker) {
+    constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string) {
         this.tc = tc;
+        this.emitIR = emitIR;
+        this.emitNoWasm = emitNoWasm;
+        this.emitFunction = emitFunction;
         this.wasm = new ssa.Wasm32Backend();
         this.wasm.module.importMemory("imports", "mem");
         this.optimizer = new ssa.Optimizer();
@@ -46,8 +49,10 @@ export class CodeGenerator {
             }
         }
 
-        console.log('============ WASM ===============');
-        console.log(this.wasm.module.toWast(""));
+//        console.log('============ WASM ===============');
+        if (!this.emitNoWasm) {
+            console.log(this.wasm.module.toWast(""));
+        }
     }
 
     private getSSAType(t: Type): ssa.Type | ssa.StructType {
@@ -165,15 +170,21 @@ export class CodeGenerator {
         }
         b.end();
 
-        console.log(ssa.Node.strainToString("", b.node));                
-
+        if (this.emitIR || f.name == this.emitFunction) {
+            console.log(ssa.Node.strainToString("", b.node));                
+        }
+    
         this.optimizer.optimizeConstants(b.node);
-        console.log('============ OPTIMIZED Constants ===============');
-        console.log(ssa.Node.strainToString("", b.node));
+        if (this.emitIR || f.name == this.emitFunction) {
+            console.log('============ OPTIMIZED Constants ===============');
+            console.log(ssa.Node.strainToString("", b.node));
+        }
 
         this.optimizer.removeDeadCode(b.node);
-        console.log('============ OPTIMIZED Dead code ===============');
-        console.log(ssa.Node.strainToString("", b.node));
+        if (this.emitIR || f.name == this.emitFunction) {
+            console.log('============ OPTIMIZED Dead code ===============');
+            console.log(ssa.Node.strainToString("", b.node));
+        }
 
         this.wasm.generateFunction(b.node, wf);
         if (exportFunc) {
@@ -1196,4 +1207,7 @@ export class CodeGenerator {
     private tc: TypeChecker;
     private funcs: Map<Function, wasm.Function | wasm.FunctionImport> = new Map<Function, wasm.Function | wasm.FunctionImport>();
     private sliceHeader: ssa.StructType;
+    private emitIR: boolean;
+    private emitNoWasm: boolean;
+    private emitFunction: string | null;
 }
