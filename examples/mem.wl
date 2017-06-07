@@ -14,9 +14,10 @@ type RootBlock struct {
 }
 
 type FreeBlock struct {
-    next #FreeBlock
-    prev #FreeBlock
-    count uint // Number of blocks in the sequence
+    next #FreeBlock  // Pointer to the next sequence of free blocks
+    prev #FreeBlock  // Pointer to the prev sequence of free blocks
+    start #FreeBlock // Pointer to the first free block in this sequence. Only set on the last block of the sequence
+    count uint // Number of free blocks in the sequence
 }
 
 // Blocks are 64KB large and split into smaller areas.
@@ -40,20 +41,15 @@ type FreeArea struct {
     size uint
 }
 
+// The RootBlock must not cross a 64K boundary.
 // blockCount is the number of free blocks, not including the root block.
 func initializeRootBlock(r #RootBlock, blockCount uint) {
     for(var i = 0; i < 11; i++) {
         r.freeAreas[i] = 0
     }
-    // Create a linked list of all blocks
-    var b #FreeBlock = ((uint)r &^ 0xffff) + (1 << 16)
-    var prev #FreeBlock
-    for(var i uint = 0; i < blockCount; i++) {
-        b.prev = prev
-        b.next = (uint)b + 1 << 16
-        prev = b
-        b = b.next
-    }
+    // All blocks are free, except the first one which is initialized for area allocation
+    var b #FreeBlock = ((uint)r &^ 0xffff) + 2*(1 << 16)
+    b.count = blockCount - 1
     for(var i uint = 0; i < 15; i++) {
         if (1 << i <= blockCount && blockCount < 1 << (i+1)) {
             r.freeBlocks[i] = b
@@ -61,6 +57,9 @@ func initializeRootBlock(r #RootBlock, blockCount uint) {
             r.freeBlocks[i] = 0
         }
     }
+    // Initialize the first block
+    b = ((uint)r &^ 0xffff) + (1 << 16)
+    initializeBlock(r, (#Block)b)
 }
 
 func initializeBlock(r #RootBlock, b #Block) {
@@ -82,7 +81,6 @@ func initializeBlock(r #RootBlock, b #Block) {
         }
         r.freeAreas[i] = f
         var area_nr = 1 << i
-        logNumber((int)f)
         b.area[area_nr >> 3] |= (byte)(1 << (area_nr & 7))
     }
 }
@@ -104,8 +102,70 @@ func split(r #RootBlock, f #FreeArea, index uint) {
 }
 
 func allocBlocks(r #RootBlock, count uint) #void {
-    // TODO
-    return 0
+    // Compute the block-count as a power of two
+    var index uint = 14
+    for(; index >= 0; index--) {
+        if (1 << index <= count) {
+            break
+        }
+    }
+    // Find a sequence of blocks that is large enough
+    for(; index < 15; index++) {
+        if (r.freeBlocks[index] != 0) {
+            break
+        }
+    }
+    // TODO: panic if index == 15 -> out of memory
+    var f #FreeBlock = r.freeBlocks[index]
+    if (f.count == count) {
+        // Use all of the blocks in this sequence.
+        // Remove this sequence from the free list.
+        if (f.prev == 0) {
+            r.freeBlocks[index] = f.next
+        } else {
+            f.prev.next = f.next
+        }
+        if (f.next != 0) {
+            f.next.prev = f.prev
+        }
+    } else {
+        // Split
+        var f2 = f
+        f2.count -= count
+        var f3 #FreeBlock = (uint)f2 + (1 << 16) * (f2.count - 1)
+        f3.start = f2
+        f = (uint)f + (1 << 16) * f2.count
+        // Compute the remaining size as a power of two
+        var index2 uint = 14
+        for(; index2 >= 0; index2--) {
+            if (1 << index2 <= f2.count) {
+                break
+            }
+        }
+        // Insert the remaining sequence of free blocks in another queue
+        if (index2 != index) {
+            if (f.prev == 0) {
+                r.freeBlocks[index] = f.next
+            } else {
+                f.prev.next = f.next
+            }
+            if (f.next != 0) {
+                f.next.prev = f.prev
+            }
+            f2.prev = 0
+            f2.next = r.freeBlocks[index2]
+            if (f2.next != 0) {
+                f2.next.prev = f2
+            }
+            r.freeBlocks[index2] = f2
+        }
+    }
+    // Mark the blocks as allocated
+    var block_nr = ((uint)f - (uint)r) >> 16 - 1 
+    for(var i uint = block_nr; i < block_nr + count; i++) {
+        r.blocks[i >> 3] |= (byte)(1 << (i & 7))
+    }
+    return (#void)f
 }
 
 // epoch is either 1 (binary 01) or 2 (binary 10) to indicate the current GC epoch.
@@ -152,12 +212,8 @@ func alloc(r #RootBlock, size uint, epoch uint) #void {
         if (f.next != 0) {
             f.next.prev = 0
         }
-        logNumber((int)index)
-        logNumber((int)targetIndex)
-        logNumber((int)f)
         // Split the area if it is too large
         for (; index > targetIndex; index--) {
-            logNumber(-1)
             split(r, f, index)
         }
 
