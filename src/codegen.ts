@@ -1139,7 +1139,7 @@ export class CodeGenerator {
                 } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
                     // Convert pointers
                     return expr;
-                } else if (this.tc.checkIsIntType(t) && this.tc.checkIsIntNumber(enode.rhs)) {
+                } else if ((t == this.tc.t_bool || this.tc.checkIsIntType(t)) && (enode.rhs.type == this.tc.t_bool || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;

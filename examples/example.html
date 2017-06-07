@@ -93,19 +93,19 @@
 //                console.log("Init block ...");
 //                results.instance.exports.initializeBlock(1 << 16, 2 * (1 << 16), 100 * 65536);
                 console.log("alloc 1200 ...");
-                let area0 = results.instance.exports.alloc(1 << 16, 1200, 1, 100 * 65536)
+                let area0 = results.instance.exports.alloc(1 << 16, 1200, 1, true, 100 * 65536)
                 console.log("Area0", area0);
                 console.log("alloc 500 ...");
-                let area1 = results.instance.exports.alloc(1 << 16, 500, 1, 100 * 65536);
+                let area1 = results.instance.exports.alloc(1 << 16, 500, 1, true, 100 * 65536);
                 console.log("Area1", area1);
                 console.log("alloc 501 ...");
-                let area2 = results.instance.exports.alloc(1 << 16, 501, 1, 100 * 65536);
+                let area2 = results.instance.exports.alloc(1 << 16, 501, 1, true, 100 * 65536);
                 console.log("Area2", area2);
                 console.log("Freeing Area2 ...", area2)
                 results.instance.exports.free(1 << 16, area2, 100 * 65536);
                 console.log("Freed Area2", area2)
                 console.log("alloc 502 ...");
-                let area3 = results.instance.exports.alloc(1 << 16, 502, 1, 100 * 65536);
+                let area3 = results.instance.exports.alloc(1 << 16, 502, 1, true, 100 * 65536);
                 console.log("Area3", area3);
 //                console.log("alloc 503 ...");
 //                let area5 = results.instance.exports.alloc(1 << 16, 503, 1, 100 * 65536);
@@ -117,14 +117,14 @@
                 results.instance.exports.free(1 << 16, area1, 100 * 65536);
                 console.log("Freed Area1", area1)
                 console.log("alloc 999 ...");
-                let area6 = results.instance.exports.alloc(1 << 16, 999, 1, 100 * 65536)
+                let area6 = results.instance.exports.alloc(1 << 16, 999, 1, false, 100 * 65536)
                 console.log("Area6", area6);
                 console.log("Allocating 3 blocks ...")
-                let large1 = results.instance.exports.allocBlocks(1 << 16, 3, 100 * 65536)
+                let large1 = results.instance.exports.allocBlocks(1 << 16, 3, 1, true, 100 * 65536)
                 console.log("Large1", large1);
-                let large2 = results.instance.exports.allocBlocks(1 << 16, 90, 100 * 65536)
+                let large2 = results.instance.exports.allocBlocks(1 << 16, 90, 1, true, 100 * 65536)
                 console.log("Large2", large2);
-                let large3 = results.instance.exports.allocBlocks(1 << 16, 2, 100 * 65536)
+                let large3 = results.instance.exports.allocBlocks(1 << 16, 2, 1, false, 100 * 65536)
                 console.log("Large3", large3);
             });
 

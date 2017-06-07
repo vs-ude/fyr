@@ -2186,7 +2186,7 @@ export class TypeChecker {
                 if (enode.parameters) {
                     if (ft.parameters.length != enode.parameters.length) {
                         if (ft.requiredParameterCount() > enode.parameters.length || (enode.parameters.length > ft.parameters.length && !ft.hasEllipsis())) {
-                            throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), enode.loc);
+                            throw new TypeError("Supplied parameter count does not match function signature " + ft.toString(), enode.loc);
                         }
                     }
                     for(let i = 0; i < enode.parameters.length; i++) {
@@ -2337,7 +2337,7 @@ export class TypeChecker {
                     enode.type = t;
                 } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
                     enode.type = t;
-                } else if (this.checkIsIntType(t) && this.checkIsIntNumber(enode.rhs)) {
+                } else if ((t == this.t_bool || this.checkIsIntType(t)) && (enode.rhs.type == this.t_bool || this.checkIsIntNumber(enode.rhs, false))) {
                     enode.type = t;
                 } else {
                     throw "TODO: conversion not possible or not implemented";
@@ -2760,11 +2760,14 @@ export class TypeChecker {
         throw new TypeError("Expected a boolean type, but got " + node.type.name, node.loc);
     }
 
-    public checkIsNumber(node: Node) {
+    public checkIsNumber(node: Node, doThrow: boolean = true) {
         if (node.type == this.t_float || node.type == this.t_double || node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64 || node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
-            return;
+            return true;
         }
-        throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
+        if (doThrow) {
+            throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
+        }
+        return false;
     }
 
     public checkIsIntNumber(node: Node, doThrow: boolean = true): boolean {
@@ -2772,7 +2775,7 @@ export class TypeChecker {
             return true;
         }
         if (doThrow) {
-            throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
+            throw new TypeError("Expected an integer type, but got " + node.type.name, node.loc);
         }
         return false;
     }
