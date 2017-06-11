@@ -173,14 +173,12 @@ func allocBlocks(count uint, epoch uint, gc_pointers bool) #void {
     return (#void)f
 }
 
-// epoch is either 1 (binary 01) or 2 (binary 10) to indicate the current GC epoch.
-// epoch is 11 if alloc is supposed to allocate memory for a stack.
-func alloc(size uint, epoch uint, gc_pointers bool) #void {
+func alloc(size uint, gc_pointers bool) #void {
     // Determine the granularity
     var index uint
     if (size > 1<<15) {             // Needs entire blocks
         // allocate a sequence of blocks
-        return allocBlocks((size + 0xffff) / (1<<16), epoch, gc_pointers) 
+        return allocBlocks((size + 0xffff) / (1<<16), gcEpoch, gc_pointers) 
     } else if (size > 1 << 14) {    // 32k
         index = 10
     } else if (size > 1 << 13) {    // 16k
@@ -225,7 +223,7 @@ func alloc(size uint, epoch uint, gc_pointers bool) #void {
         // Mark the area as allocated in a certain epoch
         var block #Block = (uint)f &^ 0xffff
         var area_nr = ((uint)f & 0xffff) >> 5
-        block.area[area_nr >> 1] |= (byte)((((uint)gc_pointers << 3) | 4 | epoch) << ((area_nr & 1) << 2))
+        block.area[area_nr >> 1] |= (byte)((((uint)gc_pointers << 3) | 4 | gcEpoch) << ((area_nr & 1) << 2))
 
         // Fill with zeros
         var ptr #uint64 = (#uint64)f
@@ -240,7 +238,7 @@ func alloc(size uint, epoch uint, gc_pointers bool) #void {
 
     // Nothing free. Add one more block and allocate again
     initializeBlock((#Block)allocBlocks(1, 1 | 2, false))
-    return alloc(size, epoch, gc_pointers)
+    return alloc(size, gc_pointers)
 }
 
 func free(ptr #void) {
