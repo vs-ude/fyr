@@ -7,6 +7,7 @@ import colors = require('colors');
 import parser = require("./parser");
 import typecheck = require("./typecheck");
 import codegen = require("./codegen");
+import ast = require("./ast");
 
 // Make TSC not throw out the colors lib
 colors.red;
@@ -15,29 +16,38 @@ var pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '.
 
 function compileModules() {
 	var args = Array.prototype.slice.call(arguments, 0);
+    let mnode = new ast.Node({loc: null, op: "module", statements: []});
 	for(var i = 0; i < args.length - 1; i++) {
+        ast.setCurrentFile(args[i]);
 		var arg = path.resolve(args[i]);
 //        console.log("Compiling " + arg + "...");
         let code = fs.readFileSync(arg, 'utf8') + "\n";
         try {
-            let mnode = parser.parse(code);
-//            console.log(fnode.stringify(""));
-            let tc = new typecheck.TypeChecker();
-            let scope = tc.checkModule(mnode);
-            let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction);
-            cg.processModule(scope);
-//            console.log(cg.module.toWast(""));
+            let f = parser.parse(code);
+            mnode.statements.push(f);
         } catch(ex) {
             if (ex instanceof parser.SyntaxError) {
-                console.log((args[i] + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-                continue;
-            } else if (ex instanceof typecheck.TypeError) {
-                console.log((args[i] + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-                continue;                
+                console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+                return;
             } else {
                 console.log(ex);
                 throw ex;
             }
+        }
+    }
+
+    try {
+        let tc = new typecheck.TypeChecker();
+        let scope = tc.checkModule(mnode);
+        let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction);
+        cg.processModule(scope);
+    } catch(ex) {
+        if (ex instanceof typecheck.TypeError) {
+            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            return;                
+        } else {
+            console.log(ex);
+            throw ex;
         }
     }
 }

@@ -14,38 +14,46 @@
         }
         return false;
     }
+
+    function fl(loc) {
+        loc.file = ast.currentFile();
+        return loc;
+    }
 }
 
-module
-  = m:(comments / func / import / typedef / $("\n"+))* {
+file
+  = m:(comments / func / import / typedef / varStatement / $("\n"+))* {
         let result = [];
         for(let i = 0; i < m.length; i++) {
             let x = m[i];
-            if (x.op == "func") {
+            if (x.op == "var" && x.lhs.op != "id") {
+                error("Illegal variable definition for global variables", x.loc);
+            }
+            if (x.op == "func" || x.op == "typedef" || x.op == "var" || x.op == "const") {
                 if (i > 0 && (m[i-1] instanceof Array)) {
                     x.comments = m[i-1];
                 }
                 result.push(x);
-            } else if (x.op == "import" || x.op == "typedef") {
+            } else if (x.op == "import") {
                 result.push(x);                
             }
         }
-        return new ast.Node({loc: location(), op: "module", statements: result});
+        return new ast.Node({loc: fl(location()), op: "file", statements: result});
     }
 
 typedef
   = "type" [ \t]+ i:identifier [ \t]+ t:type {
-      return new ast.Node({loc: location(), op: "typedef", name: i, rhs: t});
+      return new ast.Node({loc: fl(location()), op: "typedef", name: i, rhs: t});
     }
 
 import
   = "import" [ \t]* "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" [ \t]* "from" [ \t]+ m:string [ \t]* "\n" [ \t]* {
-      return new ast.Node({loc: location(), op: "import", parameters:e, rhs:m});
+      return new ast.Node({loc: fl(location()), op: "import", parameters:e, rhs:m});
     }
 
 importElement
   = "func" [ \t]* n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:type? [ \t]* "\n" [ \t]* {
-      return new ast.Node({loc: location(), op: "funcType", parameters: t, rhs: f, name: n});
+      return new ast.Node({loc: fl(location()), op: "funcType", parameters: t, rhs: f, name: n});
     }
 
 func
@@ -53,11 +61,11 @@ func
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
-                  error("'...' can only be attached to the last parameter");
+                  error("'...' can only be attached to the last parameter", fl(location()));
               }
           }
       }
-      return new ast.Node({loc: location(), op: "func", name: n?n:undefined, parameters: p, statements: b, rhs: t, genericParameters: g});
+      return new ast.Node({loc: fl(location()), op: "func", name: n?n:undefined, parameters: p, statements: b, rhs: t, genericParameters: g});
     }
 
 parameters
@@ -79,7 +87,7 @@ parameter
     }
   / "..." [ \t]* n:identifier [ \t]* t:type {
       t.name = n;
-      return new ast.Node({loc: location(), op: "ellipsisParam", lhs: t});
+      return new ast.Node({loc: fl(location()), op: "ellipsisParam", lhs: t});
     }
 
 funcTypeParameters
@@ -130,7 +138,7 @@ type
           }
           result.push(x[3]);
       }
-      return new ast.Node({loc: location(), op: "orType", parameters: result})
+      return new ast.Node({loc: fl(location()), op: "orType", parameters: result})
     }
 
 andType
@@ -142,44 +150,44 @@ andType
       for(let x of r) {
           result.push(x[3]);
       }
-      return new ast.Node({loc: location(), op: "andType", parameters: result})
+      return new ast.Node({loc: fl(location()), op: "andType", parameters: result})
     }
 
 primitiveType
   = "[" [ \t]* e:expression? "]" [ \t]* t:type {
       if (e) {
-          return new ast.Node({loc: location(), op: "arrayType", rhs: t, lhs: e})
+          return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
       }
-      return new ast.Node({loc: location(), op: "sliceType", rhs: t})
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t})
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
-      return new ast.Node({loc: location(), op: "tupleType", parameters: t});
+      return new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
     }
   / "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:type? {
       if (e) {
         t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
       }
-      return new ast.Node({loc: location(), op: "funcType", parameters: t, rhs: f});      
+      return new ast.Node({loc: fl(location()), op: "funcType", parameters: t, rhs: f});      
     }
   / "*" [ \t]* t:primitiveType {
-      return new ast.Node({loc: location(), op: "pointerType", rhs: t});
+      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
   / "#" [ \t]* t:primitiveType {
-      return new ast.Node({loc: location(), op: "unsafePointerType", rhs: t});
+      return new ast.Node({loc: fl(location()), op: "unsafePointerType", rhs: t});
     }
   / "@" [ \t]* t:primitiveType {
-      return new ast.Node({loc: location(), op: "guardedPointerType", rhs: t});
+      return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {
-          return new ast.Node({loc: location(), op: "genericType", genericParameters: g[3], lhs: i});
+          return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i});
       } 
       i.op = "basicType";
       return i;
     }
   / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* "\n" {
         let ext = e ? e[2] : null;
-        return new ast.Node({loc: location(), op: "structType", parameters: f, lhs: ext})
+        return new ast.Node({loc: fl(location()), op: "structType", parameters: f, lhs: ext})
     }
 
 namedType
@@ -196,17 +204,17 @@ returnType
       if (r) {
         for(let x of r) {
           if (!!t.name != !!x[3].name) {
-              error("mixing of named and unnamed return parameters");
+              error("mixing of named and unnamed return parameters", fl(location()));
           }
           result.push(x[3]);
         }
       }
-      return new ast.Node({loc: location(), op: "tupleType", parameters: result});
+      return new ast.Node({loc: fl(location()), op: "tupleType", parameters: result});
     }
 
 structField
   = comments? [ \t]* i:identifier [ \t]+ t:type [ \t]* semicolon {
-      return new ast.Node({loc: location(), op: "structField", lhs: i, rhs: t});
+      return new ast.Node({loc: fl(location()), op: "structField", lhs: i, rhs: t});
   }
 
 typeList
@@ -247,7 +255,7 @@ newline
   / comment
 
 comment
-  = "//" c:$([^\n]*) "\n" { return new ast.Node({loc: location(), op: "comment", value: c}); }
+  = "//" c:$([^\n]*) "\n" { return new ast.Node({loc: fl(location()), op: "comment", value: c}); }
 
 semicolon
   = ";" [ \n\t]* { return undefined; }
@@ -255,15 +263,15 @@ semicolon
   / c:comment [ \n\t]* { return c; }
 
 statement
-  = "break" { return new ast.Node({loc: location(), op: "break"}); }
-  / "continue" { return new ast.Node({loc: location(), op: "continue"}); }
+  = "break" { return new ast.Node({loc: fl(location()), op: "break"}); }
+  / "continue" { return new ast.Node({loc: fl(location()), op: "continue"}); }
   / "return" [ \t]* e:expressionList? {
       if (e && e.length == 1) {
           e = e[0];
       } else if (e) {
-          e = new ast.Node({loc: location(), op: "tuple", parameters: e});
+          e = new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
       }
-      return new ast.Node({loc: location(), op: "return", lhs: e? e : undefined});
+      return new ast.Node({loc: fl(location()), op: "return", lhs: e? e : undefined});
     }
   / "if" [ \t]* "(" [ \t\n]* init:simpleStatement e:([ \t]* ";" [ \t]* expression)? ")" [ \t]* b:block el:("else" [ \t\n]* elseBranch)? {
       if (e && (init.op != "var" && init.op != "const" && init.op != "=")) {
@@ -272,15 +280,15 @@ statement
       if (!e && isAssignment(init)) {
           expected("'an expression after the assignment", init.loc);
       }
-      return new ast.Node({loc: location(), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
+      return new ast.Node({loc: fl(location()), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
   }
-  / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block { return new ast.Node({loc: location(), op: "for", condition: f ? f[2] : undefined, statements:b}); }
+  / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block { return new ast.Node({loc: fl(location()), op: "for", condition: f ? f[2] : undefined, statements:b}); }
   / "yield" {
-      return new ast.Node({loc: location(), op: "yield"});
+      return new ast.Node({loc: fl(location()), op: "yield"});
     }
   / s: simpleStatement { 
       if (s.op == "in" || s.op == "var_in" || s.op == "const_in") {
-          error("'in' is allowed inside a for loop header only");
+          error("'in' is allowed inside a for loop header only", s.loc);
       }
       return s;
     }
@@ -290,38 +298,38 @@ simpleStatement
   / [ \t]* i:assignIdentifierList p:("++" / "--" / (assignOp [ \t\n]* expression))? {
         if (!p) {
             if (i.length > 1) {
-                expected("assignment operator");
+                expected("assignment operator", v.loc);
             }
             if (i[0].op == "ellipsisAssign") {
-                error("'...' not allowed in this place");
+                error("'...' not allowed in this place", i[0].loc);
             } else if (i[0].op == "optionalAssign") {
-                error("'?' not allowed in this place");
+                error("'?' not allowed in this place", i[0].loc);
             }
             return i[0];
         }
         if (p == "++") {
           if (i.length > 1) {
-              error ("'++' not allowed in this place");
+              error ("'++' not allowed in this place", p.loc);
           }
-          return new ast.Node({loc: location(), op: "++", lhs: i[0]});
+          return new ast.Node({loc: fl(location()), op: "++", lhs: i[0]});
         } else if (p == "--") {
           if (i.length > 1) {
-              error ("'--' not allowed in this place");
+              error ("'--' not allowed in this place", p.loc);
           }
-          return new ast.Node({loc: location(), op: "--", lhs: i[0]});
+          return new ast.Node({loc: fl(location()), op: "--", lhs: i[0]});
         }
         if (i.length > 1) {
-            i = new ast.Node({loc: location(), op: "tuple", parameters: i});
+            i = new ast.Node({loc: fl(location()), op: "tuple", parameters: i});
         } else {
             i = i[0];
         }
         if (p[0] == "in " && i.op == "tuple" && i.parameters.length > 2) {
-            error("too many identifiers in tuple left of 'in'");
+            error("too many identifiers in tuple left of 'in'", i.parameters[2].loc);
         }
         if (p[0] == "in" && (i.op == "array" || i.op == "object")) {
-            error("array or object not allowed left of 'in'")
+            error("array or object not allowed left of 'in'", i.loc)
         }
-        return new ast.Node({loc: location(), op: p[0], lhs: i, rhs: p[2]});
+        return new ast.Node({loc: fl(location()), op: p[0], lhs: i, rhs: p[2]});
     }
 
 assignIdentifierList
@@ -338,29 +346,29 @@ assignIdentifierList
 
 assignIdentifier
   = "(" [ \t\n]* e:assignIdentifierList ")" {
-      return new ast.Node({loc: location(), op: "tuple", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
     }
   / o:assignObject { return o; }
   / "[" [ \t\n]* e:assignIdentifierList "]" {
-      return new ast.Node({loc: location(), op: "array", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
     }
   / e:"..."? [ \t]* i:("_" / expression) [ \t]* o:"?"? {
       if (i == "_") {
-          i = new ast.Node({loc: location(), op: "id", value: "_"});
+          i = new ast.Node({loc: fl(location()), op: "id", value: "_"});
       }
       if (e && o) {
-          error("'...' and '?' must not be used on the same expression");
+          error("'...' and '?' must not be used on the same expression", e.loc);
       } else if (e) {
-          return new ast.Node({loc: location(), op: "ellipsisAssign", lhs: i});
+          return new ast.Node({loc: fl(location()), op: "ellipsisAssign", lhs: i});
       } else if (o) {
-          return new ast.Node({loc: location(), op: "optionalAssign", lhs: i});
+          return new ast.Node({loc: fl(location()), op: "optionalAssign", lhs: i});
       }
       return i;
   }
 
 assignObject
   = "{" [ \t\n]* e:assignKeyIdentifierList? [ \t]* "}" {
-      return new ast.Node({loc: location(), op: "object", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "object", parameters: e});
     }
 
 assignKeyIdentifierList
@@ -377,55 +385,55 @@ assignKeyIdentifierList
 assignKeyIdentifier
   = i:identifier [ \t]* o:("?")? [ \t]* ":" [ \t]* e:assignIdentifier {
       if (e.op == "ellipsisAssign") {
-          error("'...' must not be used in this place");
+          error("'...' must not be used in this place", e.loc);
       } else if (e.op == "optionalAssign") {
-          error("'?' must not be used in this place");
+          error("'?' must not be used in this place", e.loc);
       }
-      let kv = new ast.Node({loc: location(), op: "keyValue", name: i, lhs: e});
+      let kv = new ast.Node({loc: fl(location()), op: "keyValue", name: i, lhs: e});
       if (o) {
           kv.op = "optionalKeyValue";
       }
       return kv;
     }
   / "..." [ \t]* e:expression {
-      return new ast.Node({loc: location(), op: "ellipsisAssign", lhs: e});
+      return new ast.Node({loc: fl(location()), op: "ellipsisAssign", lhs: e});
     }
 
 varStatement
   = o:("var" / "const") [ \t]* i:varIdentifierList a:(("=" / "in ") [ \t\n]* expression)? {
         if (i.length > 1) {
-            i = new ast.Node({loc: location(), op: "tuple", parameters: i});
+            i = new ast.Node({loc: fl(location()), op: "tuple", parameters: i});
         } else {
             i = i[0];
         }
         if (!a) {
             if (o == "const") {
-                expected("assignment following 'const'");
+                expected("assignment following 'const'", a.loc);
             }
-            return new ast.Node({loc: location(), op: "var", lhs: i});
+            return new ast.Node({loc: fl(location()), op: "var", lhs: i});
         }
 
         if (a[0] == "in ") {
             if (i.op == "array" || i.op == "object") {
-                error("array or object not allowed in this context")
+                error("array or object not allowed in this context", i.loc)
             }
             if (i.op == "tuple") {
                 if (i.parameters.length > 2) {
-                    error("too many identifiers left of 'in'");
+                    error("too many identifiers left of 'in'", i.parameters[2].loc);
                 }
                 if (i.parameters[0].op != "id") {
-                    error("expression is not allowed on left-hand side of an assignment when used together with 'in'");
+                    error("expression is not allowed on left-hand side of an assignment when used together with 'in'", i.parameters[0].loc);
                 }
                 if (i.parameters[1].op != "id") {
-                    error("expression is not allowed on left-hand side of an assignment when used together with 'in'");
+                    error("expression is not allowed on left-hand side of an assignment when used together with 'in'", i.parameter[1].loc);
                 }
             } else if (i.op != "id") {
-                error("expression is not allowed on left-hand side of an assignment when used together with 'in'");
+                error("expression is not allowed on left-hand side of an assignment when used together with 'in'", i.loc);
             }
-            return new ast.Node({loc: location(), op: o + "_in" ,lhs: i, rhs: a[2]});
+            return new ast.Node({loc: fl(location()), op: o + "_in" ,lhs: i, rhs: a[2]});
         }
 
-        return new ast.Node({loc: location(), op: o, lhs: i, rhs: a[2]});
+        return new ast.Node({loc: fl(location()), op: o, lhs: i, rhs: a[2]});
     }
 
 varIdentifierList
@@ -442,18 +450,18 @@ varIdentifierList
 
 varIdentifier
   = "(" [ \t\n]* e:varIdentifierList ")" {
-      return new ast.Node({loc: location(), op: "tuple", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
     }
   / o:varObject { return o; }
   / "[" [ \t\n]* e:varIdentifierList "]" {
-      return new ast.Node({loc: location(), op: "array", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
     }
   / e:"..."? [ \t]* i:("_" / identifier) [ \t]* o:"?"? [ \t]* t:type? {
       if (i == "_") {
           if (t) {
-              error("The placeholder '_' must not have a type");
+              error("The placeholder '_' must not have a type", t.loc);
           }
-          i = new ast.Node({loc: location(), op: "id", value: "_"});
+          i = new ast.Node({loc: fl(location()), op: "id", value: "_"});
       }
       if (t) {
           i.rhs = t;
@@ -463,14 +471,14 @@ varIdentifier
       } else if (o) {
           i.op = "optionalId";
       } else if (e && o) {
-          error("'...' and '?' must not be used on the same identifier");
+          error("'...' and '?' must not be used on the same identifier", e.loc);
       }
       return i;
   }
 
 varObject
   = "{" [ \t\n]* e:varKeyIdentifierList? [ \t]* "}" {
-      return new ast.Node({loc: location(), op: "object", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "object", parameters: e});
     }
 
 varKeyIdentifierList
@@ -487,11 +495,11 @@ varKeyIdentifierList
 varKeyIdentifier
   = i:identifier [ \t]* o:("?")? [ \t]* ":" [ \t]* e:varIdentifier {
       if (e.op == "ellipsisId") {
-          error("... must not be used in this place");
+          error("... must not be used in this place", e.loc);
       } else if (e.op == "optionalId") {
-          error("'?' must not be used in this place");
+          error("'?' must not be used in this place", e.loc);
       }
-      let kv = new ast.Node({loc: location(), op: "keyValue", name: i, lhs: e});
+      let kv = new ast.Node({loc: fl(location()), op: "keyValue", name: i, lhs: e});
       if (o) {
           kv.op = "optionalKeyValue";
       }
@@ -523,15 +531,15 @@ assignOp
 forCondition
   = left: simpleStatement r:(";" [ \t]* expression? ";" [ \t]* simpleStatement?)? {
       if (r) {
-          return new ast.Node({loc: location(), op: ";;", lhs: left, condition: r[2], rhs: r[5]});
+          return new ast.Node({loc: fl(location()), op: ";;", lhs: left, condition: r[2], rhs: r[5]});
       }
       if (isAssignment(left) && left.op != "in" && left.op != "var_in" && left.op != "const_in") {
-        error("assignment is not allowed in the condition branch of a 'for' loop");
+        error("assignment is not allowed in the condition branch of a 'for' loop", left.loc);
       }
       return left;
     }
   / ";" e:expression? ";" s:simpleStatement? {
-        return new ast.Node({loc: location(), op: ";;", condition: e, rhs: s});
+        return new ast.Node({loc: fl(location()), op: ";;", condition: e, rhs: s});
     }
 
 elseBranch
@@ -542,9 +550,9 @@ elseBranch
       if (!e && isAssignment(init)) {
           expected("'an expression after the assignment", init.loc);
       }
-      return new ast.Node({loc: location(), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
+      return new ast.Node({loc: fl(location()), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
     }
-  / b: block { return new ast.Node({loc: location(), op: "else", statements: b}); } 
+  / b: block { return new ast.Node({loc: fl(location()), op: "else", statements: b}); } 
 
 expression
   = c: logicOr { return c; }
@@ -564,7 +572,7 @@ expressionList
 logicOr
   = left: logicAnd r:("||" [ \t\n]* logicOr)? {
       if (r) {
-         return new ast.Node({loc: location(), op: "||", lhs: left, rhs: r[2]});
+         return new ast.Node({loc: fl(location()), op: "||", lhs: left, rhs: r[2]});
       }
       return left;
   }
@@ -572,7 +580,7 @@ logicOr
 logicAnd
   = left: comparison r:("&&" [ \t\n]* logicAnd)? {
       if (r) {
-         return new ast.Node({loc: location(), op: "&&", lhs: left, rhs: r[2]});
+         return new ast.Node({loc: fl(location()), op: "&&", lhs: left, rhs: r[2]});
       }
       return left;
   }
@@ -587,12 +595,12 @@ comparison
     }
 
 comparison2
-  = "==" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "==", rhs:right}); }
-  / "!=" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "!=", rhs:right}); }
-  / "<=" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "<=", rhs:right}); }
-  / ">=" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: ">=", rhs:right}); }
-  / ">" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: ">", rhs:right}); }
-  / "<" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "<", rhs:right}); }
+  = "==" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "==", rhs:right}); }
+  / "!=" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "!=", rhs:right}); }
+  / "<=" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "<=", rhs:right}); }
+  / ">=" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: ">=", rhs:right}); }
+  / ">" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: ">", rhs:right}); }
+  / "<" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "<", rhs:right}); }
 
 additive
   = left:multiplicative right: additive2? {
@@ -604,10 +612,10 @@ additive
     }
   
 additive2
-  = "+" ![=+] [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "+", rhs:right}); }
-  / "-" ![=-] [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "-", rhs:right}); }
-  / "|" ![|=] [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "|", rhs:right}); }
-  / "^" [ \t\n]* right:additive { return new ast.Node({loc: location(), op: "^", rhs:right}); }
+  = "+" ![=+] [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "+", rhs:right}); }
+  / "-" ![=-] [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "-", rhs:right}); }
+  / "|" ![|=] [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "|", rhs:right}); }
+  / "^" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "^", rhs:right}); }
 
 multiplicative
   = left:unary right:multiplicative2? {
@@ -619,41 +627,41 @@ multiplicative
     }
 
 multiplicative2
-  = "*" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: "*", rhs:right}); }
-  / "/" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: "/", rhs:right}); }
-  / "%" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: "%", rhs:right}); }
-  / "&^" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: "&^", rhs:right}); }
-  / "<<" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: "<<", rhs:right}); }
-  / ">>" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: ">>", rhs:right}); }
-  / "&" ![=&] [ \t\n]* right:multiplicative { return new ast.Node({loc: location(), op: "&", rhs:right}); }
+  = "*" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "*", rhs:right}); }
+  / "/" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "/", rhs:right}); }
+  / "%" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "%", rhs:right}); }
+  / "&^" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "&^", rhs:right}); }
+  / "<<" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "<<", rhs:right}); }
+  / ">>" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: ">>", rhs:right}); }
+  / "&" ![=&] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "&", rhs:right}); }
 
 unary
   = t: typedLiteral { return t; }
   / c: typeCast { return c; }
-  / "+" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary+", rhs:p}); }
-  / "-" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary-", rhs:p}); }
-  / "!" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary!", rhs:p}); }
-  / "^" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary^", rhs:p}); }
-  / "*" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary*", rhs:p}); }
-  / "&" [ \t\n]* p:unary { return new ast.Node({loc: location(), op: "unary&", rhs:p}); }
+  / "+" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary+", rhs:p}); }
+  / "-" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary-", rhs:p}); }
+  / "!" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary!", rhs:p}); }
+  / "^" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary^", rhs:p}); }
+  / "*" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary*", rhs:p}); }
+  / "&" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary&", rhs:p}); }
   / p: primary { return p; }
 
 typedLiteral
   = "[" [ \t]* e:expression? "]" [ \t]* t:type [ \t]* l: array {
       if (e) {
-          l.lhs = new ast.Node({loc: location(), op: "arrayType", rhs: t, lhs: e});
+          l.lhs = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e});
       } else {
-          l.lhs = new ast.Node({loc: location(), op: "sliceType", rhs: t});
+          l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t});
       }
       return l;
     }
   / "(" [ \t]* t:typeList [ \t]* ")" [ \t]* l: tuple {
-      l.lhs = new ast.Node({loc: location(), op: "tupleType", parameters: t});
+      l.lhs = new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
       return l;
     }
   / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* l: object {
         let ext = e ? e[2] : null;
-        l.lhs = new ast.Node({loc: location(), op: "structType", parameters: f, lhs: ext});
+        l.lhs = new ast.Node({loc: fl(location()), op: "structType", parameters: f, lhs: ext});
         return l;
     }
   / i :identifier l:object {
@@ -668,7 +676,7 @@ typeCast
             e.lhs = t;
             return e;
         }
-        return new ast.Node({loc: location(), op: "typeCast", lhs: t, rhs: e});
+        return new ast.Node({loc: fl(location()), op: "typeCast", lhs: t, rhs: e});
     }
 
 primary
@@ -687,9 +695,9 @@ primary
 primary2
   = n: number { return n; }
   / f:func { return f; }
-  / "true" { return new ast.Node({loc: location(), op: "bool", value: "true"}); }
-  / "false" { return new ast.Node({loc: location(), op: "bool", value: "false"}); }
-  / "null" { return new ast.Node({loc: location(), op: "null"}); }
+  / "true" { return new ast.Node({loc: fl(location()), op: "bool", value: "true"}); }
+  / "false" { return new ast.Node({loc: fl(location()), op: "bool", value: "false"}); }
+  / "null" { return new ast.Node({loc: fl(location()), op: "null"}); }
   / i: identifier {
       return i;
     }
@@ -698,35 +706,35 @@ primary2
       if (e.length == 1) {
           return e[0];
       }
-      return new ast.Node({loc: location(), op: "tuple", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
     }
   / "func" [ \t]* "(" [ \t]* p:parameters? ")" [ \t]* t:type? [ \t]* b:(block / ("=>" [ \t]* expression)) {
       if (b.length > 1 && b[0] == "=>") {
-          return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, rhs: b[2]});
+          return new ast.Node({loc: fl(location()), op: "=>", parameters: p, lhs: t, rhs: b[2]});
       }
       if (!t) {
-          expected("return type in lambda expression");
+          expected("return type in lambda expression", fl(location()));
       }
-      return new ast.Node({loc: location(), op: "=>", parameters: p, lhs: t, statements: b});
+      return new ast.Node({loc: fl(location()), op: "=>", parameters: p, lhs: t, statements: b});
     }
   / o:object { return o; }
   / a:array { return a; }
 
 array
   = "[" [ \t\n]* e:expressionList? [ \t]* "]" {
-      return new ast.Node({loc: location(), op: "array", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
     }
 
 object
   = "{" [ \t\n]* e:keyValueList? [ \t]* "}" {
-      return new ast.Node({loc: location(), op: "object", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "object", parameters: e});
     }
 
 tuple
   = "(" [ \t\n]* e: expressionList ")" & {
       return e.length > 1
     } {
-        return new ast.Node({loc: location(), op: "tuple", parameters: e});
+        return new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
     }
 
 keyValueList
@@ -742,7 +750,7 @@ keyValueList
 
 keyValue
   = i:identifier [ \t]* ":" [ \t]* e:expression {
-      return new ast.Node({loc: location(), op: "keyValue", name: i, lhs: e});
+      return new ast.Node({loc: fl(location()), op: "keyValue", name: i, lhs: e});
     }
   / "..." i:identifier {
       i.op = "ellipsisId";
@@ -750,23 +758,23 @@ keyValue
     }
 
 number "number"
-  = digits:$([0-9]* "." [0-9]+) { return new ast.Node({loc: location(), op: "float", value: digits}); }
-  / "0x" digits:$([0-9a-f]+) { return new ast.Node({loc: location(), op: "int", value: "0x" + digits}); }
-  / digits:$([0-9]+) { return new ast.Node({loc: location(), op: "int", value: digits}); }
+  = digits:$([0-9]* "." [0-9]+) { return new ast.Node({loc: fl(location()), op: "float", value: digits}); }
+  / "0x" digits:$([0-9a-f]+) { return new ast.Node({loc: fl(location()), op: "int", value: "0x" + digits}); }
+  / digits:$([0-9]+) { return new ast.Node({loc: fl(location()), op: "int", value: digits}); }
 
 member
-  = "." [ \t\n]* i:identifier [ \t]* { return new ast.Node({loc: location(), op: ".", name:i}); }
+  = "." [ \t\n]* i:identifier [ \t]* { return new ast.Node({loc: fl(location()), op: ".", name:i}); }
   / "[" [ \t\n]* e:expression? r:(":" expression?)? "]" [ \t]* {
       if (!e && !r) {
-          expected("an index or range expression between brackets");
+          expected("an index or range expression between brackets", fl(location()));
       }
       if (r) {
-          e = new ast.Node({loc: location(), "op":":", lhs: e, rhs: r[1]});
+          e = new ast.Node({loc: fl(location()), "op":":", lhs: e, rhs: r[1]});
       }
-      return new ast.Node({loc: location(), op: "[", rhs: e});
+      return new ast.Node({loc: fl(location()), op: "[", rhs: e});
     }
-  / "(" [ \t\n]* a:arguments? ")" [ \t]* { return new ast.Node({loc: location(), op: "(", parameters: a}); }
-  / "<" [ \t]* t:typeList [ \t]* ">" { return new ast.Node({loc: location(), op: "genericInstance", genericParameters: t}); }
+  / "(" [ \t\n]* a:arguments? ")" [ \t]* { return new ast.Node({loc: fl(location()), op: "(", parameters: a}); }
+  / "<" [ \t]* t:typeList [ \t]* ">" { return new ast.Node({loc: fl(location()), op: "genericInstance", genericParameters: t}); }
 
 arguments
   = e:expression r:("," [ \t\n]* expression)* {
@@ -784,11 +792,11 @@ identifier "identifier"
   = i:$([a-zA-Z][a-zA-Z_0-9]*) & { 
       return !isKeyword(i);
     } {
-      return new ast.Node({loc: location(), op: "id", value: i});
+      return new ast.Node({loc: fl(location()), op: "id", value: i});
     }
 
 string "string"
-  = "\"" s:$stringchars* "\"" { return new ast.Node({loc: location(), op: "str", value: s}); }
+  = "\"" s:$stringchars* "\"" { return new ast.Node({loc: fl(location()), op: "str", value: s}); }
 
 stringchars
   = $("\\" .)

@@ -34,6 +34,10 @@ export class Module extends Node {
             s += indent + "    (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + ")\n";            
         }
         
+        for(let g of this.globals) {
+            s += g.toWast(indent + "    ") + "\n";
+        }
+        
         for(let f of this.funcs) {
             s += f.toWast(indent + "    ") + "\n";
         }
@@ -123,6 +127,10 @@ export class Module extends Node {
         this.memoryImport = {ns: ns, obj: obj};
     }
 
+    public addGlobal(g: Global) {
+        this.globals.push(g);
+    }
+
     public stackSize = 1 * 65536;
     public heapSize = 1 * 65536;
     public funcIndex: number = 0;
@@ -135,6 +143,7 @@ export class Module extends Node {
     private dataSize: number = 0;
     private data: Array<Data> = [];
     private memoryImport: {ns: string, obj: string};
+    private globals: Array<Global> = [];
 }
 
 export class FunctionImport {
@@ -607,7 +616,7 @@ export class End extends Node {
 }
 
 export class Call extends Node {
-    constructor(index: number) {
+    constructor(index: number | string) {
         super();
         this.index = index;
     }
@@ -620,7 +629,7 @@ export class Call extends Node {
         return indent + "call " + this.index.toString();
     }
 
-    public index: number;
+    public index: number | string;
 }
 
 export class Br extends Node {
@@ -726,6 +735,48 @@ export class Comment extends Node {
     }
 
     public comment: string;
+}
+
+export class Global extends Node {
+    constructor(type: StackType, name: string = null, mutable: boolean = true, initial: Array<Node> | null = null) {
+        super();
+        this.type = type;
+        this.name = name;
+        this.mutable = mutable;
+        this.initial = initial;
+    }
+
+    public get op(): string {
+        return "global";
+    }    
+
+    public toWast(indent: string): string {
+        let str = indent + "(global ";
+        if (this.name) {
+            str += this.name + " ";
+        }
+        if (this.mutable) {
+            str += "(mut " + this.type.toString() + ") ";
+        } else {
+            str += this.type.toString() + " ";
+        }
+        if (this.initial === null) {
+            str += "(" + this.type.toString() + ".const 0)";
+        } else {
+            str += "(\n";
+            for(let n of this.initial) {
+                str += n.toWast(indent + "    ") + "\n";
+            }
+            str += ")";
+        }
+        str += ")";
+        return str;
+    }
+
+    public name: string | null;
+    public type: StackType;
+    public mutable: boolean;
+    public initial: Array<Node> | null;
 }
 
 function align64(x: number): number {

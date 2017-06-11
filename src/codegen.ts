@@ -11,7 +11,6 @@ export class CodeGenerator {
         this.emitFunction = emitFunction;
         this.wasm = new ssa.Wasm32Backend(emitIR, emitFunction);
         this.wasm.module.importMemory("imports", "mem");
-        this.optimizer = new ssa.Optimizer();
         this.sliceHeader = new ssa.StructType();
         this.sliceHeader.name = "slice";
         this.sliceHeader.addField("data_ptr", "ptr");
@@ -31,6 +30,9 @@ export class CodeGenerator {
                     let wf = this.wasm.declareFunction(e.name);
                     this.funcs.set(e, wf);
                 }
+            } else if (e instanceof Variable) {
+                let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
+                this.globalVars.set(e, g);
             } else {
                 throw "CodeGen: Implementation Error " + e;
             }
@@ -44,11 +46,17 @@ export class CodeGenerator {
                 }
                 let wf = this.funcs.get(e) as wasm.Function;
                 let n = this.processFunction(e, true, wf);
+            } else if (e instanceof Variable) {
+                if (e.node.rhs) {
+                    throw "TODO: Initializer";
+                }
             } else {
                 throw "CodeGen: Implementation Error " + e
             }
         }
 
+        this.wasm.generateModule();
+        
 //        console.log('============ WASM ===============');
         if (!this.emitNoWasm) {
             console.log(this.wasm.module.toWast(""));
@@ -137,8 +145,13 @@ export class CodeGenerator {
     }
 
     public processFunction(f: Function, exportFunc: boolean, wf: wasm.Function): ssa.Node {
-        let b = new ssa.Builder();
         let vars = new Map<ScopeElement, ssa.Variable>();
+        // Add global variables
+        for(let e of this.globalVars.keys()) {
+            vars.set(e, this.globalVars.get(e));
+        }
+
+        let b = new ssa.Builder();
 
         b.define(f.name, this.getSSAFunctionType(f.type));
         // Declare parameters
@@ -173,7 +186,8 @@ export class CodeGenerator {
         if (this.emitIR || f.name == this.emitFunction) {
             console.log(ssa.Node.strainToString("", b.node));                
         }
-    
+
+        /*
         this.optimizer.optimizeConstants(b.node);
         if (this.emitIR || f.name == this.emitFunction) {
             console.log('============ OPTIMIZED Constants ===============');
@@ -185,8 +199,9 @@ export class CodeGenerator {
             console.log('============ OPTIMIZED Dead code ===============');
             console.log(ssa.Node.strainToString("", b.node));
         }
+        */
 
-        this.wasm.generateFunction(b.node, wf);
+        this.wasm.defineFunction(b.node, wf);
         if (exportFunc) {
             this.wasm.module.exports.set(f.name, wf);
         } 
@@ -1206,6 +1221,7 @@ export class CodeGenerator {
     private wasm: ssa.Wasm32Backend;
     private tc: TypeChecker;
     private funcs: Map<Function, wasm.Function | wasm.FunctionImport> = new Map<Function, wasm.Function | wasm.FunctionImport>();
+    private globalVars = new Map<ScopeElement, ssa.Variable>();
     private sliceHeader: ssa.StructType;
     private emitIR: boolean;
     private emitNoWasm: boolean;

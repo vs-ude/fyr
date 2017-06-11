@@ -9,6 +9,7 @@ export interface LocationPoint {
 export interface Location {
     start: LocationPoint;
     end: LocationPoint;
+    file: string;
 }
 
 export function parse(code: string): Node

@@ -15,6 +15,7 @@ export class Variable implements ScopeElement {
     public loc: Location;
     public isResult: boolean = false;
     public heapAlloc: boolean = false;
+    public node: Node;
 }
 
 export type CallingConvention = "fyr" | "fyrCoroutine" | "host";
@@ -1035,26 +1036,41 @@ export class TypeChecker {
 
     public checkModule(mnode: Node): Scope {
         let typedefs: Array<Typedef> = [];
+        let functions: Array<Function> = [];
+        let globalVariables: Array<Variable> = [];
 
         let scope = this.createScope();
+        // Iterate over all files and declare all types
         for(let fnode of mnode.statements) {
-            if (fnode.op == "typedef") {
-                let t = this.createTypedef(fnode, scope);
-                typedefs.push(t);
+            fnode.scope = new Scope(scope);
+            for (let snode of fnode.statements) {
+                if (snode.op == "typedef") {
+                    let t = this.createTypedef(snode, scope);
+                    typedefs.push(t);
+                }
             }
         }
 
+        // Iterate over all files and declare all functions and global variables
+        // and handle all imports
         for(let fnode of mnode.statements) {
-            if (fnode.op == "func") {
-                this.createFunction(fnode, scope);
-            } else if (fnode.op == "import") {
-                this.createImport(fnode, scope);
-            } else if (fnode.op == "typedef") {
-                // Do nothing by intention
-            } else if (fnode.op == "comment") {
-                // Do nothing by intention
-            } else {
-                throw "Implementation error " + fnode.op;
+            for (let snode of fnode.statements) {
+                if (snode.op == "func") {
+                    let f = this.createFunction(snode, scope);
+                    functions.push(f);
+                } else if (snode.op == "var") {
+                    let v = this.createVar(snode.lhs, scope, false);
+                    v.node = snode;
+                    globalVariables.push(v);
+                } else if (snode.op == "import") {
+                    this.createImport(snode, fnode.scope);
+                } else if (snode.op == "typedef") {
+                    // Do nothing by intention
+                } else if (snode.op == "comment") {
+                    // Do nothing by intention
+                } else {
+                    throw "Implementation error " + snode.op;
+                }
             }
         }
 
@@ -1076,11 +1092,13 @@ export class TypeChecker {
         }
 
         // Check function bodies
-        for(let key of scope.elements.keys()) {
-            let e = scope.elements.get(key);
-            if (e instanceof Function) {
-                this.checkFunctionBody(e);
-            }
+        for(let e of functions) {
+            this.checkFunctionBody(e);
+        }
+
+        // Check variable assignments
+        for(let v of globalVariables) {
+            this.checkGlobalVariable(v, scope);
         }
 
         // Determine which functions could block and hence needs special coroutine treatment.
@@ -1116,7 +1134,7 @@ export class TypeChecker {
         let needsReturn = !!f.node.rhs;
         if (needsReturn) {
             if (!f.node.statements) {
-                throw new TypeError("Mising return at end of function", {start: f.loc.end, end: f.loc.end});
+                throw new TypeError("Mising return at end of function", f.loc);
             }
             let hasReturn = false;
             for(let i = f.node.statements.length - 1; i >= 0; i--) {
@@ -1130,7 +1148,7 @@ export class TypeChecker {
                 }
             }
             if (!hasReturn) {
-                throw new TypeError("Mising return at end of function", {start: f.loc.end, end: f.loc.end});
+                throw new TypeError("Mising return at end of function", f.loc);
             }
         }
     }
@@ -2350,6 +2368,21 @@ export class TypeChecker {
                 throw new TypeError("'?' is not allowed in this context", enode.loc);
             default:
                 throw "Implementation error " + enode.op;
+        }
+    }
+
+    private checkGlobalVariable(v: Variable, scope: Scope) {
+        if (v.node.rhs) {
+            this.checkExpression(v.node.rhs, scope);
+            if (!v.type) {
+                if (v.node.rhs.type instanceof ArrayLiteralType || v.node.rhs.type instanceof TupleLiteralType || v.node.rhs.type instanceof ObjectLiteralType) {
+                    v.type = this.defaultLiteralType(v.node.rhs);
+                } else {
+                    v.type = v.node.rhs.type;
+                }
+            } else {
+                this.checkIsAssignableNode(v.type, v.node.rhs, false);
+            }
         }
     }
 

@@ -242,23 +242,6 @@ export class Node {
             str += names.join(", ");
         }
 
-        /*
-        if (this.kind == "if" || this.kind == "block" || this.kind == "loop" || this.kind == "define") {
-            if (this.next.length > 0) {
-                if (this.kind == "if") {
-                    str += Node.strainToString(indent + "    ", this.next[0]);
-                    if (this.next.length > 1) {
-                        str += indent + "else\n";
-                        str += Node.strainToString(indent + "    ", this.next[1]);
-                    }
-                } else {
-                    str += Node.strainToString(indent + "    ", this.next[0]);
-                }
-                str += indent + "end " + this.kind + "\n";
-            }
-        }
-        */
-
         return str;
     }
 
@@ -344,24 +327,7 @@ export class Builder {
         this._mem.writeCount = 2;
     }
 
-    public define(name: string, type: FunctionType) {
-        let n: Node;
-        // Check whether a function of this name has already been declared
-        if (this._node) {
-            for(let x = this._node; x; x = x.next[0]) {
-                if (x.kind == "define" && x.name == name) {
-                    n = x;
-                    break;
-                }
-            }
-        }
-        if (!n) {
-            n = this.declare(name, type);
-        }
-        this._blocks.push(n);
-    }
-
-    public declare(name: string, type: FunctionType): Node {
+    public define(name: string, type: FunctionType): Node {
         let n = new Node(null, "define", type, []);
         n.name = name;
         n.isAsync = type.callingConvention == "fyrCoroutine";
@@ -372,23 +338,8 @@ export class Builder {
             this._node = n;
         }
         this._current = n;
-        /*
-        if (type.params.length != params.length) {
-            throw "Parameters do not match FunctionType"
-        }
-        if (!!type.result != !!result) {
-            throw "Result variable does not match FunctionType"
-        }
-        for(let i = 0; i < params.length; i++) {
-            let p = params[i];
-            p.type = type.params[i];
-            this.declParam(p);
-        }
-        if (result) {
-            result.type = type.result;
-            this.declResult(result);
-        }
-        */
+        this._blocks.push(n);
+
         let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
         n.blockPartner = e;  
@@ -1043,7 +994,7 @@ export class SMTransformer {
 }
 
 
-export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_param" | "local_var";
+export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap";
 
 export class Wasm32Storage {
     public storageType: Wasm32StorageType;
@@ -1103,6 +1054,10 @@ export class Wasm32Backend {
         this.emitIR = emitIR;
         this.emitIRFunction = emitIRFunction;
         this.tr = new SMTransformer();
+        this.optimizer = new Optimizer();
+        this.funcs = [];
+        this.globalVarStorage = new Map<Variable, Wasm32Storage>();
+        this.globalVariables = [];
         this.module = new wasm.Module();
         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
         this.varsFrameHeader = new StructType();
@@ -1136,13 +1091,56 @@ export class Wasm32Backend {
         return f;
     }
 
+    public declareGlobalVar(name: string, type: Type | StructType): Variable {
+        let v = new Variable(name);
+        v.type = type;
+        this.globalVariables.push(v);
+        return v;
+    }
+
     public declareFunction(name: string): wasm.Function {
         let wf = new wasm.Function(name);
         this.module.addFunction(wf);
         return wf;
     }
 
-    public generateFunction(n: Node, f: wasm.Function) {
+    public defineFunction(n: Node, f: wasm.Function) {
+        this.funcs.push({node: n, wf: f});
+    }
+
+    public generateModule() {
+        // Generate WASM code for all globals
+        let index = 0;
+        for(let v of this.globalVariables) {
+            if (v.addressable || v.type instanceof StructType) {
+                throw "TODO: Global variable on heap"
+            } else {
+                let s: Wasm32Storage = {storageType: "global", offset: index};
+                this.globalVarStorage.set(v, s);
+                let g = new wasm.Global(this.stackTypeOf(v.type), "$" + v.name, true);
+                this.module.addGlobal(g);
+            }
+            index++;
+        }
+        // Generate WASM code for all functions
+        for(let f of this.funcs) {
+            this.optimizer.optimizeConstants(f.node);
+            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
+                console.log('============ OPTIMIZED Constants ===============');
+                console.log(Node.strainToString("", f.node));
+            }
+
+            this.optimizer.removeDeadCode(f.node);
+            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
+                console.log('============ OPTIMIZED Dead code ===============');
+                console.log(Node.strainToString("", f.node));
+            }
+
+            this.generateFunction(f.node, f.wf);
+        }
+    }
+
+    private generateFunction(n: Node, f: wasm.Function) {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
@@ -1636,7 +1634,7 @@ export class Wasm32Backend {
         if (v.name == "$mem") {
             return;
         }
-        if (this.varStorage.has(v)) {
+        if (this.varStorage.has(v) || this.globalVarStorage.has(v)) {
             return;
         }
         if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && v.type != "ptr" && !v.addressable) {
@@ -2257,7 +2255,7 @@ export class Wasm32Backend {
     }
 
     private emitAddrOfVariable(v: Variable, returnOffset: boolean, code: Array<wasm.Node>) {
-        let s = this.varStorage.get(v);
+        let s = this.storageOf(v);
         switch(s.storageType) {
             case "vars":
                 code.push(new wasm.GetLocal(this.bpLocal));
@@ -2296,6 +2294,10 @@ export class Wasm32Backend {
                 }
                 break;
             }      
+            case "global_heap":
+            {
+                throw "TODO: Global variable on heap";
+            }
             default:
                 throw "Implementation error"
         }
@@ -2383,7 +2385,7 @@ export class Wasm32Backend {
                 asWidth = "16_s";
                 break;
         }        
-        let s = this.varStorage.get(v);
+        let s = this.storageOf(v);
         switch(s.storageType) {
             case "local":
                 code.push(new wasm.GetLocal(s.offset));
@@ -2399,7 +2401,12 @@ export class Wasm32Backend {
             case "result":
                 code.push(new wasm.GetLocal(this.bpLocal));
                 code.push(new wasm.Load(width, asWidth, this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name)));
-                break;                
+                break;      
+            case "global":
+                code.push(new wasm.GetGlobal(s.offset));
+                break;
+            case "global_heap":
+                throw "TODO: Global variable";
         }
     }
 
@@ -2623,7 +2630,7 @@ export class Wasm32Backend {
     }
 
     private storeVariableFromWasmStack1(type: Type, v: Variable, code: Array<wasm.Node>) {
-        let s = this.varStorage.get(v);
+        let s = this.storageOf(v);
         switch(s.storageType) {
             case "vars":
             case "params":
@@ -2646,7 +2653,7 @@ export class Wasm32Backend {
                 asWidth = "16";
                 break;
         }
-        let s = this.varStorage.get(v);
+        let s = this.storageOf(v);
         switch(s.storageType) {
             case "local":
                 if (tee) {
@@ -2655,6 +2662,15 @@ export class Wasm32Backend {
                     code.push(new wasm.SetLocal(s.offset));
                 }
                 break;
+            case "global":
+                if (tee) {
+                    code.push(new wasm.TeeLocal(this.getTmpLocal(width)));
+                }
+                code.push(new wasm.SetGlobal(s.offset));
+                if (tee) {
+                    code.push(new wasm.GetLocal(this.getTmpLocal(width)));
+                }
+                break;                
             case "vars":
                 if (tee) {
                     code.push(new wasm.TeeLocal(this.getTmpLocal(width)));
@@ -2681,7 +2697,9 @@ export class Wasm32Backend {
                 if (tee) {
                     code.push(new wasm.GetLocal(this.getTmpLocal(width)));
                 }
-                break;                
+                break;     
+            case "global_heap":
+                throw "TODO: Global heap";
         }
     }
 
@@ -2798,6 +2816,13 @@ export class Wasm32Backend {
         throw "Implementation error";
     }
 
+    private storageOf(v: Variable): Wasm32Storage {
+        if (this.varStorage.has(v)) {
+            return this.varStorage.get(v);
+        }
+        return this.globalVarStorage.get(v);
+    }
+
     private wfHasHeapFrame(): boolean {
         for(let s of this.varStorage.values()) {
             if (s.storageType == "result" || s.storageType == "vars" || s.storageType == "params") {
@@ -2810,8 +2835,12 @@ export class Wasm32Backend {
     public module: wasm.Module;
 
     private tr: SMTransformer;
-    private copyFunctionIndex: number = 111; // TODO
-    private allocFunctionIndex: number = 112; // TODO
+    private optimizer: Optimizer;
+    private funcs: Array<{node: Node, wf: wasm.Function}>;
+    private globalVariables: Array<Variable>;
+    private globalVarStorage: Map<Variable, Wasm32Storage>;
+    private copyFunctionIndex: string = "$__copy";
+    private allocFunctionIndex: string = "$__alloc";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;
@@ -2826,7 +2855,7 @@ export class Wasm32Backend {
     private varsFrameHeader: StructType;
     private varStorage: Map<Variable, Wasm32Storage>;
     private parameterVariables: Array<Variable>;
-    private returnVariables: Array<Variable> ;
+    private returnVariables: Array<Variable>;
     private tmpI32Local: number;
     private tmpI64Local: number;
     private tmpF32Local: number;
@@ -2836,112 +2865,3 @@ export class Wasm32Backend {
     private emitIR: boolean;
     private emitIRFunction: string | null;
 }
-
-function main() {
-
-    let point = new StructType();
-    point.addField("x", "f32");
-    point.addField("y", "f32");
-
-    let b = new Builder();
-    b.define("f1", new FunctionType(["f32", "f32"], "f32", "fyrCoroutine"));
-    let p1 = b.declareParam("f32", "$1");
-    let p2 = b.declareParam("f32", "$2");
-    let r = b.declareResult("f32", "$r");
-    let t1 = b.assign(b.tmp(), "add", "f32", [p1, p2]);
-    b.assign(null, "yield", null, []);
-    let t2 = b.assign(b.tmp(), "add", "f32", [t1, p2]);
-    b.assign(null, "yield", null, []);
-    let t3 = b.assign(b.tmp(), "add", "f32", [t2, p2]);
-    b.assign(r, "return", "f32", [t3]);
-    b.end();
-    console.log(Node.strainToString("", b.node));
-
-    /*
-    let b = new Builder();
-    b.define("f1", new FunctionType(["f32", "f32"], "f32", true));
-    let p1 = b.declareParam("f32", "$1");
-    let p2 = b.declareParam("f32", "$2");
-    let r = b.declareResult("f32", "$r");
-    let t1 = b.assign(b.tmp(), "eq", "f32", [p1, p2]);
-    b.ifBlock(t1);
-    b.assign(r, "return", "f32", [-1]);
-    b.end();
-    let t3 = b.assign(b.tmp(), "const", "i32", [0]);
-    b.ifBlock(t3);
-    b.assign(p1, "neg", "f32", [p1]);
-    b.elseBlock();
-    b.assign(p2, "neg", "f32", [p2]);
-    b.end();
-    b.assign(null, "yield", null, []);
-    let t2 = b.assign(b.tmp(), "mul", "f32", [p1, p2]);
-    let t4 = b.call(b.tmp(), new FunctionType([], point, true), [13]);
-    let addr = b.assign(b.tmp(), "addr_of", "addr", [t4]);
-    let t5 = b.assign(b.tmp(), "load", "f32", [addr, 0]);
-    let t6 = b.assign(b.tmp(), "load", "f32", [addr, 4]);
-    let t7 = b.assign(b.tmp(), "add", "f32", [t5, t6]);
-    let t8 = b.assign(b.tmp(), "sub", "f32", [t2, t7]);
-    b.assign(r, "return", "f32", [t8]);
-    b.assign(r, "return", "f32", [t8]);
-    b.end();
-    console.log(Node.strainToString("", b.node));
-    */
-
-    /*
-    let b = new Builder();
-    b.define("f1", new FunctionType(["i32", "f32"], "i32"));
-    let p1 = b.declareParam("i32", "$1");
-    let p2 = b.declareParam("f32", "$2");
-    let r = b.declareResult("i32", "$r");
-    let t2 = b.assign(b.tmp(), "const", "i32", [84]);
-    let t1 = b.assign(b.tmp(), "const", "i32", [42]);
-    let t = b.assign(b.tmp(), "add", "i32", [t1, t2]);
-    let f1 = new FunctionType(["i32", "i32"], "i32");
-    b.call(null, f1, [11, t, t]);
-    b.ifBlock(t);
-    let t3 = b.call(b.tmp(), f1, [9]);
-    let t5 = b.assign(b.tmp(), "addr_of", "addr", [t]);
-    b.assign(b.mem, "store", "i32", [t5, 4, t3]);
-    b.elseBlock();
-    let t6 = b.assign(b.tmp(), "addr_of", "addr", [t]);
-    b.assign(b.mem, "store", "i32", [t6, 8, 0]);
-    b.end();
-//    b.ifBlock(t);
-    let bl = b.block();
-    let lo = b.loop();
-    let t4 = b.assign(b.tmp(), "load", "i32", [t1, 4]);
-    b.assign(b.mem, "store", "i32", [1234, 0, t4]);
-    b.br_if(t, bl);
-//    b.br(bl);
-    b.call(null, f1, [10]);
-    b.br(lo);
-    b.end();
-//    b.end();
-    b.end();
-    let f = new FunctionType(["i32"], "addr");
-    b.call(b.tmp(), f, [8, t]);
-    let dummy1 = b.assign(b.tmp(), "const", "i32", [44]);
-    let dummy2 = b.assign(b.tmp(), "const", "i32", [45]);
-    let t7 = b.assign(b.tmp(), "add", "i32", [dummy1, dummy2]);
-    b.call(null, new FunctionType(["i32"], null, false), [111, t7]);
-    b.end();
-    console.log(Node.strainToString("", b.node));
-    */
-
-    let opt = new Optimizer();
-    opt.optimizeConstants(b.node);
-    console.log('============ OPTIMIZED Constants ===============');
-    console.log(Node.strainToString("", b.node));
-
-    opt.removeDeadCode(b.node);
-    console.log('============ OPTIMIZED Dead code ===============');
-    console.log(Node.strainToString("", b.node));
-
-    let back = new Wasm32Backend(true, null);
-    var wf = back.declareFunction(b.node.name);
-    back.generateFunction(b.node, wf);
-    console.log('============ WAST ===============');
-    console.log(back.module.toWast(""));
-}
-
-// main();
