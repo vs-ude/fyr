@@ -854,7 +854,7 @@ export class TypeChecker {
         return s;
     }
 
-    public createFunction(fnode: Node, scope: Scope): Function {
+    public createFunction(fnode: Node, scope: Scope, registerScope: Scope): Function {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
         }
@@ -925,7 +925,7 @@ export class TypeChecker {
             f.type.returnType = this.t_void;
         }
 
-        scope.registerElement(f.name, f);
+        registerScope.registerElement(f.name, f);
 
         return f;
     }
@@ -1040,6 +1040,7 @@ export class TypeChecker {
         let globalVariables: Array<Variable> = [];
 
         let scope = this.createScope();
+        mnode.scope = scope;
         // Iterate over all files and declare all types
         for(let fnode of mnode.statements) {
             fnode.scope = new Scope(scope);
@@ -1056,7 +1057,7 @@ export class TypeChecker {
         for(let fnode of mnode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "func") {
-                    let f = this.createFunction(snode, scope);
+                    let f = this.createFunction(snode, fnode.scope, scope);
                     functions.push(f);
                 } else if (snode.op == "var") {
                     let v = this.createVar(snode.lhs, scope, false);

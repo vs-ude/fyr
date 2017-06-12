@@ -9,6 +9,7 @@ export class CodeGenerator {
         this.emitIR = emitIR;
         this.emitNoWasm = emitNoWasm;
         this.emitFunction = emitFunction;
+        this.imports = new Map<string, wasm.FunctionImport>();
         this.wasm = new ssa.Wasm32Backend(emitIR, emitFunction);
         this.wasm.module.importMemory("imports", "mem");
         this.sliceHeader = new ssa.StructType();
@@ -18,14 +19,33 @@ export class CodeGenerator {
         this.sliceHeader.addField("cap", "i32");
     }
 
-    public processModule(scope: Scope) {
-        let index = 0;
+    public processModule(mnode: Node) {
+        // Iterate over all files and import all functions, but import each function not more than once
+        for(let fnode of mnode.statements) {
+            for(let name of fnode.scope.elements.keys()) {
+                let e = fnode.scope.elements.get(name);
+                if (e instanceof Function && e.isImported) {
+                    let name = e.importFromModule + "/" + e.name;
+                    if (this.imports.has(name)) {
+                        this.funcs.set(e, this.imports.get(name));
+                    } else {
+                        let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
+                        this.funcs.set(e, wf);
+                        this.imports.set(name, wf);
+                    }
+                }
+            }
+        }
+
+        // Declare all functions and global variables
+        let scope = mnode.scope;
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
                 if (e.isImported) {
-                    let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
-                    this.funcs.set(e, wf);
+                    throw "Implementation error";
+//                    let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
+//                    this.funcs.set(e, wf);
                 } else {
                     let wf = this.wasm.declareFunction(e.name);
                     this.funcs.set(e, wf);
@@ -38,11 +58,12 @@ export class CodeGenerator {
             }
         }
 
+        // Generate IR code for all functions and initialization of global variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
                 if (e.isImported) {
-                    continue;
+                    throw "Implementation error";
                 }
                 let wf = this.funcs.get(e) as wasm.Function;
                 let n = this.processFunction(e, true, wf);
@@ -55,6 +76,7 @@ export class CodeGenerator {
             }
         }
 
+        // Generate WASM code for the module
         this.wasm.generateModule();
         
 //        console.log('============ WASM ===============');
@@ -267,7 +289,7 @@ export class CodeGenerator {
                         let v = vars.get(element);
                         if (element.heapAlloc) {
                             let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", "ptr", [ssa.sizeOf(storage)]);
+                            b.assign(v, "alloc", storage, [ssa.sizeOf(storage)]);
                             let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
                             b.assign(b.mem, "store", storage, [v, 0, tmp]);
                         } else {
@@ -289,7 +311,7 @@ export class CodeGenerator {
                         let v = vars.get(element);
                         if (element.heapAlloc) {
                             let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", "ptr", [ssa.sizeOf(storage)]);
+                            b.assign(v, "alloc", storage, [ssa.sizeOf(storage)]);
                         }
                         // Nothing else todo here, handled by decl_var.
                     } else {
@@ -437,7 +459,7 @@ export class CodeGenerator {
                             counter = vars.get(element);
                             if (element.heapAlloc) {
                                 let storage = this.getSSAType(element.type);
-                                b.assign(counter, "alloc", "ptr", [ssa.sizeOf(storage)]);
+                                b.assign(counter, "alloc", storage, [ssa.sizeOf(storage)]);
                                 b.assign(b.mem, "store", "s32", [counter, 0, 0]);
                             } else {
                                 b.assign(counter, "const", "s32", [0]);
@@ -447,7 +469,7 @@ export class CodeGenerator {
                             val = vars.get(valElement);
                             if (valElement.heapAlloc) {
                                 let storage = this.getSSAType(valElement.type);
-                                b.assign(val, "alloc", "ptr", [ssa.sizeOf(storage)]);
+                                b.assign(val, "alloc", storage, [ssa.sizeOf(storage)]);
                             }
                         } else {
                             // Initialize a counter with 0
@@ -458,7 +480,7 @@ export class CodeGenerator {
                             val = vars.get(valElement);
                             if (valElement.heapAlloc) {
                                 let storage = this.getSSAType(valElement.type);
-                                b.assign(val, "alloc", "ptr", [ssa.sizeOf(storage)]);
+                                b.assign(val, "alloc", storage, [ssa.sizeOf(storage)]);
                             }
                         }
                     } else {
@@ -851,7 +873,7 @@ export class CodeGenerator {
                 if (enode.type instanceof SliceType) {
                     let et = this.getSSAType(enode.type.elementType);
                     let esize = ssa.sizeOf(et);
-                    let ptr = b.assign(b.tmp(), "alloc", "ptr", [enode.parameters.length * esize]);
+                    let ptr = b.assign(b.tmp("ptr"), "alloc", et, [enode.parameters.length * esize]);
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
@@ -1017,7 +1039,7 @@ export class CodeGenerator {
                 // Make a copy of a literal
                 let p = this.processExpression(f, scope, enode.rhs, b, vars);
                 let s = this.getSSAType(enode.rhs.type);
-                let copy = b.assign(b.tmp(), "alloc", "ptr", [ssa.sizeOf(s)]);
+                let copy = b.assign(b.tmp("ptr"), "alloc", s, [ssa.sizeOf(s)]);
                 b.assign(b.mem, "store", s, [copy, 0, p]);
                 return copy;
             }
@@ -1220,6 +1242,7 @@ export class CodeGenerator {
     private optimizer: ssa.Optimizer;
     private wasm: ssa.Wasm32Backend;
     private tc: TypeChecker;
+    private imports: Map<string, wasm.FunctionImport>;
     private funcs: Map<Function, wasm.Function | wasm.FunctionImport> = new Map<Function, wasm.Function | wasm.FunctionImport>();
     private globalVars = new Map<ScopeElement, ssa.Variable>();
     private sliceHeader: ssa.StructType;

@@ -303,3 +303,14 @@ func free(ptr #void) {
     }
     // TODO: throw
 }
+
+func garbageCollect() {
+    // Switch the epoch
+    gcEpoch = gcEpoch ^ 3
+}
+
+func copy(dest #byte, src #byte, count int) {
+    for(count--; count >= 0; count--) {
+        dest[count] = src[count]
+    }
+}

@@ -101,6 +101,19 @@ export function sizeOf(x: Type | StructType): number {
     }
 }
 
+export function hasPointers(t: Type | StructType): boolean {
+    if (t instanceof StructType) {
+        for(let f of t.fields) {
+            if (hasPointers(f[1])) {
+                return true;
+            }
+        }
+    } else if (t == "ptr") {
+        return true;
+    }
+    return false;
+}
+
 export function compareTypes(t1: Type | StructType, t2: Type | StructType): boolean {
     if (t1 == t2) {
         return true;
@@ -1974,10 +1987,13 @@ export class Wasm32Backend {
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
                 n = n.next[0];
             } else if (n.kind == "alloc") {
-                if (n.type != "addr" && n.type != "ptr") {
+                if (n.type instanceof FunctionType) {
                     throw "Implementation error"
                 }
-                this.emitAssign(n.type, n, null, code);
+//                if (n.type != "addr" && n.type != "ptr") {
+//                    throw "Implementation error"
+//                }
+                this.emitAssign("ptr", n, null, code);
                 n = n.next[0];
             } else if (n.kind == "end") {
                 // Nothing to do
@@ -2116,7 +2132,7 @@ export class Wasm32Backend {
             return;
         }
 
-        // An expression of type StructType?
+        // An expression of type StructType? (but not an alloc)
         if (type instanceof StructType) {
             if (stack == "wasmStack") {
                 throw "Implementation error: StructType on wasmStack is not possible";
@@ -2421,6 +2437,12 @@ export class Wasm32Backend {
                 this.storeVariableFromWasmStack1("addr", n.assign, code);
             }
             this.emitWordAssign("i32", n.args[0], "wasmStack", code);
+            if (hasPointers(n.type as Type | StructType)) {
+                code.push(new wasm.Constant("i32", 1));
+            } else {
+                code.push(new wasm.Constant("i32", 0));
+            }
+            code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.Call(this.allocFunctionIndex));
             if (n.assign) {
                 this.storeVariableFromWasmStack2("addr", n.assign, stack == "wasmStack", code);
@@ -2839,8 +2861,8 @@ export class Wasm32Backend {
     private funcs: Array<{node: Node, wf: wasm.Function}>;
     private globalVariables: Array<Variable>;
     private globalVarStorage: Map<Variable, Wasm32Storage>;
-    private copyFunctionIndex: string = "$__copy";
-    private allocFunctionIndex: string = "$__alloc";
+    private copyFunctionIndex: string = "$copy";
+    private allocFunctionIndex: string = "$alloc";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;
