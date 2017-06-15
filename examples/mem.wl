@@ -110,7 +110,7 @@ func split(f #FreeArea, index uint) {
     block.area[area_nr >> 1] |= (byte)(4 << ((area_nr & 1) << 2))
 }
 
-func allocBlocks(count uint, epoch uint, gc_pointers bool) #void {
+func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
     // Compute the block-count as a power of two
     var index uint = 14
     for(; index >= 0; index--) {
@@ -125,6 +125,14 @@ func allocBlocks(count uint, epoch uint, gc_pointers bool) #void {
         }
     }
     // TODO: panic if index == 15 -> out of memory
+    if (index == 15) {
+        if (has_gc) {
+            // TODO: Throw out-of-memory exception
+            return 0
+        }
+        return allocBlocks(count, epoch, gc_pointers, true)
+    }
+
     var f #FreeBlock = root.freeBlocks[index]
     if (f.count == count) {
         // Use all of the blocks in this sequence.
@@ -178,7 +186,7 @@ func alloc(size uint, gc_pointers bool) #void {
     var index uint
     if (size > 1<<15) {             // Needs entire blocks
         // allocate a sequence of blocks
-        return allocBlocks((size + 0xffff) / (1<<16), gcEpoch, gc_pointers) 
+        return allocBlocks((size + 0xffff) / (1<<16), gcEpoch, gc_pointers, false) 
     } else if (size > 1 << 14) {    // 32k
         index = 10
     } else if (size > 1 << 13) {    // 16k
@@ -237,7 +245,7 @@ func alloc(size uint, gc_pointers bool) #void {
     }
 
     // Nothing free. Add one more block and allocate again
-    initializeBlock((#Block)allocBlocks(1, 1 | 2, false))
+    initializeBlock((#Block)allocBlocks(1, 1 | 2, false, false))
     return alloc(size, gc_pointers)
 }
 
@@ -313,4 +321,22 @@ func copy(dest #byte, src #byte, count int) {
     for(count--; count >= 0; count--) {
         dest[count] = src[count]
     }
+}
+
+func string_concat(str1 string, str2 string) string {
+    var s1 = *((#uint)str1)
+    var s2 = *((#uint)str2)
+    var p #void = alloc(4 + s1 + s2, false)
+    *((#uint)p) = s1 + s2
+    var dest #byte = (#byte)p + 4
+    var src #byte = (#byte)str1 + 4
+    for(var i uint = 0; i < s2; i++) {
+        dest[i] = src[i]
+    }
+    dest += s1
+    src = (#byte)str2 + 4
+    for(var i uint = 0; i < s2; i++) {
+        dest[i] = src[i]
+    }
+    return (string)p
 }

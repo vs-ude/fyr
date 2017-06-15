@@ -1916,7 +1916,7 @@ export class Wasm32Backend {
                 if (n.type instanceof FunctionType) {
                     throw "Implementation error";
                 }
-                if (n.args.length == 1 && !this.wfIsAsync && !(n.type instanceof StructType)) {
+                if (n.args.length == 1 && !this.wfIsAsync && !(n.type instanceof StructType) && n.type != "ptr") {
                     if (this.returnVariables.length != 1) {
                         throw "return with one parameter, but function has no return type"
                     }
@@ -1927,7 +1927,7 @@ export class Wasm32Backend {
                     }
                     for(let i = 0; i < n.args.length; i++) {
                         let t = this.returnVariables[i].type;
-                        if (t instanceof StructType) {
+                        if (t instanceof StructType || t == "ptr") {
                             // Destination addr
                             this.emitAddrOfVariable(this.returnVariables[i], false, code);
                             // Source addr
@@ -1944,9 +1944,9 @@ export class Wasm32Backend {
                             }                        
                         } else {
                             // Destination addr
-                            let offset = this.emitAddrOfVariable(this.returnVariables[0], true, code);
+                            let offset = this.emitAddrOfVariable(this.returnVariables[i], true, code);
                             // Put value on stack
-                            this.emitWordAssign(n.type as Type, n.args[0], "wasmStack", code);
+                            this.emitWordAssign(n.type as Type, n.args[i], "wasmStack", code);
                             let width = this.stackTypeOf(t);
                             let asWidth: null | "8"| "16" | "32" = null;
                             switch (t) {
@@ -2011,10 +2011,10 @@ export class Wasm32Backend {
             throw "Implementation error: No assignment";
         }
 
-        // Synchronous function call that returns a StructType?
+        // Synchronous function call that returns a StructType or a pointer?
         if (n instanceof Node && n.kind == "call" && (type instanceof StructType || type == "ptr")) {
             if (stack == "wasmStack") {
-                throw "Implementation error: StructType or ptr on wasmStack is not possible";
+                throw "Implementation error: StructType or pointer on wasmStack is not possible";
             }
             if (!(n.type instanceof FunctionType)) {
                 throw "Implementation error " + n.toString("");
@@ -2042,7 +2042,8 @@ export class Wasm32Backend {
                     this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", code);                    
                 }
             }
-            if (n.type.callingConvention == "fyr" || paramSize > 0 || n.type.result instanceof StructType) {
+//            if (n.type.callingConvention == "fyr" || paramSize > 0 || n.type.result instanceof StructType) {
+            if (n.type.callingConvention == "fyr" || n.type.callingConvention == "fyrCoroutine") {
                 // Put SP on wasm stack
                 code.push(new wasm.GetLocal(this.spLocal));
             }
@@ -2132,16 +2133,16 @@ export class Wasm32Backend {
             return;
         }
 
-        // An expression of type StructType? (but not an alloc)
+        // An expression of type StructType or pointer?
         if (type instanceof StructType) {
             if (stack == "wasmStack") {
-                throw "Implementation error: StructType on wasmStack is not possible";
+                throw "Implementation error: StructType or pointer on wasmStack is not possible";
             }
             if (typeof(n) == "number") {
                 throw "Implementation error: A number cannot be of type StructType";
             }
             if (n instanceof Node && (n.kind != "call_end" && n.kind != "load" && n.kind != "copy" && n.kind != "struct")) {
-                throw "Implementation error: Node " + n.kind + " cannot yield a StructType";
+                throw "Implementation error: Node " + n.kind + " cannot yield a StructType or pointer";
             }
 
             if (n instanceof Node && n.kind == "call_end") {

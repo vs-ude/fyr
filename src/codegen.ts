@@ -44,11 +44,11 @@ export class CodeGenerator {
             if (e instanceof Function) {
                 if (e.isImported) {
                     throw "Implementation error";
-//                    let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
-//                    this.funcs.set(e, wf);
-                } else {
-                    let wf = this.wasm.declareFunction(e.name);
-                    this.funcs.set(e, wf);
+                }
+                let wf = this.wasm.declareFunction(e.name);
+                this.funcs.set(e, wf);
+                if (e.name == this.stringConcatFunctionName) {
+                    this.stringConcatFunction = e;
                 }
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
@@ -364,8 +364,14 @@ export class CodeGenerator {
                     dest = tmp;
                 }
                 let p2 = this.processExpression(f, scope, snode.rhs, b, vars);
-                // TODO: String concatenation
-                if (storage == "f32" || storage == "f64") {
+                if (snode.lhs.type == this.tc.t_string) {
+                    // String concatenation
+                    if (!this.stringConcatFunction) {
+                        throw "Missing string concat function in runtime";
+                    }
+                    let wf = this.funcs.get(this.stringConcatFunction);
+                    b.call(dest, this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
+                } else if (storage == "f32" || storage == "f64") {
                     if (snode.op == "+=") {
                         b.assign(dest, "add", storage, [p1, p2]);
                     } else if (snode.op == "-=") {
@@ -933,7 +939,11 @@ export class CodeGenerator {
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
                 if (enode.lhs.type == this.tc.t_string) {
-                    throw "TODO"
+                    if (!this.stringConcatFunction) {
+                        throw "Missing string concat function in runtime";
+                    }
+                    let wf = this.funcs.get(this.stringConcatFunction);
+                    return b.call(b.tmp(), this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
                 }
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "add", storage, [p1, p2]);
@@ -1173,8 +1183,11 @@ export class CodeGenerator {
                         return b.assign(b.tmp(), "extend", s2, [expr]);
                     }
                     return expr;
-                } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
-                    // Convert pointers
+                } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType || enode.rhs.type == this.tc.t_string)) {
+                    // Convert pointer or string to unsafe pointer
+                    return expr;
+                } else if (t == this.tc.t_string && enode.rhs.type instanceof UnsafePointerType) {
+                    // Convert unsafe pointer to string
                     return expr;
                 } else if ((t == this.tc.t_bool || this.tc.checkIsIntType(t)) && (enode.rhs.type == this.tc.t_bool || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
@@ -1249,4 +1262,6 @@ export class CodeGenerator {
     private emitIR: boolean;
     private emitNoWasm: boolean;
     private emitFunction: string | null;
+    private stringConcatFunctionName: string = "string_concat";
+    private stringConcatFunction: Function;
 }

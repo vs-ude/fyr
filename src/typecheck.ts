@@ -854,13 +854,13 @@ export class TypeChecker {
         return s;
     }
 
-    public createFunction(fnode: Node, scope: Scope, registerScope: Scope): Function {
+    public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope): Function {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
         }
         let f: Function = new Function();
         f.name = fnode.name.value;
-        f.scope.parent = scope;
+        f.scope.parent = parentScope;
         f.node = fnode;
         f.loc = fnode.loc;
         if (fnode.genericParameters) {
@@ -1759,15 +1759,11 @@ export class TypeChecker {
                 this.checkExpression(snode.rhs, scope);
                 if (snode.op == "+=" && snode.lhs.type == this.t_string) {
                     this.checkIsString(snode.rhs);
-                } else if (snode.lhs.type instanceof PointerType || snode.lhs.type instanceof UnsafePointerType) {
+                } else if (snode.lhs.type instanceof UnsafePointerType) {
                     if (snode.op == "*=" || snode.op == "/=") {
                         throw new TypeError("'" + snode.op + "' is an invalid operation on pointers", snode.loc);
                     }
-                    if (snode.rhs.op == "int") {
-                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
-                    } else {
-                        this.checkTypeEquality(this.t_int, snode.rhs.type, snode.loc);
-                    }
+                    this.checkIsInt32Number(snode.rhs);
                 } else {
                     this.checkIsNumber(snode.lhs);
                     this.checkIsNumber(snode.rhs);
@@ -1969,15 +1965,26 @@ export class TypeChecker {
                     } else {
                         enode.type = this.t_bool;
                     }
-                } else if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
+                } else if (enode.lhs.type instanceof UnsafePointerType) {
                     if (enode.op == "*" || enode.op == "/") {
                         throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
                     }
                     if (enode.op == "+" || enode.op == "-") {
-                        this.checkTypeEquality(enode.rhs.type, this.t_int, enode.rhs.loc);
+                        this.checkIsInt32Number(enode.rhs);
                     } else {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
                     }
+                    enode.type = enode.lhs.type;
+                } else if (enode.rhs.type instanceof UnsafePointerType) {
+                    if (enode.op == "*" || enode.op == "/") {
+                        throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
+                    }
+                    if (enode.op == "+" || enode.op == "-") {
+                        this.checkIsInt32Number(enode.lhs);
+                    } else {
+                        this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
+                    }
+                    enode.type = enode.rhs.type;
                 } else {
                     this.checkIsNumber(enode.lhs);
                     this.checkIsNumber(enode.rhs);
@@ -2354,9 +2361,11 @@ export class TypeChecker {
                     enode.type = t;
                 } else if (this.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
                     enode.type = t;
-                } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType)) {
+                } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType || enode.rhs.type == this.t_string)) {
                     enode.type = t;
                 } else if ((t == this.t_bool || this.checkIsIntType(t)) && (enode.rhs.type == this.t_bool || this.checkIsIntNumber(enode.rhs, false))) {
+                    enode.type = t;
+                } else if (t == this.t_string && enode.rhs.type instanceof UnsafePointerType) {
                     enode.type = t;
                 } else {
                     throw "TODO: conversion not possible or not implemented";
@@ -2810,6 +2819,16 @@ export class TypeChecker {
         }
         if (doThrow) {
             throw new TypeError("Expected an integer type, but got " + node.type.name, node.loc);
+        }
+        return false;
+    }
+
+    public checkIsInt32Number(node: Node, doThrow: boolean = true): boolean {
+        if (node.type == this.t_int32 || node.type == this.t_uint32) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected an 32-bit integer type, but got " + node.type.name, node.loc);
         }
         return false;
     }
