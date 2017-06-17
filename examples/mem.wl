@@ -330,7 +330,7 @@ func string_concat(str1 string, str2 string) string {
     *((#uint)p) = s1 + s2
     var dest #byte = (#byte)p + 4
     var src #byte = (#byte)str1 + 4
-    for(var i uint = 0; i < s2; i++) {
+    for(var i uint = 0; i < s1; i++) {
         dest[i] = src[i]
     }
     dest += s1

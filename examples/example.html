@@ -21,6 +21,12 @@
                 }
             };
 
+            function makeString(offset) {
+                var l = new Uint32Array(memory.buffer, offset, 1);
+                var bytes = new Uint8Array(memory.buffer, offset + 4, l[0]);
+                return new TextDecoder('utf8').decode(bytes);
+            }
+
             function recursion(a) {
                 if (a == 0) {
                     return 0;
@@ -83,6 +89,7 @@
             });
             */
 
+            /*
             fetch('mem.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
@@ -125,7 +132,21 @@
                 let large3 = results.instance.exports.allocBlocks(2, 1, false, 100 * 65536)
                 console.log("Large3", large3);
             });
+            */
 
+            fetch('example9.wasm').then(response =>
+                response.arrayBuffer()
+            ).then(bytes =>
+                WebAssembly.instantiate(bytes, importObject)
+            ).then(results => {
+                console.log("Init root ...")
+                results.instance.exports.initializeRootBlock(1 << 16, 98, 100 * 65536);
+                console.log("main ...");
+                let s = results.instance.exports.main(100 * 65536);
+                console.log("... main");
+                let str = makeString(s);
+                console.log("main returns", str);
+            });
         </script>
     </body>
 </html>

@@ -1588,8 +1588,9 @@ export class Wasm32Backend {
     private analyzeVariableStorage(start: Node, end: Node, locals: Wasm32LocalVariableList) {
         let n = start;
         for(; n; ) {
-            if (n.kind == "decl_result" && (this.wfIsAsync || n.type instanceof StructType || n.type == "ptr")) {
-                // Pointers must be passed on the stack as well
+            if (n.kind == "decl_result" && (this.wfIsAsync || n.type instanceof StructType)) {
+                // Structs are returned via the heap stack.
+                // If async, everything is returned via the heap stack.
                 let index = this.resultFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "result", offset: index};
                 this.varStorage.set(n.assign, s);
@@ -1604,7 +1605,7 @@ export class Wasm32Backend {
                 n = n.next[0];                
                 continue;
             } else if (n.kind == "decl_param" && (n.type instanceof StructType || n.type == "ptr")) {
-                // Pointers must be passed on the stack as well
+                // Pointers as arguments must be passed on the stack as well
                 let index = this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "params", offset: index};
                 this.varStorage.set(n.assign, s);
@@ -1617,6 +1618,7 @@ export class Wasm32Backend {
                 this.wf.parameters.push(t);
                 this.varStorage.set(n.assign, s);
                 if (this.wfIsAsync) {
+                    // If the function yields, the heapstack must store the value of the parameter
                     let n = "$param" + s.offset.toString();
                     this.varsFrame.addField(n, t);
                 }             
@@ -1796,7 +1798,7 @@ export class Wasm32Backend {
                     if (n.type.params[i-1] instanceof FunctionType) {
                         throw "Implementation error"
                     }
-                    // Pointers must be passed on the stack
+                    // Pointers as arguments must be passed on the stack
                     if (n.type.params[i-1] instanceof StructType || n.type.params[i-1] == "ptr") {
                         this.emitAssign(n.type.params[i-1], n.args[i], "heapStack", code);
                     } else {
@@ -1916,7 +1918,7 @@ export class Wasm32Backend {
                 if (n.type instanceof FunctionType) {
                     throw "Implementation error";
                 }
-                if (n.args.length == 1 && !this.wfIsAsync && !(n.type instanceof StructType) && n.type != "ptr") {
+                if (n.args.length == 1 && !this.wfIsAsync && !(n.type instanceof StructType)) {
                     if (this.returnVariables.length != 1) {
                         throw "return with one parameter, but function has no return type"
                     }
@@ -1927,7 +1929,7 @@ export class Wasm32Backend {
                     }
                     for(let i = 0; i < n.args.length; i++) {
                         let t = this.returnVariables[i].type;
-                        if (t instanceof StructType || t == "ptr") {
+                        if (t instanceof StructType) {
                             // Destination addr
                             this.emitAddrOfVariable(this.returnVariables[i], false, code);
                             // Source addr
@@ -2011,15 +2013,15 @@ export class Wasm32Backend {
             throw "Implementation error: No assignment";
         }
 
-        // Synchronous function call that returns a StructType or a pointer?
-        if (n instanceof Node && n.kind == "call" && (type instanceof StructType || type == "ptr")) {
+        // Synchronous function call that returns a StructType?
+        if (n instanceof Node && n.kind == "call" && type instanceof StructType) {
             if (stack == "wasmStack") {
                 throw "Implementation error: StructType or pointer on wasmStack is not possible";
             }
             if (!(n.type instanceof FunctionType)) {
                 throw "Implementation error " + n.toString("");
             }
-            if (!(n.type.result instanceof StructType) && n.type.result != "ptr") {
+            if (!(n.type.result instanceof StructType)) {
                 throw "Implementation error.";
             }
             if (n.assign) {
@@ -2027,6 +2029,7 @@ export class Wasm32Backend {
                 this.emitAddrOfVariable(n.assign, false, code);
             }
             // Make room for the result on the heap stack
+            code.push(new wasm.Comment("result on heapstack"));
             code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.Constant("i32", sizeOf(n.type.result)));
             code.push(new wasm.BinaryInstruction("i32", "sub"));
@@ -2034,6 +2037,7 @@ export class Wasm32Backend {
             // Put parameters on wasm/heap stack
             let paramSize = 0;
             for(let i = 0; i < n.type.params.length; i++) {
+                code.push(new wasm.Comment("parameter " + i.toString()));
                 // Pointers must be passed on the stack, too
                 if (n.type.params[i] instanceof StructType || n.type.params[i] == "ptr") {
                     paramSize += sizeOf(n.type.params[i]);
@@ -2072,7 +2076,7 @@ export class Wasm32Backend {
                 code.push(new wasm.BinaryInstruction("i32", "add"));
                 code.push(new wasm.SetLocal(this.spLocal));
             } else if (paramSize > 0) {
-                // Remove parameters and result from stack
+                // Remove parameters from stack
                 code.push(new wasm.GetLocal(this.spLocal));
                 code.push(new wasm.Constant("i32", paramSize));
                 code.push(new wasm.BinaryInstruction("i32", "add"));
@@ -2627,6 +2631,7 @@ export class Wasm32Backend {
             }
             let paramSize = 0;
             for(let i = 0; i < n.type.params.length; i++) {
+                code.push(new wasm.Comment("parameter " + i.toString()));
                 // Pointers must be pased on the stack
                 if (n.type.params[i] instanceof StructType || n.type.params[i] == "ptr") {
                     paramSize += sizeOf(n.type.params[i]);
@@ -2643,8 +2648,16 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type.result as Type, n.assign, stack == "wasmStack", code);
             } else if (stack == null && n.type.result) {
-                // Remove parameter from wasm stack
+                // Remove result from wasm stack
                 code.push(new wasm.Drop());
+            }
+            if (paramSize > 0) {
+                code.push(new wasm.Comment("Remove parameters"));
+                // Remove parameters from stack
+                code.push(new wasm.GetLocal(this.spLocal));
+                code.push(new wasm.Constant("i32", paramSize));
+                code.push(new wasm.BinaryInstruction("i32", "add"));
+                code.push(new wasm.SetLocal(this.spLocal));                
             }
             n = n.next[0];            
         } else {

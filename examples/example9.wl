@@ -1,12 +1,16 @@
 func main() string {
-    var name = "Fred" + fuck()
+    var name = "Fred " + action()
     return name
 }
 
+func action() string {
+    return "sucks"
+}
+
 func fuck() string {
-    return fuck() + "x" + fuck()
+    return action() + "x" + action()
 }
 
 func dummy() string {
-    return fuck()
+    return action() + action() + action()
 }
