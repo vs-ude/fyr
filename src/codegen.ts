@@ -329,12 +329,68 @@ export class CodeGenerator {
             }
             case "=":
             {
-                if (snode.lhs.op == "tuple") {
-                    throw "TODO"
-                } else if (snode.lhs.op == "array") {
-                    throw "TODO"                        
-                } else if (snode.lhs.op == "object") {
-                    throw "TODO"                        
+                if (snode.lhs.op == "tuple" || snode.lhs.op == "array" || snode.lhs.op == "object") {
+                    var processAssignmentDestinations = (node: Node, destinations: Array<ssa.Variable | ssa.Pointer>) => {
+                        if (node.op == "tuple") {
+                            for(let p of node.parameters) {
+                                if (p.op == "tuple" || p.op == "array" || p.op == "object") {
+                                    processAssignmentDestinations(p, destinations);
+                                } else {
+                                    let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, p, b, vars);
+                                    destinations.push(dest);
+                                }
+                            }
+                        } else if (node.op == "array") {
+                            throw "TODO"                        
+                        } else if (node.op == "object") {
+                            throw "TODO"                        
+                        }
+                    }
+                    var processAssignment = (node: Node, type: Type, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer) => {
+                        if (node.op == "tuple") {
+                            if (!(type instanceof TupleType)) {
+                                throw "Implementation error";
+                            }
+                            let stype = this.getSSAType(type) as ssa.StructType;
+                            for(let i = 0; i < node.parameters.length; i++) {
+                                let p = node.parameters[i];
+                                if (p.op == "tuple" || p.op == "array" || p.op == "object") {
+                                    processAssignmentDestinations(node, destinations);
+                                } else {
+                                    let etype: ssa.Type | ssa.StructType = stype.fields[i][1];
+                                    let eoffset = stype.fieldOffset(stype.fields[i][0]);
+                                    let dest = destinations[destCount];
+                                    destCount++;
+                                    let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset]);
+                                    // If the left-hand expression returns an address, the resulting value must be stored in memory
+                                    if (dest instanceof ssa.Pointer) {
+                                        b.assign(b.mem, "store", etype, [dest.variable, dest.offset, val]);
+                                    } else {
+                                        b.assign(dest, "copy", etype, [val]);
+                                    }
+                                }
+                            }
+                        } else if (node.op == "array") {
+                            throw "TODO"                        
+                        } else if (node.op == "object") {
+                            throw "TODO"                        
+                        }
+                    }
+                    let destinations: Array<ssa.Variable | ssa.Pointer> = [];
+                    processAssignmentDestinations(snode.lhs, destinations);
+                    let val : ssa.Variable | ssa.Pointer;
+                    if (this.isLeftHandSide(snode.rhs)) {
+                        val = this.processLeftHandExpression(f, scope, snode.rhs, b, vars);
+                    } else {
+                        val = this.processExpression(f, scope, snode.rhs, b, vars) as ssa.Variable;
+                    }
+                    let ptr: ssa.Pointer;
+                    if (val instanceof ssa.Pointer) {
+                        ptr = val;
+                    } else {
+                        ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [val]), 0);
+                    }
+                    processAssignment(snode.lhs, snode.rhs.type, destinations, 0, ptr);
                 } else {
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                     let tmp = this.processExpression(f, scope, snode.rhs, b, vars);

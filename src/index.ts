@@ -36,12 +36,12 @@ function compileModules() {
         }
     }
 
-    try {
+//    try {
         let tc = new typecheck.TypeChecker();
         let scope = tc.checkModule(mnode);
         let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction);
         cg.processModule(mnode);
-    } catch(ex) {
+/*    } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;                
@@ -49,7 +49,7 @@ function compileModules() {
             console.log(ex);
             throw ex;
         }
-    }
+    }*/
 }
 
 program

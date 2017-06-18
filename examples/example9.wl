@@ -1,3 +1,14 @@
+func getTuple() (int, int) {
+    return 82, 164
+}
+
+func useTuple() int {
+    var a int
+    var b int
+    a, b = getTuple()
+    return a + b
+}
+
 func main() string {
     var name = "Fred " + action()
     return name
