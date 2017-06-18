@@ -2097,14 +2097,14 @@ export class Wasm32Backend {
                     let arrOffset = 0;
                     for(let j = 0; j < f[2]; j++, arrOffset += size) {
                         if (dest == "heapStack") {
-                            code.push(new wasm.GetLocal(this.spLocal));
+                            this.emitAssign(t, n.args[args], "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code);
                         } else {
                             // Double the destination address (unless it is SP)
                             let tmp = this.getTmpLocal("i32");
                             code.push(new wasm.TeeLocal(tmp));
                             code.push(new wasm.GetLocal(tmp));
+                            this.emitAssign(t, n.args[args], "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
                         }
-                        this.emitAssign(t, n.args[args], "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
                         args++;
                     }
                 }
