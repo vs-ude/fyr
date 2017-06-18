@@ -52,6 +52,7 @@ export class CodeGenerator {
                 }
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
+                g.noGarbageCollection = true;
                 this.globalVars.set(e, g);
             } else {
                 throw "CodeGen: Implementation Error " + e;
@@ -181,6 +182,7 @@ export class CodeGenerator {
             let e = f.scope.elements.get(name);
             if (e instanceof FunctionParameter) {
                 let v = b.declareParam(this.getSSAType(e.type), name);
+                v.noGarbageCollection = true;
                 vars.set(e, v);
             }
         }
@@ -191,11 +193,13 @@ export class CodeGenerator {
                 if (e instanceof Variable && e.isResult) {
                     // Create a variable that can be assigned multiple times
                     let v = b.declareResult(this.getSSAType(e.type), name);
+                    v.noGarbageCollection = true;
                     vars.set(e, v);                    
                 }
             }
         } else if (f.type.returnType != this.tc.t_void) {
-            b.declareResult(this.getSSAType(f.type.returnType), "$return");
+            let v = b.declareResult(this.getSSAType(f.type.returnType), "$return");
+            v.noGarbageCollection = true;
         }
 
         this.processScopeVariables(b, vars, f.scope);
@@ -245,6 +249,9 @@ export class CodeGenerator {
                 } else {
                     // Create a variable that can be assigned multiple times
                     let v = b.declareVar(e.heapAlloc ? "ptr" : this.getSSAType(e.type), name);
+                    if (!e.heapAlloc) {
+                        v.noGarbageCollection = true;
+                    }
                     vars.set(e, v);
                 }
             }
@@ -797,11 +804,13 @@ export class CodeGenerator {
                         if (ptr instanceof ssa.Variable) {
                             return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
                         }
-                        return b.assign(b.tmp(), "add", "ptr", [ptr, s.fieldOffset(enode.name.value)]);
+                        // ptr is a number. Hence we use "addr" instead of "ptr" because it must be an UnsafePointerType
+                        return b.assign(b.tmp(), "add", "addr", [ptr, s.fieldOffset(enode.name.value)]);
                     } else {
                         throw "TODO interface and class"
-                    }                    
-                } else if (enode.lhs.type instanceof GuardedPointerType) {
+                    }          
+                }          
+                if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 }
                 let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
@@ -811,10 +820,10 @@ export class CodeGenerator {
                         ptr.offset += s.fieldOffset(enode.name.value);
                         return ptr;
                     }
-                    let ptr2 = b.assign(b.tmp(), "addr_of", "ptr", [ptr]);
+                    let ptr2 = b.assign(b.tmp(), "addr_of", ptr.noGarbageCollection ? "addr" : "ptr", [ptr]);
                     return new ssa.Pointer(ptr2, s.fieldOffset(enode.name.value));
                 } else {
-                    throw "TODO interface and class"
+                    throw "Implementation error"
                 }
             }
             default:

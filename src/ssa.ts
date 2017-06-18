@@ -195,7 +195,7 @@ export class Variable {
      * isTemporary is true if the variable has been introduced by the compiler
      * to hold a temporary value.
      */
-    public isTemporary: boolean = false;
+    // public isTemporary: boolean = false;
     /**
      * usedInMultupleSteps is true, if the variable is used in different 'steps'.
      * This is only meaningful when used after SMTransformation.transform().
@@ -214,7 +214,12 @@ export class Variable {
      * addressable is true if 'addr_of' has been used on this variable.
      */
     public addressable: boolean;
-
+    /**
+     * noGarbageCollection is true if the value is stored somewhere where
+     * the garbage collection can find it. Hence, when taking the address of this variable,
+     * the type is "addr" instead of "ptr". This flag is useful when "adressable" is true.
+     */
+    public noGarbageCollection: boolean;
     /**
      * Internal
      */
@@ -620,7 +625,7 @@ export class Builder {
 
     public tmp(t: Type = null): Variable {
         let v = new Variable();
-        v.isTemporary = true;
+        // v.isTemporary = true;
         v.type = t;
         return v;
     }
