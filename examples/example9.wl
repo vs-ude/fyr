@@ -8,9 +8,21 @@ func action() string {
 }
 
 func fuck() string {
-    return action() + "x" + action()
+    return action1() + "x" + action2()
+}
+
+func action1() string {
+    return "A1"
+}
+
+func action2() string {
+    return "A2"
+}
+
+func action3() string {
+    return "A3"
 }
 
 func dummy() string {
-    return action() + action() + action()
+    return action1() + action2() + action3()
 }

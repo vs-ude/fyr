@@ -146,6 +146,18 @@
                 console.log("... main");
                 let str = makeString(s);
                 console.log("main returns", str);
+
+                console.log("fuck ...");
+                s = results.instance.exports.fuck(100 * 65536);
+                console.log("... fuck");
+                str = makeString(s);
+                console.log("fuck returns", str);
+
+                console.log("dummy ...");
+                s = results.instance.exports.dummy(100 * 65536);
+                console.log("... dummy");
+                str = makeString(s);
+                console.log("dummy returns", str);
             });
         </script>
     </body>
