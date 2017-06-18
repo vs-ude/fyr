@@ -647,6 +647,7 @@ export class CodeGenerator {
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars);
                 return new ssa.Pointer(tmp as ssa.Variable, 0);
             case "[":
+                // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (enode.lhs.type instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     let index = this.processExpression(f, scope, enode.rhs, b, vars);
@@ -660,6 +661,7 @@ export class CodeGenerator {
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 } else if (enode.lhs.type instanceof SliceType) {
+                    // TODO: Perhaps in some cases there is no need for "ptr"
                     let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
@@ -797,6 +799,7 @@ export class CodeGenerator {
                 }
             case ".":
             {
+                // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     if (enode.lhs.type.elementType instanceof StructType) {
@@ -809,21 +812,28 @@ export class CodeGenerator {
                     } else {
                         throw "TODO interface and class"
                     }          
-                }          
-                if (enode.lhs.type instanceof GuardedPointerType) {
+                } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
-                }
-                let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
-                if (enode.lhs.type instanceof StructType) {
-                    let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
-                    if (ptr instanceof ssa.Pointer) {
-                        ptr.offset += s.fieldOffset(enode.name.value);
-                        return ptr;
-                    }
-                    let ptr2 = b.assign(b.tmp(), "addr_of", ptr.noGarbageCollection ? "addr" : "ptr", [ptr]);
-                    return new ssa.Pointer(ptr2, s.fieldOffset(enode.name.value));
                 } else {
-                    throw "Implementation error"
+                    let left: ssa.Variable | ssa.Pointer;
+                    if (this.isLeftHandSide(enode.lhs)) {
+                        left = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    } else {
+                        left = this.processExpression(f, scope, enode.lhs, b, vars) as ssa.Variable;
+                    }
+                    if (enode.lhs.type instanceof StructType) {
+                        let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
+                        if (left instanceof ssa.Pointer) {
+                            left.offset += s.fieldOffset(enode.name.value);
+                            return left;
+                        }
+                        // ptr is a value type. Hence we use "addr" instead of "ptr" because the value must be somewhere on heapStack
+                        // where the GC can find it.
+                        let ptr = b.assign(b.tmp(), "addr_of", "addr", [left]);
+                        return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
+                    } else {
+                        throw "Implementation error"
+                    }
                 }
             }
             default:
@@ -831,8 +841,9 @@ export class CodeGenerator {
         }
     }
 
-    public isLeftHandSide(enode: Node): boolean {
-        return (enode.op == "[" || enode.op == "." || enode.op == "id" || enode.op == "unary*");
+    public isLeftHandSide(node: Node): boolean {
+        return this.tc.checkIsLeftHandSide(node, true);
+//        return (enode.op == "[" || enode.op == "." || enode.op == "id" || enode.op == "unary*");
     }
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
@@ -1140,7 +1151,7 @@ export class CodeGenerator {
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
 //                    if (t.returnType != this.tc.t_void) {
-                        return b.call(b.tmp(), ft, args);
+                    return b.call(b.tmp(), ft, args);
 //                    }
 //                    return b.call(null, ft, args);
                 }
@@ -1148,12 +1159,14 @@ export class CodeGenerator {
             }
             case "[":
             {
+                // Note: processLeftHandExpression implements the non-left-hand cases as well.
                 let ptr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "load", storage, [ptr.variable, ptr.offset]);
             }
             case ".":
             {
+                // Note: processLeftHandExpression implements the non-left-hand cases as well.
                 let expr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "load", storage, [expr.variable, expr.offset]);

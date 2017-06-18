@@ -1807,7 +1807,8 @@ export class TypeChecker {
                 this.checkExpression(snode.rhs, scope);
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
                 if (snode.lhs.op == "tuple") {
-                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
+//                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
+                    if (snode.lhs.parameters[0].value != "_") {
                         this.checkExpression(snode.lhs.parameters[0], scope);
                         this.checkIsLeftHandSide(snode.lhs.parameters[0]);
                         this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc);
@@ -1824,6 +1825,7 @@ export class TypeChecker {
             case "var_in":
             case "const_in":
             {
+                // TODO: underscore as in "for(var _, x in foo)"
                 this.checkExpression(snode.rhs, scope);
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
                 if (snode.lhs.op == "tuple") {
@@ -2967,10 +2969,19 @@ export class TypeChecker {
     }
 
     public checkIsLeftHandSide(node: Node, doNotThrow: boolean = false): boolean {
-        if (node.op == "id" || node.op == "." || node.op == "unary*") {
+        if (node.op == "id" || node.op == "unary*") {
             return true;
         }
-        if (node.op == "[" && node.type != this.t_string) {
+        if (node.op == ".") {
+            if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+                return true;
+            }
+            return this.checkIsLeftHandSide(node.lhs, doNotThrow);
+        }
+        if (node.op == "[" && node.lhs.type != this.t_string) {
+            if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
+                return true;
+            }
             return this.checkIsLeftHandSide(node.lhs, doNotThrow);
         }
         if (doNotThrow) {

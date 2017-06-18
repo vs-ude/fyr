@@ -46,6 +46,10 @@ func translate() Point {
     return p
 }
 
+func toX() int {
+    return newPoint().y
+}
+
 type Rect struct {
     p1 Point
     p2 Point
