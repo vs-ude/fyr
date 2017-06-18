@@ -36,6 +36,16 @@ func newPoint() Point {
     return {x: 42, y: 84}
 }
 
+func allocPoint() *Point {
+    return &{x: 42, y: 84}
+}
+
+func translate() Point {
+    var p = newPoint()
+    p.x += 2
+    return p
+}
+
 type Rect struct {
     p1 Point
     p2 Point

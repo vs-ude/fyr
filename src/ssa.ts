@@ -2035,7 +2035,6 @@ export class Wasm32Backend {
                 if (dest == "heapStack") {
                     stackSubtract -= destOffset;
                 }
-                code.push(new wasm.GetLocal(this.spLocal)); // Remember the original SP
                 code.push(new wasm.GetLocal(this.spLocal));
                 if (stackSubtract < 0) {
                     code.push(new wasm.Constant("i32", -stackSubtract));
@@ -2076,7 +2075,15 @@ export class Wasm32Backend {
                 }
                 // Remove the stack frame and restore the SP
                 code.push(new wasm.Comment("Remove stack frame and restore the SP"));
-                code.push(new wasm.SetLocal(this.spLocal));                
+                code.push(new wasm.GetLocal(this.spLocal));
+                if (stackSubtract < 0) {
+                    code.push(new wasm.Constant("i32", -stackSubtract));
+                    code.push(new wasm.BinaryInstruction("i32", "sub"));
+                } else {
+                    code.push(new wasm.Constant("i32", stackSubtract));
+                    code.push(new wasm.BinaryInstruction("i32", "add"));
+                }
+                code.push(new wasm.SetLocal(this.spLocal));
                 return;
             }
 
@@ -2116,6 +2123,8 @@ export class Wasm32Backend {
                     }
                     let assignOffset = this.emitAddrOfVariable(n.assign, true, code);
                     this.emitCopy(type, destOffset, assignOffset, code);
+                } else if (dest == "heap" || n.assign) {
+                    code.push(new wasm.Drop());
                 }
                 return;
             }
@@ -2131,11 +2140,12 @@ export class Wasm32Backend {
                 this.emitCopy(type, srcOffset, destOffset, code);
             } else if (n instanceof Node) {
                 if (n.kind == "copy" || n.kind == "load") {
+                    let assignDest: "heap" | "heapStack" = "heap"
                     // Put the destination addr on the stack (if it is not already there)
                     if (dest === null) {
                         destOffset = this.emitAddrOfVariable(n.assign, true, code);
                     } else if (dest === "heapStack") {
-                        code.push(new wasm.GetLocal(this.spLocal));
+                        assignDest = "heapStack";
                     } else if (dest === "heap" && n.assign) {
                         // Duplicate the heap addr in case we need to copy the value to the assigned variable
                         let tmp = this.getTmpLocal("i32");
@@ -2147,7 +2157,7 @@ export class Wasm32Backend {
                         this.emitAssign("addr", n.args[0], "wasmStack", 0, code);
                         this.emitCopy(type, n.args[1] as number, destOffset, code);
                     } else {
-                        this.emitAssign(type, n.args[0], "heap", destOffset, code);
+                        this.emitAssign(type, n.args[0], assignDest, destOffset, code);
                     }
                     // Assign and stack?
                     if (n.assign && dest !== null) {
