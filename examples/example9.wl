@@ -26,3 +26,21 @@ func action3() string {
 func dummy() string {
     return action1() + action2() + action3()
 }
+
+type Point struct {
+    x int
+    y int
+}
+
+func newPoint() Point {
+    return {x: 42, y: 84}
+}
+
+type Rect struct {
+    p1 Point
+    p2 Point
+}
+
+func newRect() Rect {
+    return {p1: {x: 42, y: 84}, p2: {x: 168, y: 336}}
+}

@@ -1955,8 +1955,10 @@ export class Wasm32Backend {
                     for(let i = 0; i < n.args.length; i++) {
                         let t = this.returnVariables[i].type;
                         // Destination addr
-                        let destOffset = this.emitAddrOfVariable(this.returnVariables[i], true, code);
-                        this.emitAssign(t, n.args[i], "heap", destOffset, code);
+//                        let destOffset = this.emitAddrOfVariable(this.returnVariables[i], true, code);
+                        let returnOffset = this.varStorage.get(this.returnVariables[i]).offset;
+                        let destOffset = this.paramsFrame.size + this.varsFrame.size + returnOffset;
+                        this.emitAssign(t, n.args[i], "heapStack", destOffset, code);
                     }
                 }
                 if (this.wfIsAsync) {
