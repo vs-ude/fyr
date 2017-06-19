@@ -49,6 +49,8 @@ export class CodeGenerator {
                 this.funcs.set(e, wf);
                 if (e.name == this.stringConcatFunctionName) {
                     this.stringConcatFunction = e;
+                } else if (e.name == this.stringCompareFunctionName) {
+                    this.stringCompareFunction = e;
                 }
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
@@ -1295,7 +1297,23 @@ export class CodeGenerator {
         let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
         let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
         if (enode.lhs.type == this.tc.t_string) {
-            throw "TODO"
+            let wf = this.funcs.get(this.stringCompareFunction);
+            let cmp = b.call(b.tmp(), this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
+            switch(opcode) {
+                case "eq":
+                    return b.assign(b.tmp(), "eqz", "i32", [cmp]);
+                case "ne":
+                    return b.assign(b.tmp(), "ne", "i32", [cmp, 0]);
+                case "lt":
+                    return b.assign(b.tmp(), "lt_s", "i32", [cmp, 0]);
+                case "le":
+                    return b.assign(b.tmp(), "le_s", "i32", [cmp, 0]);
+                case "gt":
+                    return b.assign(b.tmp(), "gt_s", "i32", [cmp, 0]);
+                case "ge":
+                    return b.assign(b.tmp(), "ge_s", "i32", [cmp, 0]);
+            }
+            throw "Implementation error " + opcode;
         } else {
             let storage = this.getSSAType(enode.lhs.type);
             if (p1 === 0 && opcode == "eq" && storage != "f32" && storage != "f64") {
@@ -1342,4 +1360,6 @@ export class CodeGenerator {
     private emitFunction: string | null;
     private stringConcatFunctionName: string = "string_concat";
     private stringConcatFunction: Function;
+    private stringCompareFunctionName: string = "string_compare";
+    private stringCompareFunction: Function;
 }

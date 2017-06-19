@@ -9,6 +9,27 @@ func useTuple() int {
     return a + b
 }
 
+func compare1() int {
+    if (action1() < action2()) {
+        return 42
+    }
+    return 84
+}
+
+func compare2() int {
+    if (action1() != action2()) {
+        return 42
+    }
+    return 84
+}
+
+func compare3() int {
+    if (action1() == action2()) {
+        return 42
+    }
+    return 84
+}
+
 func main() string {
     var name = "Fred " + action()
     return name

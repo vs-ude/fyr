@@ -158,6 +158,21 @@
                 console.log("... dummy");
                 str = makeString(s);
                 console.log("dummy returns", str);
+
+                console.log("compare1 ...");
+                let i = results.instance.exports.compare1(100 * 65536);
+                console.log("... compare1");
+                console.log("compare1 returns", i);
+
+                console.log("compare2 ...");
+                i = results.instance.exports.compare2(100 * 65536);
+                console.log("... compare2");
+                console.log("compare2 returns", i);
+
+                console.log("compare3 ...");
+                i = results.instance.exports.compare3(100 * 65536);
+                console.log("... compare3");
+                console.log("compare3 returns", i);
             });
         </script>
     </body>

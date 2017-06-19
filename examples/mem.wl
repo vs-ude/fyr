@@ -340,3 +340,28 @@ func string_concat(str1 string, str2 string) string {
     }
     return (string)p
 }
+
+func string_compare(str1 string, str2 string) int {
+    var s1 = *((#uint)str1)
+    var s2 = *((#uint)str2)
+    var ptr1 #byte = (#byte)str1 + 4
+    var ptr2 #byte = (#byte)str2 + 4
+    var min = s2
+    if (s1 < s2) {
+        min = s1
+    }
+    for(var i uint = 0; i < min; i++) {
+        if (ptr1[i] < ptr2[i]) {
+            return -1
+        } else if (ptr1[i] > ptr2[i]) {
+            return 1
+        }
+    }
+    if (s1 == s2) {
+        return 0
+    }
+    if (s1 < s2) {
+        return -1
+    }
+    return 1
+}
