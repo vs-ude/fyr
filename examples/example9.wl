@@ -1,5 +1,6 @@
 import {
     func logString(string)
+    func foo(int, int) int
 } from "imports"
 
 func getTuple() (int, int) {

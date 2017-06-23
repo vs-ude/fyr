@@ -19,12 +19,20 @@ export class Module extends Node {
 
         for(let f of this.funcImports) {
             s += indent + "    (func $" + f.name + " (import \"" + f.from + "\" \"" + f.name + "\") ";
-            for(let p of f.type.params) {
-                s += " (param " + p + ")";
-            } 
-            for(let p of f.type.results) {
-                s += " (result " + p + ")";
-            } 
+            if (f.type.params.length > 0) {
+                s += "(param";
+                for(let t of f.type.params) {
+                    s += " " + t.toString();
+                }
+                s += ") ";
+            }
+            if (f.type.results.length > 0) {
+                s += "(result";
+                for(let t of f.type.results) {
+                    s += " " + t.toString();
+                }
+                s += ") ";
+            }
             s += ")\n";
         }
 
