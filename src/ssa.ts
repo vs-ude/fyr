@@ -1146,6 +1146,9 @@ export class Wasm32Backend {
     }
 
     public generateModule() {
+        // Null pointers point to a string that has length zero.
+        this.module.addString("");
+
         // Generate WASM code for all globals
         let index = 0;
         for(let v of this.globalVariables) {

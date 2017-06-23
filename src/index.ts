@@ -39,7 +39,7 @@ function compileModules() {
     try {
         let tc = new typecheck.TypeChecker();
         let scope = tc.checkModule(mnode);
-        let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction);
+        let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck);
         cg.processModule(mnode);
     } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
@@ -58,6 +58,7 @@ program
     .option('-r, --emit-ir', "Emit IR code")
     .option('-f, --emit-ir-function <name>', "Emit IR code only for one function", null)
     .option('-W, --disable-wasm', "Do not emit WASM code")
+    .option('-N, --disable-null-check', "Do not check for null pointers")
 
 program
 	.command('compile')

@@ -4,11 +4,12 @@ import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
 export class CodeGenerator {
-    constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string) {
+    constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean) {
         this.tc = tc;
         this.emitIR = emitIR;
         this.emitNoWasm = emitNoWasm;
         this.emitFunction = emitFunction;
+        this.disableNullCheck = disableNullCheck;
         this.imports = new Map<string, wasm.FunctionImport>();
         this.wasm = new ssa.Wasm32Backend(emitIR, emitFunction);
         this.wasm.module.importMemory("imports", "mem");
@@ -703,6 +704,12 @@ export class CodeGenerator {
             }
             case "unary*":
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars);
+                if (!this.disableNullCheck) {
+                    let check = b.assign(b.tmp(), "eqz", "addr", [tmp]);
+                    b.ifBlock(check);
+                    b.assign(null, "trap", null, []);
+                    b.end();
+                }
                 return new ssa.Pointer(tmp as ssa.Variable, 0);
             case "[":
                 // Note: This code implements the non-left-hand cases as well to avoid duplicating code
@@ -860,6 +867,12 @@ export class CodeGenerator {
                 // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
+                    if (enode.lhs.type instanceof PointerType && !this.disableNullCheck) {
+                        let check = b.assign(b.tmp(), "eqz", "addr", [ptr]);
+                        b.ifBlock(check);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
                     if (enode.lhs.type.elementType instanceof StructType) {
                         let s = this.getSSAType(enode.lhs.type.elementType) as ssa.StructType;
                         if (ptr instanceof ssa.Variable) {
@@ -873,6 +886,7 @@ export class CodeGenerator {
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 } else {
+                    // It is a value, i.e. not a pointer to a value
                     let left: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
                         left = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
@@ -901,7 +915,6 @@ export class CodeGenerator {
 
     public isLeftHandSide(node: Node): boolean {
         return this.tc.checkIsLeftHandSide(node, true);
-//        return (enode.op == "[" || enode.op == "." || enode.op == "id" || enode.op == "unary*");
     }
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
@@ -1358,6 +1371,7 @@ export class CodeGenerator {
     private emitIR: boolean;
     private emitNoWasm: boolean;
     private emitFunction: string | null;
+    private disableNullCheck: boolean;
     private stringConcatFunctionName: string = "string_concat";
     private stringConcatFunction: Function;
     private stringCompareFunctionName: string = "string_compare";
