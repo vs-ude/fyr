@@ -1,6 +1,3 @@
-import {
-    func logNumber(int)
-} from "imports"
 
 var root #RootBlock
 

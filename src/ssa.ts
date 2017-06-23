@@ -132,7 +132,7 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
     return false;
 }
 
-export type CallingConvention = "fyr" | "fyrCoroutine" | "host";
+export type CallingConvention = "fyr" | "fyrCoroutine";
 
 export class FunctionType {
     constructor(params: Array<Type | StructType>, result: Type | StructType | null, conv: CallingConvention = "fyr") {
@@ -1097,6 +1097,8 @@ export class Wasm32Backend {
         this.globalVariables = [];
         this.module = new wasm.Module();
         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
+        // Null pointers point to a string that has length zero.
+        this.module.addString("");
         this.varsFrameHeader = new StructType();
         this.varsFrameHeader.addField("$func", "i32");
         this.varsFrameHeader.addField("$sp", "i32");
@@ -1107,22 +1109,16 @@ export class Wasm32Backend {
         let wt = new wasm.FunctionType(name, [], []);
         let hasHeapFrame = false;
         for(let p of type.params) {
-            if (p instanceof StructType) {
-                hasHeapFrame = true;
-            } else {
+            if (!(p instanceof StructType) && p != "ptr") {
                 wt.params.push(this.stackTypeOf(p))
             }
         }
         if (type.result) {
-            if (type.result instanceof StructType) {
-                hasHeapFrame = true;
-            } else {
+            if (!(type.result instanceof StructType)) {
                 wt.results.push(this.stackTypeOf(type.result));
             }
         }
-        if (hasHeapFrame || type.callingConvention == "fyr" || type.callingConvention == "fyrCoroutine") {
-            wt.params.push("i32");
-        }
+        wt.params.push("i32");
         let f = new wasm.FunctionImport(name, from, wt);
         this.module.addFunctionImport(f);
         return f;
@@ -1146,9 +1142,6 @@ export class Wasm32Backend {
     }
 
     public generateModule() {
-        // Null pointers point to a string that has length zero.
-        this.module.addString("");
-
         // Generate WASM code for all globals
         let index = 0;
         for(let v of this.globalVariables) {

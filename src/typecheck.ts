@@ -18,7 +18,7 @@ export class Variable implements ScopeElement {
     public node: Node;
 }
 
-export type CallingConvention = "fyr" | "fyrCoroutine" | "host";
+export type CallingConvention = "fyr" | "fyrCoroutine";
 
 export class Function implements ScopeElement {
     constructor() {
@@ -994,7 +994,7 @@ export class TypeChecker {
         f.node = fnode;
         f.loc = fnode.loc;
         f.type = new FunctionType();
-        f.type.callingConvention = "host";
+//        f.type.callingConvention = "host";
         f.type.loc = fnode.loc;
         let i = 0;
         if (fnode.parameters) {

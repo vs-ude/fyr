@@ -1,3 +1,7 @@
+import {
+    func logString(string)
+} from "imports"
+
 func getTuple() (int, int) {
     return 82, 164
 }
@@ -31,6 +35,7 @@ func compare3() int {
 }
 
 func main() string {
+    logString("Hello from main!!!")
     var name = "Fred " + action()
     return name
 }
