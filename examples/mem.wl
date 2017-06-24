@@ -362,3 +362,12 @@ func string_compare(str1 string, str2 string) int {
     }
     return 1
 }
+
+func make_string(src #byte, length uint) string {
+    var p #byte = (#byte)alloc(4 + length, false)
+    *((#uint)p) = length
+    for(var i uint = 0; i < length; i++) {
+        p[i] = src[i]
+    }
+    return (string)p
+}
