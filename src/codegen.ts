@@ -52,6 +52,8 @@ export class CodeGenerator {
                     this.stringConcatFunction = e;
                 } else if (e.name == this.stringCompareFunctionName) {
                     this.stringCompareFunction = e;
+                } else if (e.name == this.stringMakeFunctionName) {
+                    this.stringMakeFunction = e;
                 }
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
@@ -779,9 +781,9 @@ export class CodeGenerator {
                     }
                     let len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
                     // Compare 'index' with 'len'
-                    let cmp = b.assign(b.tmp(), "ge_u", "i32", [index, len]);
-                    let zero = b.assign(b.tmp(), "eqz", "addr", [ptr]);
-                    let trap = b.assign(b.tmp(), "or", "i32", [cmp, zero]);
+                    let trap = b.assign(b.tmp(), "ge_u", "i32", [index, len]);
+                    // let zero = b.assign(b.tmp(), "eqz", "addr", [ptr]);
+                    // let trap = b.assign(b.tmp(), "or", "i32", [cmp, zero]);
                     b.ifBlock(trap);
                     b.assign(null, "trap", null, []);
                     b.end();
@@ -904,7 +906,7 @@ export class CodeGenerator {
                         let ptr = b.assign(b.tmp(), "addr_of", "addr", [left]);
                         return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
                     } else {
-                        throw "Implementation error"
+                        throw "CodeGen: Implementation error"
                     }
                 }
             }
@@ -1228,6 +1230,75 @@ export class CodeGenerator {
                 }
                 throw "TODO: call a lambda function"
             }
+            case ":":
+            {
+                // Note: This code implements the non-left-hand cases as well to avoid duplicating code
+                let index1: ssa.Variable | number = 0;
+                if (enode.parameters[0]) {
+                    if (enode.parameters[0].op == "int") {
+                        index1 = parseInt(enode.parameters[0].value);
+                    } else {
+                        index1 = this.processExpression(f, scope, enode.parameters[0], b, vars);
+                    }
+                }
+                let index2: ssa.Variable | number = 0;
+                if (enode.parameters[1]) {
+                    if (enode.parameters[1].op == "int") {
+                        index2 = parseInt(enode.parameters[1].value);
+                    } else {
+                        index2 = this.processExpression(f, scope, enode.parameters[1], b, vars);
+                    }
+                }
+                if (enode.lhs.type instanceof UnsafePointerType) {
+                    throw "TODO";
+                } else if (enode.lhs.type instanceof GuardedPointerType) {
+                    throw "TODO";
+                } else if (enode.lhs.type instanceof SliceType) {
+                    throw "TODO";
+                } else if (enode.lhs.type == this.tc.t_string) {
+                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
+                    let len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
+                    if (enode.parameters[0] && index1 !== 0) {
+                        // Compare 'index1' with 'len'
+                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index1, len]);
+                        b.ifBlock(trap);
+                        b.assign(null, "trap", null, []);
+                        b.end();                        
+                    }
+                    if (enode.parameters[1]) {
+                        // Compare 'index2' with 'len'
+                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index2, len]);
+                        b.ifBlock(trap);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    } else {
+                        index2 = len;
+                    }
+                    if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
+                        let cmp = b.assign(b.tmp(), "gt_s", "i32", [index1, index2]);
+                        b.ifBlock(cmp);
+                        b.assign(null, "trap", null, []);
+                        b.end();                        
+                    }
+                    let ptr3: ssa.Variable | number;
+                    if (typeof(index1) == "number") {
+                        ptr3 = b.assign(b.tmp(), "add", "addr", [ptr, 4 + index1]);
+                    } else {
+                        let ptr2 = b.assign(b.tmp(), "add", "addr", [ptr, 4]);
+                        ptr3 = b.assign(b.tmp(), "add", "addr", [ptr2, index1]);
+                    }
+                    let l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
+                    if (!this.stringMakeFunction) {
+                        throw "Missing string concat function in runtime";
+                    }
+                    let wf = this.funcs.get(this.stringMakeFunction);
+                    return b.call(b.tmp(), this.getSSAFunctionType(this.stringMakeFunction.type), [wf.index, ptr3, l]);
+                } else if (enode.lhs.type instanceof ArrayType) {
+                    throw "TODO";
+                } else {
+                    throw "Implementation error";
+                }                
+            }
             case "[":
             {
                 // Note: processLeftHandExpression implements the non-left-hand cases as well.
@@ -1376,4 +1447,6 @@ export class CodeGenerator {
     private stringConcatFunction: Function;
     private stringCompareFunctionName: string = "string_compare";
     private stringCompareFunction: Function;
+    private stringMakeFunctionName: string = "make_string";
+    private stringMakeFunction: Function;
 }

@@ -2166,26 +2166,48 @@ export class TypeChecker {
                 }
                 break;
             }
+            case ":":
+            {
+                this.checkExpression(enode.lhs, scope);
+                let index1 = 0;
+                let index2 = 0;
+                if (enode.parameters[0]) {
+                    this.checkExpression(enode.parameters[0], scope);
+                    this.checkIsIntNumber(enode.parameters[0]);
+                    if (enode.parameters[0].op == "int") {
+                        index1 = parseInt(enode.parameters[0].value);                        
+                    }
+                }
+                if (enode.parameters[1]) {
+                    this.checkExpression(enode.parameters[1], scope);
+                    this.checkIsIntNumber(enode.parameters[1]);
+                    if (enode.parameters[1].op == "int") {
+                        index2 = parseInt(enode.parameters[1].value);                        
+                    }
+                }
+                if (index1 > index2) {
+                    throw new TypeError("Index out of range", enode.rhs.loc);
+                }
+                let elementType = this.checkIsIndexable(enode.lhs, index1);
+                if (enode.lhs.type instanceof ArrayType) {
+                    this.checkIsIndexable(enode.lhs, index2);
+                    enode.type = new SliceType(enode.lhs.type.elementType);
+                } else {
+                    enode.type = enode.lhs.type;
+                }
+                break;
+            }
             case "[":
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let index = 0;
                 if (enode.lhs.type instanceof TupleType) {
-                    // TODO: Check range on parseInt
                     if (enode.rhs.op != "int") {
                         throw new TypeError("Index inside a tuple must be a constant number", enode.lhs.loc);
                     }
                     index = parseInt(enode.rhs.value);
-                    if (index < 0 || index >= enode.lhs.type.types.length) {
-                        throw new TypeError("Index out of range", enode.rhs.loc);
-                    }
-                } else if (enode.lhs.type instanceof ArrayType) {
-                    if (enode.rhs.op == "int") {
-                        index = parseInt(enode.rhs.value);
-                        if (index < 0 || index >= enode.lhs.type.size) {
-                            throw new TypeError("Index out of range", enode.rhs.loc);
-                        }
-                    }                    
+                } else if (enode.lhs.type instanceof ArrayType && enode.rhs.op == "int") {
+                    index = parseInt(enode.rhs.value);
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index);
                 // TODO: In case of a map, lhs must equal the map type
@@ -2715,10 +2737,19 @@ export class TypeChecker {
                 return node.type.genericParameterTypes[1];
             }
         } else if (node.type == this.t_string) {
+            if (index < 0) {
+                throw new TypeError("Index out of range", node.loc);
+            }
             return this.t_byte;
         } else if (node.type instanceof ArrayType) {
+            if (index < 0 || index >= node.type.size) {
+                throw new TypeError("Index out of range", node.loc);
+            }
             return node.type.elementType;
         } else if (node.type instanceof SliceType) {
+            if (index < 0) {
+                throw new TypeError("Index out of range", node.loc);
+            }
             return node.type.elementType;
         } else if (node.type instanceof TupleType) {
             if (index < 0 || index >= node.type.types.length) {

@@ -769,7 +769,7 @@ member
           expected("an index or range expression between brackets", fl(location()));
       }
       if (r) {
-          e = new ast.Node({loc: fl(location()), "op":":", lhs: e, rhs: r[1]});
+          return new ast.Node({loc: fl(location()), "op":":", parameters: [e, r[1]]});
       }
       return new ast.Node({loc: fl(location()), op: "[", rhs: e});
     }
