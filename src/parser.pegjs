@@ -345,10 +345,7 @@ assignIdentifierList
     }
 
 assignIdentifier
-  = "(" [ \t\n]* e:assignIdentifierList ")" {
-      return new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
-    }
-  / o:assignObject { return o; }
+  = o:assignObject { return o; }
   / "[" [ \t\n]* e:assignIdentifierList "]" {
       return new ast.Node({loc: fl(location()), op: "array", parameters: e});
     }
@@ -655,7 +652,7 @@ typedLiteral
       }
       return l;
     }
-  / "(" [ \t]* t:typeList [ \t]* ")" [ \t]* l: tuple {
+  / "(" [ \t]* t:typeList & {return t.length > 1;} [ \t]* ")" [ \t]* l: tuple {
       l.lhs = new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
       return l;
     }
@@ -671,7 +668,7 @@ typedLiteral
   }
 
 typeCast
-  = "(" [ \t]* t:type [ \t]* ")" [ \t]* e: primary {
+  = "<" [ \t]* t:type [ \t]* ">" [ \t]* e: primary {
         if (e.op == "array" || e.op == "tuple" || e.op == "object") {
             e.lhs = t;
             return e;

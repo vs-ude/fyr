@@ -52,11 +52,11 @@ func initializeRootBlock(r #RootBlock, blockCount uint) {
     root = r
     // Initialize the first free block for area allocation.
     // The first free block starts at the next 64K boundary.
-    var b #Block = ((uint)r &^ 0xffff) + (1 << 16)
+    var b #Block = (<uint>r &^ 0xffff) + (1 << 16)
     r.blocks[0] = 4 | 2 | 1 // Beginning of a sequence of free blocks
     initializeBlock(b)
     // All blocks are free, except the first one which is initialized for area allocation
-    var f #FreeBlock = (uint)b + (1 << 16)
+    var f #FreeBlock = <uint>b + (1 << 16)
     r.blocks[0] |= 4 << 4 // Beginning of a sequence of free blocks
     f.count = blockCount - 1
     for(var i uint = 0; i < 15; i++) {
@@ -70,7 +70,7 @@ func initializeRootBlock(r #RootBlock, blockCount uint) {
 
 func initializeBlock(b #Block) {
     // Initialize the arrays 'area' and 'mark' with zero 
-    var ptr #uint64 = (#uint64)(&b.area)
+    var ptr #uint64 = <#uint64>(&b.area)
     for(var i = 0; i < 1024/8; i++) {
         *ptr = 0
         ptr++
@@ -78,7 +78,7 @@ func initializeBlock(b #Block) {
     // Mark the first 1024 byte area as in-use.
     b.area[0] = 1 | 2
     for(var i uint = 5; i < 11; i++) {
-        var f #FreeArea = 1 << (5 + i) + (uint)b
+        var f #FreeArea = 1 << (5 + i) + <uint>b
         f.next = root.freeAreas[i]
         f.prev = 0
         f.size = 1 << (5 + i)
@@ -87,14 +87,14 @@ func initializeBlock(b #Block) {
         }
         root.freeAreas[i] = f
         var area_nr = 1 << i
-        b.area[area_nr >> 1] |= (byte)(4 << ((area_nr & 1) << 2))
+        b.area[area_nr >> 1] |= <byte>(4 << ((area_nr & 1) << 2))
     }
 }
 
 func split(f #FreeArea, index uint) {
     index--
     // Split the free area and add the upper half to the free-list
-    var f2 #FreeArea = (uint)f + (1 << (index + 5))
+    var f2 #FreeArea = <uint>f + (1 << (index + 5))
     f2.next = root.freeAreas[index]
     f2.prev = 0
     if (f2.next != 0) {
@@ -102,9 +102,9 @@ func split(f #FreeArea, index uint) {
     }
     root.freeAreas[index] = f2
     // Mark the the new free area as the beginning of an area
-    var block #Block = (uint)f2 &^ 0xffff
-    var area_nr = ((uint)f2 & 0xffff) >> 5
-    block.area[area_nr >> 1] |= (byte)(4 << ((area_nr & 1) << 2))
+    var block #Block = <uint>f2 &^ 0xffff
+    var area_nr = (<uint>f2 & 0xffff) >> 5
+    block.area[area_nr >> 1] |= <byte>(4 << ((area_nr & 1) << 2))
 }
 
 func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
@@ -146,7 +146,7 @@ func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
         // Split the block sequence and allocate the tail of the sequence
         var f2 = f
         f2.count -= count
-        f = (uint)f + (1 << 16) * f2.count
+        f = <uint>f + (1 << 16) * f2.count
         // Compute the remaining size as a power of two
         var index2 uint = 14
         for(; index2 >= 0; index2--) {
@@ -173,9 +173,9 @@ func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
         }
     }
     // Mark start of allocated sequence
-    var block_nr = ((uint)f - (uint)root) >> 16 - 1 
-    root.blocks[block_nr >> 1] |= (byte)((((uint)gc_pointers << 3) | 4 | epoch) << ((block_nr & 1) << 2))
-    return (#void)f
+    var block_nr = (<uint>f - <uint>root) >> 16 - 1 
+    root.blocks[block_nr >> 1] |= <byte>(((<uint>gc_pointers << 3) | 4 | epoch) << ((block_nr & 1) << 2))
+    return <#void>f
 }
 
 func alloc(size uint, gc_pointers bool) #void {
@@ -226,56 +226,56 @@ func alloc(size uint, gc_pointers bool) #void {
         }
 
         // Mark the area as allocated in a certain epoch
-        var block #Block = (uint)f &^ 0xffff
-        var area_nr = ((uint)f & 0xffff) >> 5
-        block.area[area_nr >> 1] |= (byte)((((uint)gc_pointers << 3) | 4 | gcEpoch) << ((area_nr & 1) << 2))
+        var block #Block = <uint>f &^ 0xffff
+        var area_nr = (<uint>f & 0xffff) >> 5
+        block.area[area_nr >> 1] |= <byte>(((<uint>gc_pointers << 3) | 4 | gcEpoch) << ((area_nr & 1) << 2))
 
         // Fill with zeros
-        var ptr #uint64 = (#uint64)f
+        var ptr #uint64 = <#uint64>f
         var iterations = (size + 7)/8
         for(var i uint = 0; i < iterations; i++) {
             *ptr = 0
             ptr++
         }
 
-        return (#void)f
+        return <#void>f
     }
 
     // Nothing free. Add one more block and allocate again
-    initializeBlock((#Block)allocBlocks(1, 1 | 2, false, false))
+    initializeBlock(<#Block>allocBlocks(1, 1 | 2, false, false))
     return alloc(size, gc_pointers)
 }
 
 func free(ptr #void) {
     // Compute start of block
-    var block #Block = (uint)ptr &^ 0xffff
-    var area_nr = ((uint)ptr & 0xffff) >> 5
+    var block #Block = <uint>ptr &^ 0xffff
+    var area_nr = (<uint>ptr & 0xffff) >> 5
     for(var i uint = 0; i < 11; i++) {
-        if (block.area[area_nr >> 1] & (byte)(4 << ((area_nr & 1) << 2)) != 0) {
+        if (block.area[area_nr >> 1] & <byte>(4 << ((area_nr & 1) << 2)) != 0) {
             // Determine the size as a power of two
             var index uint = 0
             for (var next_area_nr = area_nr + 1; next_area_nr < 2048; next_area_nr = area_nr + 1 << index) {
-                if (block.area[next_area_nr >> 1] & (byte)(4 << ((next_area_nr & 1) << 2)) != 0) {
+                if (block.area[next_area_nr >> 1] & <byte>(4 << ((next_area_nr & 1) << 2)) != 0) {
                     break
                 }
                 index++
             }
             // Mark the block as free by setting the mark bits to 00
-            block.area[area_nr >> 1] &^= (byte)(15 << ((area_nr & 1) << 2))
+            block.area[area_nr >> 1] &^= <byte>(15 << ((area_nr & 1) << 2))
 
             // Comnpute the address of the free area
-            var f #FreeArea = (uint)block + area_nr << 5
+            var f #FreeArea = <uint>block + area_nr << 5
 
             // Try to merge with a buddy, but only up to a size of 16k. 32k areas are not merged, because each block has only one
             for(; index < 10; index++) {
                 // Find the buddy by flipping one bit
                 var buddy_area_nr = area_nr ^ (1 << index)
                 // Is the buddy in use? Then do nothing
-                if (block.area[buddy_area_nr >> 1] & (byte)(3 << ((buddy_area_nr & 1) << 2)) != 0) {
+                if (block.area[buddy_area_nr >> 1] & <byte>(3 << ((buddy_area_nr & 1) << 2)) != 0) {
                     break
                 }
                 // Remove the buddy from the free list
-                var f_buddy #FreeArea = (uint)block + buddy_area_nr << 5
+                var f_buddy #FreeArea = <uint>block + buddy_area_nr << 5
                 if (f_buddy.next != 0) {
                     f_buddy.next.prev = f_buddy.prev
                 }
@@ -286,11 +286,11 @@ func free(ptr #void) {
                 }
                 // Take the area with the smaller area_nr
                 if (buddy_area_nr < area_nr) {
-                    block.area[area_nr >> 1] &^= (byte)(4 << ((area_nr & 1) << 2))
+                    block.area[area_nr >> 1] &^= <byte>(4 << ((area_nr & 1) << 2))
                     area_nr = buddy_area_nr
                     f = f_buddy
                 } else {
-                    block.area[buddy_area_nr >> 3] &^= (byte)(4 << ((buddy_area_nr & 1) << 2))                    
+                    block.area[buddy_area_nr >> 3] &^= <byte>(4 << ((buddy_area_nr & 1) << 2))                    
                 }
             }
 
@@ -321,28 +321,28 @@ func copy(dest #byte, src #byte, count int) {
 }
 
 func string_concat(str1 string, str2 string) string {
-    var s1 = *((#uint)str1)
-    var s2 = *((#uint)str2)
+    var s1 = *<#uint>str1
+    var s2 = *<#uint>str2
     var p #void = alloc(4 + s1 + s2, false)
-    *((#uint)p) = s1 + s2
-    var dest #byte = (#byte)p + 4
-    var src #byte = (#byte)str1 + 4
+    *<#uint>p = s1 + s2
+    var dest #byte = <#byte>p + 4
+    var src #byte = <#byte>str1 + 4
     for(var i uint = 0; i < s1; i++) {
         dest[i] = src[i]
     }
     dest += s1
-    src = (#byte)str2 + 4
+    src = <#byte>str2 + 4
     for(var i uint = 0; i < s2; i++) {
         dest[i] = src[i]
     }
-    return (string)p
+    return <string>p
 }
 
 func string_compare(str1 string, str2 string) int {
-    var s1 = *((#uint)str1)
-    var s2 = *((#uint)str2)
-    var ptr1 #byte = (#byte)str1 + 4
-    var ptr2 #byte = (#byte)str2 + 4
+    var s1 = *<#uint>str1
+    var s2 = *<#uint>str2
+    var ptr1 #byte = <#byte>str1 + 4
+    var ptr2 #byte = <#byte>str2 + 4
     var min = s2
     if (s1 < s2) {
         min = s1
@@ -364,11 +364,11 @@ func string_compare(str1 string, str2 string) int {
 }
 
 func make_string(src #byte, length uint) string {
-    var p #byte = (#byte)alloc(4 + length, false)
-    *((#uint)p) = length
+    var p #byte = <#byte>alloc(4 + length, false)
+    *<#uint>p = length
     var dest = p + 4
     for(var i uint = 0; i < length; i++) {
         dest[i] = src[i]
     }
-    return (string)p
+    return <string>p
 }

@@ -20,14 +20,13 @@ function compileModules() {
 	for(var i = 0; i < args.length - 1; i++) {
         ast.setCurrentFile(args[i]);
 		var arg = path.resolve(args[i]);
-//        console.log("Compiling " + arg + "...");
         let code = fs.readFileSync(arg, 'utf8') + "\n";
         try {
             let f = parser.parse(code);
             mnode.statements.push(f);
         } catch(ex) {
             if (ex instanceof parser.SyntaxError) {
-                console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+                console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
                 return;
             } else {
                 console.log(ex);

@@ -1882,7 +1882,7 @@ export class Wasm32Backend {
                     let call_type = call_end.type as FunctionType;
                     // Copy from the stack into the destination
                     code.push(new wasm.GetLocal(this.spLocal));
-                    this.emitCopy(n.type, call_type.stackFrame.fieldOffset("$result"), 0, code);
+                    this.emitCopy(n.type, call_type.stackFrame.fieldOffset("$result"), n.args[1] as number, code);
                     // Remove the stack frame                  
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Constant("i32", call_type.stackFrame.size));
