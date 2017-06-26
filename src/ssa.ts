@@ -1193,6 +1193,8 @@ export class Wasm32Backend {
         this.tmpI64Local = -1;
         this.tmpF32Local = -1;
         this.tmpF64Local = -1;
+        this.tmpI32SrcLocal = -1;
+        this.tmpI32DestLocal = -1;
         this.wf = f;
 
         if (n.type.callingConvention == "fyrCoroutine") {
