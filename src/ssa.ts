@@ -181,6 +181,13 @@ export class Variable {
         }
     }
 
+    public toString(): string {
+        if (this.gcDiscoverable) {
+            return "[gc]" + this.name;
+        }
+        return this.name;
+    }
+
     public name: string;
     public type: Type | StructType;
     /**
@@ -214,12 +221,7 @@ export class Variable {
      * addressable is true if 'addr_of' has been used on this variable.
      */
     public addressable: boolean;
-    /**
-     * noGarbageCollection is true if the value is stored somewhere where
-     * the garbage collection can find it. Hence, when taking the address of this variable,
-     * the type is "addr" instead of "ptr". This flag is useful when "adressable" is true.
-     */
-    public noGarbageCollection: boolean;
+    public gcDiscoverable: boolean;
     /**
      * Internal
      */
@@ -241,6 +243,9 @@ export class Pointer {
 export class Node {
     constructor(assign: Variable, kind: NodeKind, type: Type | FunctionType | StructType, args: Array<Variable | string | number>) {
         this.assign = assign;
+        if (this.assign) {
+            this.assignType = this.assign.type;
+        }
         this.kind = kind;
         this.type = type;
         for(let a of args) {
@@ -255,7 +260,7 @@ export class Node {
     public toString(indent: string): string {
         let str = indent;
         if (this.assign instanceof Variable) {
-            str += this.assign.name + " = ";
+            str += this.assign.toString() + " = ";
         }
         str += this.kind + " ";
         if (this.name) {
@@ -267,7 +272,7 @@ export class Node {
         if (this.args.length > 0) {
             let names = this.args.map(function(v: Variable | number | Node): string {
                 if (v instanceof Variable) {
-                    return v.name;
+                    return v.toString();
                 } else if (v instanceof Node) {
                     return "(" + v.toString("") + ")";
                 } else if (v === null || v === undefined) {
@@ -353,6 +358,7 @@ export class Node {
     public prev: Array<Node> = [];
     public blockPartner: Node; // 'end' for 'if'/'block'/'loop' and either 'if' or 'block' or 'loop' for 'end'.
     public assign: Variable;
+    public assignType: Type | StructType;
     public args: Array<Variable | number | Node> = [];
     public isAsync: boolean = false;
 }
@@ -387,6 +393,7 @@ export class Builder {
     public declareParam(type: Type | StructType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_param", type, []);
         n.assign.type = type;
+        n.assignType = type;
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -401,6 +408,7 @@ export class Builder {
     public declareResult(type: Type | StructType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_result", type, []);
         n.assign.type = type;
+        n.assignType = type;
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -415,6 +423,7 @@ export class Builder {
     public declareVar(type: Type | StructType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_var", type, []);
         n.assign.type = type;
+        n.assignType = type;
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -846,6 +855,78 @@ export class Optimizer {
         if (n.kind == "if" && n.next[1]) {
             this.removeDeadStrain(n.next[1], n.blockPartner);
         }
+    }
+
+    public analyzeGCDiscoverability(n: Node) {
+        let varsRead = new Set<Variable>();
+        this._analyzeGCDiscoverability(n, null, varsRead);
+    }
+
+    private _analyzeGCDiscoverability(n: Node, stop: Node, varsRead: Set<Variable>): boolean {
+        let doesGC = false;
+        for(; n != stop;) {
+            if (n.kind == "end" && n.blockPartner.kind == "if") {
+                let r = new Set<Variable>();
+                for(let v of varsRead) {
+                    r.add(v);
+                }
+                let branchDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, r);
+                doesGC = doesGC || branchDoesGC;
+                if (n.prev[1]) {
+                    branchDoesGC = this._analyzeGCDiscoverability(n.prev[1], n.blockPartner, r);
+                    doesGC = doesGC || branchDoesGC;
+                }
+                for(let v of r) {
+                    varsRead.add(v);
+                }
+                n = n.blockPartner;
+            } else if (n.kind == "end" && (n.blockPartner.kind == "block" || n.blockPartner.kind == "loop")) {
+                let blockDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
+                n = n.blockPartner;
+            } else if (n.kind == "call" || n.kind == "alloc" || n.kind == "call_end" || n.kind == "call_begin") {
+                for(let v of varsRead) {
+                    v.gcDiscoverable = true;
+                }
+                doesGC = true;
+                n = n.prev[0];
+            } else if (n.kind == "decl_var" || n.kind == "decl_result" || n.kind == "decl_param") {
+                n = n.prev[0];
+            } else {
+                let lastArgDoesGC = false;
+                let doesGCBefore = doesGC;
+                for(let i = n.args.length - 1; i >= 0; i--) {
+                    let a = n.args[i];
+                    // If a ptr is computed for a "store" and then a value is computed leading to a GC, the ptr must be GC discoverable
+                    if (i == 0 && n.kind == "store" && doesGC && !doesGCBefore) {
+                        if (a instanceof Variable && a.type == "ptr") {
+                            a.gcDiscoverable = true;
+                        } else if (a instanceof Node && a.assignType == "ptr") {
+                            if (a.assign) {
+                                a.assign.gcDiscoverable = true;
+                            } else {
+                                a.assign = new Variable();
+                                a.assign.type = "ptr";
+                                a.assign.gcDiscoverable = true;
+                            }
+                        }
+                    }
+                    if (a instanceof Node) {
+                        lastArgDoesGC = this._analyzeGCDiscoverability(a, null, varsRead);
+                        doesGC = doesGC || lastArgDoesGC;
+                    }
+                }
+                // If the assigned variable has not yet been read, then it must be inside a loop,
+                // otherwise the variable would be useless and would have been removed.
+                // If GC happens after this assignment, GC discoverability is required.
+                if (n.assign && n.assign.type == "ptr" && !varsRead.has(n.assign) && doesGC) {
+                    n.assign.gcDiscoverable = true;
+                } else if (n.assign && n.assign.type == "ptr") {
+                    varsRead.delete(n.assign)
+                }
+                n = n.prev[0];
+            }
+        }
+        return doesGC;
     }
 }
 
@@ -1496,7 +1577,9 @@ export class Wasm32Backend {
 
     private stackifyStep(start: Node, end: Node) {
         let n = start.next[0];
+        let last: Node;
         for( ; n && n != end; ) {
+            last = n;
             if (n.kind == "addr_of") {
                 n = n.next[0];
             } else {
@@ -1531,6 +1614,9 @@ export class Wasm32Backend {
                 }
                 n = n.next[0];
             }
+        }
+        if (end === null) {
+            this.optimizer.analyzeGCDiscoverability(last);
         }
     }
 
@@ -1674,7 +1760,7 @@ export class Wasm32Backend {
         if (this.varStorage.has(v) || this.globalVarStorage.has(v)) {
             return;
         }
-        if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && v.type != "ptr" && !v.addressable) {
+        if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && !v.gcDiscoverable && !v.addressable) {
             // Pointer variables must be put on the stack
             let index = locals.allocate(v.type);
             let s: Wasm32Storage = {storageType: "local_var", offset: index};

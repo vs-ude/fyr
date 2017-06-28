@@ -57,7 +57,6 @@ export class CodeGenerator {
                 }
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
-                g.noGarbageCollection = true;
                 this.globalVars.set(e, g);
             } else {
                 throw "CodeGen: Implementation Error " + e;
@@ -187,7 +186,6 @@ export class CodeGenerator {
             let e = f.scope.elements.get(name);
             if (e instanceof FunctionParameter) {
                 let v = b.declareParam(this.getSSAType(e.type), name);
-                v.noGarbageCollection = true;
                 vars.set(e, v);
             }
         }
@@ -198,13 +196,11 @@ export class CodeGenerator {
                 if (e instanceof Variable && e.isResult) {
                     // Create a variable that can be assigned multiple times
                     let v = b.declareResult(this.getSSAType(e.type), name);
-                    v.noGarbageCollection = true;
                     vars.set(e, v);                    
                 }
             }
         } else if (f.type.returnType != this.tc.t_void) {
             let v = b.declareResult(this.getSSAType(f.type.returnType), "$return");
-            v.noGarbageCollection = true;
         }
 
         this.processScopeVariables(b, vars, f.scope);
@@ -247,16 +243,14 @@ export class CodeGenerator {
                 if (e.isResult) {
                     continue;
                 } else if (e.isConst) {
+                    throw "Const is not implemented"
                     // Create a SSA that can be assigned only once
-                    let v = b.tmp();
-                    v.type = e.heapAlloc ? "ptr" : this.getSSAType(e.type);
-                    vars.set(e, v);
+//                    let v = b.tmp();
+//                    v.type = e.heapAlloc ? "ptr" : this.getSSAType(e.type);
+//                    vars.set(e, v);
                 } else {
                     // Create a variable that can be assigned multiple times
                     let v = b.declareVar(e.heapAlloc ? "ptr" : this.getSSAType(e.type), name);
-                    if (!e.heapAlloc) {
-                        v.noGarbageCollection = true;
-                    }
                     vars.set(e, v);
                 }
             }
@@ -393,7 +387,7 @@ export class CodeGenerator {
                     if (val instanceof ssa.Pointer) {
                         ptr = val;
                     } else {
-                        ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [val]), 0);
+                        ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [val]), 0);
                     }
                     processAssignment(snode.lhs, snode.rhs.type, destinations, 0, ptr);
                 } else {
@@ -707,7 +701,7 @@ export class CodeGenerator {
             case "unary*":
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars);
                 if (!this.disableNullCheck) {
-                    let check = b.assign(b.tmp(), "eqz", "addr", [tmp]);
+                    let check = b.assign(b.tmp("i32"), "eqz", "addr", [tmp]);
                     b.ifBlock(check);
                     b.assign(null, "trap", null, []);
                     b.end();
@@ -735,8 +729,10 @@ export class CodeGenerator {
                     if (this.isLeftHandSide(enode.lhs)) {
                         head_addr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     } else {
-                        let head = this.processExpression(f, scope, enode.lhs, b, vars);
-                        head_addr = b.assign(b.tmp(), "addr_of", "ptr", [head]);
+                        head_addr = this.processExpression(f, scope, enode.lhs, b, vars) as ssa.Variable;
+                    }
+                    if (head_addr instanceof ssa.Variable) {
+                        head_addr = b.assign(b.tmp(), "addr_of", "ptr", [head_addr]);
                     }
                     let data_ptr: ssa.Variable;
                     let len: ssa.Variable;
@@ -800,8 +796,10 @@ export class CodeGenerator {
                     if (this.isLeftHandSide(enode.lhs)) {
                         ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     } else {
-                        let arr = this.processExpression(f, scope, enode.lhs, b, vars);
-                        ptr = b.assign(b.tmp(), "addr_of", "ptr", [arr]);
+                        ptr = this.processExpression(f, scope, enode.lhs, b, vars) as ssa.Variable;
+                    }
+                    if (ptr instanceof ssa.Variable) {
+                        ptr = b.assign(b.tmp(), "addr_of", "ptr", [ptr]);
                     }
                     let t = this.getSSAType(enode.lhs.type);
                     let index: ssa.Variable | number = 0;
@@ -841,8 +839,10 @@ export class CodeGenerator {
                     if (this.isLeftHandSide(enode.lhs)) {
                         ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     } else {
-                        let arr = this.processExpression(f, scope, enode.lhs, b, vars);
-                        ptr = b.assign(b.tmp(), "addr_of", "ptr", [arr]);
+                        ptr = this.processExpression(f, scope, enode.lhs, b, vars) as ssa.Variable;
+                    }
+                    if (ptr instanceof ssa.Variable) {
+                        ptr = b.assign(b.tmp(), "addr_of", "ptr", [ptr]);
                     }
                     let t = this.getSSAType(enode.lhs.type) as ssa.StructType;
                     let index: ssa.Variable | number = 0;
@@ -870,7 +870,7 @@ export class CodeGenerator {
                 if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     if (enode.lhs.type instanceof PointerType && !this.disableNullCheck) {
-                        let check = b.assign(b.tmp(), "eqz", "addr", [ptr]);
+                        let check = b.assign(b.tmp("i32"), "eqz", "addr", [ptr]);
                         b.ifBlock(check);
                         b.assign(null, "trap", null, []);
                         b.end();
@@ -880,8 +880,7 @@ export class CodeGenerator {
                         if (ptr instanceof ssa.Variable) {
                             return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
                         }
-                        // ptr is a number. Hence we use "addr" instead of "ptr" because it must be an UnsafePointerType
-                        return b.assign(b.tmp(), "add", "addr", [ptr, s.fieldOffset(enode.name.value)]);
+                        return b.assign(b.tmp(), "add", "ptr", [ptr, s.fieldOffset(enode.name.value)]);
                     } else {
                         throw "TODO interface and class"
                     }          
@@ -901,9 +900,7 @@ export class CodeGenerator {
                             left.offset += s.fieldOffset(enode.name.value);
                             return left;
                         }
-                        // ptr is a value type. Hence we use "addr" instead of "ptr" because the value must be somewhere on heapStack
-                        // where the GC can find it.
-                        let ptr = b.assign(b.tmp(), "addr_of", "addr", [left]);
+                        let ptr = b.assign(b.tmp(), "addr_of", "ptr", [left]);
                         return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
                     } else {
                         throw "CodeGen: Implementation error"
@@ -1282,10 +1279,10 @@ export class CodeGenerator {
                     }
                     let ptr3: ssa.Variable | number;
                     if (typeof(index1) == "number") {
-                        ptr3 = b.assign(b.tmp(), "add", "addr", [ptr, 4 + index1]);
+                        ptr3 = b.assign(b.tmp(), "add", "ptr", [ptr, 4 + index1]);
                     } else {
-                        let ptr2 = b.assign(b.tmp(), "add", "addr", [ptr, 4]);
-                        ptr3 = b.assign(b.tmp(), "add", "addr", [ptr2, index1]);
+                        let ptr2 = b.assign(b.tmp(), "add", "ptr", [ptr, 4]);
+                        ptr3 = b.assign(b.tmp(), "add", "ptr", [ptr2, index1]);
                     }
                     let l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     if (!this.stringMakeFunction) {

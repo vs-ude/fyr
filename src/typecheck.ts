@@ -1135,7 +1135,7 @@ export class TypeChecker {
         let needsReturn = !!f.node.rhs;
         if (needsReturn) {
             if (!f.node.statements) {
-                throw new TypeError("Mising return at end of function", f.loc);
+                throw new TypeError("Missing return at end of function", f.loc);
             }
             let hasReturn = false;
             for(let i = f.node.statements.length - 1; i >= 0; i--) {
@@ -1149,7 +1149,7 @@ export class TypeChecker {
                 }
             }
             if (!hasReturn) {
-                throw new TypeError("Mising return at end of function", f.loc);
+                throw new TypeError("Missing return at end of function", f.loc);
             }
         }
     }
