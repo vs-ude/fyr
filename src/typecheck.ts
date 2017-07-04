@@ -2224,7 +2224,7 @@ export class TypeChecker {
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index1);
                 if (enode.lhs.type instanceof ArrayType) {
-                    this.checkIsIndexable(enode.lhs, index2);
+                    this.checkIsIndexable(enode.lhs, index2, true);
                     enode.type = new SliceType(enode.lhs.type.elementType);
                 } else {
                     enode.type = enode.lhs.type;
@@ -2425,8 +2425,11 @@ export class TypeChecker {
                     enode.type = t;
                 } else if (t == this.t_string && enode.rhs.type instanceof UnsafePointerType) {
                     enode.type = t;
+                } else if (t == this.t_string && enode.rhs.type instanceof SliceType && enode.rhs.type.elementType == this.t_byte) {
+                    enode.type = t;
                 } else {
-                    throw "TODO: conversion not possible or not implemented";
+                    throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
+//                    throw "TODO: conversion not possible or not implemented";
                 }
                 break;
             }
@@ -2765,7 +2768,7 @@ export class TypeChecker {
         throw new TypeError("The type " + node.type.name + " is not enumerable", node.loc);
     }
 
-    public checkIsIndexable(node: Node, index: number): Type {
+    public checkIsIndexable(node: Node, index: number, indexCanBeLength: boolean = false): Type {
         if (node.type instanceof GenericClassInstanceType) {
             if (node.type.base == this.t_map) {
                 return node.type.genericParameterTypes[1];
@@ -2776,7 +2779,7 @@ export class TypeChecker {
             }
             return this.t_byte;
         } else if (node.type instanceof ArrayType) {
-            if (index < 0 || index >= node.type.size) {
+            if (index < 0 || (!indexCanBeLength && index >= node.type.size) || (indexCanBeLength && index > node.type.size)) {
                 throw new TypeError("Index out of range", node.loc);
             }
             return node.type.elementType;

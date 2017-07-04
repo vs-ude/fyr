@@ -1,3 +1,9 @@
+func demoString() string {
+    var buffer [256]byte
+    var arr = buffer[:]
+    return <string>arr
+}
+
 type S struct {
     x int
 }
@@ -34,6 +40,10 @@ func demoTupleLiteral1() int16 {
 func demoTupleLiteral2() (int16, string) {
     var tuple = (int16, string)(42, "Hallo!")
     return tuple
+}
+
+func demoTupleLiteral3() (int16, string) {
+    return 42, "Hallo!"
 }
 
 func demoArrayLiteral2() int16 {

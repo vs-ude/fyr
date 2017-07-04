@@ -1252,7 +1252,7 @@ export class CodeGenerator {
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
                     if (objPtr instanceof ssa.Pointer) {
-                        let tmp = b.assign(b.tmp(), "load", "addr", [objPtr.variable, objPtr.offset]);
+                        args.push(b.assign(b.tmp(), "add", "addr", [objPtr.variable, objPtr.offset]));
                     } else {
                         args.push(objPtr);
                     }
@@ -1335,7 +1335,63 @@ export class CodeGenerator {
                     let wf = this.funcs.get(this.stringMakeFunction);
                     return b.call(b.tmp(), this.getSSAFunctionType(this.stringMakeFunction.type), [wf.index, ptr3, l]);
                 } else if (enode.lhs.type instanceof ArrayType) {
-                    throw "TODO";
+                    let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    let len = enode.lhs.type.size;
+                    if (enode.parameters[0] && index1 !== 0) {
+                        // Compare 'index1' with 'len'
+                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index1, len]);
+                        b.ifBlock(trap);
+                        b.assign(null, "trap", null, []);
+                        b.end();                        
+                    }
+                    if (enode.parameters[1]) {
+                        // Compare 'index2' with 'len'
+                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index2, len]);
+                        b.ifBlock(trap);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    } else {
+                        index2 = len;
+                    }
+                    if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
+                        let cmp = b.assign(b.tmp(), "gt_s", "i32", [index1, index2]);
+                        b.ifBlock(cmp);
+                        b.assign(null, "trap", null, []);
+                        b.end();                        
+                    }
+                    let ptr2: ssa.Pointer;
+                    if (ptr instanceof ssa.Variable) {
+                        ptr2 = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ptr]), 0);
+                    } else {
+                        ptr2 = ptr;
+                    }
+                    let ptr3: ssa.Variable;
+                    if (typeof(index1) == "number") {
+                        if (index1 != 0 || ptr2.offset != 0) {
+                            ptr3 = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset + index1]);
+                        } else {
+                            ptr3 = ptr2.variable;
+                        }
+                    } else {
+                        let tmp = ptr2.variable;
+                        if (ptr2.offset != 0 ) {
+                            tmp = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset]);
+                        }
+                        ptr3 = b.assign(b.tmp(), "add", "ptr", [tmp, index1]);
+                    }
+                    let l: ssa.Variable | number;
+                    if (typeof(index1) == "number" && typeof(index2) == "number") {
+                        l = index2 - index1;  
+                    } else {
+                        l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
+                    }
+                    let cap: ssa.Variable | number;
+                    if (typeof(index1) == "number") {
+                        cap = len - index1;
+                    } else {
+                        cap = b.assign(b.tmp(), "sub", "i32", [len, index1]);
+                    }
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr3, l, cap]);
                 } else {
                     throw "Implementation error";
                 }                
@@ -1394,6 +1450,15 @@ export class CodeGenerator {
                 } else if (t == this.tc.t_string && enode.rhs.type instanceof UnsafePointerType) {
                     // Convert unsafe pointer to string
                     return expr;
+                } else if (t == this.tc.t_string && enode.rhs.type instanceof SliceType) {
+                    let head = b.assign(b.tmp(), "addr_of", "addr", [expr]);
+                    if (!this.stringMakeFunction) {
+                        throw new LinkError("Missing symbol " + this.stringMakeFunctionName, enode.loc);
+                    }
+                    let ptr = b.assign(b.tmp(), "load", "addr", [head, this.sliceHeader.fieldOffset("data_ptr")]);
+                    let l = b.assign(b.tmp(), "load", "i32", [head, this.sliceHeader.fieldOffset("length")]);
+                    let wf = this.funcs.get(this.stringMakeFunction);
+                    return b.call(b.tmp(), this.getSSAFunctionType(this.stringMakeFunction.type), [wf.index, ptr, l]);
                 } else if ((t == this.tc.t_bool || this.tc.checkIsIntType(t)) && (enode.rhs.type == this.tc.t_bool || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {

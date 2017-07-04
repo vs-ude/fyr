@@ -104,6 +104,11 @@ func newRect() Rect {
 func useRect() {
     var r = newRect()
     logNumber(r.width())
+    logNumber(r.p2.dist())
+}
+
+func Point.dist() int {
+    return this.x + this.y
 }
 
 func prefix() {
