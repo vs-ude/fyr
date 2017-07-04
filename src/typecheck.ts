@@ -207,6 +207,7 @@ export class StructType extends Type {
 
     public extends: StructType;
     public fields: Array<StructField> = [];
+    public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
 }
 
 export class StructField {
@@ -229,6 +230,9 @@ export class FunctionType extends Type {
 
     public toString(): string {
         if (this.name) {
+            if (this.objectType) {
+                return this.objectType.toString() + "." + this.name;
+            }
             return this.name;
         }
         let name = "("
@@ -266,6 +270,8 @@ export class FunctionType extends Type {
     public returnType: Type;
     public parameters: Array<FunctionParameter>;
     public callingConvention: CallingConvention = "fyr";
+    public objectType: Type;
+
 // Enable this line to measure coroutines
 //    public callingConvention: CallingConvention = "fyrCoroutine";
 }
@@ -882,6 +888,17 @@ export class TypeChecker {
             f.type = new FunctionType();
         }
         f.type.loc = fnode.loc;
+        if (fnode.lhs) {
+            f.type.objectType = this.createType(fnode.lhs, f.scope, true);
+            if (!(f.type.objectType instanceof StructType)) {
+                throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);
+            }
+            let p = new FunctionParameter();
+            p.name = "this";
+            p.type = new PointerType(f.type.objectType);
+            p.loc = fnode.lhs.loc;
+            f.scope.registerElement("this", p);
+        }
         if (fnode.parameters) {
             for(let pnode of fnode.parameters) {
                 let original_pnode = pnode;
@@ -925,7 +942,18 @@ export class TypeChecker {
             f.type.returnType = this.t_void;
         }
 
-        registerScope.registerElement(f.name, f);
+        if (f.type.objectType instanceof StructType) {
+            if (f.type.objectType.methods.has(f.name)) {
+                let loc = f.type.objectType.methods.get(f.name).loc;
+                throw new TypeError("Method " + f.type.objectType.toString() + "." + f.name + " is already defined at " + loc.file + " (" + loc.start.line + "," + loc.start.column + ")", fnode.loc);
+            }
+            f.type.objectType.methods.set(f.name, f.type);
+            registerScope.registerElement(f.type.objectType.name + "." + f.name, f);
+        } else if (f.type.objectType) {
+            throw "Implementation error";
+        } else {
+            registerScope.registerElement(f.name, f);
+        }
 
         return f;
     }
@@ -2148,15 +2176,21 @@ export class TypeChecker {
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
                     type = type.elementType;
                 } else if (type instanceof GuardedPointerType) {
+                    type = type.elementType;
                     throw "TODO";
                 }
                 if (type instanceof StructType) {
                     let name = enode.name.value;
                     let field = type.field(name);
-                    if (!field) {
-                        throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
+                    if (field) {
+                        enode.type = field.type;
+                    } else {
+                        let method = type.methods.get(name);
+                        if (!method) {
+                            throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
+                        }
+                        enode.type = method;
                     }
-                    enode.type = field.type;
                 } else if (type instanceof InterfaceType) {
                     throw "TODO"
                 } else if (type instanceof ClassType) {

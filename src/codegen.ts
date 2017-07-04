@@ -1,4 +1,4 @@
-import {Node, NodeOp} from "./ast"
+import {Location, Node, NodeOp} from "./ast"
 import {Function, Type, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
@@ -62,7 +62,7 @@ export class CodeGenerator {
                 throw "CodeGen: Implementation Error " + e;
             }
         }
-
+        
         // Generate IR code for all functions and initialization of global variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
@@ -162,6 +162,9 @@ export class CodeGenerator {
 
     private getSSAFunctionType(t: FunctionType): ssa.FunctionType {
         let ftype = new ssa.FunctionType([], null, t.callingConvention);
+        if (t.objectType) {
+            ftype.params.push("ptr");
+        }
         for(let p of t.parameters) {
             ftype.params.push(this.getSSAType(p.type));
         }
@@ -429,7 +432,7 @@ export class CodeGenerator {
                 if (snode.lhs.type == this.tc.t_string) {
                     // String concatenation
                     if (!this.stringConcatFunction) {
-                        throw "Missing string concat function in runtime";
+                        throw new LinkError("Missing symbol " + this.stringConcatFunctionName, snode.loc);
                     }
                     let wf = this.funcs.get(this.stringConcatFunction);
                     b.call(dest, this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
@@ -1195,20 +1198,64 @@ export class CodeGenerator {
             {
                 let f: Function;
                 let t: FunctionType;
+                let args: Array<ssa.Variable | string | number> = [];
+                let objPtr: ssa.Variable | ssa.Pointer | number | null = null;
                 if (enode.lhs.op == "id") {
+                    // Calling a named function
                     let e = scope.resolveElement(enode.lhs.value);
-                    if (e instanceof Function) {
+                    if (!(e instanceof Function)) {
+                        throw "Implementation error";
+                    }
+                    f = e;
+                    t = f.type;
+                } else if (enode.lhs.op == ".") {
+                    // Calling a method
+                    let ltype = enode.lhs.lhs.type;
+                    let objType: Type;
+                    if (ltype instanceof PointerType) {
+                        objType = ltype.elementType;
+                        objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars);
+                    } else if (ltype instanceof UnsafePointerType) {
+                        objType = ltype.elementType;
+                        objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars);
+                    } else if (ltype instanceof GuardedPointerType) {
+                        objType = ltype.elementType;
+                        throw "TODO";
+                    } else if (ltype instanceof StructType) {
+                        objType = ltype;
+                        objPtr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        if (objPtr instanceof ssa.Variable) {
+                            objPtr = b.assign(b.tmp(), "addr_of", "addr", [objPtr]);
+                        }
+                    } else {
+                        throw "Implementation error"
+                    }
+                    if (objType instanceof StructType) {
+                        let methodName = objType.name + "." + enode.lhs.name.value;
+                        let e = scope.resolveElement(methodName);
+                        if (!(e instanceof Function)) {
+                            throw "Implementation error";
+                        }
                         f = e;
                         t = f.type;
+                    } else {
+                        throw "Implementation error";
                     }
-                }
-                if (!f) {
+                } else {
+                    // Calling a lamdba function
                     t = enode.lhs.type as FunctionType;
                 }
                 
-                let args: Array<ssa.Variable | string | number> = [];
                 if (f) {
                     args.push(this.funcs.get(f).index);
+                }
+                if (objPtr !== null) {
+                    // Add 'this' to the arguments
+                    if (objPtr instanceof ssa.Pointer) {
+                        let tmp = b.assign(b.tmp(), "load", "addr", [objPtr.variable, objPtr.offset]);
+                    } else {
+                        args.push(objPtr);
+                    }
                 }
                 if (t.hasEllipsis()) {
                     throw "TODO"
@@ -1220,10 +1267,7 @@ export class CodeGenerator {
                 
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
-//                    if (t.returnType != this.tc.t_void) {
                     return b.call(b.tmp(), ft, args);
-//                    }
-//                    return b.call(null, ft, args);
                 }
                 throw "TODO: call a lambda function"
             }
@@ -1286,7 +1330,7 @@ export class CodeGenerator {
                     }
                     let l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     if (!this.stringMakeFunction) {
-                        throw "Missing string concat function in runtime";
+                        throw new LinkError("Missing symbol " + this.stringMakeFunctionName, enode.loc);
                     }
                     let wf = this.funcs.get(this.stringMakeFunction);
                     return b.call(b.tmp(), this.getSSAFunctionType(this.stringMakeFunction.type), [wf.index, ptr3, l]);
@@ -1378,8 +1422,11 @@ export class CodeGenerator {
         let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
         let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
         if (enode.lhs.type == this.tc.t_string) {
+            if (!this.stringCompareFunction) {
+                throw new LinkError("Missing symbol " + this.stringCompareFunctionName, enode.loc);
+            }
             let wf = this.funcs.get(this.stringCompareFunction);
-            let cmp = b.call(b.tmp(), this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
+            let cmp = b.call(b.tmp(), this.getSSAFunctionType(this.stringCompareFunction.type), [wf.index, p1, p2]);
             switch(opcode) {
                 case "eq":
                     return b.assign(b.tmp(), "eqz", "i32", [cmp]);
@@ -1446,4 +1493,14 @@ export class CodeGenerator {
     private stringCompareFunction: Function;
     private stringMakeFunctionName: string = "make_string";
     private stringMakeFunction: Function;
+}
+
+export class LinkError {
+    constructor(message: string, loc: Location) {
+        this.message = message;
+        this.location = loc;
+    }
+
+    public message: string;
+    public location: Location;
 }

@@ -11,7 +11,7 @@
             let memory_u8 = new Uint32Array(memory.buffer);
             let importObject = {
                 imports: {
-                    logString(sp) {
+                    logString: function(sp) {
                         var offset = memory_u32[sp >> 2];
                         var bytes = new Uint8Array(memory.buffer, offset + 4, memory_u32[offset >> 2]);
                         var string = new TextDecoder('utf8').decode(bytes);
@@ -180,6 +180,10 @@
                 console.log("prefix ...");
                 results.instance.exports.prefix(100 * 65536);
                 console.log("... prefix");
+
+                console.log("useRect ...");
+                results.instance.exports.useRect(100 * 65536);
+                console.log("... useRect");
             });
         </script>
     </body>

@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "type" | n == "struct" | n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
             return true;
         }
         return false;
@@ -52,12 +52,12 @@ import
     }
 
 importElement
-  = "func" [ \t]* n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:type? [ \t]* "\n" [ \t]* {
+  = "func" [ \t]+ n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:type? [ \t]* "\n" [ \t]* {
       return new ast.Node({loc: fl(location()), op: "funcType", parameters: t, rhs: f, name: n});
     }
 
 func
-  = "func" [ \t]* n:identifier? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = "func" [ \t]+ name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -65,7 +65,13 @@ func
               }
           }
       }
-      return new ast.Node({loc: fl(location()), op: "func", name: n?n:undefined, parameters: p, statements: b, rhs: t, genericParameters: g});
+      let scope = undefined;
+      if (n2) {
+          scope = name;
+          name = n2[2];
+          scope.op = "basicType";
+      }
+      return new ast.Node({loc: fl(location()), op: "func", name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
     }
 
 parameters
@@ -691,10 +697,10 @@ primary
 
 primary2
   = n: number { return n; }
-  / f:func { return f; }
   / "true" { return new ast.Node({loc: fl(location()), op: "bool", value: "true"}); }
   / "false" { return new ast.Node({loc: fl(location()), op: "bool", value: "false"}); }
   / "null" { return new ast.Node({loc: fl(location()), op: "null"}); }
+  / "this" { return new ast.Node({loc: fl(location()), op: "id", value: "this"}); }
   / i: identifier {
       return i;
     }

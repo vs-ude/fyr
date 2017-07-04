@@ -1,5 +1,6 @@
 import {
     func logString(string)
+    func logNumber(int)
 } from "imports"
 
 func getTuple() (int, int) {
@@ -92,8 +93,17 @@ type Rect struct {
     p2 Point
 }
 
+func Rect.width() int {
+    return this.p2.x - this.p1.x
+}
+
 func newRect() Rect {
     return {p1: {x: 42, y: 84}, p2: {x: 168, y: 336}}
+}
+
+func useRect() {
+    var r = newRect()
+    logNumber(r.width())
 }
 
 func prefix() {
