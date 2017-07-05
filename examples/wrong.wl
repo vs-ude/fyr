@@ -1,3 +1,9 @@
+func demoSlice() []int {
+    var arr [256]int
+    var slice = arr[:]
+    return slice[4:8]
+}
+
 func demoString() string {
     var buffer [256]byte
     var arr = buffer[:]

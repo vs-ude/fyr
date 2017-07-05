@@ -725,7 +725,6 @@ export class CodeGenerator {
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 } else if (enode.lhs.type instanceof SliceType) {
-                    // TODO: Perhaps in some cases there is no need for "ptr"
                     let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
@@ -1252,7 +1251,7 @@ export class CodeGenerator {
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
                     if (objPtr instanceof ssa.Pointer) {
-                        args.push(b.assign(b.tmp(), "add", "addr", [objPtr.variable, objPtr.offset]));
+                        args.push(b.assign(b.tmp("ptr"), "add", "i32", [objPtr.variable, objPtr.offset]));
                     } else {
                         args.push(objPtr);
                     }
@@ -1295,7 +1294,67 @@ export class CodeGenerator {
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 } else if (enode.lhs.type instanceof SliceType) {
-                    throw "TODO";
+                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                    // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
+                    let head_addr: ssa.Variable | ssa.Pointer;
+                    if (this.isLeftHandSide(enode.lhs)) {
+                        head_addr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    } else {
+                        head_addr = this.processExpression(f, scope, enode.lhs, b, vars) as ssa.Variable;
+                    }
+                    if (head_addr instanceof ssa.Variable) {
+                        head_addr = b.assign(b.tmp(), "addr_of", "ptr", [head_addr]);
+                    }
+                    let data_ptr: ssa.Variable;
+                    let len: ssa.Variable;
+                    let cap: ssa.Variable;
+                    if (head_addr instanceof ssa.Pointer) {
+                        data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
+                        len = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
+                        cap = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
+                    } else {
+                        data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr, this.sliceHeader.fieldOffset("data_ptr")]);
+                        len = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("length")]);
+                        cap = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("cap")]);
+                    }
+                    if (enode.parameters[0] && index1 !== 0) {
+                        // Compare 'index1' with 'len'
+                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index1, len]);
+                        b.ifBlock(trap);
+                        b.assign(null, "trap", null, []);
+                        b.end();                        
+                    }
+                    if (enode.parameters[1]) {
+                        // Compare 'index2' with 'len'
+                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index2, len]);
+                        b.ifBlock(trap);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    } else {
+                        index2 = len;
+                    }
+                    if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
+                        let cmp = b.assign(b.tmp(), "gt_s", "i32", [index1, index2]);
+                        b.ifBlock(cmp);
+                        b.assign(null, "trap", null, []);
+                        b.end();                        
+                    }
+                    let l: ssa.Variable | number;
+                    if (typeof(index1) == "number" && typeof(index2) == "number") {
+                        l = index2 - index1;  
+                    } else {
+                        l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
+                    }
+                    let c = b.assign(b.tmp(), "sub", "i32", [len, index1]);
+                    if (index1 != 0) {
+                        if (size != 1) {
+                            let tmp = b.assign(b.tmp(), "mul", "i32", [index1, size]);
+                            data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, tmp]);
+                        } else {
+                            data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, index1]);
+                        }
+                    }
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [data_ptr, l, c]);
                 } else if (enode.lhs.type == this.tc.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     let len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
