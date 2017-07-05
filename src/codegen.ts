@@ -1290,7 +1290,27 @@ export class CodeGenerator {
                     }
                 }
                 if (enode.lhs.type instanceof UnsafePointerType) {
-                    throw "TODO";
+                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
+                    let l: ssa.Variable | number;
+                    if (typeof(index1) == "number" && typeof(index2) == "number") {
+                        l = index2 - index1;  
+                    } else {
+                        l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
+                    }
+                    if (index1 != 0) {
+                        if (size != 1) {
+                            if (typeof(index1) == "number") {
+                                ptr = b.assign(b.tmp("ptr"), "add", "i32", [ptr, index1 * size]);
+                            } else {
+                                let tmp = b.assign(b.tmp(), "mul", "i32", [index1, size]);
+                                ptr = b.assign(b.tmp("ptr"), "add", "i32", [ptr, tmp]);
+                            }
+                        } else {
+                            ptr = b.assign(b.tmp("ptr"), "add", "i32", [ptr, index1]);
+                        }
+                    }
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, l, l]);
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
                 } else if (enode.lhs.type instanceof SliceType) {
@@ -1348,8 +1368,12 @@ export class CodeGenerator {
                     let c = b.assign(b.tmp(), "sub", "i32", [len, index1]);
                     if (index1 != 0) {
                         if (size != 1) {
-                            let tmp = b.assign(b.tmp(), "mul", "i32", [index1, size]);
-                            data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, tmp]);
+                            if (typeof(index1) == "number") {
+                                data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, index1 * size]);
+                            } else {
+                                let tmp = b.assign(b.tmp(), "mul", "i32", [index1, size]);
+                                data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, tmp]);
+                            }
                         } else {
                             data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, index1]);
                         }

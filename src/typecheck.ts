@@ -2227,7 +2227,10 @@ export class TypeChecker {
                     this.checkIsAddressable(enode.lhs, scope, false);
                     this.checkIsIndexable(enode.lhs, index2, true);
                     enode.type = new SliceType(enode.lhs.type.elementType);
+                } else if (enode.lhs.type instanceof UnsafePointerType) {
+                    enode.type = new SliceType(enode.lhs.type.elementType);
                 } else {
+                    // For strings and slices the type remains the same
                     enode.type = enode.lhs.type;
                 }
                 break;

@@ -1,3 +1,8 @@
+func demoSlice2() []int {
+    var p #int = 1234
+    return p[4:8] 
+}
+
 func demoSlice() []int {
     var arr [256]int
     var slice = arr[:]
