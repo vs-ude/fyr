@@ -2224,6 +2224,7 @@ export class TypeChecker {
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index1);
                 if (enode.lhs.type instanceof ArrayType) {
+                    this.checkIsAddressable(enode.lhs, scope, false);
                     this.checkIsIndexable(enode.lhs, index2, true);
                     enode.type = new SliceType(enode.lhs.type.elementType);
                 } else {

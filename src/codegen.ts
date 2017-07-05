@@ -1225,7 +1225,7 @@ export class CodeGenerator {
                         objType = ltype;
                         objPtr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
                         if (objPtr instanceof ssa.Variable) {
-                            objPtr = b.assign(b.tmp(), "addr_of", "addr", [objPtr]);
+                            objPtr = b.assign(b.tmp(), "addr_of", "ptr", [objPtr]);
                         }
                     } else {
                         throw "Implementation error"
@@ -1361,23 +1361,23 @@ export class CodeGenerator {
                     }
                     let ptr2: ssa.Pointer;
                     if (ptr instanceof ssa.Variable) {
-                        ptr2 = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ptr]), 0);
+                        ptr2 = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [ptr]), 0);
                     } else {
                         ptr2 = ptr;
                     }
                     let ptr3: ssa.Variable;
                     if (typeof(index1) == "number") {
                         if (index1 != 0 || ptr2.offset != 0) {
-                            ptr3 = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset + index1]);
+                            ptr3 = b.assign(b.tmp("ptr"), "add", "i32", [ptr2.variable, ptr2.offset + index1]);
                         } else {
                             ptr3 = ptr2.variable;
                         }
                     } else {
                         let tmp = ptr2.variable;
                         if (ptr2.offset != 0 ) {
-                            tmp = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset]);
+                            tmp = b.assign(b.tmp("ptr"), "add", "i32", [ptr2.variable, ptr2.offset]);
                         }
-                        ptr3 = b.assign(b.tmp(), "add", "ptr", [tmp, index1]);
+                        ptr3 = b.assign(b.tmp("ptr"), "add", "i32", [tmp, index1]);
                     }
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
