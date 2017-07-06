@@ -38,6 +38,8 @@ export class CodeGenerator {
             }
         }
 
+        // Global variables oredered by their appearance in the code
+        let globals: Array<Variable> = [];
         // Declare all functions and global variables
         let scope = mnode.scope;
         for(let name of scope.elements.keys()) {
@@ -58,11 +60,30 @@ export class CodeGenerator {
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
                 this.globalVars.set(e, g);
+                if (e.node.rhs) {
+                    globals.push(e);
+                }
             } else {
                 throw "CodeGen: Implementation Error " + e;
             }
         }
         
+        // Generate IR code for the initialization of global variables
+        if (globals.length > 0) {
+            let wf = this.wasm.declareFunction("init");
+            let b = new ssa.Builder();
+            let t = new FunctionType();
+            t.returnType = this.tc.t_void;
+            t.callingConvention = "fyr";
+            b.define("init", this.getSSAFunctionType(t));
+            for(let v of globals) {
+                let g = this.globalVars.get(v);
+                let expr = this.processExpression(null, scope, v.node.rhs, b, new Map<ScopeElement, ssa.Variable>());
+                b.assign(g, "copy", this.getSSAType(v.type), [expr]);
+            }
+            this.wasm.defineFunction(b.node, wf);
+        }
+
         // Generate IR code for all functions and initialization of global variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
@@ -73,9 +94,7 @@ export class CodeGenerator {
                 let wf = this.funcs.get(e) as wasm.Function;
                 let n = this.processFunction(e, true, wf);
             } else if (e instanceof Variable) {
-                if (e.node.rhs) {
-                    throw "TODO: Initializer";
-                }
+                // Do nothing by intention
             } else {
                 throw "CodeGen: Implementation Error " + e
             }

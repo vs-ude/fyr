@@ -2294,13 +2294,16 @@ export class TypeChecker {
                 }
                 enode.type = ft.returnType;
                 let f = scope.envelopingFunction();
-                let calls: Array<FunctionType>;
-                if (this.callGraph.has(f)) {
-                    calls = this.callGraph.get(f);
-                    calls.push(ft);
-                } else {
-                    calls = [ft];
-                    this.callGraph.set(f, calls);
+                if (f) {
+                    // Function call happens inside a function body and not during the evaluation of a global function
+                    let calls: Array<FunctionType>;
+                    if (this.callGraph.has(f)) {
+                        calls = this.callGraph.get(f);
+                        calls.push(ft);
+                    } else {
+                        calls = [ft];
+                        this.callGraph.set(f, calls);
+                    }
                 }
                 break;
             case "genericInstance":

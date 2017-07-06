@@ -1,3 +1,5 @@
+var g1 = i()
+
 func demoSlice2() []int {
     var p #int = 1234
     return p[4:8] 
