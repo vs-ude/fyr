@@ -48,9 +48,14 @@ export class FunctionParameter implements ScopeElement {
 }
 
 export class Typedef implements ScopeElement {
+    public typeCode(): string {
+        return this.type.typeCode();
+    }
+    
     public instantiate(): Type {
         return this._tc.instantiateTypedef(this);
     }
+
     public name: string;
     public type: Type;
     public loc: Location;
@@ -156,12 +161,18 @@ export interface GenericInstanceType {
     genericParameterTypes: Array<Type>;
 }
 
+var typeCodeCounter = 0;
+
 export abstract class Type {
     public name: string;
     public loc: Location;
 
     public toString(): string {
         return this.name
+    }
+
+    public typeCode(): string {
+        return this.name;
     }
 }
 
@@ -184,6 +195,12 @@ export class InterfaceType extends Type {
 }
 
 export class StructType extends Type {
+    constructor() {
+        super();
+        let tc = typeCodeCounter++;
+        this._typeCode = "struct{}(" + tc.toString() + ")";
+    }
+
     public field(name: string): StructField {
         for(let f of this.fields) {
             if (f.name == name) {
@@ -194,6 +211,10 @@ export class StructType extends Type {
             return this.extends.field(name);
         }
         return null;
+    }
+
+    public typeCode(): string {
+        return this._typeCode;
     }
 
     public toString(): string {
@@ -209,6 +230,8 @@ export class StructType extends Type {
     public extends: StructType;
     public fields: Array<StructField> = [];
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
+
+    private _typeCode: string;
 }
 
 export class StructField {

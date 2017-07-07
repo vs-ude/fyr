@@ -23,15 +23,17 @@ export class TypeMapper {
     }
 
     public mapType(t: Type, st: ssa.Type | ssa.StructType = null): TypeMap {
-        if (this.mappings.has(t)) {
-            return this.mappings.get(t);
+        let typeCode = t.typeCode();
+        // TODO: Map by typecode and not by type reference
+        if (this.mappings.has(typeCode)) {
+            return this.mappings.get(typeCode);
         }
         if (t == this.tc.t_bool || t == this.tc.t_uint8 || t == this.tc.t_byte || t == this.tc.t_int8 || t == this.tc.t_int16 || t == this.tc.t_uint16 || t == this.tc.t_int32 || t == this.tc.t_uint32 || t == this.tc.t_int64 || t == this.tc.t_uint64 || t == this.tc.t_float || t == this.tc.t_double) {
             return null;
         }
         if (t instanceof PointerType) {
             let m = new TypeMap();
-            this.mappings.set(t, m);
+            this.mappings.set(typeCode, m);
             m.entries.push({offset:0, type: this.mapType(t.elementType), flags: TypeFlags.IsPointer, count: 1});
             return m;
         }
@@ -40,19 +42,19 @@ export class TypeMapper {
         }
         if (t == this.tc.t_string) {
             let m = new TypeMap();
-            this.mappings.set(t, m);
+            this.mappings.set(typeCode, m);
             m.entries.push({offset:0, type: null, flags: TypeFlags.IsPointer, count: 1});
             return m;
         }
         if (t instanceof SliceType) {
             let m = new TypeMap();
-            this.mappings.set(t, m);
+            this.mappings.set(typeCode, m);
             m.entries.push({offset:0, type: this.mapType(t.elementType), flags: TypeFlags.IsSlice, count: 1});
             return m;
         }
         if (t instanceof StructType) {
             let m = new TypeMap();
-            this.mappings.set(t, m);
+            this.mappings.set(typeCode, m);
             let s: ssa.StructType;
             if (st) {
                 s = st as ssa.StructType;
@@ -72,20 +74,20 @@ export class TypeMapper {
                 i++;
             }
             if (m.entries.length == 0) {
-                this.mappings.set(t, null);
+                this.mappings.delete(typeCode);
                 return null;
             }
             return m;            
         }
         if (t instanceof ArrayType) {
             let m = new TypeMap();
-            this.mappings.set(t, m);
+            this.mappings.set(typeCode, m);
             m.entries.push({offset:0, type: this.mapType(t.elementType), flags: TypeFlags.Inline, count: t.size});
             return m;
         }
         if (t instanceof TupleType) {
             let m = new TypeMap();
-            this.mappings.set(t, m);
+            this.mappings.set(typeCode, m);
             let s: ssa.StructType;
             if (st) {
                 s = st as ssa.StructType;
@@ -105,7 +107,7 @@ export class TypeMapper {
                 i++;
             }
             if (m.entries.length == 0) {
-                this.mappings.set(t, null);
+                this.mappings.delete(typeCode);
                 return null;
             }
             return m;            
@@ -115,22 +117,16 @@ export class TypeMapper {
 
     public addToModule(module: wasm.Module) {
         for(var m of this.mappings.values()) {
-            if (!m) {
-                continue;
-            }
             m.declare(module);
         }
         for(var m of this.mappings.values()) {
-            if (!m) {
-                continue;
-            }
             m.define();
         }
     }
 
     private tc: TypeChecker;
     private cg: CodeGenerator;
-    private mappings: Map<Type, TypeMap> = new Map<Type, TypeMap>(); 
+    private mappings: Map<string, TypeMap> = new Map<string, TypeMap>(); 
 }
 
 export class TypeMap {
