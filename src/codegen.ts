@@ -2,6 +2,7 @@ import {Location, Node, NodeOp} from "./ast"
 import {Function, Type, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
+import * as gc from "./gc"
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean) {
@@ -18,6 +19,7 @@ export class CodeGenerator {
         this.sliceHeader.addField("data_ptr", "ptr");
         this.sliceHeader.addField("length", "i32");
         this.sliceHeader.addField("cap", "i32");
+        this.typeMapper = new gc.TypeMapper(this.tc, this);
     }
 
     public processModule(mnode: Node) {
@@ -103,13 +105,16 @@ export class CodeGenerator {
         // Generate WASM code for the module
         this.wasm.generateModule();
         
+        // Add type maps to the module
+        this.typeMapper.addToModule(this.wasm.module);
+
 //        console.log('============ WASM ===============');
         if (!this.emitNoWasm) {
             console.log(this.wasm.module.toWast(""));
         }
     }
 
-    private getSSAType(t: Type): ssa.Type | ssa.StructType {
+    public getSSAType(t: Type): ssa.Type | ssa.StructType {
         if (t == this.tc.t_bool || t == this.tc.t_uint8 || t == this.tc.t_byte) {
             return "i8";
         }
@@ -1660,6 +1665,7 @@ export class CodeGenerator {
     private stringCompareFunction: Function;
     private stringMakeFunctionName: string = "make_string";
     private stringMakeFunction: Function;
+    private typeMapper: gc.TypeMapper;
 }
 
 export class LinkError {

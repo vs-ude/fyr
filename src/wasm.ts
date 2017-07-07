@@ -145,6 +145,17 @@ export class Module extends Node {
         return offset;
     }
 
+    public declareGlobalArray(sizeInBytes: number): number {
+        let offset = this.dataSize;
+        this.dataSize += sizeInBytes;
+        return offset;
+    }
+
+    public defineGlobalArray(offset: number, arr: Uint8Array) {
+        this.data.push(new Data(offset, arr));
+        this.dataSize += align64(arr.length);
+    }
+
     public stackSize = 1 * 65536;
     public heapSize = 1 * 65536;
     public funcIndex: number = 0;
