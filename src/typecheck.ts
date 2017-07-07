@@ -10,6 +10,7 @@ export interface ScopeElement {
 
 export class Variable implements ScopeElement {
     public isConst: boolean;
+    public isGlobal: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
@@ -1090,6 +1091,7 @@ export class TypeChecker {
                 } else if (snode.op == "var") {
                     let v = this.createVar(snode.lhs, scope, false);
                     v.node = snode;
+                    v.isGlobal = true;
                     globalVariables.push(v);
                 } else if (snode.op == "import") {
                     this.createImport(snode, fnode.scope);
@@ -2812,6 +2814,9 @@ export class TypeChecker {
         switch (node.op) {
             case "id":
                 let element = scope.resolveElement(node.value);
+                if (element instanceof Variable && element.isGlobal) {
+                    return true;
+                }
                 if (element instanceof Variable) {
                     element.heapAlloc = true;
                     return true;

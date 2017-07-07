@@ -139,6 +139,12 @@ export class Module extends Node {
         this.globals.push(g);
     }
 
+    public addGlobalStruct(size: number): number {
+        let offset = this.dataSize;
+        this.dataSize += size;
+        return offset;
+    }
+
     public stackSize = 1 * 65536;
     public heapSize = 1 * 65536;
     public funcIndex: number = 0;

@@ -1227,7 +1227,9 @@ export class Wasm32Backend {
         let index = 0;
         for(let v of this.globalVariables) {
             if (v.addressable || v.type instanceof StructType) {
-                throw "TODO: Global variable on heap"
+                let offset = this.module.addGlobalStruct(sizeOf(v.type));
+                let s: Wasm32Storage = {storageType: "global_heap", offset: offset};
+                this.globalVarStorage.set(v, s);
             } else {
                 let s: Wasm32Storage = {storageType: "global", offset: index};
                 this.globalVarStorage.set(v, s);
@@ -2400,7 +2402,9 @@ export class Wasm32Backend {
             }      
             case "global_heap":
             {
-                throw "TODO: Global variable on heap";
+                let s = this.globalVarStorage.get(v);
+                code.push(new wasm.Constant("i32", s.offset));
+                break;
             }
             default:
                 throw "Implementation error"
@@ -2461,7 +2465,10 @@ export class Wasm32Backend {
                 code.push(new wasm.GetGlobal(s.offset));
                 break;
             case "global_heap":
-                throw "TODO: Global variable";
+                let st = this.globalVarStorage.get(v);
+                code.push(new wasm.Constant("i32", st.offset));
+                code.push(new wasm.Load(width, asWidth, 0));
+                break;
         }
     }
 
@@ -2664,7 +2671,11 @@ export class Wasm32Backend {
             case "params":
             case "result":
                 code.push(new wasm.GetLocal(this.bpLocal));
-                break;                
+                break;
+            case "global_heap":
+                let s = this.globalVarStorage.get(v);
+                code.push(new wasm.Constant("i32", s.offset));
+                break;
         }
     }
 
@@ -2727,7 +2738,14 @@ export class Wasm32Backend {
                 }
                 break;     
             case "global_heap":
-                throw "TODO: Global heap";
+                if (tee) {
+                    code.push(new wasm.TeeLocal(this.getTmpLocal(width)));
+                }
+                code.push(new wasm.Store(width, asWidth, 0));                
+                if (tee) {
+                    code.push(new wasm.GetLocal(this.getTmpLocal(width)));
+                }
+                break;                
         }
     }
 

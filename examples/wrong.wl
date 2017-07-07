@@ -1,4 +1,10 @@
 var g1 = i()
+var g2 = "Hallo"
+var g3 [256]byte
+
+func globalSlice() []byte {
+    return g3[:]
+}
 
 func demoSlice2() []int {
     var p #int = 1234
