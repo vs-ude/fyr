@@ -22,7 +22,7 @@ export class TypeMapper {
         this.cg = cg;
     }
 
-    public mapType(t: Type): TypeMap {
+    public mapType(t: Type, st: ssa.Type | ssa.StructType = null): TypeMap {
         if (this.mappings.has(t)) {
             return this.mappings.get(t);
         }
@@ -31,6 +31,7 @@ export class TypeMapper {
         }
         if (t instanceof PointerType) {
             let m = new TypeMap();
+            this.mappings.set(t, m);
             m.entries.push({offset:0, type: this.mapType(t.elementType), flags: TypeFlags.IsPointer, count: 1});
             return m;
         }
@@ -39,46 +40,58 @@ export class TypeMapper {
         }
         if (t == this.tc.t_string) {
             let m = new TypeMap();
+            this.mappings.set(t, m);
             m.entries.push({offset:0, type: null, flags: TypeFlags.IsPointer, count: 1});
             return m;
         }
         if (t instanceof SliceType) {
             let m = new TypeMap();
+            this.mappings.set(t, m);
             m.entries.push({offset:0, type: this.mapType(t.elementType), flags: TypeFlags.IsSlice, count: 1});
             return m;
         }
         if (t instanceof StructType) {
             let m = new TypeMap();
-            let s = this.cg.getSSAType(t) as ssa.StructType;
+            this.mappings.set(t, m);
+            let s: ssa.StructType;
+            if (st) {
+                s = st as ssa.StructType;
+            } else {
+                st = this.cg.getSSAType(t) as ssa.StructType;
+            }
             let i = 0;
             for(let f of t.fields) {
-                let elm = this.mapType(f[1]);
+                let elm = this.mapType(f.type);
                 if (elm) {
-                    let offset = s.fieldOffset(f[0]);
-                    if (f[2] == 1) {
-                        for(let elm_e of elm.entries) {
-                            elm_e.offset += offset;
-                            m.entries.push(elm_e);
-                        }
-                    } else {
-                        m.entries.push({count: f[2], type: elm, offset: offset, flags: TypeFlags.Inline});
+                    let offset = s.fieldOffset(f.name);
+                    for(let elm_e of elm.entries) {
+                        elm_e.offset += offset;
+                        m.entries.push(elm_e);
                     }
                 }
                 i++;
             }
             if (m.entries.length == 0) {
+                this.mappings.set(t, null);
                 return null;
             }
             return m;            
         }
         if (t instanceof ArrayType) {
             let m = new TypeMap();
+            this.mappings.set(t, m);
             m.entries.push({offset:0, type: this.mapType(t.elementType), flags: TypeFlags.Inline, count: t.size});
             return m;
         }
         if (t instanceof TupleType) {
             let m = new TypeMap();
-            let s = this.cg.getSSAType(t) as ssa.StructType;
+            this.mappings.set(t, m);
+            let s: ssa.StructType;
+            if (st) {
+                s = st as ssa.StructType;
+            } else {
+                st = this.cg.getSSAType(t) as ssa.StructType;
+            }
             let i = 0;
             for(let el of t.types) {
                 let elm = this.mapType(el);
@@ -92,6 +105,7 @@ export class TypeMapper {
                 i++;
             }
             if (m.entries.length == 0) {
+                this.mappings.set(t, null);
                 return null;
             }
             return m;            
@@ -101,9 +115,15 @@ export class TypeMapper {
 
     public addToModule(module: wasm.Module) {
         for(var m of this.mappings.values()) {
+            if (!m) {
+                continue;
+            }
             m.declare(module);
         }
         for(var m of this.mappings.values()) {
+            if (!m) {
+                continue;
+            }
             m.define();
         }
     }
@@ -128,7 +148,7 @@ export class TypeMap {
             let e = this.entries[i];
             a32[1 + i * 4] = e.offset;
             a32[1 + i * 4 + 1] = e.count;
-            a32[1 + i * 4 + 2] = e.type.addr;
+            a32[1 + i * 4 + 2] = e.type ? e.type.addr : 0;
             a32[1 + i * 4 + 3] = e.flags;
         }
         this.module.defineGlobalArray(this.addr, new Uint8Array(arr));

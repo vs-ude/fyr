@@ -2664,7 +2664,9 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             case "unary&":
                 if (t instanceof PointerType || t instanceof UnsafePointerType) {
-                    return this.unifyLiterals(t.elementType, node.rhs, loc, doThrow);
+                    let r = this.unifyLiterals(t.elementType, node.rhs, loc, doThrow);
+                    node.type = t;
+                    return r;
                 }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             default:

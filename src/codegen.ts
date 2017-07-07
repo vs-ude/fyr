@@ -146,15 +146,18 @@ export class CodeGenerator {
             return "f64";
         }
         if (t instanceof PointerType) {
+            this.typeMapper.mapType(t);
             return "ptr";
         }
         if (t instanceof UnsafePointerType) {
+            this.typeMapper.mapType(t);
             return "addr";
         }
         if (t == this.tc.t_string) {
             return "ptr";
         }
         if (t instanceof SliceType) {
+            this.typeMapper.mapType(t, this.sliceHeader);
             return this.sliceHeader;
         }
         if (t instanceof StructType) {
@@ -163,12 +166,14 @@ export class CodeGenerator {
             for(let f of t.fields) {
                 s.addField(f.name, this.getSSAType(f.type), 1);
             }
+            this.typeMapper.mapType(t, s);
             return s;
         }
         if (t instanceof ArrayType) {
             let s = new ssa.StructType();
             s.name = t.name;
             s.addField("data", this.getSSAType(t.elementType), t.size);
+            this.typeMapper.mapType(t, s);
             return s;
         }
         if (t instanceof TupleType) {
@@ -179,6 +184,7 @@ export class CodeGenerator {
                 s.addField("t" + i.toString(), this.getSSAType(el));
                 i++;
             }
+            this.typeMapper.mapType(t, s);
             return s;            
         }
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
