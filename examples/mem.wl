@@ -9,7 +9,7 @@ type RootBlock struct {
     freeAreas  [11]#FreeArea  // 11 * 4 = 44 Bytes
     dummy int32               // Alignment
     // Pointers to free block sequences of "(1 << i) <= count < (1 << (i+1))" blocks.
-    // The largest allocatable size is 2GB
+    // The largest allocatable size is 2GB.
     freeBlocks [15]#FreeBlock // 15 * 4 Bytes = 60 Bytes
     dummy2 int32              // Alignment
     // Each block has 4 bit.
@@ -28,15 +28,15 @@ type FreeBlock struct {
 // Blocks are 64KB large and split into smaller areas.
 type Block struct {
     // 8: area contains pointers and must be inspected by the GC
-    // 4: 32-byte unit iss the beginning of an area.
+    // 4: 32-byte unit is the beginning of an area.
     //    Areas are split (if necessary) upon allocation, and rejoined upon free.
-    // 1, 2: Two bits to indicate the epoch when the block has been marked during mark & sweep.
+    // 1 & 2: Two bits to indicate the epoch when the block has been marked during mark & sweep.
     // These bits are only meaningful if the block is the beginning or an area.
     // 11 has no meaning
     // 01 means allocated in GC epoch 1.
     // 10 means allocated in GC epoch 2.
     // 00 means free
-    area [1024]byte           // 4*2048 Bits
+    area [1024]byte           // 4*2048 Bits = 1024 bytes
     data  [65536 - 1024]byte  // 2016 units of 32 byte each = 64512 bytes
 }
 
@@ -107,7 +107,16 @@ func split(f #FreeArea, index uint) {
     block.area[area_nr >> 1] |= <byte>(4 << ((area_nr & 1) << 2))
 }
 
-func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
+func allocBlocks(elementCount uint, elementSize uint, typeMap #int, epoch uint, has_gc bool) #void {
+    var size = elementCount * elementSize
+    var flags uint = epoch | 4
+    if (typeMap != 0) {
+        // Add space for the type typeMap
+        // TODO
+        flags |= 8
+    }
+    // Round the size up to the next block size and compute the block count
+    var count = (size + 0xffff) / (1<<16)
     // Compute the block-count as a power of two
     var index uint = 14
     for(; index >= 0; index--) {
@@ -127,7 +136,8 @@ func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
             // TODO: Throw out-of-memory exception
             return 0
         }
-        return allocBlocks(count, epoch, gc_pointers, true)
+        garbageCollect()
+        return allocBlocks(elementCount, elementSize, typeMap, epoch, true)
     }
 
     var f #FreeBlock = root.freeBlocks[index]
@@ -173,18 +183,47 @@ func allocBlocks(count uint, epoch uint, gc_pointers bool, has_gc bool) #void {
         }
     }
     // Mark start of allocated sequence
-    var block_nr = (<uint>f - <uint>root) >> 16 - 1 
-    root.blocks[block_nr >> 1] |= <byte>(((<uint>gc_pointers << 3) | 4 | epoch) << ((block_nr & 1) << 2))
+    var block_nr = (<uint>f - <uint>root) >> 16 - 1
+    // root.blocks[block_nr >> 1] &^= <byte>(0xf << ((block_nr & 1) << 2))
+    // Entries of unused blocks are zero. Hence, no need to clear bits before setting them
+    root.blocks[block_nr >> 1] |= <byte>(flags << ((block_nr & 1) << 2))
+
+    if (typeMap != 0) {
+        var start #int = <#int>f
+        if (elementCount == 1) {
+            *start = <int>typeMap
+            f = <uint>f + 4
+        } else {
+            *start = -<int>elementCount
+            start++
+            *start = <int>typeMap            
+            f = <uint>f + 8
+        }
+    }
     return <#void>f
 }
 
-func alloc(size uint, gc_pointers bool) #void {
+func alloc(elementCount uint, elementSize uint, typeMap #int) #void {
+    // Determine the brutto size (i.e. including space for the TypeMap)
+    var size = elementCount * elementSize
+    var flags = 4 | gcEpoch
+    if (typeMap != 0) {
+         size += 4 // Additional 4 bytes for the typeMap
+        if (elementCount != 1) {
+            size += 4
+        }
+        flags |= 8
+    }
+
+    // Needs entire blocks?
+    if (size > 1<<15) {
+        // Allocate a sequence of blocks
+        return allocBlocks(elementCount, elementSize, typeMap, gcEpoch, false)
+    }
+
     // Determine the granularity
     var index uint
-    if (size > 1<<15) {             // Needs entire blocks
-        // allocate a sequence of blocks
-        return allocBlocks((size + 0xffff) / (1<<16), gcEpoch, gc_pointers, false) 
-    } else if (size > 1 << 14) {    // 32k
+    if (size > 1 << 14) {    // 32k
         index = 10
     } else if (size > 1 << 13) {    // 16k
         index = 9
@@ -228,7 +267,7 @@ func alloc(size uint, gc_pointers bool) #void {
         // Mark the area as allocated in a certain epoch
         var block #Block = <uint>f &^ 0xffff
         var area_nr = (<uint>f & 0xffff) >> 5
-        block.area[area_nr >> 1] |= <byte>(((<uint>gc_pointers << 3) | 4 | gcEpoch) << ((area_nr & 1) << 2))
+        block.area[area_nr >> 1] |= <byte>(flags << ((area_nr & 1) << 2))
 
         // Fill with zeros
         var ptr #uint64 = <#uint64>f
@@ -238,12 +277,26 @@ func alloc(size uint, gc_pointers bool) #void {
             ptr++
         }
 
+        // Store the TypeMap for the GC
+        if (typeMap != 0) {
+            var start #int = <#int>f
+            if (elementCount == 1) {
+                *start = <int>typeMap
+                f = <uint>f + 4
+            } else {
+                *start = -<int>elementCount
+                start++
+                *start = <int>typeMap            
+                f = <uint>f + 8
+            }
+        }
+
         return <#void>f
     }
 
     // Nothing free. Add one more block and allocate again
-    initializeBlock(<#Block>allocBlocks(1, 1 | 2, false, false))
-    return alloc(size, gc_pointers)
+    initializeBlock(<#Block>allocBlocks(1, 65536, 0, 1 | 2, false))
+    return alloc(elementCount, elementSize, typeMap)
 }
 
 func free(ptr #void) {
@@ -323,7 +376,7 @@ func copy(dest #byte, src #byte, count int) {
 func string_concat(str1 string, str2 string) string {
     var s1 = *<#uint>str1
     var s2 = *<#uint>str2
-    var p #void = alloc(4 + s1 + s2, false)
+    var p #void = alloc(4 + s1 + s2, 1, 0)
     *<#uint>p = s1 + s2
     var dest #byte = <#byte>p + 4
     var src #byte = <#byte>str1 + 4
@@ -364,7 +417,7 @@ func string_compare(str1 string, str2 string) int {
 }
 
 func make_string(src #byte, length uint) string {
-    var p #byte = <#byte>alloc(4 + length, false)
+    var p #byte = <#byte>alloc(4 + length, 1, 0)
     *<#uint>p = length
     var dest = p + 4
     for(var i uint = 0; i < length; i++) {

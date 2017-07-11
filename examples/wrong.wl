@@ -69,3 +69,12 @@ func demoArrayLiteral2() int16 {
     var arr = [3]int16[3, 5, 8]
     return arr[0]
 }
+
+type P struct {
+    p1 *int
+    p2 *int
+}
+
+func p2() *P {
+    return &{}
+}

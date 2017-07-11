@@ -1,4 +1,5 @@
 import * as wasm from "./wasm"
+import {TypeMapper} from "./gc"
 
 export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr";
@@ -1180,6 +1181,7 @@ export class Wasm32Backend {
         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
         // Null pointers point to a string that has length zero.
         this.module.addString("");
+        this.typeMapper = new TypeMapper(this.module);
         this.varsFrameHeader = new StructType();
         this.varsFrameHeader.addField("$func", "i32");
         this.varsFrameHeader.addField("$sp", "i32");
@@ -1254,6 +1256,9 @@ export class Wasm32Backend {
 
             this.generateFunction(f.node, f.wf);
         }
+
+        // Add type maps to the module
+        this.typeMapper.addToModule(this.module);
     }
 
     private generateFunction(n: Node, f: wasm.Function) {
@@ -2482,11 +2487,14 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack1("addr", n.assign, code);
             }
+            let size = sizeOf(n.type as Type | StructType);
             this.emitWordAssign("i32", n.args[0], "wasmStack", code);
-            if (hasPointers(n.type as Type | StructType)) {
-                code.push(new wasm.Constant("i32", 1));
-            } else {
+            code.push(new wasm.Constant("i32", size));
+            let m = this.typeMapper.mapType(n.type as Type | StructType);
+            if (m == null) {
                 code.push(new wasm.Constant("i32", 0));
+            } else {
+                code.push(new wasm.Constant("i32", m.addr));
             }
             code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.Call(this.allocFunctionIndex));
@@ -2924,4 +2932,5 @@ export class Wasm32Backend {
     private wfIsAsync: boolean;
     private emitIR: boolean;
     private emitIRFunction: string | null;
+    private typeMapper: TypeMapper;
 }

@@ -2366,9 +2366,11 @@ export class TypeChecker {
             case "object":
             {
                 let types = new Map<string, Type>();
-                for(let p of enode.parameters) {
-                    this.checkExpression(p.lhs, scope);
-                    types.set(p.name.value, p.lhs.type);
+                if (enode.parameters) {
+                    for(let p of enode.parameters) {
+                        this.checkExpression(p.lhs, scope);
+                        types.set(p.name.value, p.lhs.type);
+                    }
                 }
                 let t = new ObjectLiteralType(types);
                 enode.type = t;
@@ -2665,12 +2667,14 @@ export class TypeChecker {
                     node.type = t;
                     return true;
                 } else if (t instanceof StructType) {
-                    for(let pnode of node.parameters) {
-                        let field = t.field(pnode.name.value);
-                        if (!field) {
-                            throw new TypeError("Unknown field " + pnode.name.value + " in " + t.toString(), pnode.name.loc);
+                    if (node.parameters) {
+                        for(let pnode of node.parameters) {
+                            let field = t.field(pnode.name.value);
+                            if (!field) {
+                                throw new TypeError("Unknown field " + pnode.name.value + " in " + t.toString(), pnode.name.loc);
+                            }
+                            this.checkIsAssignableNode(field.type, pnode.lhs);
                         }
-                        this.checkIsAssignableNode(field.type, pnode.lhs);
                     }
                     node.type = t;
                     return true;                    

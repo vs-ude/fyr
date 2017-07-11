@@ -2,7 +2,6 @@ import {Location, Node, NodeOp} from "./ast"
 import {Function, Type, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, StorageLocation} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
-import * as gc from "./gc"
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean) {
@@ -19,7 +18,6 @@ export class CodeGenerator {
         this.sliceHeader.addField("data_ptr", "ptr");
         this.sliceHeader.addField("length", "i32");
         this.sliceHeader.addField("cap", "i32");
-        this.typeMapper = new gc.TypeMapper(this.tc, this);
     }
 
     public processModule(mnode: Node) {
@@ -105,9 +103,6 @@ export class CodeGenerator {
         // Generate WASM code for the module
         this.wasm.generateModule();
         
-        // Add type maps to the module
-        this.typeMapper.addToModule(this.wasm.module);
-
 //        console.log('============ WASM ===============');
         if (!this.emitNoWasm) {
             console.log(this.wasm.module.toWast(""));
@@ -146,18 +141,15 @@ export class CodeGenerator {
             return "f64";
         }
         if (t instanceof PointerType) {
-            this.typeMapper.mapType(t);
             return "ptr";
         }
         if (t instanceof UnsafePointerType) {
-            this.typeMapper.mapType(t);
             return "addr";
         }
         if (t == this.tc.t_string) {
             return "ptr";
         }
         if (t instanceof SliceType) {
-            this.typeMapper.mapType(t, this.sliceHeader);
             return this.sliceHeader;
         }
         if (t instanceof StructType) {
@@ -166,14 +158,12 @@ export class CodeGenerator {
             for(let f of t.fields) {
                 s.addField(f.name, this.getSSAType(f.type), 1);
             }
-            this.typeMapper.mapType(t, s);
             return s;
         }
         if (t instanceof ArrayType) {
             let s = new ssa.StructType();
             s.name = t.name;
             s.addField("data", this.getSSAType(t.elementType), t.size);
-            this.typeMapper.mapType(t, s);
             return s;
         }
         if (t instanceof TupleType) {
@@ -184,7 +174,6 @@ export class CodeGenerator {
                 s.addField("t" + i.toString(), this.getSSAType(el));
                 i++;
             }
-            this.typeMapper.mapType(t, s);
             return s;            
         }
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
@@ -328,7 +317,7 @@ export class CodeGenerator {
                         let v = vars.get(element);
                         if (element.heapAlloc) {
                             let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", storage, [ssa.sizeOf(storage)]);
+                            b.assign(v, "alloc", storage, [1]);
                             let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
                             b.assign(b.mem, "store", storage, [v, 0, tmp]);
                         } else {
@@ -350,7 +339,7 @@ export class CodeGenerator {
                         let v = vars.get(element);
                         if (element.heapAlloc) {
                             let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", storage, [ssa.sizeOf(storage)]);
+                            b.assign(v, "alloc", storage, [1]);
                         }
                         // Nothing else todo here, handled by decl_var.
                     } else {
@@ -560,7 +549,7 @@ export class CodeGenerator {
                             counter = vars.get(element);
                             if (element.heapAlloc) {
                                 let storage = this.getSSAType(element.type);
-                                b.assign(counter, "alloc", storage, [ssa.sizeOf(storage)]);
+                                b.assign(counter, "alloc", storage, [1]);
                                 b.assign(b.mem, "store", "s32", [counter, 0, 0]);
                             } else {
                                 b.assign(counter, "const", "s32", [0]);
@@ -570,7 +559,7 @@ export class CodeGenerator {
                             val = vars.get(valElement);
                             if (valElement.heapAlloc) {
                                 let storage = this.getSSAType(valElement.type);
-                                b.assign(val, "alloc", storage, [ssa.sizeOf(storage)]);
+                                b.assign(val, "alloc", storage, [1]);
                             }
                         } else {
                             // Initialize a counter with 0
@@ -581,7 +570,7 @@ export class CodeGenerator {
                             val = vars.get(valElement);
                             if (valElement.heapAlloc) {
                                 let storage = this.getSSAType(valElement.type);
-                                b.assign(val, "alloc", storage, [ssa.sizeOf(storage)]);
+                                b.assign(val, "alloc", storage, [1]);
                             }
                         }
                     } else {
@@ -965,8 +954,10 @@ export class CodeGenerator {
                     let st = this.getSSAType(enode.type) as ssa.StructType; // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     let fieldValues = new Map<string, Node>();
-                    for(let p of enode.parameters) {
-                        fieldValues.set(p.name.value, p.lhs);
+                    if (enode.parameters) {
+                        for(let p of enode.parameters) {
+                            fieldValues.set(p.name.value, p.lhs);
+                        }
                     }
                     for(let i = 0; i < st.fields.length; i++) {
                         if (!fieldValues.has(st.fields[i][0])) {
@@ -1001,7 +992,7 @@ export class CodeGenerator {
                 if (enode.type instanceof SliceType) {
                     let et = this.getSSAType(enode.type.elementType);
                     let esize = ssa.sizeOf(et);
-                    let ptr = b.assign(b.tmp("ptr"), "alloc", et, [enode.parameters.length * esize]);
+                    let ptr = b.assign(b.tmp("ptr"), "alloc", et, [enode.parameters.length]);
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
@@ -1171,7 +1162,7 @@ export class CodeGenerator {
                 // Make a copy of a literal
                 let p = this.processExpression(f, scope, enode.rhs, b, vars);
                 let s = this.getSSAType(enode.rhs.type);
-                let copy = b.assign(b.tmp("ptr"), "alloc", s, [ssa.sizeOf(s)]);
+                let copy = b.assign(b.tmp("ptr"), "alloc", s, [1]);
                 b.assign(b.mem, "store", s, [copy, 0, p]);
                 return copy;
             }
@@ -1671,7 +1662,6 @@ export class CodeGenerator {
     private stringCompareFunction: Function;
     private stringMakeFunctionName: string = "make_string";
     private stringMakeFunction: Function;
-    private typeMapper: gc.TypeMapper;
 }
 
 export class LinkError {

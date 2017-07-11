@@ -114,10 +114,12 @@ export class Module extends Node {
     }
 
     public addString(value: string): [number, number] {
+        // TODO: Align the start offset, not the size
         let uint8array: Uint8Array = new textEncoding.TextEncoder("utf-8").encode(value);
         let offset = this.dataSize;
-        this.data.push(new Data(offset, uint8array));
-        this.dataSize += align64(4 + uint8array.length);
+        let d = new StringData(offset, uint8array);
+        this.data.push(d);
+        this.dataSize += align64(d.size());
         return [offset, uint8array.length];
     }
 
@@ -140,20 +142,14 @@ export class Module extends Node {
     }
 
     public addGlobalStruct(size: number): number {
+        // TODO: Alignment
         let offset = this.dataSize;
-        this.dataSize += size;
+        this.dataSize += align64(size);
         return offset;
     }
 
-    public declareGlobalArray(sizeInBytes: number): number {
-        let offset = this.dataSize;
-        this.dataSize += sizeInBytes;
-        return offset;
-    }
-
-    public defineGlobalArray(offset: number, arr: Uint8Array) {
+    public defineGlobalStruct(offset: number, arr: Uint8Array) {
         this.data.push(new Data(offset, arr));
-        this.dataSize += align64(arr.length);
     }
 
     public stackSize = 1 * 65536;
@@ -208,6 +204,36 @@ export class Data extends Node {
     }
 
     public toWast(indent: string): string {
+        let v = "";
+        for(let i = 0; i < this.value.length; i++) {
+            v += "\\" + this.uint8ToHex(this.value[i]);
+        }
+        v += "\"";
+        return indent + "(data (i32.const " + this.offset.toString() + ") " + v + ")";
+    }
+
+    public size(): number {
+        return this.value.length;
+    }
+
+    protected uint8ToHex(x: number) {
+        let s = x.toString(16);
+        if (s.length == 1) {
+            return "0" + s;
+        }
+        return s;
+    }
+
+    public offset: number;
+    public value: Uint8Array;
+}
+
+export class StringData extends Data {
+    constructor(offset: number, value: Uint8Array) {
+        super(offset, value);
+    }
+
+    public toWast(indent: string): string {
         let a32 = new Uint32Array([this.value.length]);
         let a8 = new Uint8Array(a32.buffer);
         let v = "\"\\" + this.uint8ToHex(a8[0]) + "\\" + this.uint8ToHex(a8[1]) + "\\" + this.uint8ToHex(a8[2]) + "\\" + this.uint8ToHex(a8[3]);
@@ -218,16 +244,9 @@ export class Data extends Node {
         return indent + "(data (i32.const " + this.offset.toString() + ") " + v + ")";
     }
 
-    private uint8ToHex(x: number) {
-        let s = x.toString(16);
-        if (s.length == 1) {
-            return "0" + s;
-        }
-        return s;
+    public size(): number {
+        return 4 + this.value.length;
     }
-
-    public offset: number;
-    public value: Uint8Array;
 }
 
 export class Function extends Node {
