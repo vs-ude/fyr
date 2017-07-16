@@ -4,6 +4,12 @@ import * as wasm from "./wasm"
 export class TypeMapper {
     constructor(module: wasm.Module) {
         this.module = module;
+        this.globalMapping = new TypeMap();
+    }
+
+    public mapGlobal(offset: number, t: ssa.Type | ssa.StructType): TypeMap {
+        this.mapTypeIntern(this.globalMapping, t, offset);
+        return this.globalMapping;
     }
 
     public mapType(t: ssa.Type | ssa.StructType): TypeMap | null {
@@ -80,6 +86,7 @@ export class TypeMapper {
     }
 
     public addToModule(module: wasm.Module) {
+        this.globalMapping.define();
         for(var m of this.mappings.values()) {
             if (m != null) {
                 m.define();
@@ -88,7 +95,8 @@ export class TypeMapper {
     }
 
     private module: wasm.Module;
-    private mappings: Map<ssa.Type | ssa.StructType, TypeMap> = new Map<ssa.Type | ssa.StructType, TypeMap>(); 
+    private mappings: Map<ssa.Type | ssa.StructType, TypeMap> = new Map<ssa.Type | ssa.StructType, TypeMap>();
+    public globalMapping: TypeMap; 
 }
 
 export class TypeMap {

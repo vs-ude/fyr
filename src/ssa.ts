@@ -1228,18 +1228,21 @@ export class Wasm32Backend {
         // Generate WASM code for all globals
         let index = 0;
         for(let v of this.globalVariables) {
-            if (v.addressable || v.type instanceof StructType) {
+            if (v.addressable || v.type instanceof StructType || v.type == "ptr") {
                 let offset = this.module.addGlobalStruct(sizeOf(v.type));
                 let s: Wasm32Storage = {storageType: "global_heap", offset: offset};
                 this.globalVarStorage.set(v, s);
+                this.typeMapper.mapGlobal(offset, v.type);
             } else {
                 let s: Wasm32Storage = {storageType: "global", offset: index};
                 this.globalVarStorage.set(v, s);
                 let g = new wasm.Global(this.stackTypeOf(v.type), "$" + v.name, true);
                 this.module.addGlobal(g);
+                index++;
             }
-            index++;
         }
+        this.typeMapper.globalMapping.declare(this.module);
+
         // Generate WASM code for all functions
         for(let f of this.funcs) {
             this.optimizer.optimizeConstants(f.node);
@@ -2467,6 +2470,7 @@ export class Wasm32Backend {
                 code.push(new wasm.Load(width, asWidth, this.varsFrame.size + this.paramsFrame.size + this.resultFrame.fieldOffset(v.name)));
                 break;      
             case "global":
+//                console.log("GET", v.name, s.offset);
                 code.push(new wasm.GetGlobal(s.offset));
                 break;
             case "global_heap":

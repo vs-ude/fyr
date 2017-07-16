@@ -204,7 +204,7 @@ export class Data extends Node {
     }
 
     public toWast(indent: string): string {
-        let v = "";
+        let v = "\"";
         for(let i = 0; i < this.value.length; i++) {
             v += "\\" + this.uint8ToHex(this.value[i]);
         }

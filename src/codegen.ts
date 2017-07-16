@@ -1577,6 +1577,8 @@ export class CodeGenerator {
                         return b.assign(b.tmp(), "extend", s2, [expr]);
                     }
                     return expr;
+                } else if (t instanceof PointerType && enode.rhs.type instanceof UnsafePointerType) {
+                    return expr;
                 } else {
                     throw "TODO: conversion not implemented";
                 }

@@ -1,7 +1,8 @@
 
 var root #RootBlock
 
-var stackStart #void
+// This is a pointer to ensure that the stack is garbage collected
+var stackStart *void
 // Pointer to the beginning of the stack.
 // Initially, this is the last byte of linear memory.
 var stackEnd #void
@@ -93,7 +94,7 @@ func initializeMemory(r #RootBlock, heapEnd #void, stackSize uint) #void {
     // Allocate the stack and hold a pointer to it
     var stack_block_nr = heapEndBlockNr - stackBlockCount
     stackEnd = <uint>heapEndBlockNr << 16
-    stackStart = stack_block_nr << 16
+    stackStart = <*void><#void>(stack_block_nr << 16)
     r.blocks[stack_block_nr >> 1] |= <byte>(8 | 4 | gcEpoch) << ((stack_block_nr & 1) << 2)
     return stackEnd
 }
