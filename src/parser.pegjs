@@ -674,7 +674,7 @@ typedLiteral
   }
 
 typeCast
-  = "<" [ \t]* t:type [ \t]* ">" [ \t]* e: primary {
+  = "<" [ \t]* t:type [ \t]* ">" [ \t]* e: unary {
         if (e.op == "array" || e.op == "tuple" || e.op == "object") {
             e.lhs = t;
             return e;

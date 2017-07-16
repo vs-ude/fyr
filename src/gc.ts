@@ -15,6 +15,7 @@ export class TypeMapper {
         }
 
         let m = new TypeMap();
+        m.typeSize = ssa.sizeOf(t)
         this.mapTypeIntern(m, t, 0); 
         if (m.offsets.length == 0) {
             this.mappings.set(t, null);
@@ -56,6 +57,7 @@ export class TypeMapper {
                     m.offsets.push(offset + foffset);
                 } else if (this.hasPointer(ftype)) {
                     m.offsets.push(this.mapType(ftype));
+                    m.offsets.push(offset + foffset);
                 }
             }
         }
@@ -93,25 +95,27 @@ export class TypeMap {
 
     public declare(module: wasm.Module) {
         this.module = module;
-        this.addr = module.addGlobalStruct(4 + this.offsets.length * 4);
+        this.addr = module.addGlobalStruct(4 + 4 + this.offsets.length * 4);
     }
 
     public define() {
-        let arr = new ArrayBuffer(4 + this.offsets.length * 4);
+        let arr = new ArrayBuffer(4 + 4 + this.offsets.length * 4);
         let a32 = new Int32Array(arr);
-        a32[0] = this.offsets.length;
+        a32[0] = (this.typeSize + 3) / 4; // Size of a type instance as multiple of 4 bytes
+        a32[1] = this.offsets.length;     // Number of locations where pointers can be found
         for(let i = 0; i < this.offsets.length; i++) {
             let o = this.offsets[i];
             if (o instanceof TypeMap) {
-                a32[1 + i] = -o.addr;
+                a32[2 + i] = -o.addr;     // Pointer to another typemap?
             } else {
-                a32[1 + i] = o;
+                a32[2 + i] = o;
             }
         }
         this.module.defineGlobalStruct(this.addr, new Uint8Array(arr));
     }
 
     public offsets: Array<number | TypeMap> = [];
+    public typeSize: number;
     public addr: number;
     public module: wasm.Module;
 }

@@ -2143,9 +2143,11 @@ export class TypeChecker {
                     enode.op = "int";
                 } else if (enode.lhs.op == "int") {
                     if (enode.op == "<<" || enode.op == ">>") {
+                        this.unifyLiterals(this.t_uint, enode.lhs, enode.loc);
                         this.checkIsUnsignedNumber(enode.rhs);
+                    } else {
+                        this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
                     }
-                    this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
                 } else if (enode.rhs.op == "int") {
                     if (enode.op == "<<" || enode.op == ">>") {
                         this.unifyLiterals(this.t_uint, enode.rhs, enode.loc);
@@ -2155,8 +2157,7 @@ export class TypeChecker {
                 } else {
                     if (enode.op == "<<" || enode.op == ">>") {
                         this.checkIsUnsignedNumber(enode.rhs);
-                    }
-                    if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
+                    } else if (enode.lhs.type instanceof PointerType || enode.lhs.type instanceof UnsafePointerType) {
                         this.checkTypeEquality(this.t_uint, enode.rhs.type, enode.rhs.loc);
                     } else {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
@@ -2780,8 +2781,11 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (to instanceof PointerType || to instanceof UnsafePointerType) {
+        } else if (to instanceof UnsafePointerType) {
             if (from == this.t_int || from == this.t_uint) {
+                return true;
+            }
+            if (to.elementType == this.t_void && (from instanceof UnsafePointerType || from instanceof PointerType || from instanceof GuardedPointerType)) {
                 return true;
             }
         }

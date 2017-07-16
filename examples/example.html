@@ -24,7 +24,7 @@
                 }
             };
 
-            function makeString(offset) {
+            function decodeString(offset) {
                 var l = new Uint32Array(memory.buffer, offset, 1);
                 var bytes = new Uint8Array(memory.buffer, offset + 4, l[0]);
                 return new TextDecoder('utf8').decode(bytes);
@@ -143,46 +143,46 @@
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
                 console.log("Init root ...")
-                results.instance.exports.initializeRootBlock(1 << 16, 98, 100 * 65536);
-                console.log("main ...");
-                let s = results.instance.exports.main(100 * 65536);
+                let stack = results.instance.exports.initializeMemory(1 << 16, memory.buffer.byteLength, 65536, memory.buffer.byteLength);
+                console.log("main ..., stack=", stack);
+                let s = results.instance.exports.main(stack);
                 console.log("... main");
-                let str = makeString(s);
+                let str = decodeString(s);
                 console.log("main returns", str);
 
                 console.log("fuck ...");
-                s = results.instance.exports.fuck(100 * 65536);
+                s = results.instance.exports.fuck(stack);
                 console.log("... fuck");
-                str = makeString(s);
+                str = decodeString(s);
                 console.log("fuck returns", str);
 
                 console.log("dummy ...");
-                s = results.instance.exports.dummy(100 * 65536);
+                s = results.instance.exports.dummy(stack);
                 console.log("... dummy");
-                str = makeString(s);
+                str = decodeString(s);
                 console.log("dummy returns", str);
 
                 console.log("compare1 ...");
-                let i = results.instance.exports.compare1(100 * 65536);
+                let i = results.instance.exports.compare1(stack);
                 console.log("... compare1");
                 console.log("compare1 returns", i);
 
                 console.log("compare2 ...");
-                i = results.instance.exports.compare2(100 * 65536);
+                i = results.instance.exports.compare2(stack);
                 console.log("... compare2");
                 console.log("compare2 returns", i);
 
                 console.log("compare3 ...");
-                i = results.instance.exports.compare3(100 * 65536);
+                i = results.instance.exports.compare3(stack);
                 console.log("... compare3");
                 console.log("compare3 returns", i);
 
                 console.log("prefix ...");
-                results.instance.exports.prefix(100 * 65536);
+                results.instance.exports.prefix(stack);
                 console.log("... prefix");
 
                 console.log("useRect ...");
-                results.instance.exports.useRect(100 * 65536);
+                results.instance.exports.useRect(stack);
                 console.log("... useRect");
             });
         </script>
