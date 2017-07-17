@@ -1,4 +1,4 @@
-import {
+import . {
     func logString(string)
     func logNumber(uint)
 } from "imports"

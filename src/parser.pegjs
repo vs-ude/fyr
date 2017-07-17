@@ -47,8 +47,34 @@ typedef
     }
 
 import
-  = "import" [ \t]* "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" [ \t]* "from" [ \t]+ m:string [ \t]* "\n" [ \t]* {
-      return new ast.Node({loc: fl(location()), op: "import", parameters:e, rhs:m});
+  = "import" [ \t]+ a:importAs? [ \t]* m:(string / importWasm) [ \t]* "\n" [ \t]* {
+      if (m.op == "importWasm") {
+          if (!a || a.op == "identifierList") {
+              expected("Either . or an identifier");
+          }
+      } else if (m.value == "") {
+          expected("A non-empty string describing the import path");
+      }
+      return new ast.Node({loc: fl(location()), op: "import", rhs:m, lhs:a});
+    }
+
+importAs
+  = "." {
+        return new ast.Node({loc: fl(location()), op: "."});
+    }
+  / i:identifier [ \t]+ {
+        return i;
+    }
+  / "(" [ \t]* i:identifierList [ \t]* ")" [ \t]* {
+        return new ast.Node({loc: fl(location()), op: "identifierList", parameters: i});
+    }
+
+importWasm
+  = "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" [ \t]* "from" [ \t]* i:string {
+        if (i == "") {
+            expected("A non-empty string describing the imported namespace")
+        }
+        return new ast.Node({loc: fl(location()), op: "importWasm", parameters: e, rhs:i})
     }
 
 importElement
@@ -790,6 +816,18 @@ arguments
       }
       return [e];
     }
+
+identifierList
+  = v:identifier [ \t]* r:("," [ \t\n]* identifier [ \t]*)* {
+      if (r) {
+        let result = [v];
+        for(let x of r) {
+          result.push(x[2]);
+        }
+        return result;
+      }
+      return [v];
+  }
 
 identifier "identifier"
   = i:$([a-zA-Z][a-zA-Z_0-9]*) & { 

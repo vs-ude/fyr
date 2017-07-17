@@ -8,6 +8,14 @@ export interface ScopeElement {
     loc: Location;
 }
 
+export class Package implements ScopeElement {
+    public name: string;
+    public type: Type;
+    public loc: Location;
+    // The scope containing the elements of the package.
+    public scope: Scope;
+}
+
 // Variable is a global or function-local variable.
 export class Variable implements ScopeElement {
     public isConst: boolean;
@@ -34,6 +42,7 @@ export class Function implements ScopeElement {
     public name: string;
     public type: FunctionType;
     public namedReturnTypes: boolean;
+    // The scope containing FunctionParameters and local Variables of the function.
     public scope: Scope;
     public node: Node;
     public loc: Location;
@@ -54,11 +63,16 @@ export class Typedef implements ScopeElement {
         return this._tc.instantiateTypedef(this);
     }
 
+    // The name of the Typedef
     public name: string;
+    // The Type defined by the Typedef
     public type: Type;
     public loc: Location;
+    // The AST of the Typedef
     public node: Node;
+    // The scope to which the typedef belongs
     public scope: Scope;
+
     public _tc: TypeChecker;
     public _mark: boolean;
 }
@@ -221,6 +235,7 @@ export class StructType extends Type {
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
 }
 
+// StructField describes the field of a StructType.
 export class StructField {
     public toString(): string {
         if (!this.name) {
@@ -233,6 +248,8 @@ export class StructField {
     public type: Type;
 }
 
+// CallingConvention is part of a FunctionType.
+// It defines how the function is to be called.
 export type CallingConvention = "fyr" | "fyrCoroutine";
 
 export class FunctionType extends Type {
@@ -437,6 +454,8 @@ export class SliceType extends Type {
     public elementType: Type;
 }
 
+// ArrayLiteralTypes are created while parsing and are then unified.
+// They are gone after type checking.
 export class ArrayLiteralType extends Type {
     constructor(types: Array<Type>) {
         super();
@@ -459,6 +478,8 @@ export class ArrayLiteralType extends Type {
     public types: Array<Type>;
 }
 
+// ObjectLiteralTypes are created while parsing and are then unified.
+// They are gone after type checking.
 export class ObjectLiteralType extends Type {
     constructor(types: Map<string, Type>) {
         super();
@@ -506,6 +527,8 @@ export class TupleType extends Type {
     public types: Array<Type>;
 }
 
+// TupleLiteralTypes are created while parsing and are then unified.
+// They are gone after type checking.
 export class TupleLiteralType extends Type {
     constructor(types: Array<Type>) {
         super();
@@ -1019,18 +1042,54 @@ export class TypeChecker {
     }
 
     private createImport(inode: Node, scope: Scope) {
-        for(let n of inode.parameters) {
-            if (n.op == "funcType") {
-                this.createFunctionImport(inode, n, scope);
+        if (inode.rhs.op == "importWasm") {
+            let addToScope: Scope = scope;
+            if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier { func ... } from "imports"
+                throw "TODO"
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . { func ... } from "imports"
+                // Do nothing by intention
+            } else if (!inode.lhs.op) {
+                // Syntax of the kind: import { func ... } from "imports"
+                throw "TODO"
             } else {
-                throw "Implementation error in import " + n.op;
+                throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+            for(let n of inode.rhs.parameters) {
+                if (n.op == "funcType") {
+                    this.createFunctionImport(inode.rhs.rhs.value, n, addToScope);
+                } else {
+                    throw "Implementation error in import " + n.op;
+                }
+            }
+        } else {
+            let importPath: string = inode.rhs.value;
+            let importPathElements = importPath.split("/");
+            
+            if (inode.lhs.op == "identifierList") {
+                // Syntax of the kind: import (id1, id2, ...) "path/to/module"
+                throw "TODO"
+            } else if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier "path/to/module"
+                throw "TODO"
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . "path/to/module"
+                throw "TODO"
+            } else if (!inode.lhs.op) {
+                // Syntax of the kind: import "path/to/module"
+                let name = importPathElements[importPathElements.length - 1];
+                // TODO: Sanitize the name
+                throw "TODO"
+            } else {
+                throw "Implementation error in import lhs " + inode.lhs.op;                
             }
         }
     }
 
-    private createFunctionImport(inode: Node, fnode: Node, scope: Scope) {
+    private createFunctionImport(namespace: string, fnode: Node, scope: Scope) {
         let f: Function = new Function();
-        f.importFromModule = inode.rhs.value;
+        f.importFromModule = namespace;
         f.name = fnode.name.value;
         f.scope.parent = scope;
         f.node = fnode;
@@ -1076,6 +1135,7 @@ export class TypeChecker {
         return f;
     }
 
+    // The main function of the Typechecker that checks the types of an entire module.
     public checkModule(mnode: Node): Scope {
         let typedefs: Array<Typedef> = [];
         let functions: Array<Function> = [];
@@ -1095,7 +1155,7 @@ export class TypeChecker {
         }
 
         // Iterate over all files and declare all functions and global variables
-        // and handle all imports
+        // and andle all imports
         for(let fnode of mnode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "func") {
