@@ -1,3 +1,7 @@
+import {
+    func logString(string)
+    func logNumber(uint)
+} from "imports"
 
 var root #RootBlock
 
@@ -56,9 +60,9 @@ type Block struct {
 // This is used to store additional data
 type BlockWithMetaData struct {
     area1 [1] byte // Contains information that the block starts with a meta-data area
-    area2 [3] byte // Unused 
-    allocatedAreas int
-    markedAreas int
+    area2 [3] byte // Unused
+    allocatedAreas uint  // TODO: Make it a short?
+    markedAreas uint     // TODO: Make it a short?
     next #Block
     area3 [1024 - 16]byte
     data  [65536 - 1024]byte  // 2016 units of 32 byte each = 64512 bytes
@@ -75,6 +79,7 @@ type FreeArea struct {
 // blockCount is the number of free blocks, not including the root block.
 func initializeMemory(r #RootBlock, heapEnd #void, stackSize uint) #void {
     root = r
+    gcEpoch = 1
     // The first free block starts at the next 64K boundary.
     var b #Block = (<uint>r &^ 0xffff) + (1 << 16)
     var stackBlockCount = (stackSize + 0xffff) / 0x10000
@@ -487,27 +492,46 @@ func garbageCollect() {
 
     var latestFreeBlock_nr uint
 
+    logString("... gc running")
     // Iterate over all blocks and free everything that is not marked with the current gc epoch
     for(var block_nr = heapStartBlockNr; block_nr < heapEndBlockNr; block_nr++) {
-        var flags = root.blocks[block_nr >> 1] & <byte>(15 << ((block_nr & 1) << 2))
+        var flags = (root.blocks[block_nr >> 1] >> ((block_nr & 1) << 2)) & 15 
         // The block is subject to area allocation ?
         if (flags & 3 == 3) {
+            logString("Area block")
+            logNumber(block_nr)
             latestFreeBlock_nr = 0
             var block #Block = block_nr << 16
+            logNumber((<#BlockWithMetaData>block).allocatedAreas)
+            logNumber((<#BlockWithMetaData>block).markedAreas)
             // All allocated areas have been marked? Nothing to free here
             if ((<#BlockWithMetaData>block).allocatedAreas == (<#BlockWithMetaData>block).markedAreas) {
+                logString("All areas marked")
                 (<#BlockWithMetaData>block).markedAreas = 0
                 continue
             }
-        
+            logString("Block needs gc")
+            logNumber(block_nr)
             // Test all areas, except for the first 32 ones which contain meta data
             for (var area_nr uint = 32; area_nr < 2048; area_nr++) {
+                var area_flags = (block.area[area_nr >> 1] >> ((area_nr & 1) << 2)) & 15 
                 // If the area is not the beginning of an area, continue
-                if (block.area[area_nr >> 1] & <byte>(4 << ((area_nr & 1) << 2)) == 0) {
+                if (area_flags & 4 == 0) {
+                    // Not start of an area
                     continue
                 }
-                if (block.area[area_nr >> 1] & <byte>(3 << ((area_nr & 1) << 2)) != <byte>gcEpoch) {
+                logNumber(block_nr << 16 + area_nr << 5)
+                logNumber(<uint>area_flags)
+                if (area_flags & 3 == 0) {
+                    // A free area
+                    // TODO: optimization: Jump across all free indices
+                    continue
+                }
+                if (area_flags & 3 != <byte>gcEpoch) {
+                    logString("   freeing area")
+                    logNumber(block_nr << 16 + area_nr << 5)
                     free_intern(block, area_nr)
+                    logString("   free")
                 }
             }
         } else if (flags & 3 == 0) {
@@ -515,15 +539,20 @@ func garbageCollect() {
                 latestFreeBlock_nr = block_nr
             }
         } else if (flags & 3 != <byte>gcEpoch) {
+            logString("Free sequence of blocks")
+            logNumber(block_nr)
             // The block has not been marked. In every case, mark it as being free
             root.blocks[block_nr >> 1] &^= <byte>(3 << ((block_nr & 1) << 2))
             // The block is the beginning of an allocated sequence of blocks?
             if (flags & 4 == 4) {
                 if (latestFreeBlock_nr == 0) {
+                    logString("Free single block sequence")
                     latestFreeBlock_nr = block_nr
                     freeBlocks(latestFreeBlock_nr)
                 } else {
-                    mergeAndFreeBlocks(latestFreeBlock_nr, block_nr << 16)
+                    logString("Merge block sequence")
+                    logNumber(latestFreeBlock_nr)
+                    mergeAndFreeBlocks(latestFreeBlock_nr, block_nr)
                 }
             }
         }
@@ -536,7 +565,7 @@ func mark(ptr #void) {
     if (block_nr < heapStartBlockNr) {
         return
     }
-    var flags = root.blocks[block_nr >> 1] & <byte>15 << ((block_nr & 1) << 2)
+    var flags = (root.blocks[block_nr >> 1] >> ((block_nr & 1) << 2)) & 15
     // The block already has the right gc epoch? -> Do nothing
     if (flags & 3 == <byte>gcEpoch) {
         return
@@ -552,21 +581,21 @@ func mark(ptr #void) {
 func markArea(block #Block, area_nr uint) {
     // Determine the start of the area by clearing bits of area_nr starting with the least significant bit
     for(var i uint = 0; i < 11; i++) {
+        var area_flags = (block.area[area_nr >> 1] >> ((area_nr & 1) << 2)) & 15 
         // Not the beginning of a block? -> the area must be larger
-        if (block.area[area_nr >> 1] & <byte>(4 << ((area_nr & 1) << 2)) == 0) {
+        if (area_flags & 4 == 0) {
             area_nr &^= 1 << i
             continue
         }
-        var flags = block.area[area_nr >> 1] & <byte>15 << ((area_nr & 1) << 2)
         // The area is already marked?
-        if (flags & 3 == <byte>gcEpoch) {
+        if (area_flags & 3 == <byte>gcEpoch) {
             return
         }
         // Switch the gcEpoch
         block.area[area_nr >> 1] ^= <byte>3 << ((area_nr & 1) << 2)
         (<#BlockWithMetaData>block).markedAreas++
         // Need to follow pointers inside the area?
-        if (flags & 8 == 8) {
+        if (area_flags & 8 == 8) {
             traverseHeap(<uint>block + area_nr << 5)
         }
         return
@@ -577,7 +606,7 @@ func markArea(block #Block, area_nr uint) {
 func markBlocks(block_nr uint) {
     // Find the beginning of the sequence of blocks
     for (; block_nr >= heapStartBlockNr; block_nr--) {
-        var flags = root.blocks[block_nr >> 1] & <byte>15 << ((block_nr & 1) << 2)
+        var flags = (root.blocks[block_nr >> 1] >> ((block_nr & 1) << 2)) & 15
         if (flags & 4 == 4) {
             // Switch the gc epoch by toggling both bits
             root.blocks[block_nr >> 1] ^= <byte>3 << ((block_nr & 1) << 2)

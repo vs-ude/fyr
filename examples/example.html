@@ -137,6 +137,7 @@
             });
             */
 
+            /*
             fetch('example9.wasm').then(response =>
                 response.arrayBuffer()
             ).then(bytes =>
@@ -184,6 +185,20 @@
                 console.log("useRect ...");
                 results.instance.exports.useRect(stack);
                 console.log("... useRect");
+            }); */
+
+            fetch('example10.wasm').then(response =>
+                response.arrayBuffer()
+            ).then(bytes =>
+                WebAssembly.instantiate(bytes, importObject)
+            ).then(results => {
+                console.log("Init root ...")
+                let stack = results.instance.exports.initializeMemory(1 << 16, memory.buffer.byteLength, 65536, memory.buffer.byteLength);
+                console.log("main ..., stack=", stack);
+                let s = results.instance.exports.main(stack);
+                console.log("... main, addr=", s);
+                results.instance.exports.garbageCollect(stack);
+                console.log("... gc complete");
             });
         </script>
     </body>
