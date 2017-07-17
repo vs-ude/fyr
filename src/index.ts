@@ -15,7 +15,8 @@ colors.red;
 var pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
 function compileModules() {
-	var args = Array.prototype.slice.call(arguments, 0);
+    var args = Array.prototype.slice.call(arguments, 0);
+    // Parse all files into a single AST
     let mnode = new ast.Node({loc: null, op: "module", statements: []});
 	for(var i = 0; i < args.length - 1; i++) {
         ast.setCurrentFile(args[i]);
@@ -36,8 +37,10 @@ function compileModules() {
     }
 
     try {
+        // Run the type checker
         let tc = new typecheck.TypeChecker();
         let scope = tc.checkModule(mnode);
+        // Generate IR and WASM code
         let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck);
         cg.processModule(mnode);
     } catch(ex) {

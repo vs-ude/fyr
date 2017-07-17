@@ -1,13 +1,14 @@
 import {Node, NodeOp, Location} from "./ast"
 
-export type StorageLocation = "local" | "global" | "fyrStackPointer" | "fyrBasePointer" | "wasmStack" | "funcTable";
-
+// ScopeElement is implemented by Variable and Function, FunctionParameter.
+// A Scope contains ScopeElements.
 export interface ScopeElement {
     name: string;
     type: Type;
     loc: Location;
 }
 
+// Variable is a global or function-local variable.
 export class Variable implements ScopeElement {
     public isConst: boolean;
     public isGlobal: boolean;
@@ -19,8 +20,7 @@ export class Variable implements ScopeElement {
     public node: Node;
 }
 
-export type CallingConvention = "fyr" | "fyrCoroutine";
-
+// Function is a named function inside a scope.
 export class Function implements ScopeElement {
     constructor() {
         this.scope = new Scope(null);
@@ -47,11 +47,9 @@ export class FunctionParameter implements ScopeElement {
     public loc: Location;
 }
 
+// Typedef represents the result of a 'type' statement, i.e.
+// a named type which is of course subject to a scope.
 export class Typedef implements ScopeElement {
-    public typeCode(): string {
-        return this.type.typeCode();
-    }
-    
     public instantiate(): Type {
         return this._tc.instantiateTypedef(this);
     }
@@ -161,18 +159,12 @@ export interface GenericInstanceType {
     genericParameterTypes: Array<Type>;
 }
 
-var typeCodeCounter = 0;
-
 export abstract class Type {
     public name: string;
     public loc: Location;
 
     public toString(): string {
         return this.name
-    }
-
-    public typeCode(): string {
-        return this.name;
     }
 }
 
@@ -197,8 +189,6 @@ export class InterfaceType extends Type {
 export class StructType extends Type {
     constructor() {
         super();
-        let tc = typeCodeCounter++;
-        this._typeCode = "struct{}(" + tc.toString() + ")";
     }
 
     public field(name: string): StructField {
@@ -213,10 +203,6 @@ export class StructType extends Type {
         return null;
     }
 
-    public typeCode(): string {
-        return this._typeCode;
-    }
-
     public toString(): string {
         if (this.name) {
             return this.name;
@@ -227,11 +213,12 @@ export class StructType extends Type {
         return str;
     }
 
+    // TODO: Remove
     public extends: StructType;
+    // Fields of the struct, ordered by their appearance in the code
     public fields: Array<StructField> = [];
+    // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
-
-    private _typeCode: string;
 }
 
 export class StructField {
@@ -245,6 +232,8 @@ export class StructField {
     public name: string;
     public type: Type;
 }
+
+export type CallingConvention = "fyr" | "fyrCoroutine";
 
 export class FunctionType extends Type {
     constructor() {
@@ -966,6 +955,7 @@ export class TypeChecker {
             f.type.returnType = this.t_void;
         }
 
+        // The function is a member function
         if (f.type.objectType instanceof StructType) {
             if (f.type.objectType.methods.has(f.name)) {
                 let loc = f.type.objectType.methods.get(f.name).loc;
