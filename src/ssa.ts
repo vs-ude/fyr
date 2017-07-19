@@ -1,5 +1,6 @@
 import * as wasm from "./wasm"
 import {TypeMapper} from "./gc"
+import {SystemCalls} from "./pkg"
 
 export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr";
@@ -133,7 +134,7 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
     return false;
 }
 
-export type CallingConvention = "fyr" | "fyrCoroutine";
+export type CallingConvention = "fyr" | "fyrCoroutine" | "system";
 
 export class FunctionType {
     constructor(params: Array<Type | StructType>, result: Type | StructType | null, conv: CallingConvention = "fyr") {
@@ -1181,6 +1182,13 @@ export class Wasm32Backend {
         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
         // Null pointers point to a string that has length zero.
         this.module.addString("");
+        this.heapGlobalVariableIndex = 0;
+        this.heapGlobalVariable = new wasm.Global("i32", null, false);
+        this.module.addGlobal(this.heapGlobalVariable);
+        this.typemapGlobalVariableIndex = 1;
+        this.typemapGlobalVariable = new wasm.Global("i32", null, false);
+        this.module.addGlobal(this.typemapGlobalVariable);
+        this.customglobalVariablesIndex = 2;
         this.typeMapper = new TypeMapper(this.module);
         this.varsFrameHeader = new StructType();
         this.varsFrameHeader.addField("$func", "i32");
@@ -1226,7 +1234,7 @@ export class Wasm32Backend {
 
     public generateModule() {
         // Generate WASM code for all globals
-        let index = 0;
+        let index = this.customglobalVariablesIndex;
         for(let v of this.globalVariables) {
             if (v.addressable || v.type instanceof StructType || v.type == "ptr") {
                 let offset = this.module.addGlobalStruct(sizeOf(v.type));
@@ -1262,6 +1270,11 @@ export class Wasm32Backend {
 
         // Add type maps to the module
         this.typeMapper.addToModule(this.module);
+
+        this.module.memorySize = this.module.textSize() + this.heapSize + this.stackSize;
+
+        this.typemapGlobalVariable.initial = [new wasm.Constant("i32", this.typeMapper.globalMapping.addr)];
+        this.heapGlobalVariable.initial = [new wasm.Constant("i32", this.module.textSize())];
     }
 
     private generateFunction(n: Node, f: wasm.Function) {
@@ -2159,6 +2172,9 @@ export class Wasm32Backend {
                     code.push(new wasm.GetLocal(this.spLocal));
                 }
                 // Call the function
+                if (n.args[0] < 0) {
+                    throw "Implementation error";
+                }
                 code.push(new wasm.Call(n.args[0] as number));
                 // Assign
                 if (n.assign) {
@@ -2655,7 +2671,25 @@ export class Wasm32Backend {
                 code.push(new wasm.GetLocal(this.spLocal));
             }
             // Call the function
-            code.push(new wasm.Call(n.args[0] as number));
+            if (n.args[0] < 0) {
+                if (n.args[0] == SystemCalls.heap) {
+                    code.push(new wasm.GetGlobal(this.heapGlobalVariableIndex));
+                } else if (n.args[0] == SystemCalls.currentMemory) {
+                    code.push(new wasm.CurrentMemory());
+                } else if (n.args[0] == SystemCalls.growMemory) {
+                    code.push(new wasm.GrowMemory());
+                } else if (n.args[0] == SystemCalls.heapTypemap) {
+                    code.push(new wasm.GetGlobal(this.typemapGlobalVariableIndex));
+                } else if (n.args[0] == SystemCalls.pageSize) {
+                    code.push(new wasm.Constant("i32", 1 << 16));
+                } else if (n.args[0] == SystemCalls.stackSize) {
+                    code.push(new wasm.Constant("i32", this.stackSize));
+                } else {
+                    throw "Implementation error. Unknown system function " + n.args[0];
+                }
+            } else {
+                code.push(new wasm.Call(n.args[0] as number));
+            }
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type.result as Type, n.assign, stack == "wasmStack", code);
             } else if (stack == null && n.type.result) {
@@ -2937,4 +2971,11 @@ export class Wasm32Backend {
     private emitIR: boolean;
     private emitIRFunction: string | null;
     private typeMapper: TypeMapper;
+    private heapGlobalVariable: wasm.Global;
+    private heapGlobalVariableIndex: number;
+    private typemapGlobalVariable: wasm.Global;
+    private typemapGlobalVariableIndex: number;
+    private customglobalVariablesIndex: number;
+    private heapSize: number = 16 << 16; // 1 MB heap
+    private stackSize: number = 1 << 16; // 64kb Stack
 }

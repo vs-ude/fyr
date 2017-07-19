@@ -8,11 +8,12 @@ import parser = require("./parser");
 import typecheck = require("./typecheck");
 import codegen = require("./codegen");
 import ast = require("./ast");
+import pkg = require("./pkg");
 
 // Make TSC not throw out the colors lib
 colors.red;
 
-var pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
+var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
 function compileModules() {
     var args = Array.prototype.slice.call(arguments, 0);
@@ -39,6 +40,7 @@ function compileModules() {
     try {
         // Run the type checker
         let tc = new typecheck.TypeChecker();
+        pkg.initPackages(tc);
         let scope = tc.checkModule(mnode);
         // Generate IR and WASM code
         let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck);
@@ -49,7 +51,10 @@ function compileModules() {
             return;                
         } else if (ex instanceof codegen.LinkError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;                
+            return;           
+        } else if (ex instanceof pkg.ImportError) {
+            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            return
         } else {
             console.log(ex);
             throw ex;
@@ -58,7 +63,7 @@ function compileModules() {
 }
 
 program
-	.version(pkg.version)
+	.version(pkgJson.version)
 	.usage('[options] [command] <module ...>')
     .option('-r, --emit-ir', "Emit IR code")
     .option('-f, --emit-ir-function <name>', "Emit IR code only for one function", null)

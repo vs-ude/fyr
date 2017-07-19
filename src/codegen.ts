@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, Type, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, Type, PackageType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 
@@ -907,6 +907,8 @@ export class CodeGenerator {
                     }          
                 } else if (enode.lhs.type instanceof GuardedPointerType) {
                     throw "TODO";
+                } else if (enode.lhs.type instanceof PackageType) {
+                    throw "TODO";
                 } else {
                     // It is a value, i.e. not a pointer to a value
                     let left: ssa.Variable | ssa.Pointer;
@@ -1220,7 +1222,9 @@ export class CodeGenerator {
                 let t: FunctionType;
                 let args: Array<ssa.Variable | string | number> = [];
                 let objPtr: ssa.Variable | ssa.Pointer | number | null = null;
-                if (enode.lhs.op == "id") {
+                if (enode.lhs.type instanceof FunctionType && enode.lhs.type.callingConvention == "system") {
+                    t = enode.lhs.type;
+                } else if (enode.lhs.op == "id") {
                     // Calling a named function
                     let e = scope.resolveElement(enode.lhs.value);
                     if (!(e instanceof Function)) {
@@ -1268,6 +1272,8 @@ export class CodeGenerator {
                 
                 if (f) {
                     args.push(this.funcs.get(f).index);
+                } else if (t.callingConvention == "system") {
+                    args.push(t.systemCallType);
                 }
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
@@ -1286,6 +1292,9 @@ export class CodeGenerator {
                 }
                 
                 if (f) {
+                    let ft = this.getSSAFunctionType(t);
+                    return b.call(b.tmp(), ft, args);
+                } else if (t.callingConvention == "system") {
                     let ft = this.getSSAFunctionType(t);
                     return b.call(b.tmp(), ft, args);
                 }

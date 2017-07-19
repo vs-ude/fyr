@@ -1,4 +1,5 @@
 import {Node, NodeOp, Location} from "./ast"
+import pkg = require("./pkg");
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -8,7 +9,24 @@ export interface ScopeElement {
     loc: Location;
 }
 
-export class Package implements ScopeElement {
+export class ImportedPackage implements ScopeElement {
+    constructor(name: string, loc: Location) {
+        this.name = name;
+        this.loc = loc;
+        this.scope = new Scope(null);
+        this.type = new PackageType(name, loc);
+    }
+
+    public addElement(name: string, element: ScopeElement, loc: Location) {
+        this.scope.registerElement(name, element, loc);
+        (this.type as PackageType).elements.set(name, element.type);
+    }
+
+    public addType(name: string, type: Type, loc: Location) {
+        this.scope.registerType(name, type, loc);
+        (this.type as PackageType).types.set(name, type);
+    }
+
     public name: string;
     public type: Type;
     public loc: Location;
@@ -129,10 +147,10 @@ export class Scope {
      * @param name
      * @param element 
      */
-    public registerElement(name: string, element: ScopeElement): void {
+    public registerElement(name: string, element: ScopeElement, loc: Location = null): void {
         if (this.elements.has(name)) {
             // TODO: Output file name
-            throw new TypeError("Duplicate identifier " + name + ", already defined in " + this.elements.get(name).loc.start.line, element.loc);
+            throw new TypeError("Duplicate identifier " + name + ", already defined in " + this.elements.get(name).loc.start.line, loc ? loc : element.loc);
         }
         this.elements.set(name, element);
     }
@@ -250,7 +268,7 @@ export class StructField {
 
 // CallingConvention is part of a FunctionType.
 // It defines how the function is to be called.
-export type CallingConvention = "fyr" | "fyrCoroutine";
+export type CallingConvention = "fyr" | "fyrCoroutine" | "system";
 
 export class FunctionType extends Type {
     constructor() {
@@ -301,7 +319,8 @@ export class FunctionType extends Type {
     public parameters: Array<FunctionParameter>;
     public callingConvention: CallingConvention = "fyr";
     public objectType: Type;
-
+    // Only used when the callingConvention is "system"
+    public systemCallType: number;
 // Enable this line to measure coroutines
 //    public callingConvention: CallingConvention = "fyrCoroutine";
 }
@@ -606,6 +625,21 @@ export class StringEnumType extends Type {
         }
         return name;
     }
+}
+
+export class PackageType extends Type {
+    constructor(name: string, loc: Location) {
+        super();
+        this.name = name;
+        this.loc = loc;
+    }
+
+    public toString(): string {
+        return "package " + this.name;
+    }
+
+    public elements: Map<string, Type> = new Map<string, Type>();
+    public types: Map<string, Type> = new Map<string, Type>();
 }
 
 export class TypeChecker {
@@ -1043,51 +1077,91 @@ export class TypeChecker {
 
     private createImport(inode: Node, scope: Scope) {
         if (inode.rhs.op == "importWasm") {
-            let addToScope: Scope = scope;
-            if (inode.lhs.op == "id") {
+            let ip: ImportedPackage;
+            let importPath: string = inode.rhs.rhs.value;
+            if (!inode.lhs) {
+                // Syntax of the kind: import { func ... } from "imports"
+                let importPathElements = importPath.split("/");
+                let name = importPathElements[importPathElements.length - 1];
+                // TODO: Sanitize the name
+                ip = new ImportedPackage(name, inode.loc);
+                scope.registerElement(name, ip);
+            } else if (inode.lhs.op == "id") {
                 // Syntax of the kind: import identifier { func ... } from "imports"
-                throw "TODO"
+                ip = new ImportedPackage(inode.lhs.value, inode.loc);
+                scope.registerElement(ip.name, ip);
             } else if (inode.lhs.op == ".") {
                 // Syntax of the kind: import . { func ... } from "imports"
                 // Do nothing by intention
-            } else if (!inode.lhs.op) {
-                // Syntax of the kind: import { func ... } from "imports"
-                throw "TODO"
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
             }
             for(let n of inode.rhs.parameters) {
                 if (n.op == "funcType") {
-                    this.createFunctionImport(inode.rhs.rhs.value, n, addToScope);
+                    let f = this.createFunctionImport(inode.rhs.rhs.value, n, ip ? ip.scope : scope);
+                    if (ip) {
+                        (ip.type as PackageType).elements.set(f.name, f.type);
+                    }
                 } else {
                     throw "Implementation error in import " + n.op;
                 }
             }
         } else {
             let importPath: string = inode.rhs.value;
-            let importPathElements = importPath.split("/");
-            
-            if (inode.lhs.op == "identifierList") {
-                // Syntax of the kind: import (id1, id2, ...) "path/to/module"
-                throw "TODO"
-            } else if (inode.lhs.op == "id") {
-                // Syntax of the kind: import identifier "path/to/module"
-                throw "TODO"
-            } else if (inode.lhs.op == ".") {
-                // Syntax of the kind: import . "path/to/module"
-                throw "TODO"
-            } else if (!inode.lhs.op) {
+            let p = pkg.resolve(importPath, inode.rhs.loc);        
+            let ip: ImportedPackage;
+            if (!inode.lhs) {
                 // Syntax of the kind: import "path/to/module"
+                let importPathElements = importPath.split("/");
                 let name = importPathElements[importPathElements.length - 1];
                 // TODO: Sanitize the name
-                throw "TODO"
+                ip = new ImportedPackage(name, inode.loc);
+                scope.registerElement(name, ip);
+            } else if (inode.lhs.op == "identifierList") {
+                // Syntax of the kind: import (id1, id2, ...) "path/to/module"
+                for(let pnode of inode.lhs.parameters) {
+                    if (p.scope.elements.has(pnode.value)) {
+                        var el = p.scope.elements.get(pnode.value);
+                        scope.registerElement(pnode.value, el, pnode.loc);
+                    } else if (p.scope.types.has(pnode.value)) {
+                        var t = p.scope.types.get(pnode.value);
+                        scope.registerType(pnode.value, t, pnode.loc);
+                    } else {
+                        throw new TypeError("Unknown identifier " + pnode.value + " in package \"" + p.path + "\"", pnode.loc);
+                    }
+                }
+            } else if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier "path/to/module"
+                ip = new ImportedPackage(inode.lhs.value, inode.loc);
+                scope.registerElement(ip.name, ip);
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . "path/to/module"
+                for(var key of p.scope.elements.keys()) {
+                    var el = p.scope.elements.get(key);
+                    scope.registerElement(key, el, inode.loc);
+                }
+                for(var key of p.scope.types.keys()) {
+                    var t = p.scope.types.get(key);
+                    scope.registerType(key, t, inode.loc);
+                }
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+
+            if (ip) {
+                for(var key of p.scope.elements.keys()) {
+                    var el = p.scope.elements.get(key);
+                    ip.addElement(key, el, inode.loc);
+                }
+                for(var key of p.scope.types.keys()) {
+                    var t = p.scope.types.get(key);
+                    ip.addType(key, t, inode.loc);
+                }
             }
         }
     }
 
-    private createFunctionImport(namespace: string, fnode: Node, scope: Scope) {
+    private createFunctionImport(namespace: string, fnode: Node, scope: Scope): Function {
         let f: Function = new Function();
         f.importFromModule = namespace;
         f.name = fnode.name.value;
@@ -1262,6 +1336,9 @@ export class TypeChecker {
             let v = this.createVar(vnode, scope, false);
             v.isConst = isConst;
             if (!v.type) {
+                if (rtype instanceof PackageType) {
+                    throw new TypeError("Package types cannot be assigned", vnode.loc);
+                }
                 if (rtype instanceof ArrayLiteralType || rtype instanceof TupleLiteralType || rtype instanceof ObjectLiteralType) {
                     v.type = this.defaultLiteralType(rnode);
                 } else {
@@ -2271,6 +2348,11 @@ export class TypeChecker {
                     throw "TODO"
                 } else if (type instanceof ClassType) {
                     throw "TODO"
+                } else if (type instanceof PackageType) {
+                    if (!type.elements.has(enode.name.value)) {
+                        throw new TypeError("Unknown identifier " + enode.name.value + " in " + type.toString(), enode.name.loc);                        
+                    }
+                    enode.type = type.elements.get(enode.name.value);
                 } else {
                     throw new TypeError("Member access is not possible on type " + type.toString(), enode.lhs.loc);
                 }

@@ -3,6 +3,8 @@ import . {
     func logNumber(uint)
 } from "imports"
 
+import "fyr/system"
+
 var root #RootBlock
 
 // This is a pointer to ensure that the stack is garbage collected
@@ -74,33 +76,37 @@ type FreeArea struct {
     size uint
 }
 
-// The RootBlock must not cross a 64K boundary.
-// The SP must point to the end of linear memory.
-// blockCount is the number of free blocks, not including the root block.
-func initializeMemory(r #RootBlock, heapEnd #void, stackSize uint) #void {
-    root = r
+// Returns the stack pointer
+func initializeMemory() #void {
     gcEpoch = 1
-    // The first free block starts at the next 64K boundary.
-    var b #Block = (<uint>r &^ 0xffff) + (1 << 16)
-    var stackBlockCount = (stackSize + 0xffff) / 0x10000
+    // Determine the position and size of the heap
+    var heap = system.heap()
+    var heapEnd #void = system.currentMemory() * system.pageSize()
+    // Put the RootBlock on the heap
+    root = <#RootBlock>heap
+    heap += 32880 // TODO: sizeOf(RootBlock)
+    // The first allocatable heap block starts at the next 64K boundary.
+    var b #Block = (<uint>heap &^ 0xffff) + (1 << 16)
+    var stackBlockCount = (system.stackSize() + 0xffff) >> 16
     heapStartBlockNr = <uint>b >> 16
     heapEndBlockNr = <uint>heapEnd >> 16
-    r.blocks[heapStartBlockNr >> 1] = <byte>(4 | 2 | 1) << ((heapStartBlockNr & 1) << 2) // Beginning of a sequence of free blocks
     // Initialize the first free block for area allocation.
+    root.blocks[heapStartBlockNr >> 1] = <byte>(4 | 2 | 1) << ((heapStartBlockNr & 1) << 2) // Beginning of a sequence of free blocks
     initializeBlock(b)
 
-    // All heap blocks are free, except the first one which is initialized for area allocation
+    // All heap blocks are free for allocation, except the first one which is initialized for area allocation,
+    // and the last blocks which are used for the stack
     var f #FreeBlock = <uint>b + (1 << 16)
     var freeBlockNr = heapStartBlockNr + 1
-    r.blocks[freeBlockNr >> 1] |= <byte>4 << ((freeBlockNr & 1) << 2) // Beginning of a sequence of free blocks
+    root.blocks[freeBlockNr >> 1] |= <byte>4 << ((freeBlockNr & 1) << 2) // Beginning of a sequence of free blocks
     f.count = heapEndBlockNr - heapStartBlockNr - 1 - stackBlockCount
-    r.freeBlocks[blockCountToIndex(f.count)] = f
+    root.freeBlocks[blockCountToIndex(f.count)] = f
 
-    // Allocate the stack and hold a pointer to it
+    // Allocate the stack and hold a pointer to it so that GC can find it
     var stack_block_nr = heapEndBlockNr - stackBlockCount
     stackEnd = <uint>heapEndBlockNr << 16
     stackStart = <*void><#void>(stack_block_nr << 16)
-    r.blocks[stack_block_nr >> 1] |= <byte>(8 | 4 | gcEpoch) << ((stack_block_nr & 1) << 2)
+    root.blocks[stack_block_nr >> 1] |= <byte>(8 | 4 | gcEpoch) << ((stack_block_nr & 1) << 2)
     return stackEnd
 }
 

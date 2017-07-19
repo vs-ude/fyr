@@ -144,7 +144,7 @@
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
                 console.log("Init root ...")
-                let stack = results.instance.exports.initializeMemory(1 << 16, memory.buffer.byteLength, 65536, memory.buffer.byteLength);
+                let stack = results.instance.exports.initializeMemory();
                 console.log("main ..., stack=", stack);
                 let s = results.instance.exports.main(stack);
                 console.log("... main");
@@ -193,7 +193,7 @@
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
                 console.log("Init root ...")
-                let stack = results.instance.exports.initializeMemory(1 << 16, memory.buffer.byteLength, 65536, memory.buffer.byteLength);
+                let stack = results.instance.exports.initializeMemory();
                 console.log("main ..., stack=", stack);
                 let s = results.instance.exports.main(stack);
                 console.log("... main, addr=", s);

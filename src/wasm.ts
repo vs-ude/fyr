@@ -37,9 +37,9 @@ export class Module extends Node {
         }
 
         if (this.memoryImport) {
-            s += indent + "    (import \"" + this.memoryImport.ns + "\" \"" + this.memoryImport.obj + "\" (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + "))\n";
+            s += indent + "    (import \"" + this.memoryImport.ns + "\" \"" + this.memoryImport.obj + "\" (memory " + Math.ceil((this.memorySize) / 65536).toString() + "))\n";
         } else {
-            s += indent + "    (memory " + Math.ceil((this.dataSize + this.heapSize + this.stackSize) / 65536).toString() + ")\n";            
+            s += indent + "    (memory " + Math.ceil((this.memorySize) / 65536).toString() + ")\n";            
         }
         
         for(let g of this.globals) {
@@ -152,8 +152,11 @@ export class Module extends Node {
         this.data.push(new Data(offset, arr));
     }
 
-    public stackSize = 1 * 65536;
-    public heapSize = 1 * 65536;
+    public textSize(): number {
+        return align64(this.dataSize);
+    }
+
+    public memorySize: number;
     public funcIndex: number = 0;
     public funcs: Array<Function> = [];
     public funcTable: Array<Function> = [];
@@ -821,6 +824,26 @@ export class Global extends Node {
     public type: StackType;
     public mutable: boolean;
     public initial: Array<Node> | null;
+}
+
+export class CurrentMemory extends Node {
+    public get op(): string {
+        return "current_memory";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "current_memory";
+    }
+}
+
+export class GrowMemory extends Node {
+    public get op(): string {
+        return "grow_memory";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "grow_memory";
+    }
 }
 
 function align64(x: number): number {
