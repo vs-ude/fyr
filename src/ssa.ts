@@ -1218,6 +1218,8 @@ export class Wasm32Backend {
     public declareGlobalVar(name: string, type: Type | StructType): Variable {
         let v = new Variable(name);
         v.type = type;
+        v.readCount = 2; // Avoid that global variables are optimized away
+        v.writeCount = 2;
         this.globalVariables.push(v);
         return v;
     }

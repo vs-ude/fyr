@@ -814,7 +814,7 @@ export class Global extends Node {
             for(let n of this.initial) {
                 str += n.toWast(indent + "    ") + "\n";
             }
-            str += ")";
+            str += indent + ")";
         }
         str += ")";
         return str;

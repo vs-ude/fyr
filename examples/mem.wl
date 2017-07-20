@@ -490,7 +490,8 @@ func garbageCollect() {
     // Therefore, traverse the all global variables, which point to the stack, which points to more heap data.
     //
 
-    // TODO
+    var typemap #int = <#int>system.heapTypemap()
+    traverseType(0, typemap)
 
     //
     // Sweep all data that is no longer being used
@@ -567,7 +568,7 @@ func garbageCollect() {
 
 func mark(ptr #void) {
     var block_nr = <uint>ptr >> 16
-    // Pointing to static data? -> Do nothing
+    // Pointing to the text segment? -> Do nothing
     if (block_nr < heapStartBlockNr) {
         return
     }
@@ -632,7 +633,6 @@ func markBlocks(block_nr uint) {
 }
 
 func traverseHeap(ptr #void) {
-    var elementCount uint = 1
     var iptr #int = <uint>ptr
     if (*iptr > 0) {
         var typemap #int = <uint>*iptr
@@ -640,7 +640,7 @@ func traverseHeap(ptr #void) {
         return
     }
 
-    elementCount = <uint>(-*iptr)
+    var elementCount = <uint>(-*iptr)
     iptr++
     var typemap #int = <uint>*iptr
     var size uint = <uint>*typemap
@@ -654,6 +654,7 @@ func traverseHeap(ptr #void) {
 }
 
 func traverseType(ptr #uint, typemap #int) {
+    logString("traverseType")
     // The second entry in typemap tells how many entries the typemap has
     var entries_end = typemap[1] + 2
     // Iterate over all entries in the typemap
@@ -680,7 +681,9 @@ func traverseType(ptr #uint, typemap #int) {
                 }
             }
         } else {
-            mark(<uint>ptr + <uint>a)
+            logNumber(<uint>ptr + <uint>a)
+            var p ##void = <uint>ptr + <uint>a
+            mark(*p)
         }
     }
 }
