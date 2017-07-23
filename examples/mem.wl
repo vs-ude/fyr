@@ -681,12 +681,17 @@ func traverseStack(stack #Stack) {
     for(ptr > tos) {
         logString("stack frame")
         logNumber(<uint>ptr)
-        var typemap #int = *(ptr - 1)
-        ptr -= *typemap
-        logNumber(<uint>ptr)
-        logNumber(<uint>typemap)
-        logNumber(<uint>*typemap)
-        traverseType(<#uint>ptr, typemap)
+        var typemapOrSize int = *(ptr - 1)
+        if (typemapOrSize < 0) {
+            ptr += typemapOrSize
+        } else {
+            var typemap #int = *(ptr - 1)
+            ptr -= *typemap
+            logNumber(<uint>ptr)
+            logNumber(<uint>typemap)
+            logNumber(<uint>*typemap)
+            traverseType(<#uint>ptr, typemap)
+        }
         logString("-----------------")
     }
 }

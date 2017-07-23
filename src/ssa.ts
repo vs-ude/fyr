@@ -1363,7 +1363,6 @@ export class Wasm32Backend {
             console.log("bp -> local " + this.bpLocal);
         }
 
-        // TODO: Because of GC there are not empty varFrames
         // Generate function body
         let code: Array<wasm.Node> = [];
         if (this.varsFrame.size > 0) {
@@ -1375,7 +1374,7 @@ export class Wasm32Backend {
             code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the varsFrame
             // Put the typemap on the stack
             code.push(new wasm.GetLocal(this.spLocal));
-            code.push(new wasm.Constant("i32", typemap.offsets.length == 0 ? 0 : typemap.addr));
+            code.push(new wasm.Constant("i32", typemap.offsets.length == 0 ? -this.varsFrame.size : typemap.addr));
             code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$typemap")));
         } else if (this.resultFrame.size != 0 || this.paramsFrame.size != 0) {
             code.push(new wasm.GetLocal(this.spLocal));
@@ -1463,7 +1462,7 @@ export class Wasm32Backend {
         code.push(new wasm.TeeLocal(this.spLocal));
         code.push(new wasm.TeeLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
         // Put the typemap on the stack
-        code.push(new wasm.Constant("i32", typemap.offsets.length == 0 ? 0 : typemap.addr));
+        code.push(new wasm.Constant("i32", typemap.offsets.length == 0 ? -this.varsFrame.size : typemap.addr));
         code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$typemap")));
 
         code.push(new wasm.GetLocal(this.spLocal));
@@ -1975,7 +1974,7 @@ export class Wasm32Backend {
                     let typemap = this.typeMapper.mapType(n.type.stackFrame);
                     code.push(new wasm.Comment("Store typemap"));
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Constant("i32", typemap.offsets.length == 0 ? 0 : typemap.addr));
+                    code.push(new wasm.Constant("i32", typemap.addr));
                     code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
                 }
                 // Put parameters on stack

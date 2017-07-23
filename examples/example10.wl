@@ -21,7 +21,11 @@ func main() *Point {
     logNumber(<uint><#Point>p)
     tmp = &{x:20, y: 22}
     logNumber(<uint><#Point>tmp)
+    useless(tmp)
+    return &{x: 42, y:84, next: tmp}
+}
+
+func useless(p *Point) {
     // Enforce a garbage collection
     system.garbageCollect()
-    return &{x: 42, y:84, next: tmp}
 }
