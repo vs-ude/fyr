@@ -110,7 +110,7 @@ export class CodeGenerator {
     }
 
     public getSSAType(t: Type): ssa.Type | ssa.StructType {
-        if (t == this.tc.t_bool || t == this.tc.t_uint8 || t == this.tc.t_byte) {
+        if (t == this.tc.t_bool || t == this.tc.t_uint8 || t == this.tc.t_byte || t == this.tc.t_void) {
             return "i8";
         }
         if (t == this.tc.t_int8) {
@@ -465,6 +465,19 @@ export class CodeGenerator {
                     } else if (snode.op == "/=") {
                         b.assign(dest, "div", storage, [p1, p2]);
                     }
+                } else if (snode.lhs.type instanceof UnsafePointerType) {
+                    let estorage = this.getSSAType(snode.lhs.type.elementType);
+                    let size = ssa.sizeOf(estorage);
+                    if (size > 1) {
+                        p2 = b.assign(b.tmp(), "mul", "i32", [p2, size]);
+                    }
+                    if (snode.op == "+=") {
+                        b.assign(dest, "add", storage, [p1, p2]);
+                    } else if (snode.op == "-=") {
+                        b.assign(dest, "sub", storage, [p1, p2]);
+                    }
+                } else if (snode.lhs.type instanceof GuardedPointerType) {
+                    throw "TODO"
                 } else {
                     if (snode.op == "+=") {
                         b.assign(dest, "add", storage, [p1, p2]);
@@ -1021,7 +1034,7 @@ export class CodeGenerator {
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
                     return this.processCompare("lt", f, scope, enode, b, vars);
                 }
-                if (this.isSigned(enode.lhs.type)) {
+                if (!(enode.lhs.type instanceof UnsafePointerType) && this.isSigned(enode.lhs.type)) {
                     return this.processCompare("lt_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("lt_u", f, scope, enode, b, vars);
@@ -1029,7 +1042,7 @@ export class CodeGenerator {
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
                     return this.processCompare("gt", f, scope, enode, b, vars);
                 }
-                if (this.isSigned(enode.lhs.type)) {
+                if (!(enode.lhs.type instanceof UnsafePointerType) && this.isSigned(enode.lhs.type)) {
                     return this.processCompare("gt_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("gt_u", f, scope, enode, b, vars);
@@ -1037,7 +1050,7 @@ export class CodeGenerator {
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
                     return this.processCompare("le", f, scope, enode, b, vars);
                 }
-                if (this.isSigned(enode.lhs.type)) {
+                if (!(enode.lhs.type instanceof UnsafePointerType) && this.isSigned(enode.lhs.type)) {
                     return this.processCompare("le_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("le_u", f, scope, enode, b, vars);
@@ -1045,7 +1058,7 @@ export class CodeGenerator {
                 if (enode.lhs.type == this.tc.t_float || enode.lhs.type == this.tc.t_double || enode.lhs.type == this.tc.t_string) {
                     return this.processCompare("ge", f, scope, enode, b, vars);
                 }
-                if (this.isSigned(enode.lhs.type)) {
+                if (!(enode.lhs.type instanceof UnsafePointerType) && this.isSigned(enode.lhs.type)) {
                     return this.processCompare("ge_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("ge_u", f, scope, enode, b, vars);
@@ -1059,6 +1072,12 @@ export class CodeGenerator {
                     }
                     let wf = this.funcs.get(this.stringConcatFunction);
                     return b.call(b.tmp(), this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
+                } else if (enode.lhs.type instanceof UnsafePointerType) {
+                    let estorage = this.getSSAType(enode.lhs.type.elementType);
+                    let size = ssa.sizeOf(estorage);
+                    if (size > 1) {
+                        p2 = b.assign(b.tmp(), "mul", "i32", [p2, size]);
+                    }
                 }
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "add", storage, [p1, p2]);
@@ -1068,6 +1087,13 @@ export class CodeGenerator {
             {
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
+                if (enode.lhs.type instanceof UnsafePointerType) {
+                    let estorage = this.getSSAType(enode.lhs.type.elementType);
+                    let size = ssa.sizeOf(estorage);
+                    if (size > 1) {
+                        p2 = b.assign(b.tmp(), "mul", "i32", [p2, size]);
+                    }
+                }
                 let storage = this.getSSAType(enode.type);
                 let opcode: "mul" | "sub" = enode.op == "*" ? "mul" : "sub";
                 return b.assign(b.tmp(), opcode, storage, [p1, p2]);

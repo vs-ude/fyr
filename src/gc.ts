@@ -7,6 +7,10 @@ export class TypeMapper {
         this.globalMapping = new TypeMap();
     }
 
+    public mapStack(stackMap: TypeMap, t: ssa.Type | ssa.StructType, offset: number) {
+        this.mapTypeIntern(stackMap, t, offset);
+    }
+
     public mapGlobal(offset: number, t: ssa.Type | ssa.StructType): TypeMap {
         this.mapTypeIntern(this.globalMapping, t, offset);
         return this.globalMapping;
@@ -32,13 +36,13 @@ export class TypeMapper {
         return m;
     }
 
-    private mapTypeIntern(m: TypeMap, t: ssa.Type | ssa.StructType, offset: number): TypeMap | null {
+    private mapTypeIntern(m: TypeMap, t: ssa.Type | ssa.StructType, offset: number): void {
         if (t == "ptr") {
             m.offsets.push(offset);
-            return m;
+            return;
         }
         if (!(t instanceof ssa.StructType)) {
-            return null;
+            return;
         }
 
         for(let f of t.fields) {
@@ -67,8 +71,8 @@ export class TypeMapper {
                 }
             }
         }
-        this.mappings.set(t, m);
-        return m;
+//        this.mappings.set(t, m);
+        return;
     }
 
     private hasPointer(s: ssa.StructType): boolean {

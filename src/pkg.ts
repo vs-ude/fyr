@@ -7,7 +7,11 @@ export enum SystemCalls {
     growMemory = -3,
     heapTypemap = -4,
     pageSize = -5,
-    stackSize = -6,
+    // Returns the default size for a stack
+    defaultStackSize = -6,
+    garbageCollect = -7,
+    // The current SP
+    stackPointer = -8,
 }
 
 export class Package {
@@ -91,12 +95,28 @@ export function initPackages(tc: TypeChecker) {
     pageSize.type.systemCallType = SystemCalls.pageSize;
     pageSize.type.returnType = tc.t_uint;
     systemPkg.scope.registerElement(pageSize.name, pageSize);
-    var stackSize: Function = new Function();
-    stackSize.name = "stackSize";
-    stackSize.type = new FunctionType();
-    stackSize.type.callingConvention = "system";
-    stackSize.type.name = "stackSize";
-    stackSize.type.systemCallType = SystemCalls.stackSize;
-    stackSize.type.returnType = tc.t_uint;
-    systemPkg.scope.registerElement(stackSize.name, stackSize);
+    var defaultStackSize: Function = new Function();
+    defaultStackSize.name = "defaultStackSize";
+    defaultStackSize.type = new FunctionType();
+    defaultStackSize.type.callingConvention = "system";
+    defaultStackSize.type.name = "defaultStackSize";
+    defaultStackSize.type.systemCallType = SystemCalls.defaultStackSize;
+    defaultStackSize.type.returnType = tc.t_uint;
+    systemPkg.scope.registerElement(defaultStackSize.name, defaultStackSize);
+    var garbageCollect: Function = new Function();
+    garbageCollect.name = "garbageCollect";
+    garbageCollect.type = new FunctionType();
+    garbageCollect.type.callingConvention = "system";
+    garbageCollect.type.name = "garbageCollect";
+    garbageCollect.type.systemCallType = SystemCalls.garbageCollect;
+    garbageCollect.type.returnType = tc.t_void;
+    systemPkg.scope.registerElement(garbageCollect.name, garbageCollect);
+    var stackPointer: Function = new Function();
+    stackPointer.name = "stackPointer";
+    stackPointer.type = new FunctionType();
+    stackPointer.type.callingConvention = "system";
+    stackPointer.type.name = "stackPointer";
+    stackPointer.type.systemCallType = SystemCalls.stackPointer;
+    stackPointer.type.returnType = new UnsafePointerType(tc.t_void);
+    systemPkg.scope.registerElement(stackPointer.name, stackPointer);
 }

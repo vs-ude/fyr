@@ -7,20 +7,21 @@ import "fyr/system"
 
 var root #RootBlock
 
-// This is a pointer to ensure that the stack is garbage collected
-var stackStart *void
-// Pointer to the beginning of the stack.
-// Initially, this is the last byte of linear memory.
-var stackEnd #void
-
 // The first block available for the heap
 var heapStartBlockNr uint
 // The first block that is no longer available for the heap
-// TODO: Compute with current_memory
 var heapEndBlockNr uint
 
 // The value is either binary 01 or 10
 var gcEpoch uint
+
+var coroutine Coroutine
+
+type Coroutine struct {
+    // This is a pointer to ensure that the stack is garbage collected
+    stack *Stack
+    stackSize uint
+}
 
 type RootBlock struct {
     // Pointers to free areas of size 1 << (5 + i).
@@ -76,6 +77,13 @@ type FreeArea struct {
     size uint
 }
 
+type Stack struct {
+    zeroTypemap #void
+    // This pointer is used by the GC to detect the end of the stack
+    stackEnd #void
+    sp #void
+}
+
 // Returns the stack pointer
 func initializeMemory() #void {
     gcEpoch = 1
@@ -87,7 +95,7 @@ func initializeMemory() #void {
     heap += 32880 // TODO: sizeOf(RootBlock)
     // The first allocatable heap block starts at the next 64K boundary.
     var b #Block = (<uint>heap &^ 0xffff) + (1 << 16)
-    var stackBlockCount = (system.stackSize() + 0xffff) >> 16
+    var stackBlockCount = (system.defaultStackSize() + 0xffff) >> 16
     heapStartBlockNr = <uint>b >> 16
     heapEndBlockNr = <uint>heapEnd >> 16
     // Initialize the first free block for area allocation.
@@ -104,10 +112,14 @@ func initializeMemory() #void {
 
     // Allocate the stack and hold a pointer to it so that GC can find it
     var stack_block_nr = heapEndBlockNr - stackBlockCount
-    stackEnd = <uint>heapEndBlockNr << 16
-    stackStart = <*void><#void>(stack_block_nr << 16)
+    coroutine.stack = <*Stack><#Stack>(stack_block_nr << 16)
+    coroutine.stackSize = stackBlockCount << 16
+    // The stack has a 0-typemap which indicates that this is a stack,
+    // followed by a pointer to the end of the stack, followed by a location for storing the SP
+    // of the coroutine owning the stack
+    coroutine.stack.stackEnd = heapEndBlockNr << 16
     root.blocks[stack_block_nr >> 1] |= <byte>(8 | 4 | gcEpoch) << ((stack_block_nr & 1) << 2)
-    return stackEnd
+    return coroutine.stack.stackEnd
 }
 
 func initializeBlock(b #Block) {
@@ -490,6 +502,7 @@ func garbageCollect() {
     // Therefore, traverse the all global variables, which point to the stack, which points to more heap data.
     //
 
+    coroutine.stack.sp = system.stackPointer()
     var typemap #int = <#int>system.heapTypemap()
     traverseType(0, typemap)
 
@@ -603,7 +616,7 @@ func markArea(block #Block, area_nr uint) {
         (<#BlockWithMetaData>block).markedAreas++
         // Need to follow pointers inside the area?
         if (area_flags & 8 == 8) {
-            traverseHeap(<uint>block + area_nr << 5)
+            traverseHeapArea(<uint>block + area_nr << 5)
         }
         return
     }
@@ -619,7 +632,7 @@ func markBlocks(block_nr uint) {
             root.blocks[block_nr >> 1] ^= <byte>3 << ((block_nr & 1) << 2)
             if (flags & 8 == 8) {
                 // Traverse the type map
-                traverseHeap(block_nr << 16)
+                traverseHeapArea(block_nr << 16)
             }
             return
         } else if (flags & 3 == <byte>gcEpoch) {
@@ -632,15 +645,20 @@ func markBlocks(block_nr uint) {
     }
 }
 
-func traverseHeap(ptr #void) {
+// Traverses an allocated area of the heap.
+func traverseHeapArea(ptr #void) {
     var iptr #int = <uint>ptr
-    if (*iptr > 0) {
-        var typemap #int = <uint>*iptr
+    var first = *iptr
+    if (first > 0) {
+        var typemap #int = <uint>first
         traverseType(<uint>iptr + 4, typemap)
         return
     }
-
-    var elementCount = <uint>(-*iptr)
+    if (first == 0) {
+        traverseStack(<#Stack>ptr)
+        return
+    }
+    var elementCount = <uint>(-first)
     iptr++
     var typemap #int = <uint>*iptr
     var size uint = <uint>*typemap
@@ -653,8 +671,29 @@ func traverseHeap(ptr #void) {
     }
 }
 
+func traverseStack(stack #Stack) {
+    logString("traversingStack")
+    logNumber(<uint>stack)
+    // Top of stack, i.e. the lowest address currently used by the stack
+    var tos #int = <#int>stack.sp
+    logNumber(<uint>tos)
+    var ptr #int = <#int>stack.stackEnd
+    for(ptr > tos) {
+        logString("stack frame")
+        logNumber(<uint>ptr)
+        var typemap #int = *(ptr - 1)
+        ptr -= *typemap
+        logNumber(<uint>ptr)
+        logNumber(<uint>typemap)
+        logNumber(<uint>*typemap)
+        traverseType(<#uint>ptr, typemap)
+        logString("-----------------")
+    }
+}
+
 func traverseType(ptr #uint, typemap #int) {
     logString("traverseType")
+    logNumber(<uint>typemap[1])
     // The second entry in typemap tells how many entries the typemap has
     var entries_end = typemap[1] + 2
     // Iterate over all entries in the typemap
