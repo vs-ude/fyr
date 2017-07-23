@@ -26,6 +26,7 @@ func main() *Point {
 }
 
 func useless(p *Point) {
+    var arr [256]byte
     // Enforce a garbage collection
     system.garbageCollect()
 }
