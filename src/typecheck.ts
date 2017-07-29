@@ -332,7 +332,38 @@ export class GenericFunctionType extends FunctionType implements GenericType {
         this.genericParameterTypes = [];
     }
 
-    // TODO: toString()
+    public toString(): string {
+        if (this.name) {
+            if (this.objectType) {
+                return this.objectType.toString() + "." + this.name;
+            }
+            return this.name;
+        }
+        let name = "<";
+        for(let i = 0; i < this.genericParameterNames.length; i++) {
+            if (i != 0) {
+                name += ",";
+            }
+            name += this.genericParameterNames[i];
+            if (this.genericParameterTypes[i]) {
+                name += " is " + this.genericParameterTypes[i].toString();
+            }
+        }
+        name += ">(";
+        let j = 0;
+        for(let p of this.parameters) {
+            if (j != 0) {
+                name += ",";
+            }
+            if (p.ellipsis) {
+                name += "...";
+            }
+            name += p.type.toString();
+            j++
+        }
+        name += ") => " + this.returnType.toString();
+        return name;
+    }
 
     public genericParameterNames: Array<string>;
     public genericParameterTypes: Array<Type>;
@@ -345,7 +376,36 @@ export class GenericFunctionInstanceType extends FunctionType {
         this.genericParameterTypes = [];
     }
 
-    // TODO: toString()
+    public toString(): string {
+        if (this.name) {
+            if (this.objectType) {
+                return this.objectType.toString() + "." + this.name;
+            }
+            return this.name;
+        }
+        let name = "<";
+        for(let i = 0; i < this.base.genericParameterNames.length; i++) {
+            if (i != 0) {
+                name += ",";
+            }
+            name += this.base.genericParameterNames[i];
+            name += "=" + this.genericParameterTypes[i].toString();
+        }
+        name += ">(";
+        let j = 0;
+        for(let p of this.parameters) {
+            if (j != 0) {
+                name += ",";
+            }
+            if (p.ellipsis) {
+                name += "...";
+            }
+            name += p.type.toString();
+            j++
+        }
+        name += ") => " + this.returnType.toString();
+        return name;
+    }
 
     public base: GenericFunctionType;
     public genericParameterTypes: Array<Type>;    
@@ -2444,6 +2504,9 @@ export class TypeChecker {
                     }
                 }
                 let ft: FunctionType = enode.lhs.type;
+                if (enode.lhs.type instanceof GenericFunctionType) {
+                    throw "TODO: Derive the generic parameters"
+                }
                 if (enode.parameters) {
                     if (ft.parameters.length != enode.parameters.length) {
                         if (ft.requiredParameterCount() > enode.parameters.length || (enode.parameters.length > ft.parameters.length && !ft.hasEllipsis())) {
@@ -2459,11 +2522,8 @@ export class TypeChecker {
                             this.checkIsAssignableNode(ft.parameters[i].type, pnode);
                         }
                     }
-                } else if (ft.parameters.length != 0) {
+                } else if (ft.parameters.length != 0 && (!ft.hasEllipsis || ft.parameters.length > 1)) {
                     throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), enode.loc);                    
-                }
-                if (enode.lhs.type instanceof GenericFunctionType) {
-                    throw "TODO: Derive the generic parameters"
                 }
                 enode.type = ft.returnType;
                 let f = scope.envelopingFunction();
