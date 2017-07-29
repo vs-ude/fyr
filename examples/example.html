@@ -199,6 +199,8 @@
                 console.log("... main, addr=", s);
                 results.instance.exports.garbageCollect(stack);
                 console.log("... gc complete");
+                results.instance.exports.lens(stack);
+                console.log("Done");
             });
         </script>
     </body>

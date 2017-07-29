@@ -672,6 +672,16 @@ export class TypeChecker {
         this.t_void = new BasicType("void");
         this.t_error = new InterfaceType();
         this.t_error.name = "error";
+
+        this.builtin_len = new FunctionType();
+        this.builtin_len.callingConvention = "system";
+        this.builtin_len.name = "len";
+        this.builtin_len.returnType = this.t_int;
+
+        this.builtin_cap = new FunctionType();
+        this.builtin_cap.callingConvention = "system";
+        this.builtin_cap.name = "cap";
+        this.builtin_cap.returnType = this.t_int;
     }
 
     public createScope(): Scope {
@@ -2354,7 +2364,12 @@ export class TypeChecker {
                     }
                     enode.type = type.elements.get(enode.name.value);
                 } else {
-                    throw new TypeError("Member access is not possible on type " + type.toString(), enode.lhs.loc);
+                    let name = enode.name.value;
+                    let method = this.getBuiltinFunction(type, name);
+                    if (!method) {
+                        throw new TypeError("Unknown method " + name + " in " + type.toString(), enode.name.loc);
+                    }
+                    enode.type = method;
                 }
                 break;
             }
@@ -3237,6 +3252,25 @@ export class TypeChecker {
         throw new TypeError("The expression is not assignable", node.loc);
     }
 
+    private getBuiltinFunction(type: Type, name: string): FunctionType | null {
+        if (type == this.t_string) {
+            if (name == "len") {
+                return this.builtin_len;
+            }
+        } else if (type instanceof SliceType) {
+            if (name == "len") {
+                return this.builtin_len;
+            } else if (name == "cap") {
+                return this.builtin_cap;
+            }
+        } else if (type instanceof ArrayType) {
+            if (name == "len") {
+                return this.builtin_len;
+            }
+        }
+        return null;
+    }
+
     public t_bool: Type;
     public t_float: Type;
     public t_double: Type;
@@ -3258,6 +3292,9 @@ export class TypeChecker {
     public t_json: ClassType;
     public t_void: Type;
     public t_error: InterfaceType;
+
+    public builtin_len: FunctionType;
+    public builtin_cap: FunctionType;
 
     private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
 }

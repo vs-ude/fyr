@@ -1248,7 +1248,30 @@ export class CodeGenerator {
                 let t: FunctionType;
                 let args: Array<ssa.Variable | string | number> = [];
                 let objPtr: ssa.Variable | ssa.Pointer | number | null = null;
-                if (enode.lhs.type instanceof FunctionType && enode.lhs.type.callingConvention == "system") {
+                if (enode.lhs.type == this.tc.builtin_len) {
+                    if (enode.lhs.lhs.type == this.tc.t_string) {
+                        let s = this.processExpression(f, scope, enode.lhs.lhs, b, vars);
+                        return b.assign(b.tmp(), "load", "i32", [s, 0]);
+                    } else if (enode.lhs.lhs.type instanceof SliceType) {
+                        let s = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        if (s instanceof ssa.Variable) {
+                            s = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [s]), 0);
+                        }
+                        return b.assign(b.tmp(), "load", "i32", [s.variable, s.offset + this.sliceHeader.fieldOffset("length")]);
+                    } else if (enode.lhs.lhs.type instanceof ArrayType) {
+                        return enode.lhs.lhs.type.size;
+                    }
+                    throw "Implementation error";
+                } else if (enode.lhs.type == this.tc.builtin_cap) {
+                    if (enode.lhs.lhs.type instanceof SliceType) {
+                        let s = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        if (s instanceof ssa.Variable) {
+                            s = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [s]), 0);
+                        }
+                        return b.assign(b.tmp(), "load", "i32", [s.variable, s.offset + this.sliceHeader.fieldOffset("cap")]);
+                    }
+                    throw "Implementation error";
+                } else if (enode.lhs.type instanceof FunctionType && enode.lhs.type.callingConvention == "system") {
                     t = enode.lhs.type;
                 } else if (enode.lhs.op == "id") {
                     // Calling a named function

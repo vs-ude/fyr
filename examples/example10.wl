@@ -30,3 +30,12 @@ func useless(p *Point) {
     // Enforce a garbage collection
     system.garbageCollect()
 }
+
+func lens() {
+    logNumber(<uint>"Hallo".len())
+    var arr [256]byte
+    logNumber(<uint>arr.len())
+    var slice = []int[5,6,7,8,9]
+    logNumber(<uint>slice.len())
+    logNumber(<uint>slice.cap())
+}

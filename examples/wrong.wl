@@ -78,3 +78,7 @@ type P struct {
 func p2() *P {
     return &{}
 }
+
+func strlen(s string) int {
+    return s.len()
+}
