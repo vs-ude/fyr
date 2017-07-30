@@ -819,5 +819,20 @@ func appendSlice(a *void, alen uint, acap uint, b *void, blen uint, bcap int, el
         return {data_ptr: <*void>newptr, length: l, cap: l}
     }
     copy(<#byte>aptr + alen * elementSize, <#byte>bptr, blen * elementSize)   
-    return {data_ptr: <*void>aptr, length: l, cap: acap - blen}
+    return {data_ptr: <*void>aptr, length: l, cap: acap}
+}
+
+func growSlice(ptr *void, len uint, cap uint, add uint, elementSize uint, typemap #int) Slice {
+    var l = len + add
+    if (l > cap) {
+        cap *= 2
+        if (l > cap) {
+            cap = l
+        }
+        var newptr = alloc(cap, elementSize, typemap)
+        copy(<#byte>newptr, <#byte><#void>ptr, len * elementSize)
+        ptr = <*void>newptr
+    }
+
+    return {data_ptr: ptr, length: l, cap: cap}
 }

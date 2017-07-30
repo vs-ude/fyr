@@ -46,4 +46,10 @@ func lens() {
     logNumber(<uint>a3.cap())
     logNumber(a3[0])
     logNumber(a3[3])
+    logString("append 2")
+    var a4 = a3.append(101, 102, 103)
+    logNumber(<uint>a4.len())
+    logNumber(<uint>a4.cap())
+    logNumber(a4[0])
+    logNumber(a4[7])
 }

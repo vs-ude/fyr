@@ -2240,6 +2240,10 @@ export class Wasm32Backend {
                         code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
                         code.push(new wasm.GetLocal(this.spLocal));
                         code.push(new wasm.Call(this.sliceAppendFunctionIndex));
+                    } else if (n.args[0] == SystemCalls.growSlice) {
+                        code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
+                        code.push(new wasm.GetLocal(this.spLocal));
+                        code.push(new wasm.Call(this.growSliceFunctionIndex));                        
                     } else {
                         throw "Implementation error";
                     }
@@ -3032,6 +3036,7 @@ export class Wasm32Backend {
     private allocFunctionIndex: string = "$alloc";
     private sliceAppendFunctionIndex: string = "$appendSlice";
     private garbageCollectFunctionIndex: string = "$garbageCollect";
+    private growSliceFunctionIndex: string = "$growSlice";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;

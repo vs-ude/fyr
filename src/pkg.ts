@@ -13,6 +13,7 @@ export enum SystemCalls {
     // The current SP
     stackPointer = -8,
     append = -9,
+    growSlice = -10,
 }
 
 export class Package {

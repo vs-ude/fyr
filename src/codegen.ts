@@ -1294,9 +1294,8 @@ export class CodeGenerator {
                     if (!(enode.lhs.lhs.type instanceof SliceType)) {
                         throw "Implementation error";
                     }
-                    let ft = new ssa.FunctionType(["ptr", "i32", "i32", "ptr", "i32", "i32", "i32"], this.sliceHeader, "system");
-                    ft.ellipsisParam = this.getSSAType(enode.lhs.lhs.type.elementType);
-                    let size = ssa.sizeOf(ft.ellipsisParam);
+                    let elementType = this.getSSAType(enode.lhs.lhs.type.elementType);
+                    let size = ssa.sizeOf(elementType);
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs.lhs)) {
@@ -1322,9 +1321,28 @@ export class CodeGenerator {
                         let b_data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
                         let b_len = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
                         let b_cap = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
+                        let ft = new ssa.FunctionType(["ptr", "i32", "i32", "ptr", "i32", "i32", "i32"], this.sliceHeader, "system");
+                        ft.ellipsisParam = elementType
                         return b.call(b.tmp(), ft, [SystemCalls.append, data_ptr, len, cap, b_data_ptr, b_len, b_cap, size]);
-                    } else {
-                        throw "TODO append with parameter list"
+                    } else {                        
+                        let add = enode.parameters.length;
+                        let new_len = b.assign(b.tmp(), "add", "i32", [len, add]);
+                        let cond = b.assign(b.tmp(), "gt_u", "i32", [new_len, cap]);
+                        b.ifBlock(cond);
+                        let ft = new ssa.FunctionType(["ptr", "i32", "i32", "i32", "i32"], this.sliceHeader, "system");
+                        ft.ellipsisParam = elementType
+                        let newslice = b.call(b.tmp(), ft, [SystemCalls.growSlice, data_ptr, len, cap, add, size]);
+                        let newslice_addr = b.assign(b.tmp(), "addr_of", "ptr", [newslice]);
+                        data_ptr = b.assign(b.tmp(), "load", "ptr", [newslice_addr, this.sliceHeader.fieldOffset("data_ptr")]);
+                        cap = b.assign(b.tmp(), "load", "i32", [newslice_addr, this.sliceHeader.fieldOffset("cap")]);
+                        b.end();
+                        let offset = b.assign(b.tmp(), "mul", "i32", [size, len]);
+                        let new_data_ptr = b.assign(b.tmp("addr"), "add", "i32", [data_ptr, offset]);
+                        for(let i = 0; i < add; i++) {
+                            let p = this.processExpression(f, scope, enode.parameters[i], b, vars);
+                            b.assign(b.mem, "store", this.getSSAType(enode.lhs.lhs.type.elementType), [new_data_ptr, i * size, p]);
+                        }
+                        return b.assign(b.tmp(), "struct", this.sliceHeader, [data_ptr, new_len, cap]);
                     }
                 } else if (enode.lhs.type instanceof FunctionType && enode.lhs.type.callingConvention == "system") {
                     t = enode.lhs.type;
