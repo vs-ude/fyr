@@ -2117,6 +2117,9 @@ export class TypeChecker {
 
     public checkExpression(enode: Node, scope: Scope) {
         switch (enode.op) {
+            case "null":
+                enode.type = this.t_null;
+                break;
             case "bool":
                 enode.type = this.t_bool;
                 break;
@@ -2383,9 +2386,12 @@ export class TypeChecker {
                         enode.value = (enode.lhs.value != enode.rhs.value) ? "true" : "false";                        
                     }
                     enode.op = "bool";                    
-                } else if (enode.lhs.op == "int" || enode.lhs.op == "float" || enode.lhs.op == "str") {
+                } else if (enode.lhs.op == "null" && enode.rhs.op == "null") {
+                    enode.value = (enode.op == "==" ? "true" : "false");
+                    enode.op = "bool";                    
+                } else if (enode.lhs.op == "int" || enode.lhs.op == "float" || enode.lhs.op == "str" || enode.lhs.op == "null") {
                     this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
-                } else if  (enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str") {
+                } else if  (enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str" || enode.rhs.op == "null") {
                     this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
                 } else {
                     this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
@@ -2498,11 +2504,11 @@ export class TypeChecker {
                 if (!(enode.lhs.type instanceof FunctionType)) {
                     throw new TypeError("Expression is not a function", enode.loc);
                 }
-                if (enode.parameters) {
-                    for(let p of enode.parameters) {
-                        this.checkExpression(p, scope);                
-                    }
-                }
+//                if (enode.parameters) {
+//                    for(let p of enode.parameters) {
+//                        this.checkExpression(p, scope);                
+//                    }
+//                }
                 let ft: FunctionType = enode.lhs.type;
                 if (enode.lhs.type instanceof GenericFunctionType) {
                     throw "TODO: Derive the generic parameters"
@@ -2515,11 +2521,22 @@ export class TypeChecker {
                     }
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let pnode = enode.parameters[i];
-                        this.checkExpression(pnode, scope);
-                        if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
-                            this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode);
+                        if (pnode.op == "unary...") {
+                            if (!ft.hasEllipsis()) {
+                                throw new TypeError("Ellipsis not allowed here. Function is not variadic", pnode.loc);
+                            }
+                            if (i != ft.parameters.length - 1 || i != enode.parameters.length - 1) {
+                                throw new TypeError("Ellipsis must only appear with the last parameter", pnode.loc);
+                            }
+                            this.checkExpression(pnode.rhs, scope);
+                            this.checkIsAssignableNode(ft.lastParameter().type, pnode.rhs);
                         } else {
-                            this.checkIsAssignableNode(ft.parameters[i].type, pnode);
+                            this.checkExpression(pnode, scope);
+                            if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
+                                this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode);
+                            } else {
+                                this.checkIsAssignableNode(ft.parameters[i].type, pnode);
+                            }
                         }
                     }
                 } else if (ft.parameters.length != 0 && (!ft.hasEllipsis || ft.parameters.length > 1)) {
@@ -2905,7 +2922,19 @@ export class TypeChecker {
                     node.type = t;
                     return r;
                 }
+                if (!doThrow) {
+                    return false;
+                }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
+            case "null":
+                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                    node.type = t;
+                    return true;
+                }
+                if (!doThrow) {
+                    return false;
+                }
+                throw new TypeError("Type mismatch between null literal and " + t.toString(), loc);
             default:
                 throw "Implementation error";
         }
@@ -3322,6 +3351,18 @@ export class TypeChecker {
                 return this.builtin_len;
             } else if (name == "cap") {
                 return this.builtin_cap;
+            } else if (name == "append") {
+                let ft = new FunctionType()
+                ft.name = "append";
+                ft.callingConvention = "system";
+                ft.objectType = type;
+                let p = new FunctionParameter();
+                p.name = "slice";
+                p.type = type;
+                p.ellipsis = true;
+                ft.parameters.push(p);
+                ft.returnType = type;
+                return ft;
             }
         } else if (type instanceof ArrayType) {
             if (name == "len") {

@@ -171,6 +171,7 @@ export class FunctionType {
     }
 
     public params: Array<Type | StructType>;
+    public ellipsisParam: Type | StructType | null;
     public result: Type | StructType | null;
     public callingConvention: CallingConvention = "fyr";
 
@@ -2224,21 +2225,31 @@ export class Wasm32Backend {
                     code.push(new wasm.Comment("parameter " + i.toString()));
                     // Pointers must be passed on the stack, too
                     if (n.type.params[i] instanceof StructType || n.type.params[i] == "ptr") {
-                        code.push(new wasm.GetLocal(this.spLocal));
+//                    code.push(new wasm.Comment(">>parameter " + i.toString()));
+//                        code.push(new wasm.GetLocal(this.spLocal));
+//                    code.push(new wasm.Comment("<<parameter " + i.toString()));
                         this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", n.type.stackFrame.fieldOffset("$p" + i.toString()), code);
                     } else {
                         this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", 0, code);                    
                     }
                 }
-                if (n.type.callingConvention == "fyr" || n.type.callingConvention == "fyrCoroutine") {
-                    // Put SP on wasm stack
-                    code.push(new wasm.GetLocal(this.spLocal));
-                }
                 // Call the function
                 if (n.args[0] < 0) {
-                    throw "Implementation error";
+                    if (n.args[0] == SystemCalls.append) {
+                        let typemap = this.typeMapper.mapType(n.type.ellipsisParam);
+                        code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
+                        code.push(new wasm.GetLocal(this.spLocal));
+                        code.push(new wasm.Call(this.sliceAppendFunctionIndex));
+                    } else {
+                        throw "Implementation error";
+                    }
+                } else {
+                    if (n.type.callingConvention == "fyr" || n.type.callingConvention == "fyrCoroutine") {
+                        // Put SP on wasm stack
+                        code.push(new wasm.GetLocal(this.spLocal));
+                    }
+                    code.push(new wasm.Call(n.args[0] as number | string));
                 }
-                code.push(new wasm.Call(n.args[0] as number));
                 // Assign
                 if (n.assign) {
                     // Copy the struct from the heapStack to the assigned variable
@@ -2574,7 +2585,7 @@ export class Wasm32Backend {
             this.emitWordAssign("i32", n.args[0], "wasmStack", code);
             code.push(new wasm.Constant("i32", size));
             let m = this.typeMapper.mapType(n.type as Type | StructType);
-            if (m == null) {
+            if (m == null || m.offsets.length == 0) {
                 code.push(new wasm.Constant("i32", 0));
             } else {
                 code.push(new wasm.Constant("i32", m.addr));
@@ -3019,6 +3030,7 @@ export class Wasm32Backend {
     private globalVarStorage: Map<Variable, Wasm32Storage>;
     private copyFunctionIndex: string = "$copy";
     private allocFunctionIndex: string = "$alloc";
+    private sliceAppendFunctionIndex: string = "$appendSlice";
     private garbageCollectFunctionIndex: string = "$garbageCollect";
     private stepLocal: number;
     private bpLocal: number;

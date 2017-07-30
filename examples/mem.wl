@@ -732,9 +732,9 @@ func traverseType(ptr #uint, typemap #int) {
     }
 }
 
-func copy(dest #byte, src #byte, count int) {
-    for(count--; count >= 0; count--) {
-        dest[count] = src[count]
+func copy(dest #byte, src #byte, count uint) {
+    for(var i uint = 0; i < count; i++) {
+        dest[i] = src[i]
     }
 }
 
@@ -789,4 +789,35 @@ func make_string(src #byte, length uint) string {
         dest[i] = src[i]
     }
     return <string>p
+}
+
+type Slice struct {
+    data_ptr *void
+    length uint
+    cap uint
+}
+
+func appendSlice(a *void, alen uint, acap uint, b *void, blen uint, bcap int, elementSize uint, typemap #int) Slice {
+    var aptr #void = <#void>a
+    var bptr #void = <#void>b
+    if (a == null) {
+        if (bcap < 0 && b != null) {
+            var newptr = alloc(blen, elementSize, typemap)
+            copy(<#byte>newptr, <#byte>bptr, blen * elementSize)
+            return {data_ptr: <*void>newptr, length: blen, cap: blen}
+        }
+        return {data_ptr: <*void>bptr, length: blen, cap: <uint>bcap}        
+    }
+    if (b == null) {
+        return {data_ptr: <*void>aptr, length: alen, cap: acap}
+    }
+    var l = alen + blen
+    if (alen + blen > acap) {
+        var newptr = alloc(l, elementSize, typemap)
+        copy(<#byte>newptr, <#byte>aptr, alen * elementSize)
+        copy(<#byte>newptr + alen * elementSize, <#byte>bptr, blen * elementSize)
+        return {data_ptr: <*void>newptr, length: l, cap: l}
+    }
+    copy(<#byte>aptr + alen * elementSize, <#byte>bptr, blen * elementSize)   
+    return {data_ptr: <*void>aptr, length: l, cap: acap - blen}
 }

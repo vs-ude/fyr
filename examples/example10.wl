@@ -38,4 +38,12 @@ func lens() {
     var slice = []int[5,6,7,8,9]
     logNumber(<uint>slice.len())
     logNumber(<uint>slice.cap())
+
+    var a1 = []uint[1,2,3]
+    var a2 = []uint[7,8,9,10]
+    var a3 = a1.append(...a2)
+    logNumber(<uint>a3.len())
+    logNumber(<uint>a3.cap())
+    logNumber(a3[0])
+    logNumber(a3[3])
 }

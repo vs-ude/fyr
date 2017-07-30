@@ -2,6 +2,7 @@ import {Location, Node, NodeOp} from "./ast"
 import {Function, Type, PackageType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
+import {SystemCalls} from "./pkg"
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean) {
@@ -50,6 +51,7 @@ export class CodeGenerator {
                 }
                 let wf = this.wasm.declareFunction(e.name);
                 this.funcs.set(e, wf);
+                // Is this the implementation of a runtime function?
                 if (e.name == this.stringConcatFunctionName) {
                     this.stringConcatFunction = e;
                 } else if (e.name == this.stringCompareFunctionName) {
@@ -189,6 +191,9 @@ export class CodeGenerator {
         }
         if (t.returnType != this.tc.t_void) {
             ftype.result = this.getSSAType(t.returnType);
+        }
+        if (t.hasEllipsis()) {
+            ftype.ellipsisParam = this.getSSAType((t.lastParameter().type as SliceType).elementType);
         }
         return ftype;
     }
@@ -954,6 +959,8 @@ export class CodeGenerator {
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
         switch(enode.op) {
+            case "null":
+                return 0;
             case "int":
                 return parseInt(enode.value);
             case "float":
@@ -1253,24 +1260,72 @@ export class CodeGenerator {
                         let s = this.processExpression(f, scope, enode.lhs.lhs, b, vars);
                         return b.assign(b.tmp(), "load", "i32", [s, 0]);
                     } else if (enode.lhs.lhs.type instanceof SliceType) {
-                        let s = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
-                        if (s instanceof ssa.Variable) {
-                            s = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [s]), 0);
+                        // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
+                        let head_addr: ssa.Variable | ssa.Pointer;
+                        if (this.isLeftHandSide(enode.lhs.lhs)) {
+                            head_addr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        } else {
+                            head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars) as ssa.Variable;
                         }
-                        return b.assign(b.tmp(), "load", "i32", [s.variable, s.offset + this.sliceHeader.fieldOffset("length")]);
+                        if (head_addr instanceof ssa.Variable) {
+                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                        }
+                        return b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
                     } else if (enode.lhs.lhs.type instanceof ArrayType) {
                         return enode.lhs.lhs.type.size;
                     }
                     throw "Implementation error";
                 } else if (enode.lhs.type == this.tc.builtin_cap) {
                     if (enode.lhs.lhs.type instanceof SliceType) {
-                        let s = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
-                        if (s instanceof ssa.Variable) {
-                            s = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [s]), 0);
+                        // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
+                        let head_addr: ssa.Variable | ssa.Pointer;
+                        if (this.isLeftHandSide(enode.lhs.lhs)) {
+                            head_addr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        } else {
+                            head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars) as ssa.Variable;
                         }
-                        return b.assign(b.tmp(), "load", "i32", [s.variable, s.offset + this.sliceHeader.fieldOffset("cap")]);
+                        if (head_addr instanceof ssa.Variable) {
+                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                        }
+                        return b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
                     }
                     throw "Implementation error";
+                } else if (enode.lhs.type instanceof FunctionType && enode.lhs.type.callingConvention == "system" && enode.lhs.type.name == "append") {
+                    if (!(enode.lhs.lhs.type instanceof SliceType)) {
+                        throw "Implementation error";
+                    }
+                    let ft = new ssa.FunctionType(["ptr", "i32", "i32", "ptr", "i32", "i32", "i32"], this.sliceHeader, "system");
+                    ft.ellipsisParam = this.getSSAType(enode.lhs.lhs.type.elementType);
+                    let size = ssa.sizeOf(ft.ellipsisParam);
+                    // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
+                    let head_addr: ssa.Variable | ssa.Pointer;
+                    if (this.isLeftHandSide(enode.lhs.lhs)) {
+                        head_addr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                    } else {
+                        head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars) as ssa.Variable;
+                    }
+                    if (head_addr instanceof ssa.Variable) {
+                        head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                    }
+                    let data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
+                    let len = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
+                    let cap = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
+                    if (enode.parameters.length == 1 && enode.parameters[0].op == "unary...") {
+                        if (this.isLeftHandSide(enode.parameters[0].rhs)) {
+                            head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0].rhs, b, vars);
+                        } else {
+                            head_addr = this.processExpression(f, scope, enode.parameters[0].rhs, b, vars) as ssa.Variable;
+                        }
+                        if (head_addr instanceof ssa.Variable) {
+                            head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                        }
+                        let b_data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
+                        let b_len = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
+                        let b_cap = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
+                        return b.call(b.tmp(), ft, [SystemCalls.append, data_ptr, len, cap, b_data_ptr, b_len, b_cap, size]);
+                    } else {
+                        throw "TODO append with parameter list"
+                    }
                 } else if (enode.lhs.type instanceof FunctionType && enode.lhs.type.callingConvention == "system") {
                     t = enode.lhs.type;
                 } else if (enode.lhs.op == "id") {

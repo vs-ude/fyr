@@ -12,6 +12,7 @@ export enum SystemCalls {
     garbageCollect = -7,
     // The current SP
     stackPointer = -8,
+    append = -9,
 }
 
 export class Package {

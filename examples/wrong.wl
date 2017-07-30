@@ -79,12 +79,8 @@ func p2() *P {
     return &{}
 }
 
-func append<T>(slice []T, ...elements []T) []T {
-    return slice
-}
-
 func useAppend() {
     var a1 = []int[1,2,3]
     var a2 = []int[7,8,9,10]
-    append(a1, 11)
+    var a3 = a1.append(...a2)
 }

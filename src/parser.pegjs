@@ -381,14 +381,14 @@ assignIdentifier
   / "[" [ \t\n]* e:assignIdentifierList "]" {
       return new ast.Node({loc: fl(location()), op: "array", parameters: e});
     }
-  / e:"..."? [ \t]* i:("_" / expression) [ \t]* o:"?"? {
+  / i:("_" / expression) [ \t]* o:"?"? {
       if (i == "_") {
           i = new ast.Node({loc: fl(location()), op: "id", value: "_"});
       }
-      if (e && o) {
+      if (i.op == "unary..." && o) {
           error("'...' and '?' must not be used on the same expression", e.loc);
-      } else if (e) {
-          return new ast.Node({loc: fl(location()), op: "ellipsisAssign", lhs: i});
+      } else if (i.op == "unary...") {
+          return new ast.Node({loc: fl(location()), op: "ellipsisAssign", lhs: i.rhs});
       } else if (o) {
           return new ast.Node({loc: fl(location()), op: "optionalAssign", lhs: i});
       }
@@ -673,6 +673,7 @@ unary
   / "^" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary^", rhs:p}); }
   / "*" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary*", rhs:p}); }
   / "&" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary&", rhs:p}); }
+  / "..." [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary...", rhs:p}); }
   / p: primary { return p; }
 
 typedLiteral
@@ -731,6 +732,7 @@ primary2
       return i;
     }
   / s: string { return s; }
+  / "..." [\t ]* 
   / "(" [ \t\n]* e: expressionList ")" {
       if (e.length == 1) {
           return e[0];
