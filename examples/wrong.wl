@@ -84,3 +84,17 @@ func useAppend() {
     var a2 = []int[7,8,9,10]
     var a3 = a1.append(...a2)
 }
+
+func variadic(fmt string, ...args []string) string {
+    var result = fmt
+    for(var i = 0; i < args.len(); i++) {
+        result += args[i]
+    }
+    return result
+}
+
+func useVariadic() {
+    variadic("fmt", "eins", "zwei", "drei")
+    var arr = []string["uno", "dos", "tres"]
+    variadic("fmt2", ...arr)
+}

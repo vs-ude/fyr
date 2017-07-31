@@ -429,7 +429,7 @@ assignKeyIdentifier
     }
 
 varStatement
-  = o:("var" / "const") [ \t]* i:varIdentifierList a:(("=" / "in ") [ \t\n]* expression)? {
+  = o:("var" / "const") [ \t]+ i:varIdentifierList a:(("=" / "in ") [ \t\n]* expression)? {
         if (i.length > 1) {
             i = new ast.Node({loc: fl(location()), op: "tuple", parameters: i});
         } else {
