@@ -1405,11 +1405,11 @@ export class CodeGenerator {
                         args.push(objPtr);
                     }
                 }
-                if (t.hasEllipsis()) {
+                if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
                     throw "TODO"
                 } else if (enode.parameters) {
                     for(let pnode of enode.parameters) {
-                        args.push(this.processExpression(f, scope, pnode, b, vars));
+                        args.push(this.processExpression(f, scope, pnode.op == "unary..." ? pnode.rhs : pnode, b, vars));
                     }
                 }
                 

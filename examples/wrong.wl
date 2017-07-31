@@ -94,7 +94,7 @@ func variadic(fmt string, ...args []string) string {
 }
 
 func useVariadic() {
-    variadic("fmt", "eins", "zwei", "drei")
+//    variadic("fmt", "eins", "zwei", "drei")
     var arr = []string["uno", "dos", "tres"]
     variadic("fmt2", ...arr)
 }
