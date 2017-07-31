@@ -14,6 +14,7 @@ export enum SystemCalls {
     stackPointer = -8,
     append = -9,
     growSlice = -10,
+    copy = -11,
 }
 
 export class Package {

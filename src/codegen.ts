@@ -19,6 +19,7 @@ export class CodeGenerator {
         this.sliceHeader.addField("data_ptr", "ptr");
         this.sliceHeader.addField("length", "i32");
         this.sliceHeader.addField("cap", "i32");
+        this.copyFunctionType = new ssa.FunctionType(["addr", "addr", "i32"], null, "system");
     }
 
     public processModule(mnode: Node) {
@@ -1722,6 +1723,12 @@ export class CodeGenerator {
                     return expr;
                 } else if (t instanceof PointerType && enode.rhs.type instanceof UnsafePointerType) {
                     return expr;
+                } else if (t instanceof SliceType && t.elementType == this.tc.t_byte && enode.rhs.type == this.tc.t_string) {
+                    let l = b.assign(b.tmp(), "load", "i32", [expr]);
+                    let src = b.assign(b.tmp("addr"), "add", "i32", [expr, 4]);
+                    let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);
+                    b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, src, l]);
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
                 } else {
                     throw "TODO: conversion not implemented";
                 }
@@ -1801,12 +1808,14 @@ export class CodeGenerator {
     private emitNoWasm: boolean;
     private emitFunction: string | null;
     private disableNullCheck: boolean;
+    // TODO: Turn these into system functions
     private stringConcatFunctionName: string = "string_concat";
     private stringConcatFunction: Function;
     private stringCompareFunctionName: string = "string_compare";
     private stringCompareFunction: Function;
     private stringMakeFunctionName: string = "make_string";
     private stringMakeFunction: Function;
+    private copyFunctionType: ssa.FunctionType;
 }
 
 export class LinkError {

@@ -2691,6 +2691,8 @@ export class TypeChecker {
                     enode.type = t;
                 } else if (t instanceof PointerType && enode.rhs.type instanceof UnsafePointerType && t.elementType == enode.rhs.type.elementType) {
                     enode.type = t;
+                } else if (t instanceof SliceType && t.elementType == this.t_byte && enode.rhs.type == this.t_string) {
+                    enode.type = t;
                 } else {
                     throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
 //                    throw "TODO: conversion not possible or not implemented";
