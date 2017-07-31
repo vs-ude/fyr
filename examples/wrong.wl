@@ -23,9 +23,9 @@ func demoString() string {
     return <string>arr
 }
 
-//func demoString2() string {
-//    return g2[0:2]
-//}
+func demoString2() string {
+    return g2[0:2]
+}
 
 //func demoString3() []byte {
 //    return <[]byte>g2

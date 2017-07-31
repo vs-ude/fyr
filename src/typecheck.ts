@@ -1339,14 +1339,14 @@ export class TypeChecker {
             }
         }
 
-        // Check function bodies
-        for(let e of functions) {
-            this.checkFunctionBody(e);
-        }
-
         // Check variable assignments
         for(let v of globalVariables) {
             this.checkGlobalVariable(v, scope);
+        }
+
+        // Check function bodies
+        for(let e of functions) {
+            this.checkFunctionBody(e);
         }
 
         // Determine which functions could block and hence needs special coroutine treatment.
@@ -2444,21 +2444,24 @@ export class TypeChecker {
                 this.checkExpression(enode.lhs, scope);
                 let index1 = 0;
                 let index2 = 0;
+                let indicesAreNumbers = 0;
                 if (enode.parameters[0]) {
                     this.checkExpression(enode.parameters[0], scope);
                     this.checkIsIntNumber(enode.parameters[0]);
                     if (enode.parameters[0].op == "int") {
-                        index1 = parseInt(enode.parameters[0].value);                        
+                        index1 = parseInt(enode.parameters[0].value);
+                        indicesAreNumbers++;                 
                     }
                 }
                 if (enode.parameters[1]) {
                     this.checkExpression(enode.parameters[1], scope);
                     this.checkIsIntNumber(enode.parameters[1]);
                     if (enode.parameters[1].op == "int") {
-                        index2 = parseInt(enode.parameters[1].value);                        
+                        index2 = parseInt(enode.parameters[1].value);   
+                        indicesAreNumbers++;                     
                     }
                 }
-                if (index1 > index2) {
+                if (indicesAreNumbers == 2 && index1 > index2) {
                     throw new TypeError("Index out of range", enode.rhs.loc);
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index1);
