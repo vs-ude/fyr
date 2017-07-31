@@ -53,3 +53,17 @@ func lens() {
     logNumber(a4[0])
     logNumber(a4[7])
 }
+
+func variadic(fmt string, ...args []string) string {
+    var result = fmt
+    for(var i = 0; i < args.len(); i++) {
+        result += args[i]
+    }
+    return result
+}
+
+func useVariadic() string {
+    var s1 = variadic("fmt", "eins", "zwei", "drei")
+    var arr = []string["uno", "dos", "tres"]
+    return s1 + variadic("fmt2", ...arr)
+}

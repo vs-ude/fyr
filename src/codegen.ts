@@ -1406,7 +1406,19 @@ export class CodeGenerator {
                     }
                 }
                 if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
-                    throw "TODO"
+                    let elementType = this.getSSAType((t.lastParameter().type as SliceType).elementType);
+                    let normalParametersCount = t.parameters.length - 1 - (t.objectType ? 1 : 0);
+                    for(let i = 0; i < normalParametersCount; i++) {
+                        args.push(this.processExpression(f, scope, enode.parameters[i], b, vars));
+                    }
+                    let mem = b.assign(b.tmp("ptr"), "alloc", elementType, [enode.parameters.length - normalParametersCount]);
+                    let offset = 0;
+                    let elementSize = ssa.sizeOf(elementType);
+                    for(let i = normalParametersCount; i < enode.parameters.length; i++, offset += elementSize) {
+                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
+                        b.assign(b.mem, "store", elementType, [mem, offset, v]);
+                    }
+                    args.push(b.assign(b.tmp(), "struct", this.sliceHeader, [mem, enode.parameters.length - normalParametersCount, enode.parameters.length - normalParametersCount]));
                 } else if (enode.parameters) {
                     for(let pnode of enode.parameters) {
                         args.push(this.processExpression(f, scope, pnode.op == "unary..." ? pnode.rhs : pnode, b, vars));

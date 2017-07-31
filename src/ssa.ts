@@ -2324,7 +2324,7 @@ export class Wasm32Backend {
 
             // An expression of type StructType?
             if (typeof(n) == "number") {
-                throw "Implementation error: A number cannot be of type StructType";
+                throw "Implementation error: A number cannot be of type StructType " + type.name;
             } else if (n instanceof Variable) {
                 let srcOffset = this.emitAddrOfVariable(n, true, code);
                 if (dest === "heapStack") {

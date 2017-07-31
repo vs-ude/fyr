@@ -200,6 +200,9 @@
                 results.instance.exports.garbageCollect(stack);
                 console.log("... gc complete");
                 results.instance.exports.lens(stack);
+                console.log("variadics ...");
+                let str = results.instance.exports.useVariadic(stack);
+                console.log(decodeString(str));
                 console.log("Done");
             });
         </script>
