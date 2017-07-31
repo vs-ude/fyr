@@ -738,7 +738,7 @@ func copy(dest #byte, src #byte, count uint) {
     }
 }
 
-func string_concat(str1 string, str2 string) string {
+func concatString(str1 string, str2 string) string {
     var s1 = *<#uint>str1
     var s2 = *<#uint>str2
     var p #void = alloc(4 + s1 + s2, 1, 0)
@@ -756,7 +756,7 @@ func string_concat(str1 string, str2 string) string {
     return <string>p
 }
 
-func string_compare(str1 string, str2 string) int {
+func compareString(str1 string, str2 string) int {
     var s1 = *<#uint>str1
     var s2 = *<#uint>str2
     var ptr1 #byte = <#byte>str1 + 4
@@ -781,7 +781,7 @@ func string_compare(str1 string, str2 string) int {
     return 1
 }
 
-func make_string(src #byte, length uint) string {
+func makeString(src #byte, length uint) string {
     var p #byte = <#byte>alloc(4 + length, 1, 0)
     *<#uint>p = length
     var dest = p + 4

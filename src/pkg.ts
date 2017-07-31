@@ -12,9 +12,12 @@ export enum SystemCalls {
     garbageCollect = -7,
     // The current SP
     stackPointer = -8,
-    append = -9,
+    appendSlice = -9,
     growSlice = -10,
     copy = -11,
+    makeString = -12,
+    concatString = -13,
+    compareString = -14,
 }
 
 export class Package {

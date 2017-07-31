@@ -2235,7 +2235,7 @@ export class Wasm32Backend {
                 }
                 // Call the function
                 if (n.args[0] < 0) {
-                    if (n.args[0] == SystemCalls.append) {
+                    if (n.args[0] == SystemCalls.appendSlice) {
                         let typemap = this.typeMapper.mapType(n.type.ellipsisParam);
                         code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
                         code.push(new wasm.GetLocal(this.spLocal));
@@ -2776,6 +2776,15 @@ export class Wasm32Backend {
                 } else if (n.args[0] == SystemCalls.copy) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.copyFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.makeString) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.makeStringFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.concatString) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.concatStringFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.compareString) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.compareStringFunctionIndex));                    
                 } else {
                     throw "Implementation error. Unknown system function " + n.args[0];
                 }
@@ -3040,6 +3049,9 @@ export class Wasm32Backend {
     private sliceAppendFunctionIndex: string = "$appendSlice";
     private garbageCollectFunctionIndex: string = "$garbageCollect";
     private growSliceFunctionIndex: string = "$growSlice";
+    private makeStringFunctionIndex: string = "$makeString";
+    private compareStringFunctionIndex: string = "$compareString";
+    private concatStringFunctionIndex: string = "$concatString";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;

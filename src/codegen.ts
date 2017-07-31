@@ -20,6 +20,9 @@ export class CodeGenerator {
         this.sliceHeader.addField("length", "i32");
         this.sliceHeader.addField("cap", "i32");
         this.copyFunctionType = new ssa.FunctionType(["addr", "addr", "i32"], null, "system");
+        this.makeStringFunctionType = new ssa.FunctionType(["addr", "i32"], "ptr", "system");
+        this.compareStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "i32", "system");
+        this.concatStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
     }
 
     public processModule(mnode: Node) {
@@ -52,14 +55,6 @@ export class CodeGenerator {
                 }
                 let wf = this.wasm.declareFunction(e.name);
                 this.funcs.set(e, wf);
-                // Is this the implementation of a runtime function?
-                if (e.name == this.stringConcatFunctionName) {
-                    this.stringConcatFunction = e;
-                } else if (e.name == this.stringCompareFunctionName) {
-                    this.stringCompareFunction = e;
-                } else if (e.name == this.stringMakeFunctionName) {
-                    this.stringMakeFunction = e;
-                }
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
                 this.globalVars.set(e, g);
@@ -455,12 +450,7 @@ export class CodeGenerator {
                 }
                 let p2 = this.processExpression(f, scope, snode.rhs, b, vars);
                 if (snode.lhs.type == this.tc.t_string) {
-                    // String concatenation
-                    if (!this.stringConcatFunction) {
-                        throw new LinkError("Missing symbol " + this.stringConcatFunctionName, snode.loc);
-                    }
-                    let wf = this.funcs.get(this.stringConcatFunction);
-                    b.call(dest, this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
+                    b.call(dest, this.concatStringFunctionType, [SystemCalls.concatString, p1, p2]);
                 } else if (storage == "f32" || storage == "f64") {
                     if (snode.op == "+=") {
                         b.assign(dest, "add", storage, [p1, p2]);
@@ -1075,11 +1065,7 @@ export class CodeGenerator {
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
                 if (enode.lhs.type == this.tc.t_string) {
-                    if (!this.stringConcatFunction) {
-                        throw "Missing string concat function in runtime";
-                    }
-                    let wf = this.funcs.get(this.stringConcatFunction);
-                    return b.call(b.tmp(), this.getSSAFunctionType(this.stringConcatFunction.type), [wf.index, p1, p2]);
+                    return b.call(b.tmp(), this.concatStringFunctionType, [SystemCalls.concatString, p1, p2]);
                 } else if (enode.lhs.type instanceof UnsafePointerType) {
                     let estorage = this.getSSAType(enode.lhs.type.elementType);
                     let size = ssa.sizeOf(estorage);
@@ -1324,7 +1310,7 @@ export class CodeGenerator {
                         let b_cap = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
                         let ft = new ssa.FunctionType(["ptr", "i32", "i32", "ptr", "i32", "i32", "i32"], this.sliceHeader, "system");
                         ft.ellipsisParam = elementType
-                        return b.call(b.tmp(), ft, [SystemCalls.append, data_ptr, len, cap, b_data_ptr, b_len, b_cap, size]);
+                        return b.call(b.tmp(), ft, [SystemCalls.appendSlice, data_ptr, len, cap, b_data_ptr, b_len, b_cap, size]);
                     } else {                        
                         let add = enode.parameters.length;
                         let new_len = b.assign(b.tmp(), "add", "i32", [len, add]);
@@ -1577,11 +1563,7 @@ export class CodeGenerator {
                         ptr3 = b.assign(b.tmp(), "add", "ptr", [ptr2, index1]);
                     }
                     let l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
-                    if (!this.stringMakeFunction) {
-                        throw new LinkError("Missing symbol " + this.stringMakeFunctionName, enode.loc);
-                    }
-                    let wf = this.funcs.get(this.stringMakeFunction);
-                    return b.call(b.tmp(), this.getSSAFunctionType(this.stringMakeFunction.type), [wf.index, ptr3, l]);
+                    return b.call(b.tmp(), this.makeStringFunctionType, [SystemCalls.makeString, ptr3, l]);
                 } else if (enode.lhs.type instanceof ArrayType) {
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     let len = enode.lhs.type.size;
@@ -1700,13 +1682,9 @@ export class CodeGenerator {
                     return expr;
                 } else if (t == this.tc.t_string && enode.rhs.type instanceof SliceType) {
                     let head = b.assign(b.tmp(), "addr_of", "addr", [expr]);
-                    if (!this.stringMakeFunction) {
-                        throw new LinkError("Missing symbol " + this.stringMakeFunctionName, enode.loc);
-                    }
                     let ptr = b.assign(b.tmp(), "load", "addr", [head, this.sliceHeader.fieldOffset("data_ptr")]);
                     let l = b.assign(b.tmp(), "load", "i32", [head, this.sliceHeader.fieldOffset("length")]);
-                    let wf = this.funcs.get(this.stringMakeFunction);
-                    return b.call(b.tmp(), this.getSSAFunctionType(this.stringMakeFunction.type), [wf.index, ptr, l]);
+                    return b.call(b.tmp(), this.makeStringFunctionType, [SystemCalls.makeString, ptr, l]);
                 } else if ((t == this.tc.t_bool || this.tc.checkIsIntType(t)) && (enode.rhs.type == this.tc.t_bool || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
@@ -1743,11 +1721,7 @@ export class CodeGenerator {
         let p1 = this.processExpression(f, scope, enode.lhs, b, vars);
         let p2 = this.processExpression(f, scope, enode.rhs, b, vars);
         if (enode.lhs.type == this.tc.t_string) {
-            if (!this.stringCompareFunction) {
-                throw new LinkError("Missing symbol " + this.stringCompareFunctionName, enode.loc);
-            }
-            let wf = this.funcs.get(this.stringCompareFunction);
-            let cmp = b.call(b.tmp(), this.getSSAFunctionType(this.stringCompareFunction.type), [wf.index, p1, p2]);
+            let cmp = b.call(b.tmp(), this.compareStringFunctionType, [SystemCalls.compareString, p1, p2]);
             switch(opcode) {
                 case "eq":
                     return b.assign(b.tmp(), "eqz", "i32", [cmp]);
@@ -1808,13 +1782,9 @@ export class CodeGenerator {
     private emitNoWasm: boolean;
     private emitFunction: string | null;
     private disableNullCheck: boolean;
-    // TODO: Turn these into system functions
-    private stringConcatFunctionName: string = "string_concat";
-    private stringConcatFunction: Function;
-    private stringCompareFunctionName: string = "string_compare";
-    private stringCompareFunction: Function;
-    private stringMakeFunctionName: string = "make_string";
-    private stringMakeFunction: Function;
+    private concatStringFunctionType: ssa.FunctionType;
+    private compareStringFunctionType: ssa.FunctionType;
+    private makeStringFunctionType: ssa.FunctionType;
     private copyFunctionType: ssa.FunctionType;
 }
 
