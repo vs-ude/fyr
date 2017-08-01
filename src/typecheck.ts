@@ -323,6 +323,7 @@ export class FunctionType extends Type {
     public systemCallType: number;
 // Enable this line to measure coroutines
 //    public callingConvention: CallingConvention = "fyrCoroutine";
+    public isConst: boolean;
 }
 
 export class GenericFunctionType extends FunctionType implements GenericType {
@@ -1028,8 +1029,14 @@ export class TypeChecker {
             f.type = new FunctionType();
         }
         f.type.loc = fnode.loc;
+        // A member function?
         if (fnode.lhs) {
-            f.type.objectType = this.createType(fnode.lhs, f.scope, true);
+            let obj = fnode.lhs;
+            if (obj.op == "const") {
+                f.type.isConst = true;
+                obj = obj.rhs;
+            }
+            f.type.objectType = this.createType(obj, f.scope, true);
             if (!(f.type.objectType instanceof StructType)) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);
             }
@@ -1062,6 +1069,7 @@ export class TypeChecker {
                 f.scope.registerElement(p.name, p);
             }
         }
+        // A return type?
         if (fnode.rhs) {
             f.type.returnType = this.createType(fnode.rhs, f.scope);
             if (fnode.rhs.op == "tupleType") {
@@ -1087,6 +1095,9 @@ export class TypeChecker {
             if (f.type.objectType.methods.has(f.name)) {
                 let loc = f.type.objectType.methods.get(f.name).loc;
                 throw new TypeError("Method " + f.type.objectType.toString() + "." + f.name + " is already defined at " + loc.file + " (" + loc.start.line + "," + loc.start.column + ")", fnode.loc);
+            }
+            if (f.type.objectType.field(f.name)) {
+                throw new TypeError("Field " + f.type.objectType.toString() + "." + f.name + " is already defined", fnode.loc);
             }
             f.type.objectType.methods.set(f.name, f.type);
             registerScope.registerElement(f.type.objectType.name + "." + f.name, f);
@@ -2418,6 +2429,7 @@ export class TypeChecker {
                         if (!method) {
                             throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
                         }
+                        // TODO: If this is a value type, can the method handle that?
                         enode.type = method;
                     }
                 } else if (type instanceof InterfaceType) {
@@ -2516,6 +2528,7 @@ export class TypeChecker {
                 if (enode.lhs.type instanceof GenericFunctionType) {
                     throw "TODO: Derive the generic parameters"
                 }
+                // Type check all parameters
                 if (enode.parameters) {
                     if (ft.parameters.length != enode.parameters.length) {
                         if (ft.requiredParameterCount() > enode.parameters.length || (enode.parameters.length > ft.parameters.length && !ft.hasEllipsis())) {

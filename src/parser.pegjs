@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = "func" [ \t]+ name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = "func" [ \t]+ c:("const" [ \t]+)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -96,7 +96,12 @@ func
           scope = name;
           name = n2[2];
           scope.op = "basicType";
-      }
+          if (c) {
+              scope = new ast.Node({loc: scope.loc, op: "const", rhs: scope});
+          }
+      } else if (c) {
+          error("'const' is only allowed for member functions");
+      }      
       return new ast.Node({loc: fl(location()), op: "func", name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
     }
 

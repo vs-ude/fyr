@@ -86,3 +86,20 @@ type P struct {
 func p2() *P {
     return &{}
 }
+
+type Point struct {
+    x int
+    y int
+}
+
+func const Point.mul() int {
+    return this.x * this.y
+}
+
+func p3() Point {
+    return {}
+}
+
+func usePoint() {
+    p3().mul()
+}

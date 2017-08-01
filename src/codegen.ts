@@ -1356,9 +1356,14 @@ export class CodeGenerator {
                         throw "TODO";
                     } else if (ltype instanceof StructType) {
                         objType = ltype;
-                        objPtr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
-                        if (objPtr instanceof ssa.Variable) {
-                            objPtr = b.assign(b.tmp(), "addr_of", "ptr", [objPtr]);
+                        if (this.isLeftHandSide(enode.lhs.lhs)) {
+                            objPtr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                            if (objPtr instanceof ssa.Variable) {
+                                objPtr = b.assign(b.tmp(), "addr_of", "ptr", [objPtr]);
+                            }
+                        } else {
+                            let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars);
+                            objPtr = b.assign(b.tmp(), "addr_of", "ptr", [value]);
                         }
                     } else {
                         throw "Implementation error"
