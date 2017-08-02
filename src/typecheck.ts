@@ -36,6 +36,7 @@ export class ImportedPackage implements ScopeElement {
 
 // Variable is a global or function-local variable.
 export class Variable implements ScopeElement {
+    // A variable is const if its value cannot be assigned to except during its initial definition.
     public isConst: boolean;
     public isGlobal: boolean;
     public name: string;
@@ -71,7 +72,9 @@ export class FunctionParameter implements ScopeElement {
     public name: string;
     public ellipsis: boolean;
     public type: Type;
-    public loc: Location;
+    public loc: Location;   
+    // 'this' is const, because the function parameter cannot be assigned to
+    public isConst: boolean;
 }
 
 // Typedef represents the result of a 'type' statement, i.e.
@@ -323,7 +326,6 @@ export class FunctionType extends Type {
     public systemCallType: number;
 // Enable this line to measure coroutines
 //    public callingConvention: CallingConvention = "fyrCoroutine";
-    public isConst: boolean;
 }
 
 export class GenericFunctionType extends FunctionType implements GenericType {
@@ -498,6 +500,68 @@ export class GuardedPointerType extends Type {
     }
 
     public elementType: Type;
+}
+
+export type Restrictions = {
+    isConst: boolean;
+    isVolatile: boolean;
+    isImmutable: boolean;
+}
+
+// Implements restrictions
+export class RestrictedType extends Type {
+    constructor(elementType: Type, r: Restrictions | null = null) {
+        super();
+        this.elementType = elementType;
+        if (r) {
+            this.isConst = r.isConst;
+            this.isVolatile = r.isVolatile;
+            this.isImmutable = r.isImmutable;
+        }
+    }
+
+    public static combineRestrictions(r1: Restrictions | null, r2: Restrictions | null): Restrictions | null {
+        if (!r1) {
+            return r2;
+        }
+        if (!r2) {
+            return r1;
+        }
+        return {
+            isConst : r1.isConst || r2.isConst,
+            isVolatile : r1.isVolatile || r2.isVolatile,
+            isImmutable : r1.isImmutable || r2.isImmutable
+        }
+    }
+
+    public static strip(t: Type): Type {
+        if (t instanceof RestrictedType) {
+            return t.elementType;
+        }
+        return t;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        let str = "";
+        if (this.isConst) {
+            str += "const ";
+        }
+        if (this.isVolatile) {
+            str += "volatile";
+        }
+        if (this.isImmutable) {
+            str += "immutable";
+        }
+        return str + this.elementType.toString();
+    }
+
+    public elementType: Type;
+    public isConst: boolean;
+    public isVolatile: boolean;
+    public isImmutable: boolean;
 }
 
 export class ArrayType extends Type {
@@ -777,17 +841,51 @@ export class TypeChecker {
                 throw new TypeError("Unknown type " + tnode.value, tnode.loc);
             }
             return t;
+        } else if (tnode.op == "constType") {
+            let c = this.createType(tnode.rhs, scope);
+            if (c instanceof RestrictedType) {
+                let r = new RestrictedType(c.elementType);
+                r.isImmutable = c.isImmutable;
+                r.isVolatile = c.isVolatile;
+                r.isConst = true;
+                return r;
+            }
+            let r = new RestrictedType(c);
+            r.isConst = true;
+            return r;
+        } else if (tnode.op == "volatileType") {
+            let c = this.createType(tnode.rhs, scope);
+            if (c instanceof RestrictedType) {
+                let r = new RestrictedType(c.elementType);
+                r.isImmutable = c.isImmutable;
+                r.isConst = c.isConst;
+                r.isVolatile = true;
+                return r;
+            }
+            let r = new RestrictedType(c);
+            r.isVolatile = true;
+            return r;
+        } else if (tnode.op == "immutableType") {
+            let c = this.createType(tnode.rhs, scope);
+            if (c instanceof RestrictedType) {
+                let r = new RestrictedType(c.elementType);
+                r.isVolatile = c.isVolatile;
+                r.isImmutable = true;
+                r.isConst = true;
+                return r;
+            }
+            let r = new RestrictedType(c);
+            r.isConst = true;
+            r.isImmutable = true;
+            return r;
         } else if (tnode.op == "pointerType") {
             let t = new PointerType(this.createType(tnode.rhs, scope));
-//            t.name = "*" + t.elementType.name;
             return t;
         } else if (tnode.op == "unsafePointerType") {
             let t = new UnsafePointerType(this.createType(tnode.rhs, scope));
-//            t.name = "#" + t.elementType.name;
             return t;
         } else if (tnode.op == "sliceType") {
             let t = new SliceType(this.createType(tnode.rhs, scope));
-//            t.name = "[]" + t.elementType.name;
             return t
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
@@ -804,7 +902,6 @@ export class TypeChecker {
             }
             // TODO: Check range before parseInt
             let t = new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
-//            t.name = "[" + t.size.toString() + "]" + t.elementType.name;
             return t;
         } else if (tnode.op == "funcType") {
             let t = new FunctionType();
@@ -991,7 +1088,7 @@ export class TypeChecker {
             if (s.field(fnode.lhs.value)) {
                 throw new TypeError("Duplicate field name " + fnode.lhs.value, fnode.lhs.loc);
             }
-            // TODO: Check for duplicate names
+            // TODO: Check for duplicate names in the structs extends by this struct
             let field = new StructField();
             field.name = fnode.lhs.value;
             field.type = this.createType(fnode.rhs, scope);
@@ -1032,18 +1129,20 @@ export class TypeChecker {
         // A member function?
         if (fnode.lhs) {
             let obj = fnode.lhs;
-            if (obj.op == "const") {
-                f.type.isConst = true;
-                obj = obj.rhs;
-            }
             f.type.objectType = this.createType(obj, f.scope, true);
-            if (!(f.type.objectType instanceof StructType)) {
+            // TODO: Lift this limitation eventually
+            if (!(f.type.objectType instanceof StructType) && (!(f.type.objectType instanceof RestrictedType) || !(f.type.objectType.elementType instanceof StructType))) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);
             }
             let p = new FunctionParameter();
-            p.name = "this";
-            p.type = new PointerType(f.type.objectType);
+            p.name = "this";            
             p.loc = fnode.lhs.loc;
+            p.isConst = true;
+            if (f.type.objectType instanceof RestrictedType) {
+                p.type = new RestrictedType(new PointerType(f.type.objectType.elementType), f.type.objectType);
+            } else {
+                p.type = new PointerType(f.type.objectType);
+            }
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
@@ -1090,18 +1189,22 @@ export class TypeChecker {
             f.type.returnType = this.t_void;
         }
 
+        let objType = f.type.objectType;
+        if (objType instanceof RestrictedType) {
+            objType = objType.elementType;
+        }
         // The function is a member function
-        if (f.type.objectType instanceof StructType) {
-            if (f.type.objectType.methods.has(f.name)) {
-                let loc = f.type.objectType.methods.get(f.name).loc;
-                throw new TypeError("Method " + f.type.objectType.toString() + "." + f.name + " is already defined at " + loc.file + " (" + loc.start.line + "," + loc.start.column + ")", fnode.loc);
+        if (objType instanceof StructType) {
+            if (objType.methods.has(f.name)) {
+                let loc = objType.methods.get(f.name).loc;
+                throw new TypeError("Method " + objType.toString() + "." + f.name + " is already defined at " + loc.file + " (" + loc.start.line + "," + loc.start.column + ")", fnode.loc);
             }
-            if (f.type.objectType.field(f.name)) {
-                throw new TypeError("Field " + f.type.objectType.toString() + "." + f.name + " is already defined", fnode.loc);
+            if (objType.field(f.name)) {
+                throw new TypeError("Field " + objType.toString() + "." + f.name + " is already defined", fnode.loc);
             }
-            f.type.objectType.methods.set(f.name, f.type);
-            registerScope.registerElement(f.type.objectType.name + "." + f.name, f);
-        } else if (f.type.objectType) {
+            objType.methods.set(f.name, f.type);
+            registerScope.registerElement(objType.name + "." + f.name, f);
+        } else if (objType) {
             throw "Implementation error";
         } else {
             registerScope.registerElement(f.name, f);
@@ -1320,6 +1423,12 @@ export class TypeChecker {
                     let v = this.createVar(snode.lhs, scope, false);
                     v.node = snode;
                     v.isGlobal = true;
+                    globalVariables.push(v);
+                } else if (snode.op == "const") {
+                    let v = this.createVar(snode.lhs, scope, false);
+                    v.node = snode;
+                    v.isGlobal = true;
+                    v.isConst = true;
                     globalVariables.push(v);
                 } else if (snode.op == "import") {
                     this.createImport(snode, fnode.scope);
@@ -1709,7 +1818,7 @@ export class TypeChecker {
                         throw new TypeError("Ellipsis identifier must be at last position in tuple", vnode.loc);
                     }
                     this.checkExpression(p.lhs, scope);
-                    this.checkIsLeftHandSide(p.lhs);
+                    this.checkIsMutable(p.lhs, scope);
                     hasEllipsis = true;
                     if (!(p.lhs.type instanceof TupleType)) {
                         throw new TypeError("Ellipsis identifier in a tuple context must be of tuple type", vnode.loc);
@@ -1757,7 +1866,7 @@ export class TypeChecker {
                     }
                     hasEllipsis = true;
                     this.checkExpression(p.lhs, scope);
-                    this.checkIsLeftHandSide(p.lhs);
+                    this.checkIsMutable(p.lhs, scope);
                     if (rtype instanceof ArrayLiteralType) {
                         let rt: Type;
                         if (p.lhs.type instanceof ArrayType) {
@@ -1845,7 +1954,7 @@ export class TypeChecker {
                     }
                     hasEllipsis = true;
                     this.checkExpression(kv.lhs, scope);
-                    this.checkIsLeftHandSide(kv.lhs);
+                    this.checkIsMutable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
                         let rt: Type;
                         if (kv.lhs.type instanceof GenericClassInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
@@ -1893,7 +2002,7 @@ export class TypeChecker {
             }
         } else {
             this.checkExpression(vnode, scope);
-            this.checkIsLeftHandSide(vnode);
+            this.checkIsMutable(vnode, scope);
             if (rnode) {
                 this.checkIsAssignableNode(vnode.type, rnode, jsonErrorIsHandled);
             } else {
@@ -2016,7 +2125,7 @@ export class TypeChecker {
             case "/=":
             case "-=":
                 this.checkExpression(snode.lhs, scope);
-                this.checkIsLeftHandSide(snode.lhs);
+                this.checkIsMutable(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
                 if (snode.op == "+=" && snode.lhs.type == this.t_string) {
                     this.checkIsString(snode.rhs);
@@ -2043,7 +2152,7 @@ export class TypeChecker {
             case "|=":
             case "^=":
                 this.checkExpression(snode.lhs, scope);
-                this.checkIsLeftHandSide(snode.lhs);
+                this.checkIsMutable(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
                 if (snode.lhs.type instanceof PointerType || snode.rhs.type instanceof UnsafePointerType) {
                     if (snode.op == "%=") {
@@ -2071,20 +2180,19 @@ export class TypeChecker {
 //                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
                     if (snode.lhs.parameters[0].value != "_") {
                         this.checkExpression(snode.lhs.parameters[0], scope);
-                        this.checkIsLeftHandSide(snode.lhs.parameters[0]);
+                        this.checkIsAssignable(snode.lhs.parameters[0], scope);
                         this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc);
                     } 
                     this.checkExpression(snode.lhs.parameters[1], scope);
-                    this.checkIsLeftHandSide(snode.lhs.parameters[1]);
+                    this.checkIsAssignable(snode.lhs.parameters[1], scope);
                     this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc);
                 } else {
                     this.checkExpression(snode.lhs, scope);
-                    this.checkIsLeftHandSide(snode.lhs);
+                    this.checkIsAssignable(snode.lhs, scope);
                     this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc);
                 }
                 break;
             case "var_in":
-            case "const_in":
             {
                 // TODO: underscore as in "for(var _, x in foo)"
                 this.checkExpression(snode.rhs, scope);
@@ -2161,7 +2269,7 @@ export class TypeChecker {
                 } else {
                     this.checkIsIntNumber(enode.lhs);
                 }
-                this.checkIsLeftHandSide(enode.lhs);
+                this.checkIsMutable(enode.lhs, scope);
                 enode.type = enode.lhs.type;
                 break;
             case "unary-":
@@ -2413,17 +2521,26 @@ export class TypeChecker {
             {
                 this.checkExpression(enode.lhs, scope);
                 let type: Type = enode.lhs.type;
-                if (type instanceof PointerType || type instanceof UnsafePointerType) {
+                let restrictions: Restrictions;
+                if (type instanceof RestrictedType) {
+                    restrictions = type;
                     type = type.elementType;
-                } else if (type instanceof GuardedPointerType) {
+                }
+                if (type instanceof PointerType || type instanceof UnsafePointerType || type instanceof GuardedPointerType) {
                     type = type.elementType;
-                    throw "TODO";
+                }
+                if (type instanceof RestrictedType) {
+                    restrictions = RestrictedType.combineRestrictions(type, restrictions);
+                    type = type.elementType;
                 }
                 if (type instanceof StructType) {
                     let name = enode.name.value;
                     let field = type.field(name);
                     if (field) {
                         enode.type = field.type;
+                        if (restrictions && !this.isPrimitive(enode.type)) {
+                            enode.type = new RestrictedType(enode.type, restrictions);
+                        }
                     } else {
                         let method = type.methods.get(name);
                         if (!method) {
@@ -2690,13 +2807,13 @@ export class TypeChecker {
             {
                 let t = this.createType(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
-                if (this.checkIsIntType(t) && enode.rhs.type instanceof UnsafePointerType) {
+                if (this.isIntNumber(t) && enode.rhs.type instanceof UnsafePointerType) {
                     enode.type = t;
                 } else if (this.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
                     enode.type = t;
                 } else if (t instanceof UnsafePointerType && (enode.rhs.type instanceof UnsafePointerType || enode.rhs.type instanceof PointerType || enode.rhs.type == this.t_string)) {
                     enode.type = t;
-                } else if ((t == this.t_bool || this.checkIsIntType(t)) && (enode.rhs.type == this.t_bool || this.checkIsIntNumber(enode.rhs, false))) {
+                } else if ((t == this.t_bool || this.isIntNumber(t)) && (enode.rhs.type == this.t_bool || this.checkIsIntNumber(enode.rhs, false))) {
                     enode.type = t;
                 } else if (t == this.t_string && enode.rhs.type instanceof UnsafePointerType) {
                     enode.type = t;
@@ -2705,6 +2822,12 @@ export class TypeChecker {
                 } else if (t instanceof PointerType && enode.rhs.type instanceof UnsafePointerType && t.elementType == enode.rhs.type.elementType) {
                     enode.type = t;
                 } else if (t instanceof SliceType && t.elementType == this.t_byte && enode.rhs.type == this.t_string) {
+                    enode.type = t;
+                } else if (t instanceof RestrictedType && t.elementType == enode.rhs.type && this.isPrimitive(enode.rhs.type)) {
+                    enode.type = t;
+                } else if (enode.rhs.type instanceof RestrictedType && enode.rhs.type.elementType == t && this.isPrimitive(t)) {
+                    enode.type = t;
+                } else if (t instanceof RestrictedType && enode.rhs.type instanceof RestrictedType && t.elementType == enode.rhs.type.elementType && this.isPrimitive(t.elementType)) {
                     enode.type = t;
                 } else {
                     throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
@@ -2799,6 +2922,18 @@ export class TypeChecker {
                 return false;
             }
         }
+
+        if (t instanceof RestrictedType) {
+            let result = this.unifyLiterals(t.elementType, node, loc, doThrow);
+            if (result) {
+                let r = new RestrictedType(node.type);
+                r.isConst = t.isConst;
+                r.isVolatile = t.isVolatile;
+                r.isImmutable = t.isImmutable;
+                node.type = r;
+            }
+            return result;
+        }  
 
         switch (node.op) {
             case "int":
@@ -2958,6 +3093,7 @@ export class TypeChecker {
         }
     }
 
+    // Checks whether the type of 'from' can be assigned to the type 'to'.
     public checkIsAssignableNode(to: Type, from: Node, jsonErrorIsHandled: boolean = false) {
         if (from.isUnifyableLiteral()) {
             this.unifyLiterals(to, from, from.loc);
@@ -2966,11 +3102,24 @@ export class TypeChecker {
         this.checkIsAssignableType(to, from.type, from.loc, true, jsonErrorIsHandled);
     }
 
+    // Checks whether the type 'from' can be assigned to the type 'to'.
     public checkIsAssignableType(to: Type, from: Type, loc: Location, doThrow: boolean = true, jsonErrorIsHandled: boolean = false): boolean {
         if (this.checkTypeEquality(to, from, loc, false)) {
             return true;
         }
-        if (from == this.t_json && jsonErrorIsHandled && (to == this.t_float || to == this.t_double || to == this.t_int8 || to == this.t_int16 || to == this.t_int32 || to == this.t_int64 || to == this.t_uint8 || to == this.t_uint16 || to == this.t_uint32 || to == this.t_uint64 || to == this.t_string || to == this.t_bool || to == this.t_null)) {
+        if (from instanceof RestrictedType && this.isPrimitive(from.elementType)) {
+            if (from.elementType == to || (to instanceof RestrictedType && from.elementType == to.elementType)) {
+                return true;
+            }
+        } else if (to instanceof RestrictedType && from instanceof RestrictedType) {
+            if ((to.isVolatile || !from.isVolatile) && (to.isConst || !from.isConst) && to.isImmutable == from.isImmutable) {
+                return this.checkIsAssignableType(to.elementType, from.elementType, loc, doThrow, jsonErrorIsHandled);
+            }
+        } else if (to instanceof RestrictedType) {
+            if (!to.isImmutable) {
+                return this.checkIsAssignableType(to.elementType, from, loc, doThrow, jsonErrorIsHandled);                
+            }
+        } else if (from == this.t_json && jsonErrorIsHandled && (to == this.t_float || to == this.t_double || to == this.t_int8 || to == this.t_int16 || to == this.t_int32 || to == this.t_int64 || to == this.t_uint8 || to == this.t_uint16 || to == this.t_uint32 || to == this.t_uint64 || to == this.t_string || to == this.t_bool || to == this.t_null)) {
             return true;
         } else if (to == this.t_json) {
             if (from == this.t_json || from == this.t_string || from == this.t_null || from == this.t_bool || this.isNumber(from)) {
@@ -3103,12 +3252,16 @@ export class TypeChecker {
         switch (node.op) {
             case "id":
                 let element = scope.resolveElement(node.value);
-                if (element instanceof Variable && element.isGlobal) {
-                    return true;
-                }
                 if (element instanceof Variable) {
+//                    if (element.isConst && !(element.))
+                    if (element.isGlobal) {
+                        return true;
+                    }                
                     element.heapAlloc = true;
                     return true;
+                }
+                if (element instanceof FunctionParameter) {
+                    throw new TypeError("Cannot take address of function parameter", node.loc);
                 }
                 break;
             case ".":
@@ -3139,93 +3292,158 @@ export class TypeChecker {
         throw new TypeError("Cannot take address of intermediate value", node.loc);
     }
 
-    public checkIsPointer(node: Node) {
+    public checkIsPointer(node: Node, doThrow: boolean = true): boolean {
+        if (node.type instanceof RestrictedType && (node.type.elementType instanceof PointerType || node.type.elementType instanceof UnsafePointerType)) {
+            return true;
+        }
         if (node.type instanceof PointerType || node.type instanceof UnsafePointerType) {
-            return;
-        }
-        throw new TypeError("Expected a pointer, but got " + node.type.name, node.loc);
-    }
-
-    public checkIsString(node: Node) {
-        if (node.type == this.t_string) {
-            return;
-        }
-        throw new TypeError("Expected a string, but got " + node.type.name, node.loc);
-    }
-
-    public checkIsSignedNumber(node: Node) {
-        if (node.type == this.t_float || node.type == this.t_double || node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64) {
-            return;
-        }
-        throw new TypeError("Expected a signed numeric type, but got " + node.type.name, node.loc);
-    }
-
-    public checkIsUnsignedNumber(node: Node) {
-        if (node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
-            return;
-        }
-        throw new TypeError("Expected an unsigned numeric type, but got " + node.type.name, node.loc);
-    }
-
-    public checkIsBool(node: Node) {
-        if (node.type == this.t_bool) {
-            return;
-        }
-        throw new TypeError("Expected a boolean type, but got " + node.type.name, node.loc);
-    }
-
-    public checkIsNumber(node: Node, doThrow: boolean = true) {
-        if (node.type == this.t_float || node.type == this.t_double || node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64 || node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
             return true;
         }
         if (doThrow) {
-            throw new TypeError("Expected a numeric type, but got " + node.type.name, node.loc);
+            throw new TypeError("Expected a pointer, but got " + node.type.toString(), node.loc);
+        }
+        return false;
+    }
+
+    public checkIsString(node: Node, doThrow: boolean = true): boolean {
+        if (node.type instanceof RestrictedType && node.type.elementType == this.t_string) {
+            return true;
+        }
+        if (node.type == this.t_string) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected a string, but got " + node.type.toString(), node.loc);
+        }
+        return false;
+    }
+
+    public checkIsSignedNumber(node: Node, doThrow: boolean = true): boolean {
+        if (node.type instanceof RestrictedType) {
+            if (node.type.elementType == this.t_float || node.type.elementType == this.t_double || node.type.elementType == this.t_int8 || node.type.elementType == this.t_int16 || node.type.elementType == this.t_int32 || node.type.elementType == this.t_int64) {
+                return true;
+            }            
+        }
+        if (node.type == this.t_float || node.type == this.t_double || node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected a signed numeric type, but got " + node.type.toString(), node.loc);
+        }
+        return false;
+    }
+
+    public checkIsUnsignedNumber(node: Node, doThrow: boolean = true): boolean {
+        if (node.type instanceof RestrictedType) {
+            if (node.type.elementType == this.t_uint8 || node.type.elementType == this.t_uint16 || node.type.elementType == this.t_uint32 || node.type.elementType == this.t_uint64) {
+                return true;
+            }
+        }
+        if (node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected an unsigned numeric type, but got " + node.type.toString(), node.loc);
+        }
+        return false;
+    }
+
+    public checkIsBool(node: Node, doThrow: boolean = true): boolean {
+        if (node.type instanceof RestrictedType && node.type.elementType == this.t_bool) {
+            return true;
+        }
+        if (node.type == this.t_bool) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected a boolean type, but got " + node.type.toString(), node.loc);
+        }
+        return false;
+    }
+
+    public checkIsNumber(node: Node, doThrow: boolean = true): boolean {
+        if (this.isNumber(node.type)) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected a numeric type, but got " + node.type.toString(), node.loc);
         }
         return false;
     }
 
     public checkIsIntNumber(node: Node, doThrow: boolean = true): boolean {
-        if (node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64 || node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
+        if (this.isIntNumber(node.type)) {
             return true;
         }
         if (doThrow) {
-            throw new TypeError("Expected an integer type, but got " + node.type.name, node.loc);
+            throw new TypeError("Expected an integer type, but got " + node.type.toString(), node.loc);
         }
         return false;
     }
 
     public checkIsInt32Number(node: Node, doThrow: boolean = true): boolean {
+        if (node.type instanceof RestrictedType) {
+            if (node.type.elementType == this.t_int32 || node.type.elementType == this.t_uint32) {
+                return true;
+            }
+        }
         if (node.type == this.t_int32 || node.type == this.t_uint32) {
             return true;
         }
         if (doThrow) {
-            throw new TypeError("Expected an 32-bit integer type, but got " + node.type.name, node.loc);
+            throw new TypeError("Expected an 32-bit integer type, but got " + node.type.toString(), node.loc);
         }
         return false;
     }
 
-    public checkIsIntType(type: Type): boolean {
+    public isIntNumber(type: Type): boolean {
+        if (type instanceof RestrictedType) {
+            return this.isIntNumber(type.elementType);
+        }
         if (type == this.t_int8 || type == this.t_int16 || type == this.t_int32 || type == this.t_int64 || type == this.t_uint8 || type == this.t_uint16 || type == this.t_uint32 || type == this.t_uint64) {
             return true;
         }
         return false;
     }
 
-    public checkIsIntOrPointerNumber(node: Node) {
+    public isNumber(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return this.isNumber(t.elementType);
+        }
+        return (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+    }
+
+    public isPrimitive(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return this.isNumber(t.elementType);
+        }
+        return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+    }
+
+    public checkIsIntOrPointerNumber(node: Node, doThrow: boolean = true): boolean {
         if (node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64 || node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
-            return;
+            return true;
         }
         if (node.type instanceof PointerType || node.type instanceof UnsafePointerType) {
-            return;
+            return true;
         }
-        throw new TypeError("Expected a numeric or pointer type, but got " + node.type.name, node.loc);
+        if (doThrow) {
+            throw new TypeError("Expected a numeric or pointer type, but got " + node.type.toString(), node.loc);
+        }
+        return false;
     }
 
     public checkTypeEquality(a: Type, b: Type, loc: Location, doThrow: boolean = true): boolean {
         if (a == b) {
             return true;
         }
-        if (a instanceof PointerType && b instanceof PointerType) {
+        if (a instanceof RestrictedType && b instanceof RestrictedType) {
+            if (a.isConst == b.isConst && a.isVolatile == b.isVolatile && a.isImmutable == b.isImmutable) {
+                if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+                    return true;
+                }
+            }
+        } else if (a instanceof PointerType && b instanceof PointerType) {
             if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
                 return true;
             }
@@ -3333,28 +3551,83 @@ export class TypeChecker {
         return false;
     }
 
-    public isNumber(t: Type): boolean {
-        return (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+    public checkIsIntermediate(node: Node): boolean {
+        if (node.op == "id") {
+            return false;
+        } else if (node.op == "unary*") {
+            return false;
+        } else if (node.op == ".") {
+            if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+                return false;
+            }
+            return this.checkIsIntermediate(node.lhs);
+        } else if (node.op == "[" && node.lhs.type != this.t_string) {
+            if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType || node.lhs.type instanceof SliceType) {
+                return false;
+            }
+            return this.checkIsIntermediate(node.lhs);
+        }
+        return true;
     }
 
-    public checkIsLeftHandSide(node: Node, doNotThrow: boolean = false): boolean {
-        if (node.op == "id" || node.op == "unary*") {
+    public checkIsMutable(node: Node, scope: Scope): boolean {
+        if (node.op == "id") {
+            let element = scope.resolveElement(node.value);
+            if ((!(element instanceof Variable) || !element.isConst) && (!(element instanceof FunctionParameter) || !element.isConst)) {
+                return true;
+            }
+        } else if (node.op == "unary*") {
+            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
+                return true;
+            }
+        } else if (node.op == ".") {
+            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
+                if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+                    return true;
+                }
+                if (!this.checkIsIntermediate(node.lhs)) {
+                    return true;
+                }
+            }
+        } else if (node.op == "[" && node.lhs.type != this.t_string) {
+            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
+                if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType || node.lhs.type instanceof SliceType) {
+                    return true;
+                }
+                if (!this.checkIsIntermediate(node.lhs)) {
+                    return true;
+                }
+            }
+        }
+        throw new TypeError("The expression is not mutable", node.loc);
+    }
+
+    // Returns true if a value can be assigned to this expression
+    public checkIsAssignable(node: Node, scope: Scope): boolean {
+        if (node.op == "id") {
             return true;
-        }
-        if (node.op == ".") {
-            if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+        } else if (node.op == "unary*") {
+            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
                 return true;
             }
-            return this.checkIsLeftHandSide(node.lhs, doNotThrow);
-        }
-        if (node.op == "[" && node.lhs.type != this.t_string) {
-            if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
-                return true;
+        } else if (node.op == ".") {
+            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
+                if (node.rhs.type instanceof PointerType || node.rhs.type instanceof UnsafePointerType || node.rhs.type instanceof GuardedPointerType) {
+                    return true;
+                }
+                if (!this.checkIsIntermediate(node.lhs)) {
+                    return true;
+                }
             }
-            return this.checkIsLeftHandSide(node.lhs, doNotThrow);
-        }
-        if (doNotThrow) {
-            return false;
+        } else if (node.op == "[" && node.lhs.type != this.t_string) {
+            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
+                if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType || node.lhs.type instanceof SliceType) {
+                    return true;
+                }
+                if (!this.checkIsIntermediate(node.lhs)) {
+                    return true;
+                }
+            }
         }
         throw new TypeError("The expression is not assignable", node.loc);
     }

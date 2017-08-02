@@ -2,7 +2,7 @@
     var ast = require("./ast");
 
     function isAssignment(n) {
-        if (n.op == "=" || n.op == "var_in" || n.op == "const_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "const") {
+        if (n.op == "=" || n.op == "var_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "const" || n.op == "volatile") {
             return true;
         }
         return false;
@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = "func" [ \t]+ c:("const" [ \t]+)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = "func" [ \t]+ c:("const" [ \t]+)? v:("volatile" [ \t]+)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -96,10 +96,13 @@ func
           scope = name;
           name = n2[2];
           scope.op = "basicType";
-          if (c) {
-              scope = new ast.Node({loc: scope.loc, op: "const", rhs: scope});
+          if (v) {
+              scope = new ast.Node({loc: scope.loc, op: "volatileType", rhs: scope});
           }
-      } else if (c) {
+          if (c) {
+              scope = new ast.Node({loc: scope.loc, op: "constType", rhs: scope});
+          }
+      } else if (c || v) {
           error("'const' is only allowed for member functions");
       }      
       return new ast.Node({loc: fl(location()), op: "func", name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
@@ -215,6 +218,16 @@ primitiveType
   / "@" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
+  / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* "\n" {
+        let ext = e ? e[2] : null;
+        return new ast.Node({loc: fl(location()), op: "structType", parameters: f, lhs: ext})
+    }
+  / "const" [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+    }
+  / "volatile" [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "volatileType", rhs: t})
+    }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {
           return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i});
@@ -222,10 +235,7 @@ primitiveType
       i.op = "basicType";
       return i;
     }
-  / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* "\n" {
-        let ext = e ? e[2] : null;
-        return new ast.Node({loc: fl(location()), op: "structType", parameters: f, lhs: ext})
-    }
+
 
 namedType
   = n:identifier [ \t]* t:type {
@@ -311,7 +321,7 @@ statement
       return new ast.Node({loc: fl(location()), op: "return", lhs: e? e : undefined});
     }
   / "if" [ \t]* "(" [ \t\n]* init:simpleStatement e:([ \t]* ";" [ \t]* expression)? ")" [ \t]* b:block el:("else" [ \t\n]* elseBranch)? {
-      if (e && (init.op != "var" && init.op != "const" && init.op != "=")) {
+      if (e && (init.op != "var" && init.op != "=")) {
          expected("an assignment or variable definition ", init.loc);
       }
       if (!e && isAssignment(init)) {
@@ -324,7 +334,7 @@ statement
       return new ast.Node({loc: fl(location()), op: "yield"});
     }
   / s: simpleStatement { 
-      if (s.op == "in" || s.op == "var_in" || s.op == "const_in") {
+      if (s.op == "in" || s.op == "var_in") {
           error("'in' is allowed inside a for loop header only", s.loc);
       }
       return s;
@@ -567,7 +577,7 @@ forCondition
       if (r) {
           return new ast.Node({loc: fl(location()), op: ";;", lhs: left, condition: r[2], rhs: r[5]});
       }
-      if (isAssignment(left) && left.op != "in" && left.op != "var_in" && left.op != "const_in") {
+      if (isAssignment(left) && left.op != "in" && left.op != "var_in") {
         error("assignment is not allowed in the condition branch of a 'for' loop", left.loc);
       }
       return left;
@@ -578,7 +588,7 @@ forCondition
 
 elseBranch
   = "if" [ \t]* "(" [ \t\n]* init:simpleStatement e:([ \t]* ";" [ \t]* expression)? ")" [ \t]* b:block el:("else" [ \t\n]* elseBranch)? {
-      if (e && (init.op != "var" && init.op != "const" && init.op != "=")) {
+      if (e && (init.op != "var" && init.op != "=")) {
          expected("an assignment or variable definition ", init.loc);
       }
       if (!e && isAssignment(init)) {

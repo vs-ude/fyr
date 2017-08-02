@@ -1,3 +1,8 @@
+import . {
+    func logString(string)
+    func logNumber(int)
+} from "imports"
+
 var g1 = i()
 var g2 = "Hallo"
 var g3 [256]byte
@@ -92,8 +97,17 @@ type Point struct {
     y int
 }
 
-func const Point.mul() int {
-    return this.x * this.y
+func mul(p const volatile *Point) int {
+    return p.x * p.y
+}
+
+func const volatile Point.mul() int {
+    return mul(this)
+}
+
+func Point.wontWork() int {
+    this.x++
+    return this.x
 }
 
 func p3() Point {
@@ -103,3 +117,28 @@ func p3() Point {
 func usePoint() {
     p3().mul()
 }
+
+const pi = 3.14
+
+func foo() {
+    //pi = 3
+    const answer = 42
+    //answer = 43
+    var i const int = 5
+    var j const int = 6
+    i = j + 1
+    i++
+    var p const *Point = &{x:1, y:2}
+    bar(p)
+    p.mul()
+    p.wontWork()
+    var p2 *Point = &{x:1, y:2}
+    bar(p2)
+    p2.wontWork()
+    p = p2
+}
+
+func bar(p const *Point) {
+    logNumber(p.x)
+}
+
