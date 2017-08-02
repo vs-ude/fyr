@@ -116,6 +116,7 @@ func p3() Point {
 
 func usePoint() {
     p3().mul()
+//    p3().wontWork()
 }
 
 const pi = 3.14
@@ -131,7 +132,7 @@ func foo() {
     var p const *Point = &{x:1, y:2}
     bar(p)
     p.mul()
-    p.wontWork()
+    //p.wontWork()
     var p2 *Point = &{x:1, y:2}
     bar(p2)
     p2.wontWork()

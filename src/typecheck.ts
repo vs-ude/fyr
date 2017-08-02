@@ -541,6 +541,28 @@ export class RestrictedType extends Type {
         return t;
     }
 
+    public static isLess(r1: Restrictions | null, r2: Restrictions | null): boolean {
+        if (!r1 && !r2) {
+            return false;
+        }
+        if (!r2) {
+            return false;
+        }
+        if (!r1) {
+            return true;
+        }
+        if (!r1.isConst && r2.isConst) {
+            return true;
+        }
+        if (!r1.isVolatile && r2.isVolatile) {
+            return true;
+        }
+        if (!r1.isImmutable && r2.isImmutable) {
+            return true;
+        }
+        return false;
+    }
+
     public toString(): string {
         if (this.name) {
             return this.name;
@@ -2538,6 +2560,13 @@ export class TypeChecker {
                     let field = type.field(name);
                     if (field) {
                         enode.type = field.type;
+                        if (this.checkIsIntermediate(enode.lhs) && this.isStruct(enode.type)) {
+                            if (restrictions) {
+                                restrictions.isVolatile = true;
+                            } else {
+                                restrictions = {isConst: false, isImmutable: false, isVolatile: true};
+                            }
+                        }
                         if (restrictions && !this.isPrimitive(enode.type)) {
                             enode.type = new RestrictedType(enode.type, restrictions);
                         }
@@ -2546,7 +2575,17 @@ export class TypeChecker {
                         if (!method) {
                             throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
                         }
-                        // TODO: If this is a value type, can the method handle that?
+                        // Does the object type specified by the method match the object being used here?
+                        if (this.checkIsIntermediate(enode.lhs)) {
+                            if (restrictions) {
+                                restrictions.isVolatile = true;
+                            } else {
+                                restrictions = {isConst: false, isImmutable: false, isVolatile: true};
+                            }
+                        }
+                        if (restrictions && (!(method.objectType instanceof RestrictedType) || RestrictedType.isLess(method.objectType, restrictions))) {
+                            throw new TypeError("Method " + name + " is not allowed for object type " + enode.lhs.type.toString(), enode.lhs.loc);
+                        }
                         enode.type = method;
                     }
                 } else if (type instanceof InterfaceType) {
@@ -3418,6 +3457,13 @@ export class TypeChecker {
             return this.isNumber(t.elementType);
         }
         return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+    }
+
+    public isStruct(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof StructType;
+        }
+        return t instanceof StructType;
     }
 
     public checkIsIntOrPointerNumber(node: Node, doThrow: boolean = true): boolean {
