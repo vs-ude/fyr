@@ -135,6 +135,7 @@ func usePoint() {
 const pi = 3.14
 
 func foo() {
+    //p3().x = 42
     //pi = 3
     const answer = 42
     //answer = 43
@@ -156,12 +157,27 @@ func foo() {
     bar(&p3)
 
     const p4 Point = *p2
-//    bar4(&p4)
-//    bar(&p4)
-//    p4.x = 0
+    bar4(&p4)
+    bar(&p4)
+    //p4.x = 0
 
-    const hash []byte = [1,2,3,4]
-    hash[3] = 1
+// TODO    const hash []byte = [1,2,3,4]
+//    hash[3] = 1
+
+// TODO    const hash2 [4]byte = [1,2,3,4]
+//    hash2[3] = 1
+
+// TODO    demoString3()[4] = 1
+    //arr()[3] = 1
+    arr2()[0].x = 1
+}
+
+func arr() [4]byte {
+    return [1,2,3,4]
+}
+
+func arr2() [1]*Point {
+    return [&{x: 1, y:2}]
 }
 
 func bar(p const *Point) {
@@ -175,4 +191,8 @@ func bar2(p *int) {
 }
 
 func bar3(p *P) {
+}
+
+func bar5(p &Point) {
+    *p = {x:1, y:2}
 }

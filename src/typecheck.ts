@@ -517,6 +517,10 @@ export class RestrictedType extends Type {
             this.isConst = r.isConst;
             this.isVolatile = r.isVolatile;
             this.isImmutable = r.isImmutable;
+        } else {
+            this.isConst = false;
+            this.isVolatile = false;
+            this.isImmutable = false;
         }
     }
 
@@ -1613,7 +1617,7 @@ export class TypeChecker {
                 } else {
                     v.type = rtype;
                 }
-                if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
                     v.type = RestrictedType.makeConst(v.type);
                 }
             } else {
@@ -1669,7 +1673,7 @@ export class TypeChecker {
                             this.checkIsAssignableType(v.type, new TupleType(rtype.types.slice(i)), vnode.loc);
                         }
                     }
-                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                    if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
                         v.type = RestrictedType.makeConst(v.type);
                     }
                     break;
@@ -1763,7 +1767,7 @@ export class TypeChecker {
                             }
                         }
                     }
-                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                    if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
                         v.type = RestrictedType.makeConst(v.type);
                     }
                     break;
@@ -1855,7 +1859,7 @@ export class TypeChecker {
                             }
                         }
                     }
-                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                    if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
                         v.type = RestrictedType.makeConst(v.type);
                     }
                 } else {
@@ -2408,6 +2412,7 @@ export class TypeChecker {
                 let restrictions: Restrictions = null;
                 if (t instanceof RestrictedType) {
                     restrictions = t;
+                    // Dereferencing removes volatile
                     if (!restrictions.isConst && !restrictions.isImmutable) {
                         restrictions = null;
                     } else if (restrictions.isVolatile) {
@@ -2658,15 +2663,15 @@ export class TypeChecker {
                     if (field) {
                         enode.type = field.type;
                         // Volatile does not expand to primitive types and pointers
-                        if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointer(enode.type)) {
+                        if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointerOrString(enode.type)) {
                             if (!restrictions.isConst && !restrictions.isImmutable) {
                                 restrictions = null;
                             } else {
                                 restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: false};
                             }
                         }
-                        // Intermediates which are not primitives or pointers are always volatile, because they live on the stack
-                        if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointer(enode.type)) {
+                        // Intermediates which are not primitives or pointers or strings are always volatile, because they live on the stack
+                        if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointerOrString(enode.type)) {
                             if (restrictions) {
                                 restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: true};
                             } else {
@@ -2753,30 +2758,59 @@ export class TypeChecker {
                 break;
             }
             case "[":
+            {
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
+                let t = enode.lhs.type;
+                let restrictions: Restrictions = null;
+                if (t instanceof RestrictedType) {
+                    restrictions = t;
+                    t = RestrictedType.strip(t);
+                }
                 let index = 0;
-                if (enode.lhs.type instanceof TupleType) {
+                if (t instanceof TupleType) {
                     if (enode.rhs.op != "int") {
                         throw new TypeError("Index inside a tuple must be a constant number", enode.lhs.loc);
                     }
                     index = parseInt(enode.rhs.value);
-                } else if (enode.lhs.type instanceof ArrayType && enode.rhs.op == "int") {
+                } else if (t instanceof ArrayType && enode.rhs.op == "int") {
                     index = parseInt(enode.rhs.value);
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index);
                 // TODO: In case of a map, lhs must equal the map type
-                if (enode.lhs.type instanceof GenericClassInstanceType && enode.lhs.type.base == this.t_map) {
+                if (t instanceof GenericClassInstanceType && t.base == this.t_map) {
                     if (enode.rhs.isUnifyableLiteral()) {
-                        this.unifyLiterals(enode.lhs.type.genericParameterTypes[0], enode.rhs, enode.rhs.loc);
+                        this.unifyLiterals(t.genericParameterTypes[0], enode.rhs, enode.rhs.loc);
                     } else {
-                        this.checkTypeEquality(enode.lhs.type.genericParameterTypes[0], enode.rhs.type, enode.rhs.loc);
+                        this.checkTypeEquality(t.genericParameterTypes[0], enode.rhs.type, enode.rhs.loc);
                     }
                 } else {
                     this.checkIsIntNumber(enode.rhs);
                 }
                 enode.type = elementType;
+                // Volatile does not expand to primitive types and pointers
+                if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointerOrString(enode.type)) {
+                    if (!restrictions.isConst && !restrictions.isImmutable) {
+                        restrictions = null;
+                    } else {
+                        restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: false};
+                    }
+                }
+                if (t instanceof ArrayType || t instanceof TupleType) {
+                    // Intermediates which are not primitives or pointers or strings are always volatile, because they live on the stack
+                    if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointerOrString(enode.type)) {
+                        if (restrictions) {
+                            restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: true};
+                        } else {
+                            restrictions = {isConst: false, isImmutable: false, isVolatile: true};
+                        }
+                    }
+                }
+                if (restrictions && !this.isPrimitive(enode.type)) {
+                    enode.type = new RestrictedType(enode.type, restrictions);
+                }
                 break;
+            }
             case "(":
                 this.checkExpression(enode.lhs, scope);
                 if (!(enode.lhs.type instanceof FunctionType)) {
@@ -3343,55 +3377,64 @@ export class TypeChecker {
         if (!doThrow) {
             return false;
         }
+        console.log(to, from);
         throw new TypeError("Type " + from.toString() + " cannot be assigned to type " + to.toString(), loc);        
     }
 
     public checkIsEnumerable(node: Node): [Type, Type] {
-        if (node.type instanceof GenericClassInstanceType) {
-            if (node.type.base == this.t_map) {
-                return [node.type.genericParameterTypes[0], node.type.genericParameterTypes[1]];
-            }
-        } else if (node.type == this.t_string) {
-            return [this.t_int, this.t_byte];
-        } else if (node.type instanceof ArrayType) {
-            return [this.t_int, node.type.elementType];
-        } else if (node.type instanceof SliceType) {
-            return [this.t_int, node.type.elementType];
+        let t = node.type;
+        if (t instanceof RestrictedType) {
+            t = RestrictedType.strip(t);
         }
-        throw new TypeError("The type " + node.type.name + " is not enumerable", node.loc);
+        if (t instanceof GenericClassInstanceType) {
+            if (t.base == this.t_map) {
+                return [t.genericParameterTypes[0], t.genericParameterTypes[1]];
+            }
+        } else if (t == this.t_string) {
+            return [this.t_int, this.t_byte];
+        } else if (t instanceof ArrayType) {
+            return [this.t_int, t.elementType];
+        } else if (t instanceof SliceType) {
+            return [this.t_int, t.elementType];
+        }
+        throw new TypeError("The type " + t.toString() + " is not enumerable", node.loc);
     }
 
     public checkIsIndexable(node: Node, index: number, indexCanBeLength: boolean = false): Type {
-        if (node.type instanceof GenericClassInstanceType) {
-            if (node.type.base == this.t_map) {
-                return node.type.genericParameterTypes[1];
+        let t = node.type;
+        if (t instanceof RestrictedType) {
+            t = RestrictedType.strip(t);
+        }
+        if (t instanceof GenericClassInstanceType) {
+            if (t.base == this.t_map) {
+                return t.genericParameterTypes[1];
             }
-        } else if (node.type == this.t_string) {
+        } else if (t == this.t_string) {
             if (index < 0) {
                 throw new TypeError("Index out of range", node.loc);
             }
             return this.t_byte;
-        } else if (node.type instanceof ArrayType) {
-            if (index < 0 || (!indexCanBeLength && index >= node.type.size) || (indexCanBeLength && index > node.type.size)) {
+        } else if (t instanceof ArrayType) {
+            if (index < 0 || (!indexCanBeLength && index >= t.size) || (indexCanBeLength && index > t.size)) {
                 throw new TypeError("Index out of range", node.loc);
             }
-            return node.type.elementType;
-        } else if (node.type instanceof SliceType) {
+            return t.elementType;
+        } else if (t instanceof SliceType) {
             if (index < 0) {
                 throw new TypeError("Index out of range", node.loc);
             }
-            return node.type.elementType;
-        } else if (node.type instanceof TupleType) {
-            if (index < 0 || index >= node.type.types.length) {
-                throw new TypeError("The index " + index + " does not exist in the tuple " + node.type.name, node.loc);
+            return t.elementType;
+        } else if (t instanceof TupleType) {
+            if (index < 0 || index >= t.types.length) {
+                throw new TypeError("The index " + index + " does not exist in the tuple " + t.name, node.loc);
             }
-            return node.type.types[index];
-        } else if (node.type == this.t_json) {
+            return t.types[index];
+        } else if (t == this.t_json) {
             return new TupleType([this.t_json, this.t_error]);
-        } else if (node.type instanceof UnsafePointerType || node.type instanceof PointerType) {
-            return node.type.elementType;
+        } else if (t instanceof UnsafePointerType || t instanceof PointerType) {
+            return t.elementType;
         }
-        throw new TypeError("The type " + node.type.name + " is not indexable", node.loc);
+        throw new TypeError("The type " + t.toString() + " is not indexable", node.loc);
     }
 
     public checkIsAddressable(node: Node, scope: Scope, direct: boolean = true): boolean {
@@ -3566,9 +3609,9 @@ export class TypeChecker {
         return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
 
-    public isPrimitiveOrPointer(t: Type): boolean {
+    public isPrimitiveOrPointerOrString(t: Type): boolean {
         if (t instanceof RestrictedType) {
-            return this.isPrimitiveOrPointer(t.elementType);
+            return this.isPrimitiveOrPointerOrString(t.elementType);
         }
         return (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
