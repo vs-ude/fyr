@@ -2,7 +2,7 @@
     var ast = require("./ast");
 
     function isAssignment(n) {
-        if (n.op == "=" || n.op == "var_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "const" || n.op == "volatile") {
+        if (n.op == "=" || n.op == "var_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "const") {
             return true;
         }
         return false;
@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = "func" [ \t]+ c:("const" [ \t]+)? v:("volatile" [ \t]+)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -97,7 +97,7 @@ func
           name = n2[2];
           scope.op = "basicType";
           if (v) {
-              scope = new ast.Node({loc: scope.loc, op: "volatileType", rhs: scope});
+              scope = new ast.Node({loc: scope.loc, op: "referenceType", rhs: scope});
           }
           if (c) {
               scope = new ast.Node({loc: scope.loc, op: "constType", rhs: scope});
@@ -225,8 +225,8 @@ primitiveType
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
     }
-  / "volatile" [ \t]+ t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "volatileType", rhs: t})
+  / "&" [ \t]* t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t})
     }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {

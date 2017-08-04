@@ -97,23 +97,24 @@ type Point struct {
     y int
 }
 
-func mul(p const volatile *Point) int {
+func mul(p const &Point) int {
     return p.x * p.y
 }
 
-func const volatile Point.mul() int {
+func const &Point.mul() int {
     return mul(this)
 }
 
 func Point.wontWork() int {
     this.x++
+    mul(this)
     return this.x
 }
 
-// func volatile Point.notAllowed() volatile *Point {
-// func volatile Point.notAllowed() *Point {
-func volatile Point.testme() Point {
-//    var a volatile *Point = this
+// func &Point.notAllowed() &Point {
+// func &Point.notAllowed() *Point {
+func &Point.testme() Point {
+//    var a &Point = this
     return *this
 }
 

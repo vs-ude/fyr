@@ -568,14 +568,16 @@ export class RestrictedType extends Type {
             return this.name;
         }
         let str = "";
-        if (this.isConst) {
+        if (this.isImmutable) {
+            str += "immutable ";
+        } else if (this.isConst) {
             str += "const ";
         }
         if (this.isVolatile) {
+            if (this.elementType instanceof PointerType) {
+                return str + "&" + this.elementType.elementType.toString();
+            }
             str += "volatile ";
-        }
-        if (this.isImmutable) {
-            str += "immutable ";
         }
         return str + this.elementType.toString();
     }
@@ -875,21 +877,6 @@ export class TypeChecker {
             let r = new RestrictedType(c);
             r.isConst = true;
             return r;
-        } else if (tnode.op == "volatileType") {
-            if (!allowVolatile) {
-                throw new TypeError("Volatile types are not allowed in this context", tnode.loc);
-            }
-            let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
-            if (c instanceof RestrictedType) {
-                let r = new RestrictedType(c.elementType);
-                r.isImmutable = c.isImmutable;
-                r.isConst = c.isConst;
-                r.isVolatile = true;
-                return r;
-            }
-            let r = new RestrictedType(c);
-            r.isVolatile = true;
-            return r;
         } else if (tnode.op == "immutableType") {
             let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
             if (c instanceof RestrictedType) {
@@ -902,6 +889,22 @@ export class TypeChecker {
             let r = new RestrictedType(c);
             r.isConst = true;
             r.isImmutable = true;
+            return r;
+        } else if (tnode.op == "referenceType") {
+            if (!allowVolatile) {
+                throw new TypeError("Volatile types are not allowed in this context", tnode.loc);
+            }
+            // Internally, a reference type is the same as a volatile pointer
+            let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            if (c instanceof RestrictedType) {
+                let r = new RestrictedType(new PointerType(c.elementType));
+                r.isImmutable = c.isImmutable;
+                r.isConst = c.isConst;
+                r.isVolatile = true;
+                return r;
+            }
+            let r = new RestrictedType(new PointerType(c));
+            r.isVolatile = true;
             return r;
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
@@ -1185,6 +1188,10 @@ export class TypeChecker {
         if (fnode.lhs) {
             let obj = fnode.lhs;
             f.type.objectType = this.createType(obj, f.scope, true, true);
+            // Strip a '&'
+            if (f.type.objectType instanceof RestrictedType && f.type.objectType.isVolatile && f.type.objectType.elementType instanceof PointerType) {
+                f.type.objectType = new RestrictedType(f.type.objectType.elementType.elementType, f.type.objectType);
+            }
             // TODO: Lift this limitation eventually
             if (!(f.type.objectType instanceof StructType) && (!(f.type.objectType instanceof RestrictedType) || !(f.type.objectType.elementType instanceof StructType))) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);
