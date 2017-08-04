@@ -452,7 +452,7 @@ varStatement
         }
         if (!a) {
             if (o == "const") {
-                expected("assignment following 'const'", a.loc);
+                expected("assignment following 'const'", o.loc);
             }
             return new ast.Node({loc: fl(location()), op: "var", lhs: i});
         }

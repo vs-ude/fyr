@@ -151,16 +151,20 @@ func foo() {
     bar(p2)
     p2.wontWork()
     p = p2
+    const p3 const Point = *p2
+    bar4(&p3)
+    bar(&p3)
 }
 
 func bar(p const *Point) {
     logNumber(p.x)
 }
 
-func bar2(p *int) {
+func bar4(p * const Point) {
+}
 
+func bar2(p *int) {
 }
 
 func bar3(p *P) {
-
 }

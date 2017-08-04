@@ -904,10 +904,40 @@ export class TypeChecker {
             r.isImmutable = true;
             return r;
         } else if (tnode.op == "pointerType") {
-            let t = new PointerType(this.createType(tnode.rhs, scope, noStructBody, allowVolatile));
+            let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let restrictions: Restrictions;
+            if (t instanceof RestrictedType) {
+                restrictions = t;
+                t = RestrictedType.strip(t);
+            }
+            t = new PointerType(t);
+            if (restrictions) {
+                t = new RestrictedType(t, restrictions);
+            }
             return t;
         } else if (tnode.op == "unsafePointerType") {
-            let t = new UnsafePointerType(this.createType(tnode.rhs, scope, noStructBody, allowVolatile));
+            let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let restrictions: Restrictions;
+            if (t instanceof RestrictedType) {
+                restrictions = t;
+                t = RestrictedType.strip(t);
+            }
+            t = new UnsafePointerType(t);
+            if (restrictions) {
+                t = new RestrictedType(t, restrictions);
+            }
+            return t;
+        } else if (tnode.op == "guardedPointerType") {
+            let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let restrictions: Restrictions;
+            if (t instanceof RestrictedType) {
+                restrictions = t;
+                t = RestrictedType.strip(t);
+            }
+            t = new GuardedPointerType(t);
+            if (restrictions) {
+                t = new RestrictedType(t, restrictions);
+            }
             return t;
         } else if (tnode.op == "sliceType") {
             let t = new SliceType(this.createType(tnode.rhs, scope, noStructBody, allowVolatile));
@@ -2355,10 +2385,21 @@ export class TypeChecker {
                 break;
             }
             case "unary&":
+            {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsAddressable(enode.rhs, scope);
-                enode.type = new PointerType(enode.rhs.type);
+                let t = enode.rhs.type;
+                let restrictions: Restrictions = null;
+                if (t instanceof RestrictedType) {
+                    restrictions = t;
+                    t = RestrictedType.strip(t);
+                }                
+                enode.type = new PointerType(t);
+                if (restrictions) {
+                    enode.type = new RestrictedType(enode.type, restrictions);
+                }
                 break;
+            }
             case "+":                                             
             case "*":
             case "/":
