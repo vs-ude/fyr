@@ -110,6 +110,13 @@ func Point.wontWork() int {
     return this.x
 }
 
+// func volatile Point.notAllowed() volatile *Point {
+// func volatile Point.notAllowed() *Point {
+func volatile Point.testme() Point {
+//    var a volatile *Point = this
+    return *this
+}
+
 func p3() Point {
     return {}
 }

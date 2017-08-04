@@ -1164,16 +1164,17 @@ export class CodeGenerator {
             case "unary*":
             {
                 let p = this.processExpression(f, scope, enode.rhs, b, vars);
-                if (enode.rhs.type instanceof UnsafePointerType) {
-                    let storage = this.getSSAType(enode.rhs.type.elementType);
+                let t = RestrictedType.strip(enode.rhs.type);
+                if (t instanceof UnsafePointerType) {
+                    let storage = this.getSSAType(t.elementType);
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
-                } else if (enode.rhs.type instanceof PointerType) {
-                    let storage = this.getSSAType(enode.rhs.type.elementType);
+                } else if (t instanceof PointerType) {
+                    let storage = this.getSSAType(t.elementType);
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
-                } else if (enode.rhs.type instanceof GuardedPointerType) {
+                } else if (t instanceof GuardedPointerType) {
                     throw "TODO"
                 }                                
-                break;
+                throw "Implementation error";
             }
             case "unary&":
             {
@@ -1735,7 +1736,6 @@ export class CodeGenerator {
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
-        throw "Unreachable";
     }
 
     private processCompare(opcode: ssa.NodeKind, f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
