@@ -541,6 +541,16 @@ export class RestrictedType extends Type {
         return t;
     }
 
+    public static makeConst(t: Type): Type {
+        if (t instanceof RestrictedType) {
+            if (t.isConst) {
+                return t;
+            }
+            return new RestrictedType(t.elementType, {isConst: true, isImmutable: t.isImmutable, isVolatile: t.isVolatile});
+        }
+        return new RestrictedType(t, {isConst: true, isImmutable: false, isVolatile: false});
+    }
+
     public static isLess(r1: Restrictions | null, r2: Restrictions | null): boolean {
         if (!r1 && !r2) {
             return false;
@@ -1275,16 +1285,24 @@ export class TypeChecker {
         return f;
     }
 
-    private createVar(vnode: Node, scope: Scope, needType: boolean = true): Variable {
+    private createVar(vnode: Node, scope: Scope, needType: boolean = true, isConst: boolean = false): Variable {
         let v = new Variable();
         v.loc = vnode.loc;
         v.name = vnode.value;
+        v.isConst = isConst;
         if (!vnode.rhs) {
             if (needType) {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
             v.type = this.createType(vnode.rhs, scope);
+            if (isConst && !this.isPrimitive(v.type)) {
+                if (v.type instanceof RestrictedType) {
+                    v.type = new RestrictedType(v.type.elementType, {isConst: true, isImmutable: v.type.isImmutable, isVolatile: false});
+                } else {
+                    v.type = new RestrictedType(v.type, {isConst: true, isImmutable: false, isVolatile: false});
+                }
+            }
         }
         if (v.name != "_") {
             scope.registerElement(v.name, v);
@@ -1487,7 +1505,7 @@ export class TypeChecker {
                     v.isGlobal = true;
                     globalVariables.push(v);
                 } else if (snode.op == "const") {
-                    let v = this.createVar(snode.lhs, scope, false);
+                    let v = this.createVar(snode.lhs, scope, false, true);
                     v.node = snode;
                     v.isGlobal = true;
                     v.isConst = true;
@@ -1585,8 +1603,7 @@ export class TypeChecker {
 
     public checkVarAssignment(isConst: boolean, scope: Scope, vnode: Node, rtype: Type, rnode: Node = null, jsonErrorIsHandled: boolean = false) {
         if (vnode.op == "id" || vnode.op == "optionalId") {
-            let v = this.createVar(vnode, scope, false);
-            v.isConst = isConst;
+            let v = this.createVar(vnode, scope, false, isConst);
             if (!v.type) {
                 if (rtype instanceof PackageType) {
                     throw new TypeError("Package types cannot be assigned", vnode.loc);
@@ -1595,6 +1612,9 @@ export class TypeChecker {
                     v.type = this.defaultLiteralType(rnode);
                 } else {
                     v.type = rtype;
+                }
+                if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                    v.type = RestrictedType.makeConst(v.type);
                 }
             } else {
                 if (rnode) {
@@ -1627,10 +1647,12 @@ export class TypeChecker {
                         throw new TypeError("Ellipsis identifier must be at last position in tuple", vnode.loc);
                     }
                     hasEllipsis = true;
-                    let v = this.createVar(p, scope, false);
-                    v.isConst = isConst;
+                    let v = this.createVar(p, scope, false, isConst);
                     if (!v.type) {
                         v.type = new TupleType(rtype.types.slice(i));
+                        if (isConst) {
+                            v.type = new RestrictedType(v.type, {isConst: true, isImmutable: false, isVolatile: false});
+                        }
                     } else {
                         if (!(v.type instanceof TupleType)) {
                             throw new TypeError("Ellipsis identifier in a tuple context must be of tuple type", vnode.loc);
@@ -1646,6 +1668,9 @@ export class TypeChecker {
                         } else {
                             this.checkIsAssignableType(v.type, new TupleType(rtype.types.slice(i)), vnode.loc);
                         }
+                    }
+                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                        v.type = RestrictedType.makeConst(v.type);
                     }
                     break;
                 } else {
@@ -1678,8 +1703,7 @@ export class TypeChecker {
                         throw new TypeError("Ellipsis identifier must be at last position in array", vnode.loc);
                     }
                     hasEllipsis = true;
-                    let v = this.createVar(p, scope, false);
-                    v.isConst = isConst;
+                    let v = this.createVar(p, scope, false, isConst);
                     if (!v.type) {
                         if (rtype instanceof ArrayLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
@@ -1739,6 +1763,9 @@ export class TypeChecker {
                             }
                         }
                     }
+                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                        v.type = RestrictedType.makeConst(v.type);
+                    }
                     break;
                 } else {
                     if (p.op == "optionalId") {
@@ -1784,8 +1811,7 @@ export class TypeChecker {
                         throw new TypeError("Ellipsis identifier must be at last position in object", vnode.loc);
                     }
                     hasEllipsis = true;
-                    let v = this.createVar(kv, scope, false);
-                    v.isConst = isConst;
+                    let v = this.createVar(kv, scope, false, isConst);
                     if (!v.type) {
                         if (rtype instanceof ObjectLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
@@ -1828,6 +1854,9 @@ export class TypeChecker {
                                 this.checkTypeEquality(v.type, this.t_json, vnode.loc);
                             }
                         }
+                    }
+                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+                        v.type = RestrictedType.makeConst(v.type);
                     }
                 } else {
                     let p = kv.lhs;
@@ -2164,13 +2193,14 @@ export class TypeChecker {
             case "var":
             case "const":
                 if (!snode.rhs) {
+                    if (snode.op == "const") {
+                        throw "Implementation error: const without initialization"
+                    }
                     if (snode.lhs.op == "id") {
-                        let v = this.createVar(snode.lhs, scope);
-                        v.isConst = snode.op == "const";
+                        let v = this.createVar(snode.lhs, scope, true);
                     } else {
                         for (let p of snode.lhs.parameters) {
                             let v = this.createVar(p, scope);                            
-                            v.isConst = snode.op == "const";
                         }
                     }
                 } else {
@@ -2627,13 +2657,23 @@ export class TypeChecker {
                     let field = type.field(name);
                     if (field) {
                         enode.type = field.type;
-                        if (this.checkIsIntermediate(enode.lhs) && this.isStruct(enode.type)) {
+                        // Volatile does not expand to primitive types and pointers
+                        if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointer(enode.type)) {
+                            if (!restrictions.isConst && !restrictions.isImmutable) {
+                                restrictions = null;
+                            } else {
+                                restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: false};
+                            }
+                        }
+                        // Intermediates which are not primitives or pointers are always volatile, because they live on the stack
+                        if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointer(enode.type)) {
                             if (restrictions) {
-                                restrictions.isVolatile = true;
+                                restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: true};
                             } else {
                                 restrictions = {isConst: false, isImmutable: false, isVolatile: true};
                             }
                         }
+                        // Restrictions apply to everything, except primitive types
                         if (restrictions && !this.isPrimitive(enode.type)) {
                             enode.type = new RestrictedType(enode.type, restrictions);
                         }
@@ -3521,9 +3561,16 @@ export class TypeChecker {
 
     public isPrimitive(t: Type): boolean {
         if (t instanceof RestrictedType) {
-            return this.isNumber(t.elementType);
+            return this.isPrimitive(t.elementType);
         }
         return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+    }
+
+    public isPrimitiveOrPointer(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return this.isPrimitiveOrPointer(t.elementType);
+        }
+        return (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
 
     public isStruct(t: Type): boolean {
@@ -3694,8 +3741,9 @@ export class TypeChecker {
                 return true;
             }
         } else if (node.op == ".") {
-            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-                if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
+                let t = RestrictedType.strip(node.lhs.type);
+                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -3703,8 +3751,9 @@ export class TypeChecker {
                 }
             }
         } else if (node.op == "[" && node.lhs.type != this.t_string) {
-            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-                if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType || node.lhs.type instanceof SliceType) {
+            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
+                let t = RestrictedType.strip(node.lhs.type);
+                if (t instanceof UnsafePointerType || t instanceof GuardedPointerType || t instanceof SliceType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -3724,8 +3773,9 @@ export class TypeChecker {
                 return true;
             }
         } else if (node.op == ".") {
-            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-                if (node.rhs.type instanceof PointerType || node.rhs.type instanceof UnsafePointerType || node.rhs.type instanceof GuardedPointerType) {
+            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
+                let t = RestrictedType.strip(node.lhs.type);
+                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -3733,8 +3783,9 @@ export class TypeChecker {
                 }
             }
         } else if (node.op == "[" && node.lhs.type != this.t_string) {
-            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-                if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType || node.lhs.type instanceof SliceType) {
+            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
+                let t = RestrictedType.strip(node.lhs.type);
+                if (t instanceof UnsafePointerType || t instanceof GuardedPointerType || t instanceof SliceType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {

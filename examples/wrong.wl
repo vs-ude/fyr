@@ -112,7 +112,6 @@ func Point.wontWork() int {
 }
 
 // func &Point.notAllowed() &Point {
-// func &Point.notAllowed() *Point {
 func &Point.testme() Point {
 //    var a &Point = this
     return *this
@@ -155,6 +154,14 @@ func foo() {
     const p3 const Point = *p2
     bar4(&p3)
     bar(&p3)
+
+    const p4 Point = *p2
+//    bar4(&p4)
+//    bar(&p4)
+//    p4.x = 0
+
+    const hash []byte = [1,2,3,4]
+    hash[3] = 1
 }
 
 func bar(p const *Point) {
