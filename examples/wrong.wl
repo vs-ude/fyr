@@ -161,15 +161,16 @@ func foo() {
     bar(&p4)
     //p4.x = 0
 
-// TODO    const hash []byte = [1,2,3,4]
-//    hash[3] = 1
+    const hash []byte = [1,2,3,4]
+    //hash[3] = 1
 
-// TODO    const hash2 [4]byte = [1,2,3,4]
-//    hash2[3] = 1
+    const hash2 [4]byte = [1,2,3,4]
+    //hash2[3] = 1
 
-// TODO    demoString3()[4] = 1
+    demoString3()[4] = 1
     //arr()[3] = 1
     arr2()[0].x = 1
+    //arr3()[0].x = 1
 }
 
 func arr() [4]byte {
@@ -178,6 +179,10 @@ func arr() [4]byte {
 
 func arr2() [1]*Point {
     return [&{x: 1, y:2}]
+}
+
+func arr3() [1]Point {
+    return [{x: 1, y:2}]
 }
 
 func bar(p const *Point) {

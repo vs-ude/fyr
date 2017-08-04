@@ -1008,8 +1008,9 @@ export class CodeGenerator {
             }
             case "array":
             {
-                if (enode.type instanceof SliceType) {
-                    let et = this.getSSAType(enode.type.elementType);
+                let t = RestrictedType.strip(enode.type);
+                if (t instanceof SliceType) {
+                    let et = this.getSSAType(t.elementType);
                     let esize = ssa.sizeOf(et);
                     let ptr = b.assign(b.tmp("ptr"), "alloc", et, [enode.parameters.length]);
                     for(let i = 0; i < enode.parameters.length; i++) {
@@ -1017,15 +1018,15 @@ export class CodeGenerator {
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, enode.parameters.length, enode.parameters.length]);
-                } else if (enode.type instanceof ArrayType) {
-                    let st = this.getSSAType(enode.type); // This returns a struct type
+                } else if (t instanceof ArrayType) {
+                    let st = this.getSSAType(t); // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processExpression(f, scope, enode.parameters[i], b, vars);
                         args.push(v);
                     }
                     return b.assign(b.tmp(), "struct", st, args);
-                } else if (enode.type == this.tc.t_json) {
+                } else if (t == this.tc.t_json) {
                     throw "TODO";
                 }
                 throw "Implementation error";
