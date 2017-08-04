@@ -3377,7 +3377,6 @@ export class TypeChecker {
         if (!doThrow) {
             return false;
         }
-        console.log(to, from);
         throw new TypeError("Type " + from.toString() + " cannot be assigned to type " + to.toString(), loc);        
     }
 
@@ -3454,15 +3453,19 @@ export class TypeChecker {
                 }
                 break;
             case ".":
-                if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+            {
+                let t = RestrictedType.strip(node.lhs.type);                
+                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
                     return true;
                 }
                 return this.checkIsAddressable(node.lhs, scope, false);
+            }
             case "[":
-                if (node.lhs.type instanceof SliceType) {
+                let t = RestrictedType.strip(node.lhs.type);                
+                if (t instanceof SliceType) {
                     return true;
                 }
-                if (node.lhs.type instanceof ArrayType || node.lhs.type instanceof TupleType) {
+                if (t instanceof ArrayType || t instanceof TupleType) {
                     return this.checkIsAddressable(node.lhs, scope, false);
                 }
                 break;
