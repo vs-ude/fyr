@@ -114,9 +114,15 @@ func p3() Point {
     return {}
 }
 
+func p4() P {
+    return {}
+}
+
 func usePoint() {
     p3().mul()
 //    p3().wontWork()
+    bar2(p4().p1)
+//    bar3(&p4())
 }
 
 const pi = 3.14
@@ -133,6 +139,7 @@ func foo() {
     bar(p)
     p.mul()
     //p.wontWork()
+    //(*p).wontWork()
     var p2 *Point = &{x:1, y:2}
     bar(p2)
     p2.wontWork()
@@ -143,3 +150,10 @@ func bar(p const *Point) {
     logNumber(p.x)
 }
 
+func bar2(p *int) {
+
+}
+
+func bar3(p *P) {
+
+}

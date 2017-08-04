@@ -2331,10 +2331,21 @@ export class TypeChecker {
                 enode.type = enode.rhs.type;
                 break;
             case "unary*":
+            {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsPointer(enode.rhs);
-                enode.type = (enode.rhs.type as PointerType).elementType;
+                let t = enode.rhs.type;
+                let restrictions: Restrictions;
+                if (t instanceof RestrictedType) {
+                    restrictions = t;
+                    t = RestrictedType.strip(t);
+                }
+                enode.type = (t as PointerType).elementType;
+                if (restrictions) {
+                    enode.type = new RestrictedType(enode.type, restrictions);
+                }
                 break;
+            }
             case "unary&":
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsAddressable(enode.rhs, scope);
