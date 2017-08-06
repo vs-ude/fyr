@@ -583,8 +583,12 @@ export class RestrictedType extends Type {
         }
         let str = "";
         if (this.isImmutable) {
+            if (this.elementType instanceof PointerType) {
+                return str + "@" + this.elementType.elementType.toString();
+            }
             str += "immutable ";
-        } else if (this.isConst) {
+        }
+        if (this.isConst) {
             str += "const ";
         }
         if (this.isVolatile) {
@@ -891,16 +895,16 @@ export class TypeChecker {
             let r = new RestrictedType(c);
             r.isConst = true;
             return r;
-        } else if (tnode.op == "immutableType") {
+        } else if (tnode.op == "immutablePointerType") {
             let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
             if (c instanceof RestrictedType) {
-                let r = new RestrictedType(c.elementType);
+                let r = new RestrictedType(new PointerType(c.elementType));
                 r.isVolatile = c.isVolatile;
                 r.isImmutable = true;
                 r.isConst = true;
                 return r;
             }
-            let r = new RestrictedType(c);
+            let r = new RestrictedType(new PointerType(c));
             r.isConst = true;
             r.isImmutable = true;
             return r;
@@ -3292,7 +3296,7 @@ export class TypeChecker {
                 return true;
             }
         } else if (to instanceof RestrictedType && from instanceof RestrictedType) {
-            if ((to.isVolatile || !from.isVolatile) && (to.isConst || !from.isConst) && to.isImmutable == from.isImmutable) {
+            if ((to.isVolatile || !from.isVolatile) && (to.isConst || !from.isConst) && (to.isImmutable == from.isImmutable || (to.isConst && from.isImmutable))) {
                 return this.checkIsAssignableType(to.elementType, from.elementType, loc, doThrow, jsonErrorIsHandled);
             }
         } else if (to instanceof RestrictedType) {

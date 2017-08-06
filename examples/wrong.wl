@@ -210,3 +210,21 @@ func bar5(p &Point) {
 
 func bar6(p *Point) {
 }
+
+func bar7(p @Point) {
+}
+
+func immo1() @Point {
+    return &{x: 1, y: 2}
+}
+
+//func immo2() @Point {
+//    return @Point{x: 1, y: 2}
+//}
+
+func useImmo() {
+    var p = immo1()
+    bar4(p)
+    bar(p)
+    bar7(p)
+}

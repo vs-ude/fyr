@@ -215,7 +215,7 @@ primitiveType
   / "#" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "unsafePointerType", rhs: t});
     }
-  / "@" [ \t]* t:primitiveType {
+  / "^" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
   / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* "\n" {
@@ -227,6 +227,9 @@ primitiveType
     }
   / "&" [ \t]* t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t})
+    }
+  / "@" [ \t]* t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "immutablePointerType", rhs: t})
     }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {
