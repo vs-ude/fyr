@@ -218,7 +218,19 @@ export class GenericConstraintType extends Type {
 }
 
 export class InterfaceType extends Type {
-    // TODO
+    public getAllMethods(map?: Map<string, FunctionType>): Map<string, FunctionType> {
+        if (!map) {
+            map = new Map<string, FunctionType>();
+        }
+        for(let key of this.methods.keys()) {
+            map.set(key, this.methods.get(key));
+        }
+        return map;
+    }
+
+    public extendsInterfaces: Array<InterfaceType> = [];
+    // Member methods indexed by their name
+    public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
 }
 
 export class StructType extends Type {
@@ -1144,7 +1156,48 @@ export class TypeChecker {
         }
         throw "Implementation error for type " + tnode.op
     }
-    
+
+    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType): InterfaceType {
+        if (!iface) {
+            iface = new InterfaceType();
+        }
+        for(let mnode of tnode.parameters) {
+            if (mnode.op == "basicType") {
+                let t = this.createType(mnode, scope);
+                if (!(t instanceof InterfaceType)) {
+                    throw new TypeError(t.toString() + " is not an interface", mnode.loc);
+                }
+                iface.extendsInterfaces.push(t);
+            }
+        }
+        for(let mnode of tnode.parameters) {
+            if (mnode.op == "basicType") {
+                // Do nothing by intention
+            } else if (mnode.op == "funcType") {
+                let ft = this.createType(mnode, scope) as FunctionType;
+                ft.name = mnode.name.value;
+                if (iface.methods.has(ft.name)) {
+                    throw new TypeError("Duplicate member name " + ft.name, mnode.lhs.loc);
+                }
+                ft.objectType = iface;
+                if (mnode.lhs) {
+                    if (mnode.lhs.op == "constType") {
+                        ft.objectType = new RestrictedType(ft.objectType, {isConst: true, isVolatile: false, isImmutable: false});
+                    } else {
+                        throw "Implementation error";
+                    }
+                }
+            } else {
+                throw "Implementation error";
+            }
+        }
+        return iface;
+    }
+
+    private checkInterfaceType(iface: InterfaceType) {
+        // TODO
+    }
+
     private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
         if (!s) {
             s = new StructType();
@@ -1501,7 +1554,7 @@ export class TypeChecker {
         }
 
         // Iterate over all files and declare all functions and global variables
-        // and andle all imports
+        // and handle all imports
         for(let fnode of mnode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "func") {
@@ -1539,12 +1592,18 @@ export class TypeChecker {
         }
 
         // Check fields of structs and interfaces
+        let ifaces: Array<InterfaceType> = [];
         for(let t of typedefs) {
             if (t.type instanceof StructType) {
                 this.createStructType(t.node.rhs, t.scope, t.type);
             } else if (t.type instanceof InterfaceType) {
-                // TODO
+                ifaces.push(this.createInterfaceType(t.node.rhs, t.scope, t.type));
             }
+        }
+
+        // Check all interfaces for conflicting names
+        for(let iface of ifaces) {
+            this.checkInterfaceType(iface);
         }
 
         // Check variable assignments

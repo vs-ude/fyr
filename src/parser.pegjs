@@ -231,6 +231,9 @@ primitiveType
   / "@" [ \t]* t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "immutablePointerType", rhs: t})
     }
+  / "interface" [ \t]* "{" [ \t]* f:("\n" [ \t]* interfaceMembers)? "}" {
+        return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f[2] : []});
+    }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {
           return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i});
@@ -239,6 +242,32 @@ primitiveType
       return i;
     }
 
+interfaceMembers
+  = comments* i:interfaceMember m:interfaceMembers? {
+      if (!m) {
+          return [i];
+      }
+      return [i].concat(m);
+  } 
+
+interfaceMember
+  = "func" [ \t]+ c:("const" [ \t]+)? name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
+      if (p) {
+          for(let i = 0; i < p.length; i++) {
+              if (p[i].op == "ellipsisParam" && i != p.length - 1) {
+                  error("'...' can only be attached to the last parameter", fl(location()));
+              }
+          }
+      }
+      let scope = undefined;
+      if (c) {
+          scope = new ast.Node({loc: scope.loc, op: "constType", rhs: scope});
+      }
+      return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
+    }
+  / "extends" [ \t]+ i:identifier [ \t]* semicolon {
+        return new ast.Node({loc: fl(location()), op: "basicType", name: i});
+    }
 
 namedType
   = n:identifier [ \t]* t:type {

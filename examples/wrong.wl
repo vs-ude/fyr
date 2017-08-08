@@ -228,3 +228,20 @@ func useImmo() {
     bar(p)
     bar7(p)
 }
+
+type Reader interface {
+    func Read(buffer []byte) (n int, err error)
+}
+
+type Writer interface {
+    func Write(buffer []byte) (n int, err error)
+}
+
+type ReadWriter interface {
+    extends Reader
+    extends Writer
+}
+
+func iface1(something interface{}) {
+
+}
