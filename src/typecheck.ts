@@ -228,9 +228,37 @@ export class InterfaceType extends Type {
         return map;
     }
 
+    public getAllBaseTypes(base?: Array<InterfaceType>): Array<InterfaceType> {
+        if (base && base.indexOf(this) != -1) {
+            return base;
+        }
+        for(let b of this.extendsInterfaces) {
+            if (!base) {
+                base = [b];
+            } else {
+                base.push(b);
+            }
+            base = b.getAllBaseTypes(base);
+        }
+        return base;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        if (this.extendsInterfaces.length > 0 || this.methods.size > 0) {
+            return "interface{...}";
+        }
+        return "interface{}";
+    }
+
     public extendsInterfaces: Array<InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
+
+    // Required during recursive checking
+    public _markChecked: boolean = false;
 }
 
 export class StructType extends Type {
@@ -1153,6 +1181,11 @@ export class TypeChecker {
                 return new StructType();
             }
             return this.createStructType(tnode, scope);
+        } else if (tnode.op == "interfaceType") {
+            if (noStructBody) {
+                return new InterfaceType();
+            }
+            return this.createInterfaceType(tnode, scope);
         }
         throw "Implementation error for type " + tnode.op
     }
@@ -1161,6 +1194,7 @@ export class TypeChecker {
         if (!iface) {
             iface = new InterfaceType();
         }
+        iface.loc = tnode.loc;
         for(let mnode of tnode.parameters) {
             if (mnode.op == "basicType") {
                 let t = this.createType(mnode, scope);
@@ -1177,8 +1211,9 @@ export class TypeChecker {
                 let ft = this.createType(mnode, scope) as FunctionType;
                 ft.name = mnode.name.value;
                 if (iface.methods.has(ft.name)) {
-                    throw new TypeError("Duplicate member name " + ft.name, mnode.lhs.loc);
+                    throw new TypeError("Duplicate member name " + ft.name, mnode.loc);
                 }
+                iface.methods.set(ft.name, ft);
                 ft.objectType = iface;
                 if (mnode.lhs) {
                     if (mnode.lhs.op == "constType") {
@@ -1195,7 +1230,45 @@ export class TypeChecker {
     }
 
     private checkInterfaceType(iface: InterfaceType) {
-        // TODO
+        if (iface._markChecked) {
+            return;
+        }
+        iface._markChecked = true;
+
+        let bases = iface.getAllBaseTypes();
+        if (bases && bases.indexOf(iface) != -1) {
+            throw new TypeError("Interface " + iface.name + " is extending itself", iface.loc);
+        }
+
+        // Find all methods that exist in more than one inherited interface or are defined on this interface.
+        // These method types must be equal
+        let methodNames: Map<string, boolean> = new Map<string, boolean>();
+        let maps: Map<InterfaceType, Map<string, FunctionType>> = new Map<InterfaceType, Map<string, FunctionType>>()
+        maps.set(iface, iface.getAllMethods());
+        for(let b of iface.extendsInterfaces) {
+            maps.set(b, b.getAllMethods());
+        }
+        for(let m of maps.values()) {
+            for(let key of m.keys()) {
+                methodNames.set(key, true);
+            }
+        }
+        for(let key of methodNames.keys()) {
+            let ft: FunctionType = null;
+            let ft_iface: InterfaceType;
+            for(let entry of maps.entries()) {
+                if (entry[1].has(key)) {
+                    if (ft) {
+                        if (!this.checkTypeEquality(ft, entry[1].get(key), iface.loc, false)) {
+                            throw new TypeError("Incompatible definition of " + key + " in " + ft_iface.toString() + " and " + entry[0].toString(), iface.loc);
+                        }
+                    } else {
+                        ft = entry[1].get(key);
+                        ft_iface = entry[0];
+                    }
+                }
+            }
+        }
     }
 
     private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
@@ -3805,12 +3878,23 @@ export class TypeChecker {
             }
         } else if (a instanceof FunctionType && b instanceof FunctionType) {
             if (a.parameters.length == b.parameters.length) {
-                this.checkTypeEquality(a.returnType, b.returnType, loc);
-                for(let i = 0; i < a.parameters.length; i++) {
-                    // TODO: Check for ellipsis
-                    this.checkTypeEquality(a.parameters[i].type, b.parameters[i].type, loc);                    
+                if (this.checkTypeEquality(a.returnType, b.returnType, loc, false)) {
+                    let ok = true;
+                    for(let i = 0; i < a.parameters.length; i++) {
+                        // TODO: Check for ellipsis
+                        if (!this.checkTypeEquality(a.parameters[i].type, b.parameters[i].type, loc, false)) {
+                            ok = false;
+                            break;
+                        }
+                        if (a.parameters[i].ellipsis != b.parameters[i].ellipsis) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (ok) {
+                        return true;
+                    }
                 }
-                return true;
             }
         }
 

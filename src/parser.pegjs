@@ -266,7 +266,7 @@ interfaceMember
       return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }
   / "extends" [ \t]+ i:identifier [ \t]* semicolon {
-        return new ast.Node({loc: fl(location()), op: "basicType", name: i});
+        return new ast.Node({loc: fl(location()), op: "basicType", value: i.value});
     }
 
 namedType

@@ -245,3 +245,12 @@ type ReadWriter interface {
 func iface1(something interface{}) {
 
 }
+
+type IBar interface {
+    func Read(a int)
+}
+
+type IFoo interface {
+    extends IBar
+    func Read(x int)
+}
