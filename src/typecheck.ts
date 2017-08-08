@@ -1259,7 +1259,9 @@ export class TypeChecker {
             for(let entry of maps.entries()) {
                 if (entry[1].has(key)) {
                     if (ft) {
-                        if (!this.checkTypeEquality(ft, entry[1].get(key), iface.loc, false)) {
+                        let ft2: FunctionType = entry[1].get(key)
+                        // Both functions must have the same signatures and either they are both const or both non-const (the only restriction possible on interface functions)
+                        if (!this.checkTypeEquality(ft, ft2, iface.loc, false) || (ft.objectType instanceof RestrictedType) != (ft2.objectType instanceof RestrictedType)) {
                             throw new TypeError("Incompatible definition of " + key + " in " + ft_iface.toString() + " and " + entry[0].toString(), iface.loc);
                         }
                     } else {
@@ -3878,7 +3880,8 @@ export class TypeChecker {
             }
         } else if (a instanceof FunctionType && b instanceof FunctionType) {
             if (a.parameters.length == b.parameters.length) {
-                if (this.checkTypeEquality(a.returnType, b.returnType, loc, false)) {
+                // Check the return type. And both functions are either both member functions or both non-member functions.
+                if (this.checkTypeEquality(a.returnType, b.returnType, loc, false) && !!a.objectType == !!b.objectType) {
                     let ok = true;
                     for(let i = 0; i < a.parameters.length; i++) {
                         // TODO: Check for ellipsis
@@ -3894,6 +3897,21 @@ export class TypeChecker {
                     if (ok) {
                         return true;
                     }
+                }
+            }
+        } else if (a instanceof InterfaceType && b instanceof InterfaceType) {
+            let m1 = a.getAllMethods();
+            let m2 = b.getAllMethods();
+            if (m1.size == m2.size) {
+                let ok = true;
+                for(let entry of m1.entries()) {
+                    if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) {
+                    return true;
                 }
             }
         }

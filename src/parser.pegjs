@@ -261,7 +261,7 @@ interfaceMember
       }
       let scope = undefined;
       if (c) {
-          scope = new ast.Node({loc: scope.loc, op: "constType", rhs: scope});
+          scope = new ast.Node({loc: fl(location()), op: "constType", rhs: scope});
       }
       return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }

@@ -247,10 +247,10 @@ func iface1(something interface{}) {
 }
 
 type IBar interface {
-    func Read(a int)
+    func const Read(a int)
 }
 
 type IFoo interface {
     extends IBar
-    func Read(x int)
+    func const Read(x int)
 }
