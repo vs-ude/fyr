@@ -69,6 +69,14 @@ func useVariadic() string {
 }
 
 func useDeconstruct() (string, int16, bool) {
+    var x = ("Hallo", (42, true))
+    var x1 string
+    var x2 int
+    var x3 bool
+    x1, (x2, x3) = x
+    if (false) {
+        return x1, <int16>x2, x3
+    }
     var a string
     var b int16
     var c bool

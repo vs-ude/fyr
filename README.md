@@ -32,3 +32,20 @@ node ./lib/index.js compile examples/example3.wl
 - AndType should be mapped to interfaces
 - Change prededence of OrType and AndType
 - @constructor
+
+## Pending Fixes
+
+### Pruning if-clauses
+
+If an if-clause is pruned, decrease the reference count of all variables used therein.
+```
+    var x = ("Hallo", (42, true))
+    var x1 string
+    var x2 int
+    var x3 bool
+    x1, (x2, x3) = x
+    if (false) {
+        return x1, <int16>x2, x3
+    }
+```
+Here the x-es should not be assigned at all if they are used in the if-clause only.
