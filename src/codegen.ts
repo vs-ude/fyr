@@ -375,13 +375,14 @@ export class CodeGenerator {
                             for(let i = 0; i < node.parameters.length; i++) {
                                 let p = node.parameters[i];
                                 if (p.op == "tuple" || p.op == "array" || p.op == "object") {
-                                    processAssignmentDestinations(node, destinations);
+                                    let eoffset = stype.fieldOffset(stype.fields[i][0]);
+                                    destCount = processAssignment(p, type.types[i], destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
                                 } else {
                                     let etype: ssa.Type | ssa.StructType = stype.fields[i][1];
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;
-                                    let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset]);
+                                    let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
                                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                                     if (dest instanceof ssa.Pointer) {
                                         b.assign(b.mem, "store", etype, [dest.variable, dest.offset, val]);
@@ -395,6 +396,7 @@ export class CodeGenerator {
                         } else if (node.op == "object") {
                             throw "TODO"                        
                         }
+                        return destCount;
                     }
                     let destinations: Array<ssa.Variable | ssa.Pointer> = [];
                     processAssignmentDestinations(snode.lhs, destinations);

@@ -67,3 +67,10 @@ func useVariadic() string {
     var arr = []string["uno", "dos", "tres"]
     return s1 + variadic("fmt2", ...arr)
 }
+
+func useDeconstruct() (string, int16) {
+    var a string
+    var b int16
+    a, b = ("Hallo", 42)
+    return a, b
+}

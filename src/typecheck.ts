@@ -253,6 +253,10 @@ export class InterfaceType extends Type {
         return "interface{}";
     }
 
+    public isEmptyInterface(): boolean {
+        return this.extendsInterfaces.length == 0 && this.methods.size == 0;
+    }
+
     public extendsInterfaces: Array<InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -1770,6 +1774,7 @@ export class TypeChecker {
                 if (vnode.parameters.length != 2) {
                     throw new TypeError("Expected a tuple of length two", vnode.loc);
                 }
+                // TODO: Check that the second element of the tuple is the error type
                 this.checkVarAssignment(isConst, scope, vnode.parameters[0], this.t_json, null, true);
                 return;
             }
@@ -2078,6 +2083,14 @@ export class TypeChecker {
             }
             if (!hasEllipsis && rtype.types.length != vnode.parameters.length) {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
+            }
+            // The type of the right-hand side might have been inferred. In this case, compute the new type
+            if (rnode && rnode.op == "tuple") {
+                let types: Array<Type> = [];
+                for(let p of rnode.parameters) {
+                    types.push(p.type);
+                }
+                rnode.type = new TupleType(types);
             }
         } else if (vnode.op == "array") {
             if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_json && rtype != this.t_string) {
@@ -3253,6 +3266,11 @@ export class TypeChecker {
             return result;
         }  
 
+        if (t instanceof InterfaceType && t.isEmptyInterface()) {
+            node.type = this.defaultLiteralType(node);
+            return true;
+        }
+
         switch (node.op) {
             case "int":
                 // TODO: Check range
@@ -3266,6 +3284,7 @@ export class TypeChecker {
                     return true;                    
                 }
                 if (t instanceof UnsafePointerType) {
+                    // TODO: Check range
                     node.type = t;
                     return true;
                 }
@@ -3402,6 +3421,7 @@ export class TypeChecker {
                     node.type = t;
                     return true;
                 }
+
                 if (!doThrow) {
                     return false;
                 }

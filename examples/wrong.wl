@@ -242,7 +242,17 @@ type ReadWriter interface {
     extends Writer
 }
 
+func useIface() {
+    iface1(42)
+    iface1(true)
+    iface1(&Point{x:1, y:2})
+}
+
 func iface1(something interface{}) {
+
+}
+
+func iface2(bar IBar) {
 
 }
 
