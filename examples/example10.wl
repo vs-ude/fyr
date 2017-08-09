@@ -68,9 +68,10 @@ func useVariadic() string {
     return s1 + variadic("fmt2", ...arr)
 }
 
-func useDeconstruct() (string, int16) {
+func useDeconstruct() (string, int16, bool) {
     var a string
     var b int16
-    a, b = ("Hallo", 42)
-    return a, b
+    var c bool
+    a, (b, c) = ("Hallo", (42, true))
+    return a, b, c
 }
