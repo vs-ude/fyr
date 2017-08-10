@@ -32,8 +32,6 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Type switch statement
 - Generics with interfaces
 - Generics without interfaces
-- AndType should be mapped to interfaces
-- Change prededence of OrType and AndType
 - @constructor
 - Automatically include the runtime souces
 
@@ -59,6 +57,6 @@ If an if-clause is pruned, decrease the reference count of all variables used th
 ```
 Here the x-es should not be assigned at all if they are used in the if-clause only.
 
-### Type error must be an interface
+### Type error must be an interface with one method
 
 ### Check for the assignment of non trivial interfaces

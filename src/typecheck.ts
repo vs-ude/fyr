@@ -810,25 +810,6 @@ export class OrType extends Type {
     }
 }
 
-export class AndType extends Type {
-    public types: Array<Type> = [];
-
-    public toString(): string {
-        if (this.name) {
-            return this.name;
-        }
-        let name = "";
-        for(let v of this.types) {
-            if (name == "") {
-                name += v.toString();
-            } else {
-                name += " & " + v.toString();
-            }
-        }
-        return name;
-    }
-}
-
 export class StringEnumType extends Type {
     public values: Map<string, number> = new Map<string, number>();
 
@@ -892,7 +873,9 @@ export class TypeChecker {
         this.t_json.name = "json";
         this.t_void = new BasicType("void");
         this.t_error = new InterfaceType();
+        // TODO: Add a member function here
         this.t_error.name = "error";
+        this.ifaces.push(this.t_error);
 
         this.builtin_len = new FunctionType();
         this.builtin_len.callingConvention = "system";
@@ -1180,15 +1163,16 @@ export class TypeChecker {
             }
             return t;
         } else if (tnode.op == "andType") {
-            let t = new AndType();
+            let t = new InterfaceType();
             for(let i = 0; i < tnode.parameters.length; i++) {
                 let pnode = tnode.parameters[i];
                 let pt = this.createType(pnode, scope, noStructBody, allowVolatile);
-                if (pt instanceof OrType) {
-                    t.types = t.types.concat(pt.types);
+                if (!(pt instanceof InterfaceType)) {
+                    throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
                 }
-                t.types.push(pt);
+                t.extendsInterfaces.push(pt);
             }
+            this.ifaces.push(t);
             return t;
         } else if (tnode.op == "structType") {
             if (noStructBody) {
@@ -1197,7 +1181,9 @@ export class TypeChecker {
             return this.createStructType(tnode, scope);
         } else if (tnode.op == "interfaceType") {
             if (noStructBody) {
-                return new InterfaceType();
+                let t = new InterfaceType();
+                this.ifaces.push(t);
+                return t;
             }
             return this.createInterfaceType(tnode, scope);
         }
@@ -1207,6 +1193,7 @@ export class TypeChecker {
     private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType): InterfaceType {
         if (!iface) {
             iface = new InterfaceType();
+            this.ifaces.push(iface);
         }
         iface.loc = tnode.loc;
         for(let mnode of tnode.parameters) {
@@ -1246,13 +1233,17 @@ export class TypeChecker {
         return iface;
     }
 
-    private createBoxedType(t: Type): InterfaceType {
+    private createBoxedType(t: Type, loc: Location): InterfaceType {
         // Interfaces cannot be boxed, because a boxed type is itself just an interface.
         // Hence, boxing interfaces makes little sense.
         if (t instanceof InterfaceType) {
             return t;
         }
+        if (t instanceof RestrictedType && t.isVolatile) {
+            throw new TypeError("Reference type " + t.toString() + " cannot be boxed", loc);
+        }
         let iface = new InterfaceType();
+        this.ifaces.push(iface);
         iface.loc = t.loc;
         iface._markChecked = true;
         iface.extendsInterfaces.push(t);
@@ -1498,7 +1489,9 @@ export class TypeChecker {
         if (t.node.rhs.op == "structType") {
             t.type = new StructType();
         } else if (t.node.rhs.op == "interfaceType") {
-            t.type = new InterfaceType();
+            let iface = new InterfaceType();
+            this.ifaces.push(iface);
+            t.type = iface;
         } else {
             t._mark = true;
             t.type = this.createType(t.node.rhs, t.scope);
@@ -1701,17 +1694,16 @@ export class TypeChecker {
         }
 
         // Check fields of structs and interfaces
-        let ifaces: Array<InterfaceType> = [];
         for(let t of typedefs) {
             if (t.type instanceof StructType) {
                 this.createStructType(t.node.rhs, t.scope, t.type);
             } else if (t.type instanceof InterfaceType) {
-                ifaces.push(this.createInterfaceType(t.node.rhs, t.scope, t.type));
+                this.createInterfaceType(t.node.rhs, t.scope, t.type);
             }
         }
 
         // Check all interfaces for conflicting names
-        for(let iface of ifaces) {
+        for(let iface of this.ifaces) {
             this.checkInterfaceType(iface);
         }
 
@@ -3538,26 +3530,6 @@ export class TypeChecker {
                     }
                 }
             }
-        } else if (to instanceof AndType) {
-            if (from instanceof AndType) {
-                let ok = true;
-                for(let f of from.types) {
-                    let ok2 = false;
-                    for(let t of to.types) {
-                        if (this.checkIsAssignableType(t, f, loc, false, jsonErrorIsHandled)) {
-                            ok2 = true;
-                            break;
-                        }
-                    }
-                    if (!ok2) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    return true;
-                }
-            }
         } else if (to instanceof UnsafePointerType) {
             if (from == this.t_int || from == this.t_uint) {
                 return true;
@@ -3566,6 +3538,9 @@ export class TypeChecker {
                 return true;
             }
         } else if (to instanceof InterfaceType) {
+            if (from instanceof RestrictedType && from.isVolatile) {
+                throw new TypeError("Reference type " + from.toString() + " cannot be assigned to an interface", loc);
+            }
             if (to.isEmptyInterface()) {
                 return true;
             }
@@ -3919,27 +3894,6 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (a instanceof AndType && b instanceof AndType) {
-            if (a.types.length == b.types.length) {
-                let ok = true;
-                for(let t of a.types) {
-                    let ok2 = false;
-                    for(let t2 of b.types) {
-                        let eq = this.checkTypeEquality(t, t2, loc, false);
-                        if (eq) {
-                            ok2 = true;
-                            break;
-                        }
-                    }
-                    if (!ok2) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    return true;
-                }
-            }
         } else if (a instanceof FunctionType && b instanceof FunctionType) {
             if (a.parameters.length == b.parameters.length) {
                 // Check the return type. And both functions are either both member functions or both non-member functions.
@@ -4126,6 +4080,9 @@ export class TypeChecker {
     public builtin_cap: FunctionType;
 
     private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
+    // List of all interfaces. These are checked for possible errors after they have been defined.
+    private ifaces: Array<InterfaceType> = [];
+
 }
 
 export class TypeError {

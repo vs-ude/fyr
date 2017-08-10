@@ -273,6 +273,10 @@ func iface3(box interface{int16}) {
 
 }
 
+func iface4(io Reader & Writer) {
+
+}
+
 type IBar interface {
     func const Read(a int)
 }
