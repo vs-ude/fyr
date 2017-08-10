@@ -231,8 +231,8 @@ primitiveType
   / "@" [ \t]* t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "immutablePointerType", rhs: t})
     }
-  / "interface" [ \t]* "{" [ \t]* f:("\n" [ \t]* interfaceMembers)? "}" {
-        return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f[2] : []});
+  / "interface" [ \t]* "{" [ \t]* f:interfaceContent? "}" {
+        return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
     }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       if (g) {
@@ -240,6 +240,14 @@ primitiveType
       } 
       i.op = "basicType";
       return i;
+    }
+
+interfaceContent
+  = "\n" [ \t]* m:interfaceMembers {
+      return m;
+    }
+  / t:primitiveType [ \t]* {
+      return [t];
     }
 
 interfaceMembers

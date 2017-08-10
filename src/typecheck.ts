@@ -233,6 +233,9 @@ export class InterfaceType extends Type {
             return base;
         }
         for(let b of this.extendsInterfaces) {
+            if (!(b instanceof InterfaceType)) {
+                continue;
+            }
             if (!base) {
                 base = [b];
             } else {
@@ -257,7 +260,14 @@ export class InterfaceType extends Type {
         return this.extendsInterfaces.length == 0 && this.methods.size == 0;
     }
 
-    public extendsInterfaces: Array<InterfaceType> = [];
+    public isBoxedType(): boolean {
+        if (this.extendsInterfaces.length == 1 && !(this.extendsInterfaces[0] instanceof InterfaceType)) {
+            return true;
+        }
+        return false;
+    }
+
+    public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
 
@@ -1202,7 +1212,7 @@ export class TypeChecker {
         for(let mnode of tnode.parameters) {
             if (mnode.op == "basicType") {
                 let t = this.createType(mnode, scope);
-                if (!(t instanceof InterfaceType)) {
+                if (!(t instanceof InterfaceType) && tnode.parameters.length != 1) {
                     throw new TypeError(t.toString() + " is not an interface", mnode.loc);
                 }
                 iface.extendsInterfaces.push(t);
@@ -1212,6 +1222,9 @@ export class TypeChecker {
             if (mnode.op == "basicType") {
                 // Do nothing by intention
             } else if (mnode.op == "funcType") {
+                if (iface.isBoxedType()) {
+                    throw new TypeError("Boxed types cannot have functions", mnode.loc);
+                }
                 let ft = this.createType(mnode, scope) as FunctionType;
                 ft.name = mnode.name.value;
                 if (iface.methods.has(ft.name)) {
@@ -1233,11 +1246,28 @@ export class TypeChecker {
         return iface;
     }
 
+    private createBoxedType(t: Type): InterfaceType {
+        // Interfaces cannot be boxed, because a boxed type is itself just an interface.
+        // Hence, boxing interfaces makes little sense.
+        if (t instanceof InterfaceType) {
+            return t;
+        }
+        let iface = new InterfaceType();
+        iface.loc = t.loc;
+        iface._markChecked = true;
+        iface.extendsInterfaces.push(t);
+        return iface;
+    }
+
     private checkInterfaceType(iface: InterfaceType) {
         if (iface._markChecked) {
             return;
         }
         iface._markChecked = true;
+
+        if (iface.isBoxedType()) {
+            return;
+        }
 
         let bases = iface.getAllBaseTypes();
         if (bases && bases.indexOf(iface) != -1) {
@@ -1250,7 +1280,7 @@ export class TypeChecker {
         let maps: Map<InterfaceType, Map<string, FunctionType>> = new Map<InterfaceType, Map<string, FunctionType>>()
         maps.set(iface, iface.getAllMethods());
         for(let b of iface.extendsInterfaces) {
-            maps.set(b, b.getAllMethods());
+            maps.set(b as InterfaceType, (b as InterfaceType).getAllMethods());
         }
         for(let m of maps.values()) {
             for(let key of m.keys()) {
@@ -3271,6 +3301,10 @@ export class TypeChecker {
             return true;
         }
 
+        if (t instanceof InterfaceType && t.isBoxedType()) {
+            return this.unifyLiterals(t.extendsInterfaces[0], node, loc, doThrow);
+        }
+
         switch (node.op) {
             case "int":
                 // TODO: Check range
@@ -3531,6 +3565,14 @@ export class TypeChecker {
             if (to.elementType == this.t_void && (from instanceof UnsafePointerType || from instanceof PointerType || from instanceof GuardedPointerType)) {
                 return true;
             }
+        } else if (to instanceof InterfaceType) {
+            if (to.isEmptyInterface()) {
+                return true;
+            }
+            if (to.isBoxedType()) {
+                return this.checkIsAssignableType(to.extendsInterfaces[0], from, loc, doThrow, jsonErrorIsHandled);
+            }
+            // TODO: Check assignment to interface
         }
         if (!doThrow) {
             return false;
