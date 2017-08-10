@@ -19,19 +19,28 @@ Running `npm build:parser` will only generate fresh JavaScript from the `parser.
 ## Running the compiler
 
 ```
-node ./lib/index.js compile examples/example3.wl
+node ./lib/index.js compile examples/mem.wl examples/example3.wl
 ```
+
+The file `mem.wl` must always be part of the compilation, since this is currently the fyr runtime.
+
 ## Todos
 
 - Interfaces
--- Type checking
--- Code generation
+    - Type checking
+    - Code generation (including automated boxing and unboxing)
 - Type switch statement
 - Generics with interfaces
 - Generics without interfaces
 - AndType should be mapped to interfaces
 - Change prededence of OrType and AndType
 - @constructor
+- Automatically include the runtime souces
+
+# Wish List
+- Package structure
+- Documentation generator
+- A new parser that handles comments and spaces in a sane way
 
 ## Pending Fixes
 
@@ -49,3 +58,7 @@ If an if-clause is pruned, decrease the reference count of all variables used th
     }
 ```
 Here the x-es should not be assigned at all if they are used in the if-clause only.
+
+### Type error must be an interface
+
+### Check for the assignment of non trivial interfaces
