@@ -280,13 +280,13 @@ export class StructType extends Type {
         super();
     }
 
-    public field(name: string): StructField {
+    public field(name: string, ownFieldsOnly: boolean = false): StructField {
         for(let f of this.fields) {
             if (f.name == name) {
                 return f;
             }
         }
-        if (this.extends) {
+        if (!ownFieldsOnly && this.extends) {
             return this.extends.field(name);
         }
         return null;
@@ -302,12 +302,42 @@ export class StructType extends Type {
         return str;
     }
 
-    // TODO: Remove
+    public getAllMethodsAndFields(map?: Map<string, FunctionType | StructField>): Map<string, FunctionType | StructField> {
+        if (!map) {
+            map = new Map<string, FunctionType | StructField>();
+        }
+        for(let key of this.methods.keys()) {
+            map.set(key, this.methods.get(key));
+        }
+        for(let f of this.fields) {
+            map.set(f.name, f);
+        }
+        return map;
+    }
+
+    public getAllBaseTypes(base?: Array<StructType>): Array<StructType> {
+        if (base && base.indexOf(this) != -1) {
+            return base;
+        }
+        if (this.extends) {
+            if (!base) {
+                base = [this.extends];
+            } else {
+                base.push(this.extends);
+            }
+            base = this.extends.getAllBaseTypes(base);
+        }
+        return base;
+    }
+
     public extends: StructType;
+    public implements: Array<InterfaceType> = [];
     // Fields of the struct, ordered by their appearance in the code
     public fields: Array<StructField> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
+
+    public _markChecked: boolean;
 }
 
 // StructField describes the field of a StructType.
@@ -1176,7 +1206,9 @@ export class TypeChecker {
             return t;
         } else if (tnode.op == "structType") {
             if (noStructBody) {
-                return new StructType();
+                let t = new StructType();
+                this.structs.push(t);
+                return t;
             }
             return this.createStructType(tnode, scope);
         } else if (tnode.op == "interfaceType") {
@@ -1193,12 +1225,13 @@ export class TypeChecker {
     private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType): InterfaceType {
         if (!iface) {
             iface = new InterfaceType();
+            iface.loc = tnode.loc;
             this.ifaces.push(iface);
         }
         iface.loc = tnode.loc;
         for(let mnode of tnode.parameters) {
-            if (mnode.op == "basicType") {
-                let t = this.createType(mnode, scope);
+            if (mnode.op == "extends") {
+                let t = this.createType(mnode.rhs, scope);
                 if (!(t instanceof InterfaceType) && tnode.parameters.length != 1) {
                     throw new TypeError(t.toString() + " is not an interface", mnode.loc);
                 }
@@ -1206,7 +1239,7 @@ export class TypeChecker {
             }
         }
         for(let mnode of tnode.parameters) {
-            if (mnode.op == "basicType") {
+            if (mnode.op == "extends") {
                 // Do nothing by intention
             } else if (mnode.op == "funcType") {
                 if (iface.isBoxedType()) {
@@ -1227,7 +1260,7 @@ export class TypeChecker {
                     }
                 }
             } else {
-                throw "Implementation error";
+                throw "Implementation error " + mnode.op + " " + iface.name;
             }
         }
         return iface;
@@ -1301,30 +1334,73 @@ export class TypeChecker {
     private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
         if (!s) {
             s = new StructType();
-        }
-        if (tnode.lhs) {
-            let ext: Type = this.createType(tnode.lhs, scope);
-            if (!(ext instanceof StructType)) {
-                throw new TypeError("Struct can only extend another struct", tnode.lhs.loc);
-            }
-            s.extends = ext;
-            // TODO: Avoid circular dependencies
+            s.loc = tnode.loc;
+            this.structs.push(s);
         }
         for(let fnode of tnode.parameters) {
-            if (fnode.op != "structField") {
+            if (fnode.op == "extends") {
+                let ext: Type = this.createType(fnode.rhs, scope);
+                if (!(ext instanceof StructType)) {
+                    throw new TypeError("Struct can only extend another struct", tnode.lhs.loc);
+                }
+                if (s.extends) {
+                    throw new TypeError("Struct cannot extend multiple structs", fnode.loc);
+                }
+                s.extends = ext;
+            } else if (fnode.op == "implements") {
+                let ext: Type = this.createType(fnode.rhs, scope);
+                if (!(ext instanceof InterfaceType)) {
+                    throw new TypeError(ext.toString() + " is not an interface type", tnode.lhs.loc);
+                }
+                s.implements.push(ext);
+            } else if (fnode.op == "structField") {
+                if (s.field(fnode.lhs.value, true)) {
+                    throw new TypeError("Duplicate field name " + fnode.lhs.value, fnode.lhs.loc);
+                }
+                // TODO: Check for duplicate names in the structs extends by this struct
+                let field = new StructField();
+                field.name = fnode.lhs.value;
+                field.type = this.createType(fnode.rhs, scope);
+                s.fields.push(field);
+            } else {
                 throw "Implementation error";
             }
-            if (s.field(fnode.lhs.value)) {
-                throw new TypeError("Duplicate field name " + fnode.lhs.value, fnode.lhs.loc);
-            }
-            // TODO: Check for duplicate names in the structs extends by this struct
-            let field = new StructField();
-            field.name = fnode.lhs.value;
-            field.type = this.createType(fnode.rhs, scope);
-            s.fields.push(field);
         }
 
         return s;
+    }
+
+    public checkStructType(s: StructType) {
+        if (s._markChecked) {
+            return;
+        }
+        s._markChecked = true;
+
+        if (s.extends) {
+            this.checkStructType(s.extends);
+            let bases = s.getAllBaseTypes();
+            if (bases && bases.indexOf(s) != -1) {
+                throw new TypeError("Struct " + s.name + " is extending itself", s.loc);
+            }
+            let inheritedMethods = s.extends.getAllMethodsAndFields();
+
+            for(let key of s.methods.keys()) {
+                if (inheritedMethods.has(key)) {
+                    throw new TypeError("Method " + key + " shadows field or method of " + s.extends.toString(), s.loc);
+                }
+            }
+
+            for(let f of s.fields) {
+                if (inheritedMethods.has(f.name)) {
+                    throw new TypeError("Field " + f.name + " shadows field or method of " + s.extends.toString(), s.loc);
+                }
+            }
+        }
+        for(let iface of s.implements) {
+            if (!this.checkIsAssignableType(iface, new PointerType(s), s.loc, false)) {
+                throw new TypeError(s.toString() + " does not implement " + iface.toString(), s.loc);
+            }
+        }
     }
 
     public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope): Function {
@@ -1487,9 +1563,15 @@ export class TypeChecker {
             throw new TypeError("Recursive type definition of " + t.name, t.node.loc);
         }
         if (t.node.rhs.op == "structType") {
-            t.type = new StructType();
+            let s = new StructType();
+            s.loc = t.loc;
+            s.name = t.name;
+            this.structs.push(s);
+            t.type = s;
         } else if (t.node.rhs.op == "interfaceType") {
             let iface = new InterfaceType();
+            iface.loc = t.loc;
+            iface.name = t.name;
             this.ifaces.push(iface);
             t.type = iface;
         } else {
@@ -1705,6 +1787,11 @@ export class TypeChecker {
         // Check all interfaces for conflicting names
         for(let iface of this.ifaces) {
             this.checkInterfaceType(iface);
+        }
+
+        // Check all structs for conflicting names and whether they implement the promised interfaces
+        for(let s of this.structs) {
+            this.checkStructType(s);
         }
 
         // Check variable assignments
@@ -3243,7 +3330,9 @@ export class TypeChecker {
             node.type = tt;
             return tt;
         } else if (node.type instanceof ObjectLiteralType) {
-            node.type = new StructType();
+            let s = new StructType();
+            this.structs.push(s);
+            node.type = s;
             for(let i = 0; i < node.parameters.length; i++) {
                 let pnode = node.parameters[i];
                 this.defaultLiteralType(pnode.lhs);
@@ -4082,7 +4171,7 @@ export class TypeChecker {
     private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     // List of all interfaces. These are checked for possible errors after they have been defined.
     private ifaces: Array<InterfaceType> = [];
-
+    private structs: Array<StructType> = [];
 }
 
 export class TypeError {

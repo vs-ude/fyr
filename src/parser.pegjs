@@ -218,9 +218,8 @@ primitiveType
   / "^" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
-  / "struct" [ \t]* e:("extends" [ \t]+ type [ \t]*)? "{" [ \t]* "\n" [ \t]* f:structField* [ \t]* "}" [ \t]* "\n" {
-        let ext = e ? e[2] : null;
-        return new ast.Node({loc: fl(location()), op: "structType", parameters: f, lhs: ext})
+  / "struct" [ \t]* "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
+        return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : []})
     }
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
@@ -231,7 +230,7 @@ primitiveType
   / "@" [ \t]* t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "immutablePointerType", rhs: t})
     }
-  / "interface" [ \t]* "{" [ \t]* f:interfaceContent? "}" {
+  / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
     }
   / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
@@ -246,12 +245,12 @@ interfaceContent
   = "\n" [ \t]* m:interfaceMembers {
       return m;
     }
-  / t:primitiveType [ \t]* {
-      return [t];
+  / t:type [ \t]* {
+      return [new ast.Node({loc: fl(location()), op: "extends", rhs: t})];
     }
 
 interfaceMembers
-  = comments* i:interfaceMember m:interfaceMembers? {
+  = comments? [ \t]* i:interfaceMember m:interfaceMembers? {
       if (!m) {
           return [i];
       }
@@ -273,8 +272,8 @@ interfaceMember
       }
       return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }
-  / "extends" [ \t]+ i:identifier [ \t]* semicolon {
-        return new ast.Node({loc: fl(location()), op: "basicType", value: i.value});
+  / "extends" [ \t]+ t:type [ \t]* semicolon {
+        return new ast.Node({loc: fl(location()), op: "extends", rhs: t});
     }
 
 namedType
@@ -299,8 +298,22 @@ returnType
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: result});
     }
 
+structFields
+  = comments? [ \t]* i:structField m:structFields? {
+      if (!m) {
+          return [i];
+      }
+      return [i].concat(m);
+  } 
+
 structField
-  = comments? [ \t]* i:identifier [ \t]+ t:type [ \t]* semicolon {
+  = "extends" [ \t]+ t:type [ \t]* semicolon {
+      return new ast.Node({loc: fl(location()), op: "extends", rhs: t});
+    }
+  / "implements" [ \t]+ t:type [ \t]* semicolon {
+      return new ast.Node({loc: fl(location()), op: "implements", rhs: t});
+  }
+  / i:identifier [ \t]+ t:type [ \t]* semicolon {
       return new ast.Node({loc: fl(location()), op: "structField", lhs: i, rhs: t});
   }
 

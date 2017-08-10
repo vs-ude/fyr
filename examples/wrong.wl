@@ -218,7 +218,7 @@ func immo1() @Point {
     return &{x: 1, y: 2}
 }
 
-//func immo2() @Point {
+// TODO func immo2() @Point {
 //    return @Point{x: 1, y: 2}
 //}
 
@@ -230,6 +230,7 @@ func useImmo() {
 }
 
 type File struct {
+// TODO    implements ReadWriter
 }
 
 func File.Read(buffer []byte) (n int, err error) {
@@ -257,7 +258,7 @@ func useIface() {
     iface1(42)
     iface1(true)
     iface1(&Point{x:1, y:2})
-    iface2(&Point{x:1, y:2})
+// TODO    iface2(&Point{x:1, y:2})
     iface3(42)
 }
 
@@ -284,4 +285,9 @@ type IBar interface {
 type IFoo interface {
     extends IBar
     func const Read(x int)
+}
+
+type Point3D struct {
+    extends Point
+    z int
 }

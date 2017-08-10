@@ -34,6 +34,12 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Generics without interfaces
 - @constructor
 - Automatically include the runtime souces
+- struct implements
+    - parsing
+    - checking
+- struct extends
+    - parsing
+    - checking for recursions
 
 # Wish List
 - Package structure
@@ -60,3 +66,7 @@ Here the x-es should not be assigned at all if they are used in the if-clause on
 ### Type error must be an interface with one method
 
 ### Check for the assignment of non trivial interfaces
+
+### Allow calling methods of base structs
+
+### Allow access to fields of base structs
