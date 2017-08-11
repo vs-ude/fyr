@@ -43,7 +43,7 @@ export class StructType {
     }
 
     public fields: Array<[string, Type | StructType, number]> = [];
-    private fieldOffsetsByName: Map<string, number> = new Map<string, number>();
+    public fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
     public name: string;
 }

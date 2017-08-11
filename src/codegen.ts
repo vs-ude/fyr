@@ -153,8 +153,15 @@ export class CodeGenerator {
         if (t instanceof StructType) {
             let s = new ssa.StructType();
             s.name = t.name;
-            for(let f of t.fields) {
-                s.addField(f.name, this.getSSAType(f.type), 1);
+            for(let i = 0; i < t.fields.length; i++) {
+                let f = t.fields[i];
+                let ft = this.getSSAType(f.type);
+                s.addField(f.name, ft, 1);
+                if (t.extends && i == 0) {
+                    for(let entry of (ft as ssa.StructType).fieldOffsetsByName.entries()) {
+                        s.fieldOffsetsByName.set(entry[0], entry[1]);
+                    }
+                }
             }
             return s;
         }
@@ -926,7 +933,7 @@ export class CodeGenerator {
                     throw "TODO";
                 } else if (t instanceof PackageType) {
                     throw "TODO";
-                } else {
+                } else if (t instanceof StructType) {
                     // It is a value, i.e. not a pointer to a value
                     let left: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
@@ -934,17 +941,16 @@ export class CodeGenerator {
                     } else {
                         left = this.processExpression(f, scope, enode.lhs, b, vars) as ssa.Variable;
                     }
-                    if (t instanceof StructType) {
-                        let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
-                        if (left instanceof ssa.Pointer) {
-                            left.offset += s.fieldOffset(enode.name.value);
-                            return left;
-                        }
-                        let ptr = b.assign(b.tmp(), "addr_of", "ptr", [left]);
-                        return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
-                    } else {
-                        throw "CodeGen: Implementation error"
+                    
+                    let s = this.getSSAType(enode.lhs.type) as ssa.StructType;
+                    if (left instanceof ssa.Pointer) {
+                        left.offset += s.fieldOffset(enode.name.value);
+                        return left;
                     }
+                    let ptr = b.assign(b.tmp(), "addr_of", "ptr", [left]);
+                    return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
+                } else {
+                    throw "CodeGen: Implementation error"
                 }
             }
             default:

@@ -1347,10 +1347,19 @@ export class TypeChecker {
                     throw new TypeError("Struct cannot extend multiple structs", fnode.loc);
                 }
                 s.extends = ext;
+                if (s.extends.name != "") {
+                    if (s.field(s.extends.name)) {
+                        throw new TypeError("Duplicate field name " + s.extends.name, fnode.loc);                        
+                    }
+                }
+                let f = new StructField();
+                f.name = s.extends.name;
+                f.type = s.extends;
+                s.fields.unshift(f);
             } else if (fnode.op == "implements") {
                 let ext: Type = this.createType(fnode.rhs, scope);
                 if (!(ext instanceof InterfaceType)) {
-                    throw new TypeError(ext.toString() + " is not an interface type", tnode.lhs.loc);
+                    throw new TypeError(ext.toString() + " is not an interface type", tnode.rhs.loc);
                 }
                 s.implements.push(ext);
             } else if (fnode.op == "structField") {
