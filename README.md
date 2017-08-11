@@ -63,8 +63,6 @@ If an if-clause is pruned, decrease the reference count of all variables used th
 ```
 Here the x-es should not be assigned at all if they are used in the if-clause only.
 
-### Type error must be an interface with one method
-
 ### Check for the assignment of non trivial interfaces
 
 ### Allow calling methods of base structs

@@ -905,6 +905,11 @@ export class TypeChecker {
         this.t_error = new InterfaceType();
         // TODO: Add a member function here
         this.t_error.name = "error";
+        let toError = new FunctionType();
+        toError.name = "toError";
+        toError.returnType = this.t_string;
+        toError.objectType = this.t_error;
+        this.t_error.methods.set("toError", toError);
         this.ifaces.push(this.t_error);
 
         this.builtin_len = new FunctionType();
