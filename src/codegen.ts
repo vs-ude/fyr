@@ -1467,8 +1467,9 @@ export class CodeGenerator {
                         index2 = this.processExpression(f, scope, enode.parameters[1], b, vars);
                     }
                 }
-                if (enode.lhs.type instanceof UnsafePointerType) {
-                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                let t = RestrictedType.strip(enode.lhs.type);
+                if (t instanceof UnsafePointerType) {
+                    let size = ssa.sizeOf(this.getSSAType(t.elementType));
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
@@ -1489,10 +1490,10 @@ export class CodeGenerator {
                         }
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, l, l]);
-                } else if (enode.lhs.type instanceof GuardedPointerType) {
+                } else if (t instanceof GuardedPointerType) {
                     throw "TODO";
-                } else if (enode.lhs.type instanceof SliceType) {
-                    let size = ssa.sizeOf(this.getSSAType(enode.lhs.type.elementType));
+                } else if (t instanceof SliceType) {
+                    let size = ssa.sizeOf(this.getSSAType(t.elementType));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
@@ -1557,7 +1558,7 @@ export class CodeGenerator {
                         }
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [data_ptr, l, c]);
-                } else if (enode.lhs.type == this.tc.t_string) {
+                } else if (t == this.tc.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars);
                     let len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
                     if (enode.parameters[0] && index1 !== 0) {
@@ -1591,9 +1592,9 @@ export class CodeGenerator {
                     }
                     let l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     return b.call(b.tmp(), this.makeStringFunctionType, [SystemCalls.makeString, ptr3, l]);
-                } else if (enode.lhs.type instanceof ArrayType) {
+                } else if (t instanceof ArrayType) {
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
-                    let len = enode.lhs.type.size;
+                    let len = t.size;
                     if (enode.parameters[0] && index1 !== 0) {
                         // Compare 'index1' with 'len'
                         let trap = b.assign(b.tmp(), "gt_u", "i32", [index1, len]);

@@ -996,14 +996,18 @@ export class TypeChecker {
             }
             // Internally, a reference type is the same as a volatile pointer
             let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let elementType = RestrictedType.strip(c);
+            if (!(elementType instanceof SliceType)) {
+                elementType = new PointerType(elementType);
+            }
             if (c instanceof RestrictedType) {
-                let r = new RestrictedType(new PointerType(c.elementType));
+                let r = new RestrictedType(elementType);
                 r.isImmutable = c.isImmutable;
                 r.isConst = c.isConst;
                 r.isVolatile = true;
                 return r;
             }
-            let r = new RestrictedType(new PointerType(c));
+            let r = new RestrictedType(elementType);
             r.isVolatile = true;
             return r;
         } else if (tnode.op == "pointerType") {
@@ -3029,12 +3033,24 @@ export class TypeChecker {
                     throw new TypeError("Index out of range", enode.rhs.loc);
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index1);
-                if (enode.lhs.type instanceof ArrayType) {
+                let restrictions: RestrictedType;
+                let t = enode.lhs.type;
+                if (t instanceof RestrictedType) {
+                    restrictions = t;
+                    t = t.elementType;
+                }
+                if (t instanceof ArrayType) {
                     this.checkIsAddressable(enode.lhs, scope, false);
                     this.checkIsIndexable(enode.lhs, index2, true);
-                    enode.type = new SliceType(enode.lhs.type.elementType);
-                } else if (enode.lhs.type instanceof UnsafePointerType) {
-                    enode.type = new SliceType(enode.lhs.type.elementType);
+                    enode.type = new SliceType(elementType);
+                    if (restrictions) {
+                        enode.type = new RestrictedType(enode.type, restrictions);
+                    }
+                } else if (t instanceof UnsafePointerType) {
+                    enode.type = new SliceType(elementType);
+                    if (restrictions) {
+                        enode.type = new RestrictedType(enode.type, restrictions);
+                    }
                 } else {
                     // For strings and slices the type remains the same
                     enode.type = enode.lhs.type;

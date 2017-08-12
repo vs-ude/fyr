@@ -177,6 +177,10 @@ func foo() {
     //tuple[1].x = 42
     bar(&tuple[1])
     //bar6(&tuple[1])
+
+    const buf [4]byte = [1,2,3,4]
+    //arr4(buf[:])
+    arr5(buf[:])
 }
 
 func arr() [4]byte {
@@ -189,6 +193,14 @@ func arr2() [1]*Point {
 
 func arr3() [1]Point {
     return [{x: 1, y:2}]
+}
+
+func arr4(data &[]byte) {
+    data[0] = 0
+}
+
+func arr5(data const &[]byte) {
+    //data[0] = 0
 }
 
 func bar(p const *Point) {
