@@ -1388,7 +1388,9 @@ export class CodeGenerator {
                         throw "Implementation error"
                     }
                     if (objType instanceof StructType) {
-                        let methodName = objType.name + "." + enode.lhs.name.value;
+                        let method = objType.method(enode.lhs.name.value);
+                        let methodObjType = RestrictedType.strip(method.objectType);
+                        let methodName = methodObjType.name + "." + enode.lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
                             throw "Implementation error";

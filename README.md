@@ -65,4 +65,4 @@ Here the x-es should not be assigned at all if they are used in the if-clause on
 
 ### Check for the assignment of non trivial interfaces
 
-### Allow calling methods of base structs
+### Const on [:]

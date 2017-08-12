@@ -291,4 +291,5 @@ type Point3D struct {
 func use3D() int {
     var p Point3D
     return p.z + p.y + p.Point.x
+    p.mul()
 }

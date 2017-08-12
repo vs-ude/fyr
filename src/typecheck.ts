@@ -292,6 +292,16 @@ export class StructType extends Type {
         return null;
     }
 
+    public method(name: string): FunctionType {
+        if (this.methods.has(name)) {
+            return this.methods.get(name);
+        }
+        if (this.extends) {
+            return this.extends.method(name);
+        }
+        return null;
+    }
+
     public toString(): string {
         if (this.name) {
             return this.name;
@@ -2957,7 +2967,7 @@ export class TypeChecker {
                             enode.type = new RestrictedType(enode.type, restrictions);
                         }
                     } else {
-                        let method = type.methods.get(name);
+                        let method = type.method(name);
                         if (!method) {
                             throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
                         }
