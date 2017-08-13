@@ -37,8 +37,6 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Automatically include the runtime souces
 - struct implements
     - checking
-- JSON: Either support it as planned or remove t_json
-- Check assignment of [] when type inference is used
 
 # Wish List
 - Package structure
