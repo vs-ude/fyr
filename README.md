@@ -30,6 +30,7 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
     - Type checking
     - Code generation (including automated boxing and unboxing)
 - Type switch statement
+- Parsing of generic structs
 - Generics with interfaces
 - Generics without interfaces
 - @ constructor
@@ -37,6 +38,7 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - struct implements
     - checking
 - JSON: Either support it as planned or remove t_json
+- Check assignment of [] when type inference is used
 
 # Wish List
 - Package structure

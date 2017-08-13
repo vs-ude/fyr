@@ -911,8 +911,6 @@ export class TypeChecker {
         this.t_map.genericParameterNames.push("Key");
         this.t_map.genericParameterTypes.push(this.t_any);
         this.t_map.genericParameterNames.push("Value");
-        this.t_json = new StructType();
-        this.t_json.name = "json";
         this.t_void = new BasicType("void");
         this.t_error = new InterfaceType();
         // TODO: Add a member function here
@@ -954,7 +952,6 @@ export class TypeChecker {
         s.registerType("uint64", this.t_uint64);
         s.registerType("string", this.t_string);
         s.registerType("map", this.t_map);
-        s.registerType("json", this.t_json);
         s.registerType("void", this.t_void);
         s.registerType("error", this.t_error);
         return s;
@@ -1900,14 +1897,6 @@ export class TypeChecker {
                 }
             }
         } else if (vnode.op == "tuple") {
-            if (rtype == this.t_json) {
-                if (vnode.parameters.length != 2) {
-                    throw new TypeError("Expected a tuple of length two", vnode.loc);
-                }
-                // TODO: Check that the second element of the tuple is the error type
-                this.checkVarAssignment(isConst, scope, vnode.parameters[0], this.t_json, null, true);
-                return;
-            }
             if (!(rtype instanceof TupleType) && !(rtype instanceof TupleLiteralType)) {
                 throw new TypeError("Expected tuple expression or json on right hand side", vnode.loc);
             }
@@ -1962,11 +1951,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "array") {
-            if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_json && rtype != this.t_string) {
+            if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_string) {
                 throw new TypeError("Expected an expression of array type, slice type, or string or json", vnode.loc);
-            }
-            if (rtype == this.t_json && !jsonErrorIsHandled) {
-                throw new TypeError("Right-hand value of type 'json' must be assigned to a tuple, where the second parameter is of type 'error'", vnode.loc);
             }
             let hasEllipsis = false;
             let hasOptional = false;
@@ -1984,18 +1970,18 @@ export class TypeChecker {
                     if (!v.type) {
                         if (rtype instanceof ArrayLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
-                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j]);
-                                rtype.types[j] = rnode.parameters[j].type;
+                                // TODO: Check that all elements of the array have the same type
+//                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j]);
+//                                rtype.types[j] = rnode.parameters[j].type;
                             }
-                            v.type = new SliceType(this.t_json);
+//                            v.type = new SliceType(this.t_json);
+                            throw "TODO";
                         } else if (rtype instanceof ArrayType) {
                             v.type = new ArrayType(rtype.elementType, rtype.size - i);
                         } else if (rtype instanceof SliceType) {
                             v.type = new SliceType(rtype.elementType);
                         } else if (rtype == this.t_string) {
                             v.type = this.t_string;
-                        } else if (rtype == this.t_json) {
-                            v.type = new SliceType(this.t_json);
                         }
                     } else {
                         if (rtype instanceof ArrayLiteralType) {
@@ -2009,8 +1995,6 @@ export class TypeChecker {
                                 rt = v.type.elementType;
                             } else if (v.type == this.t_string) {
                                 rt = this.t_byte;
-                            } else if (v.type == this.t_json) {
-                                rt = this.t_json;
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of array type, slice type, string or json", vnode.loc);
                             }
@@ -2032,12 +2016,6 @@ export class TypeChecker {
                             this.checkTypeEquality(v.type.elementType, rtype.elementType, vnode.loc);
                         } else if (rtype == this.t_string) {
                             this.checkTypeEquality(v.type, this.t_string, vnode.loc);
-                        } else if (rtype == this.t_json) {
-                            if (v.type instanceof SliceType) {
-                                this.checkIsAssignableType(v.type.elementType, this.t_json, vnode.loc, true, jsonErrorIsHandled);
-                            } else {
-                                this.checkTypeEquality(v.type, this.t_json, vnode.loc);
-                            }
                         }
                     }
                     if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
@@ -2064,8 +2042,6 @@ export class TypeChecker {
                         rt = rtype.elementType;
                     } else if (rtype == this.t_string) {
                         rt = this.t_byte;
-                    } else if (rtype == this.t_json) {
-                        rt = this.t_json;
                     }
                     this.checkVarAssignment(isConst, scope, p, rt, r, jsonErrorIsHandled);
                 }
@@ -2074,11 +2050,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && rtype != this.t_json && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
+            if (!(rtype instanceof ObjectLiteralType) && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
                 throw new TypeError("Expected an expression of object type, map or json", vnode.loc);
-            }
-            if (rtype == this.t_json && !jsonErrorIsHandled) {
-                throw new TypeError("Right-hand value of type 'json' must be assigned to a tuple, where the second parameter is of type 'error'", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
@@ -2092,27 +2065,21 @@ export class TypeChecker {
                     if (!v.type) {
                         if (rtype instanceof ObjectLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
-                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
+//                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
                             }
                             let t = new GenericStructInstanceType();
                             t.base = this.t_map;
-                            t.genericParameterTypes.push(this.t_string, this.t_json);
+//                            t.genericParameterTypes.push(this.t_string, this.t_json);
                             v.type = t;
+                            throw "TODO";
                         } else if (rtype instanceof GenericStructInstanceType) {
                             v.type = rtype;
-                        } else if (rtype == this.t_json) {
-                            let t = new GenericStructInstanceType();
-                            t.base = this.t_map;
-                            t.genericParameterTypes.push(this.t_string, this.t_json);
-                            v.type = t;
                         }
                     } else {
                         if (rtype instanceof ObjectLiteralType) {
                             let rt: Type;
                             if (v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
                                 rt = v.type.genericParameterTypes[1];
-                            } else if (v.type == this.t_json) {
-                                rt = this.t_json;
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
                             }
@@ -2124,12 +2091,6 @@ export class TypeChecker {
                                 throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
                             }
                             this.checkTypeEquality(v.type.genericParameterTypes[1], rtype.genericParameterTypes[1], vnode.loc);
-                        } else if (rtype == this.t_json) {
-                            if (v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
-                                this.checkIsAssignableType(v.type.genericParameterTypes[1], this.t_json, vnode.loc, true, jsonErrorIsHandled);
-                            } else {
-                                this.checkTypeEquality(v.type, this.t_json, vnode.loc);
-                            }
                         }
                     }
                     if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
@@ -2150,8 +2111,6 @@ export class TypeChecker {
                         throw "TODO: Find matching node in literal"
                     } else if (rtype instanceof GenericStructInstanceType) {
                         rt = rtype.genericParameterTypes[1];
-                    } else if (rtype == this.t_json) {
-                        rt = this.t_json;
                     }
                     this.checkVarAssignment(isConst, scope, p, rt, r, jsonErrorIsHandled);
                 }
@@ -2161,15 +2120,6 @@ export class TypeChecker {
 
     public checkAssignment(scope: Scope, vnode: Node, rtype: Type, rnode: Node = null, jsonErrorIsHandled: boolean = false) {
         if (vnode.op == "tuple") {
-            if (rtype == this.t_json) {
-                if (vnode.parameters.length != 2) {
-                    throw new TypeError("Expected a tuple of length two", vnode.loc);
-                }
-//                this.checkExpression(vnode.parameters[0], scope);
-//                this.checkIsLeftHandSide(vnode.parameters[0]);
-                this.checkAssignment(scope, vnode.parameters[0], this.t_json, null, true);
-                return;
-            }
             if (!(rtype instanceof TupleType) && !(rtype instanceof TupleLiteralType)) {
                 throw new TypeError("Expected tuple expression or json on right hand side", vnode.loc);
             }
@@ -2223,11 +2173,8 @@ export class TypeChecker {
                 rnode.type = new TupleType(types);
             }
         } else if (vnode.op == "array") {
-            if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_json && rtype != this.t_string) {
+            if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_string) {
                 throw new TypeError("Expected an expression of array type, slice type, or string or json", vnode.loc);
-            }
-            if (rtype == this.t_json && !jsonErrorIsHandled) {
-                throw new TypeError("Right-hand value of type 'json' must be assigned to a tuple, where the second parameter is of type 'error'", vnode.loc);
             }
             let hasEllipsis = false;
             let hasOptional = false;
@@ -2254,8 +2201,6 @@ export class TypeChecker {
                             rt = p.lhs.type.elementType;
                         } else if (p.lhs.type == this.t_string) {
                             rt = this.t_byte;
-                        } else if (p.lhs.type == this.t_json) {
-                            rt = this.t_json;
                         } else {
                             throw new TypeError("Ellipsis identifier must be of array type, slice type, string or json", vnode.loc);
                         }
@@ -2277,12 +2222,6 @@ export class TypeChecker {
                         this.checkTypeEquality(p.lhs.type.elementType, rtype.elementType, vnode.loc);
                     } else if (rtype == this.t_string) {
                         this.checkTypeEquality(p.lhs.type, this.t_string, vnode.loc);
-                    } else if (rtype == this.t_json) {
-                        if (p.lhs.type instanceof SliceType) {
-                            this.checkIsAssignableType(p.lhs.type.elementType, this.t_json, vnode.loc, true, jsonErrorIsHandled);
-                        } else {
-                            this.checkTypeEquality(p.lhs.type, this.t_json, vnode.loc);
-                        }
                     }
                     break;
                 } else {
@@ -2305,8 +2244,6 @@ export class TypeChecker {
                         rt = rtype.elementType;
                     } else if (rtype == this.t_string) {
                         rt = this.t_byte;
-                    } else if (rtype == this.t_json) {
-                        rt = this.t_json;
                     }
                     this.checkAssignment(scope, p, rt, r, jsonErrorIsHandled);
                 }
@@ -2315,11 +2252,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && rtype != this.t_json && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
+            if (!(rtype instanceof ObjectLiteralType) && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
                 throw new TypeError("Expected an expression of object type, map or json", vnode.loc);
-            }
-            if (rtype == this.t_json && !jsonErrorIsHandled) {
-                throw new TypeError("Right-hand value of type 'json' must be assigned to a tuple, where the second parameter is of type 'error'", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
@@ -2335,8 +2269,6 @@ export class TypeChecker {
                         let rt: Type;
                         if (kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
                             rt = kv.lhs.type.genericParameterTypes[1];
-                        } else if (kv.lhs.type == this.t_json) {
-                            rt = this.t_json;
                         } else {
                             throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
                         }
@@ -2348,12 +2280,6 @@ export class TypeChecker {
                             throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
                         }
                         this.checkTypeEquality(kv.lhs.type.genericParameterTypes[1], rtype.genericParameterTypes[1], vnode.loc);
-                    } else if (rtype == this.t_json) {
-                        if (kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
-                            this.checkIsAssignableType(kv.lhs.type.genericParameterTypes[1], this.t_json, vnode.loc, true, jsonErrorIsHandled);
-                        } else {
-                            this.checkTypeEquality(kv.lhs.type, this.t_json, vnode.loc);
-                        }
                     }
                 } else {
                     let p = kv.lhs;
@@ -2370,8 +2296,6 @@ export class TypeChecker {
                         throw "TODO: Find matching node in literal"
                     } else if (rtype instanceof GenericStructInstanceType) {
                         rt = rtype.genericParameterTypes[1];
-                    } else if (rtype == this.t_json) {
-                        rt = this.t_json;
                     }
                     this.checkAssignment(scope, p, rt, r, jsonErrorIsHandled);
                 }
@@ -3347,7 +3271,7 @@ export class TypeChecker {
                 this.defaultLiteralType(pnode);
             }
             if (node.parameters.length == 0) {
-                node.type = this.t_json;
+                throw new TypeError("Cannot infer type of []", node.loc);
             } else {
                 let t = node.parameters[0].type;
                 for(let i = 1; i < node.parameters.length; i++) {
@@ -3435,11 +3359,6 @@ export class TypeChecker {
                     node.type = t;
                     return true;
                 }
-                if (t == this.t_json) {
-                    // TODO: Check range
-                    node.type = t;
-                    return true;                    
-                }
                 if (t instanceof UnsafePointerType) {
                     // TODO: Check range
                     node.type = t;
@@ -3455,17 +3374,12 @@ export class TypeChecker {
                     node.type = t;
                     return true;
                 }
-                if (t == this.t_json) {
-                    // TODO: Check range
-                    node.type = t;
-                    return true;                    
-                }
                 if (!doThrow) {
                     return false;
                 }
                 throw new TypeError("Type mismatch between floating point number and " + t.toString(), loc);                
             case "str":
-                if (t == this.t_string || t == this.t_json) {
+                if (t == this.t_string) {
                     node.type = t;
                     return true;
                 } else if (t instanceof StringEnumType) {
@@ -3506,12 +3420,6 @@ export class TypeChecker {
                     }
                     node.type = t;
                     return true;
-                } else if (t == this.t_json) {
-                    for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode(this.t_json, pnode);
-                    }
-                    node.type = t;
-                    return true;
                 }
                 if (!doThrow) {
                     return false;
@@ -3549,12 +3457,6 @@ export class TypeChecker {
                             }
                             this.checkIsAssignableNode(field.type, pnode.lhs);
                         }
-                    }
-                    node.type = t;
-                    return true;                    
-                } else if (t == this.t_json) {
-                    for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode(this.t_json, pnode.rhs);
                     }
                     node.type = t;
                     return true;
@@ -3620,16 +3522,6 @@ export class TypeChecker {
             // It is possible to assign a non-restricted type to a const- or volatile-restricted type.
             // However, something that is not immutable cannot be assigned to an immutable variable.
             return this.checkIsAssignableType(to.elementType, from, loc, doThrow, jsonErrorIsHandled);                
-        } else if (from == this.t_json && jsonErrorIsHandled && (to == this.t_float || to == this.t_double || to == this.t_int8 || to == this.t_int16 || to == this.t_int32 || to == this.t_int64 || to == this.t_uint8 || to == this.t_uint16 || to == this.t_uint32 || to == this.t_uint64 || to == this.t_string || to == this.t_bool || to == this.t_null)) {
-            return true;
-        } else if (to == this.t_json) {
-            if (from == this.t_json || from == this.t_string || from == this.t_null || from == this.t_bool || this.isNumber(from)) {
-                return true;
-            } else if (from instanceof SliceType && (from.elementType == this.t_json || from.elementType == this.t_string || from.elementType == this.t_null || from.elementType == this.t_bool || this.isNumber(from.elementType))) {
-                return true;
-            } else if (from instanceof GenericStructInstanceType && from.base == this.t_map && from.genericParameterTypes[0] == this.t_string && from.genericParameterTypes[0] == this.t_null && from.genericParameterTypes[0] == this.t_bool && (from.genericParameterTypes[1] == this.t_json || from.genericParameterTypes[1] == this.t_string || this.isNumber(from.genericParameterTypes[1]))) {
-                return true;
-            }
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
             for(let i = 0; i < to.types.length; i++) {
@@ -3740,8 +3632,6 @@ export class TypeChecker {
                 throw new TypeError("The index " + index + " does not exist in the tuple " + t.name, node.loc);
             }
             return t.types[index];
-        } else if (t == this.t_json) {
-            return new TupleType([this.t_json, this.t_error]);
         } else if (t instanceof UnsafePointerType || t instanceof PointerType) {
             return t.elementType;
         }
@@ -4214,7 +4104,6 @@ export class TypeChecker {
     public t_string: Type;
     public t_map: GenericStructType;
     public t_any: Type;
-    public t_json: StructType;
     public t_void: Type;
     public t_error: InterfaceType;
 

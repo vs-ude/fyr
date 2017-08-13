@@ -868,8 +868,6 @@ export class CodeGenerator {
                         return ptr;
                     }
                     return new ssa.Pointer(ptr, offset);
-                } else if (ltype == this.tc.t_json) {
-                    throw "TODO";
                 } else {
                     throw "TODO"; // TODO: map
                 }
@@ -1004,8 +1002,6 @@ export class CodeGenerator {
                         args.push(v);
                     }
                     return b.assign(b.tmp(), "struct", st, args);
-                } else if (t == this.tc.t_json) {
-                    throw "TODO";
                 }
                 throw "Implementation error";
             }
