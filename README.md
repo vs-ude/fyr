@@ -37,6 +37,7 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Automatically include the runtime souces
 - struct implements
     - checking
+- map represented as MapType and not a generic type
 
 # Wish List
 - Package structure
