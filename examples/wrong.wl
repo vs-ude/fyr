@@ -19,7 +19,7 @@ func demoSlice2() []int {
 func demoSlice() []int {
     var arr [256]int
     var slice = arr[:]
-    return slice[4:8]
+    return <[]int>slice[4:8]
 }
 
 func demoString() string {
@@ -153,12 +153,12 @@ func foo() {
     p2.wontWork()
     p = p2
     const p3 const Point = *p2
-    bar4(&p3)
-    bar(&p3)
+    bar_ref(&p3)
+    //bar(&p3)
 
     const p4 Point = *p2
-    bar4(&p4)
-    bar(&p4)
+    bar_ref(&p4)
+    //bar(&p4)
     //p4.x = 0
 
     const hash []byte = [1,2,3,4]
@@ -187,6 +187,11 @@ func arr() [4]byte {
     return [1,2,3,4]
 }
 
+func arr_b() [4]byte {
+    const x [4]byte = [1,2,3,4]
+    return x
+}
+
 func arr2() [1]*Point {
     return [&{x: 1, y:2}]
 }
@@ -207,7 +212,7 @@ func bar(p const *Point) {
     logNumber(p.x)
 }
 
-func bar4(p * const Point) {
+func bar_ref(p const &Point) {
 }
 
 func bar2(p *int) {
@@ -236,7 +241,7 @@ func immo1() @Point {
 
 func useImmo() {
     var p = immo1()
-    bar4(p)
+    bar_ref(p)
     bar(p)
     bar7(p)
 }

@@ -277,7 +277,7 @@ export class CodeGenerator {
                     continue;
                 } else {
                     // Create a variable that can be assigned multiple times
-                    let v = b.declareVar(e.heapAlloc ? "ptr" : this.getSSAType(e.type), name);
+                    let v = b.declareVar(this.getSSAType(e.type), name);
                     vars.set(e, v);
                 }
             }
@@ -321,15 +321,8 @@ export class CodeGenerator {
                     if (snode.lhs.op == "id") {
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let v = vars.get(element);
-                        if (element.heapAlloc) {
-                            let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", storage, [1]);
-                            let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
-                            b.assign(b.mem, "store", storage, [v, 0, tmp]);
-                        } else {
-                            let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
-                            b.assign(v, "copy", v.type, [tmp]);
-                        }
+                        let tmp = this.processExpression(f, scope, snode.rhs, b, vars);
+                        b.assign(v, "copy", v.type, [tmp]);
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
                     } else if (snode.lhs.op == "array") {
@@ -338,18 +331,6 @@ export class CodeGenerator {
                         throw "TODO"                        
                     } else {
                         throw "Impl error"
-                    }
-                } else { // Assignment of initial value (all zero)
-                    if (snode.lhs.op == "id") {
-                        let element = scope.resolveElement(snode.lhs.value) as Variable;
-                        let v = vars.get(element);
-                        if (element.heapAlloc) {
-                            let storage = this.getSSAType(element.type);
-                            b.assign(v, "alloc", storage, [1]);
-                        }
-                        // Nothing else todo here, handled by decl_var.
-                    } else {
-                        throw "TODO"; // TODO: Can this happen at all?
                     }
                 }
                 return;
@@ -551,7 +532,8 @@ export class CodeGenerator {
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
                 } else if (snode.condition && snode.condition.op == "var_in") {
-                    if (snode.condition.rhs.type instanceof SliceType) {
+                    let t = RestrictedType.strip(snode.condition.rhs.type);
+                    if (t instanceof SliceType) {
                         // TODO: Use processLeftHandSide if possible
                         // Load the slice header
                         let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
@@ -563,20 +545,9 @@ export class CodeGenerator {
                             // Initialize the counter with 0
                             let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;
                             counter = vars.get(element);
-                            if (element.heapAlloc) {
-                                let storage = this.getSSAType(element.type);
-                                b.assign(counter, "alloc", storage, [1]);
-                                b.assign(b.mem, "store", "s32", [counter, 0, 0]);
-                            } else {
-                                b.assign(counter, "const", "s32", [0]);
-                            }
-                            // Allocate memory for the variable if required
+                            b.assign(counter, "const", "s32", [0]);
                             valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
                             val = vars.get(valElement);
-                            if (valElement.heapAlloc) {
-                                let storage = this.getSSAType(valElement.type);
-                                b.assign(val, "alloc", storage, [1]);
-                            }
                         } else {
                             // Initialize a counter with 0
                             counter = b.declareVar("s32", "$counter");
@@ -584,16 +555,16 @@ export class CodeGenerator {
                             // Allocate memory for the variable if required
                             valElement = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;
                             val = vars.get(valElement);
-                            if (valElement.heapAlloc) {
-                                let storage = this.getSSAType(valElement.type);
-                                b.assign(val, "alloc", storage, [1]);
-                            }
                         }
-                    } else {
+                    } else if (t instanceof ArrayType) {
                         throw "TODO"
+                    } else {
+                        throw "Implementation error"
                     }
+                    // TODO map and string
                 } else if (snode.condition && snode.condition.op == "in") {
-                    if (snode.condition.rhs.type instanceof SliceType) {
+                    let t = RestrictedType.strip(snode.condition.rhs.type);
+                    if (t instanceof SliceType) {
                         // TODO: Use processLeftHandSide if possible
                         // Load the slice header
                         let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars) as ssa.Variable;
@@ -606,9 +577,12 @@ export class CodeGenerator {
                             counter = b.declareVar("s32", "$counter");
                             b.assign(counter, "const", "s32", [0]);                            
                         }
-                    } else {
+                    } else if (t instanceof ArrayType) {
                         throw "TODO"
+                    } else {
+                        throw "Implementation error"
                     }
+                    // TODO map and string
                 }
                 let outer = b.block();
                 let loop = b.loop();
@@ -621,7 +595,8 @@ export class CodeGenerator {
                         }
                     } else if (snode.condition.op == "in") {
                         // TODO: map, runes in a string
-                        if (snode.condition.rhs.type instanceof SliceType) {
+                        let t = RestrictedType.strip(snode.condition.rhs.type);
+                        if (t instanceof SliceType) {
                             let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
                             let storage = this.getSSAType(snode.condition.lhs.type);
                             let index = b.assign(b.tmp(), "mul", "s32", [counter, ssa.sizeOf(storage)]);
@@ -634,23 +609,19 @@ export class CodeGenerator {
                                 b.assign(dest, "copy", storage, [val]);
                             }
                         } else {
-                            throw "TODO";
+                            throw "TODO array map and string";
                         }
                     } else if (snode.condition.op == "var_in") {
-                        if (snode.condition.rhs.type instanceof SliceType) {
+                        let t = RestrictedType.strip(snode.condition.rhs.type);
+                        if (t instanceof SliceType) {
                             let storage = this.getSSAType(valElement.type);
                             let index = b.assign(b.tmp(), "mul", "s32", [counter, ssa.sizeOf(storage)]);
                             let addr = b.assign(b.tmp(), "add", "ptr", [ptr, index]);
-                            if (valElement.heapAlloc) {
-                                let tmp = b.assign(b.tmp(), "load", storage, [addr, 0]);
-                                b.assign(b.mem, "store", storage, [val, 0, tmp]);
-                            } else {
-                                b.assign(val, "load", storage, [addr, 0]);
-                            }
+                            b.assign(val, "load", storage, [addr, 0]);
                             let end = b.assign(b.tmp(), "eq", "s32", [len, counter]);
                             b.br_if(end, outer);
                         } else {
-                            throw "TODO"
+                            throw "TODO array map and strinf"
                         }
                     } else {
                         let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars);
@@ -666,20 +637,22 @@ export class CodeGenerator {
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
                     this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
                 } else if (snode.condition && snode.condition.op == "var_in") {
-                    if (snode.condition.rhs.type instanceof SliceType) {
+                    let t = RestrictedType.strip(snode.condition.rhs.type);
+                    if (t instanceof SliceType) {
                         b.assign(counter, "add", "s32", [counter, 1]);
                     } else {
-                        throw "TODO"
+                        throw "TODO array map and string"
                     }
                 } else if (snode.condition && snode.condition.op == "in") {
-                    if (snode.condition.rhs.type instanceof SliceType) {
+                    let t = RestrictedType.strip(snode.condition.rhs.type);
+                    if (t instanceof SliceType) {
                         if (snode.condition.lhs.op == "tuple") {
                             throw "TODO: Increment counter";
                         } else {
                             b.assign(counter, "add", "s32", [counter, 1]);
                         }
                     } else {
-                        throw "TODO"
+                        throw "TODO array map and string"
                     }
                 }
                 b.br(loop);
@@ -731,9 +704,6 @@ export class CodeGenerator {
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
-                if (element instanceof Variable && element.heapAlloc) {
-                    return new ssa.Pointer(vars.get(element), 0);
-                }
                 return vars.get(element);
             }
             case "unary*":
@@ -1247,9 +1217,6 @@ export class CodeGenerator {
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
-                if (element instanceof Variable && element.heapAlloc) {
-                    return b.assign(b.tmp(), "load", this.getSSAType(element.type), [vars.get(element), 0]);
-                }
                 return vars.get(element);
             }
             case "(":
@@ -1708,7 +1675,7 @@ export class CodeGenerator {
                 } else if (t == this.tc.t_string && enode.rhs.type instanceof UnsafePointerType) {
                     // Convert unsafe pointer to string
                     return expr;
-                } else if (t == this.tc.t_string && enode.rhs.type instanceof SliceType) {
+                } else if (t == this.tc.t_string && RestrictedType.strip(enode.rhs.type) instanceof SliceType) {
                     let head = b.assign(b.tmp(), "addr_of", "addr", [expr]);
                     let ptr = b.assign(b.tmp(), "load", "addr", [head, this.sliceHeader.fieldOffset("data_ptr")]);
                     let l = b.assign(b.tmp(), "load", "i32", [head, this.sliceHeader.fieldOffset("length")]);
@@ -1730,9 +1697,11 @@ export class CodeGenerator {
                 } else if (t instanceof PointerType && enode.rhs.type instanceof UnsafePointerType) {
                     return expr;
                 } else if (t instanceof RestrictedType && t.elementType == enode.rhs.type && this.tc.isPrimitive(enode.rhs.type)) {
-                    return expr;
+                    throw "Useless";
+                    // return expr;
                 } else if (enode.rhs.type instanceof RestrictedType && enode.rhs.type.elementType == t && this.tc.isPrimitive(t)) {
-                    return expr;
+                    throw "Useless";
+                    // return expr;
                 } else if (t instanceof RestrictedType && enode.rhs.type instanceof RestrictedType && t.elementType == enode.rhs.type.elementType && this.tc.isPrimitive(t.elementType)) {
                     return expr;
                 } else if (t instanceof SliceType && t.elementType == this.tc.t_byte && enode.rhs.type == this.tc.t_string) {
@@ -1740,6 +1709,14 @@ export class CodeGenerator {
                     let src = b.assign(b.tmp("addr"), "add", "i32", [expr, 4]);
                     let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);
                     b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, src, l]);
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
+                } else if (t instanceof SliceType && enode.rhs.type instanceof RestrictedType && enode.rhs.type.isVolatile && !enode.rhs.type.isConst) {
+                    // A volatile slice can be converted to a non-volatile slice by copying it.
+                    let head = b.assign(b.tmp(), "addr_of", "addr", [expr]);
+                    let ptr = b.assign(b.tmp(), "load", "addr", [head, this.sliceHeader.fieldOffset("data_ptr")]);
+                    let l = b.assign(b.tmp(), "load", "i32", [head, this.sliceHeader.fieldOffset("length")]);
+                    let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);
+                    b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, ptr, l]);
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
                 } else {
                     throw "TODO: conversion not implemented";

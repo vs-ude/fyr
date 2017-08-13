@@ -38,12 +38,14 @@ export class ImportedPackage implements ScopeElement {
 export class Variable implements ScopeElement {
     // A variable is const if its value cannot be assigned to except during its initial definition.
     public isConst: boolean;
+    // Variable belongs to the global scope.
+    // All other variables belong to a function scope.
     public isGlobal: boolean;
+    // Variable is the return value of a function
+    public isResult: boolean = false;
     public name: string;
     public type: Type;
     public loc: Location;
-    public isResult: boolean = false;
-    public heapAlloc: boolean = false;
     public node: Node;
 }
 
@@ -649,6 +651,16 @@ export class RestrictedType extends Type {
         return new RestrictedType(t, {isConst: true, isImmutable: false, isVolatile: false});
     }
 
+    public static makeVolatile(t: Type): Type {
+        if (t instanceof RestrictedType) {
+            if (t.isVolatile) {
+                return t;
+            }
+            return new RestrictedType(t.elementType, {isConst: t.isConst, isImmutable: t.isImmutable, isVolatile: true});
+        }
+        return new RestrictedType(t, {isConst: false, isImmutable: false, isVolatile: true});
+    }
+
     public static isLess(r1: Restrictions | null, r2: Restrictions | null): boolean {
         if (!r1 && !r2) {
             return false;
@@ -688,6 +700,9 @@ export class RestrictedType extends Type {
         if (this.isVolatile) {
             if (this.elementType instanceof PointerType) {
                 return str + "&" + this.elementType.elementType.toString();
+            }
+            if (this.elementType instanceof SliceType) {
+                return str + "&" + this.elementType.toString();
             }
             str += "volatile ";
         }
@@ -1550,23 +1565,24 @@ export class TypeChecker {
         return f;
     }
 
-    private createVar(vnode: Node, scope: Scope, needType: boolean = true, isConst: boolean = false): Variable {
+    private createVar(vnode: Node, scope: Scope, needType: boolean = true, isConst: boolean = false, isGlobal: boolean = false): Variable {
         let v = new Variable();
         v.loc = vnode.loc;
         v.name = vnode.value;
         v.isConst = isConst;
+        v.isGlobal = isGlobal;
         if (!vnode.rhs) {
             if (needType) {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
             v.type = this.createType(vnode.rhs, scope);
-            if (isConst && !this.isPrimitive(v.type)) {
-                if (v.type instanceof RestrictedType) {
-                    v.type = new RestrictedType(v.type.elementType, {isConst: true, isImmutable: v.type.isImmutable, isVolatile: false});
-                } else {
-                    v.type = new RestrictedType(v.type, {isConst: true, isImmutable: false, isVolatile: false});
-                }
+            if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
+                v.type = RestrictedType.makeConst(v.type);
+            }
+            // All non-global variables are volatile. However, on primitives, strings and pointers, being volatile makes no difference.
+            if (!isGlobal && !this.isPrimitiveOrPointerOrString(v.type)) {
+                v.type = RestrictedType.makeVolatile(v.type);
             }
         }
         if (v.name != "_") {
@@ -1773,15 +1789,12 @@ export class TypeChecker {
                     let f = this.createFunction(snode, fnode.scope, scope);
                     functions.push(f);
                 } else if (snode.op == "var") {
-                    let v = this.createVar(snode.lhs, scope, false);
+                    let v = this.createVar(snode.lhs, scope, false, false, true);
                     v.node = snode;
-                    v.isGlobal = true;
                     globalVariables.push(v);
                 } else if (snode.op == "const") {
-                    let v = this.createVar(snode.lhs, scope, false, true);
+                    let v = this.createVar(snode.lhs, scope, false, true, true);
                     v.node = snode;
-                    v.isGlobal = true;
-                    v.isConst = true;
                     globalVariables.push(v);
                 } else if (snode.op == "import") {
                     this.createImport(snode, fnode.scope);
@@ -2723,7 +2736,7 @@ export class TypeChecker {
                 if (t instanceof RestrictedType) {
                     restrictions = t;
                     t = RestrictedType.strip(t);
-                }                
+                }
                 enode.type = new PointerType(t);
                 if (restrictions) {
                     enode.type = new RestrictedType(enode.type, restrictions);
@@ -3296,8 +3309,13 @@ export class TypeChecker {
                 } else if ((t == this.t_bool || this.isIntNumber(t)) && (enode.rhs.type == this.t_bool || this.checkIsIntNumber(enode.rhs, false))) {
                     enode.type = t;
                 } else if (t == this.t_string && enode.rhs.type instanceof UnsafePointerType) {
+                    // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
                 } else if (t == this.t_string && enode.rhs.type instanceof SliceType && enode.rhs.type.elementType == this.t_byte) {
+                    // A slice of bytes can be converted to a string by copying it
+                    enode.type = t;
+                } else if (t == this.t_string && enode.rhs.type instanceof RestrictedType && enode.rhs.type.elementType instanceof SliceType && enode.rhs.type.elementType.elementType == this.t_byte) {
+                    // A restricted slice of bytes can be converted to a string by copying it. Copying removes all restrictions
                     enode.type = t;
                 } else if (t instanceof PointerType && enode.rhs.type instanceof UnsafePointerType && t.elementType == enode.rhs.type.elementType) {
                     enode.type = t;
@@ -3306,8 +3324,14 @@ export class TypeChecker {
                 } else if (t instanceof RestrictedType && t.elementType == enode.rhs.type && this.isPrimitive(enode.rhs.type)) {
                     enode.type = t;
                 } else if (enode.rhs.type instanceof RestrictedType && enode.rhs.type.elementType == t && this.isPrimitive(t)) {
-                    enode.type = t;
+                    throw "TODO: This rule should ne useless";
+                    // enode.type = t;
                 } else if (t instanceof RestrictedType && enode.rhs.type instanceof RestrictedType && t.elementType == enode.rhs.type.elementType && this.isPrimitive(t.elementType)) {
+                    throw "TODO: This rule should ne useless";
+                    // enode.type = t;
+                } else if (t instanceof SliceType && enode.rhs.type instanceof RestrictedType && this.checkTypeEquality(t, enode.rhs.type.elementType, enode.loc, false) && (!enode.rhs.type.isConst || this.isPrimitive(t.elementType))) {
+                    // A restricted slice can be converted to a non-volatile slice by copying it.
+                    // However, const can only be removed for primitives
                     enode.type = t;
                 } else {
                     throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
@@ -3600,18 +3624,24 @@ export class TypeChecker {
         if (this.checkTypeEquality(to, from, loc, false)) {
             return true;
         }
-        if (from instanceof RestrictedType && this.isPrimitive(from.elementType)) {
-            if (from.elementType == to || (to instanceof RestrictedType && from.elementType == to.elementType)) {
+        if (this.isPrimitive(to)) {
+            // Primitive types do not need restrictions, hence they can always be dropped or added
+            if (this.checkIsAssignableType(RestrictedType.strip(to), RestrictedType.strip(from), loc, false, jsonErrorIsHandled)) {
                 return true;
             }
         } else if (to instanceof RestrictedType && from instanceof RestrictedType) {
-            if ((to.isVolatile || !from.isVolatile) && (to.isConst || !from.isConst) && (to.isImmutable == from.isImmutable || (to.isConst && from.isImmutable))) {
+            // It is possible to assign a non-volatile to a volatile and to assign a non-const to a const and to assign an immutable to a const. 
+            // Furthermore, it is possible to assign a non-primitive volatile/const to a non-volatile/non-const if assigning means copying (which is true for Structs and Arrays and Typles)
+            if ((to.isVolatile || !from.isVolatile || this.isStructOrArrayOrTuple(to.elementType)) && (to.isConst || !from.isConst || this.isStructOrArrayOrTuple(to.elementType)) && (to.isImmutable == from.isImmutable || (to.isConst && from.isImmutable))) {
                 return this.checkIsAssignableType(to.elementType, from.elementType, loc, doThrow, jsonErrorIsHandled);
             }
-        } else if (to instanceof RestrictedType) {
-            if (!to.isImmutable) {
-                return this.checkIsAssignableType(to.elementType, from, loc, doThrow, jsonErrorIsHandled);                
-            }
+        } else if (from instanceof RestrictedType && !from.isImmutable && this.isStructOrArrayOrTuple(from.elementType)) {
+            // It is possible to assign a non-primitive volatile/const to a non-volatile/non-const if assigning means copying (which is true for Structs and Arrays and Typles)
+            return this.checkIsAssignableType(to, from.elementType, loc, doThrow, jsonErrorIsHandled);
+        } else if (to instanceof RestrictedType && !to.isImmutable) {
+            // It is possible to assign a non-restricted type to a const- or volatile-restricted type.
+            // However, something that is not immutable cannot be assigned to an immutable variable.
+            return this.checkIsAssignableType(to.elementType, from, loc, doThrow, jsonErrorIsHandled);                
         } else if (from == this.t_json && jsonErrorIsHandled && (to == this.t_float || to == this.t_double || to == this.t_int8 || to == this.t_int16 || to == this.t_int32 || to == this.t_int64 || to == this.t_uint8 || to == this.t_uint16 || to == this.t_uint32 || to == this.t_uint64 || to == this.t_string || to == this.t_bool || to == this.t_null)) {
             return true;
         } else if (to == this.t_json) {
@@ -3745,11 +3775,9 @@ export class TypeChecker {
             case "id":
                 let element = scope.resolveElement(node.value);
                 if (element instanceof Variable) {
-//                    if (element.isConst && !(element.))
                     if (element.isGlobal) {
                         return true;
                     }                
-                    element.heapAlloc = true;
                     return true;
                 }
                 if (element instanceof FunctionParameter) {
@@ -3928,6 +3956,13 @@ export class TypeChecker {
             return t.elementType instanceof StructType;
         }
         return t instanceof StructType;
+    }
+
+    public isStructOrArrayOrTuple(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof StructType || t instanceof ArrayType || t instanceof TupleType;
+        }
+        return t instanceof StructType || t instanceof ArrayType || t instanceof TupleType;
     }
 
     public checkIsIntOrPointerNumber(node: Node, doThrow: boolean = true): boolean {
