@@ -206,14 +206,7 @@ export abstract class Type {
 }
 
 export class BasicType extends Type {
-    constructor(name: "void" | "string" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64") {
-        super();
-        this.name = name;
-    }
-}
-
-export class GenericConstraintType extends Type {
-    constructor(name: "any" | "number" | "snumber" | "struct" | "class") {
+    constructor(name: "void" | "string" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "any") {
         super();
         this.name = name;
     }
@@ -469,7 +462,7 @@ export class GenericFunctionType extends FunctionType implements GenericType {
     public node: Node;
 }
 
-export class GenericFunctionInstanceType extends FunctionType {
+export class GenericFunctionInstanceType extends FunctionType implements GenericInstanceType {
     constructor() {
         super();
         this.genericParameterTypes = [];
@@ -510,24 +503,18 @@ export class GenericFunctionInstanceType extends FunctionType {
     public genericParameterTypes: Array<Type>;    
 }
 
-export class ClassType extends Type {
-    // TODO
-}
-
-export class GenericClassType extends ClassType implements GenericType {
+export class GenericStructType extends StructType implements GenericType {
     constructor() {
         super();
         this.genericParameterTypes = [];
         this.genericParameterNames = [];
     }
 
-    // TODO: toString()
-
     public genericParameterTypes: Array<Type>;
     public genericParameterNames: Array<string>;
 }
 
-export class GenericClassInstanceType extends ClassType {
+export class GenericStructInstanceType extends StructType {
     constructor() {
         super();
         this.genericParameterTypes = [];
@@ -546,7 +533,7 @@ export class GenericClassInstanceType extends ClassType {
         return str;
     }
 
-    public base: GenericClassType;
+    public base: GenericStructType;
     public genericParameterTypes: Array<Type>;    
 }
 
@@ -904,7 +891,7 @@ export class TypeChecker {
         this.t_bool = new BasicType("bool");
         this.t_float = new BasicType("float");
         this.t_double = new BasicType("double");
-        this.t_any = new GenericConstraintType("any");
+        this.t_any = new BasicType("any");
         this.t_null = new BasicType("null");
         this.t_int8 = new BasicType("int8");
         this.t_int16 = new BasicType("int16");
@@ -918,13 +905,13 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         this.t_string = new BasicType("string");
-        this.t_map = new GenericClassType();
+        this.t_map = new GenericStructType();
         this.t_map.name = "map";
         this.t_map.genericParameterTypes.push(this.t_any);
         this.t_map.genericParameterNames.push("Key");
         this.t_map.genericParameterTypes.push(this.t_any);
         this.t_map.genericParameterNames.push("Value");
-        this.t_json = new ClassType();
+        this.t_json = new StructType();
         this.t_json.name = "json";
         this.t_void = new BasicType("void");
         this.t_error = new InterfaceType();
@@ -1112,28 +1099,21 @@ export class TypeChecker {
             } else {
                 baset = tnode.lhs.type;
             }
-            if (baset instanceof GenericClassType) {
-                let ct = new GenericClassInstanceType();
+            if (baset instanceof GenericStructType) {
+                let ct = new GenericStructInstanceType();
                 if (baset.genericParameterTypes.length != tnode.genericParameters.length) {
                     throw new TypeError("Supplied parameters do not match generic parameter types of " + baset.toString(), tnode.loc);
                 }
-                let mapping = new Map<Type, Type>();
+//                let mapping = new Map<Type, Type>();
                 ct.loc = tnode.loc;
                 ct.base = baset;
-//                ct.name = baset.name + "<";
                 for(let i = 0; i < tnode.genericParameters.length; i++) {
                     let pnode = tnode.genericParameters[i];
                     let pt = this.createType(pnode, scope, noStructBody, allowVolatile);
                     ct.genericParameterTypes.push(pt);
                     // TODO: Check that pt extends baset.genericParameterTypes[i]
-                    mapping.set(pt, baset.genericParameterTypes[i]);
-//                    if (i == 0) {
-//                        ct.name += pt.name;
-//                    } else {
-//                        ct.name += "," + pt.name;
-//                    }
+//                    mapping.set(pt, baset.genericParameterTypes[i]);
                 }
-//                ct.name += ">"
                 // TODO: Instantiate the type of ct, e.g. all function signatures and properties.
                 return ct;
             } else if (baset instanceof GenericFunctionType) {
@@ -2094,7 +2074,7 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && rtype != this.t_json && !(rtype instanceof GenericClassInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
+            if (!(rtype instanceof ObjectLiteralType) && rtype != this.t_json && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
                 throw new TypeError("Expected an expression of object type, map or json", vnode.loc);
             }
             if (rtype == this.t_json && !jsonErrorIsHandled) {
@@ -2114,14 +2094,14 @@ export class TypeChecker {
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
                             }
-                            let t = new GenericClassInstanceType();
+                            let t = new GenericStructInstanceType();
                             t.base = this.t_map;
                             t.genericParameterTypes.push(this.t_string, this.t_json);
                             v.type = t;
-                        } else if (rtype instanceof GenericClassInstanceType) {
+                        } else if (rtype instanceof GenericStructInstanceType) {
                             v.type = rtype;
                         } else if (rtype == this.t_json) {
-                            let t = new GenericClassInstanceType();
+                            let t = new GenericStructInstanceType();
                             t.base = this.t_map;
                             t.genericParameterTypes.push(this.t_string, this.t_json);
                             v.type = t;
@@ -2129,7 +2109,7 @@ export class TypeChecker {
                     } else {
                         if (rtype instanceof ObjectLiteralType) {
                             let rt: Type;
-                            if (v.type instanceof GenericClassInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
+                            if (v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
                                 rt = v.type.genericParameterTypes[1];
                             } else if (v.type == this.t_json) {
                                 rt = this.t_json;
@@ -2139,13 +2119,13 @@ export class TypeChecker {
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                             }
-                        } else if (rtype instanceof GenericClassInstanceType) {
-                            if (!(v.type instanceof GenericClassInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string)) {
+                        } else if (rtype instanceof GenericStructInstanceType) {
+                            if (!(v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string)) {
                                 throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
                             }
                             this.checkTypeEquality(v.type.genericParameterTypes[1], rtype.genericParameterTypes[1], vnode.loc);
                         } else if (rtype == this.t_json) {
-                            if (v.type instanceof GenericClassInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
+                            if (v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
                                 this.checkIsAssignableType(v.type.genericParameterTypes[1], this.t_json, vnode.loc, true, jsonErrorIsHandled);
                             } else {
                                 this.checkTypeEquality(v.type, this.t_json, vnode.loc);
@@ -2168,7 +2148,7 @@ export class TypeChecker {
                         rt = rtype.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtype instanceof GenericClassInstanceType) {
+                    } else if (rtype instanceof GenericStructInstanceType) {
                         rt = rtype.genericParameterTypes[1];
                     } else if (rtype == this.t_json) {
                         rt = this.t_json;
@@ -2335,7 +2315,7 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && rtype != this.t_json && !(rtype instanceof GenericClassInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
+            if (!(rtype instanceof ObjectLiteralType) && rtype != this.t_json && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
                 throw new TypeError("Expected an expression of object type, map or json", vnode.loc);
             }
             if (rtype == this.t_json && !jsonErrorIsHandled) {
@@ -2353,7 +2333,7 @@ export class TypeChecker {
                     this.checkIsMutable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
                         let rt: Type;
-                        if (kv.lhs.type instanceof GenericClassInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
+                        if (kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
                             rt = kv.lhs.type.genericParameterTypes[1];
                         } else if (kv.lhs.type == this.t_json) {
                             rt = this.t_json;
@@ -2363,13 +2343,13 @@ export class TypeChecker {
                         for(let j = i; j < rnode.parameters.length; j++) {
                             this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                         }
-                    } else if (rtype instanceof GenericClassInstanceType) {
-                        if (!(kv.lhs.type instanceof GenericClassInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string)) {
+                    } else if (rtype instanceof GenericStructInstanceType) {
+                        if (!(kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string)) {
                             throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
                         }
                         this.checkTypeEquality(kv.lhs.type.genericParameterTypes[1], rtype.genericParameterTypes[1], vnode.loc);
                     } else if (rtype == this.t_json) {
-                        if (kv.lhs.type instanceof GenericClassInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
+                        if (kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
                             this.checkIsAssignableType(kv.lhs.type.genericParameterTypes[1], this.t_json, vnode.loc, true, jsonErrorIsHandled);
                         } else {
                             this.checkTypeEquality(kv.lhs.type, this.t_json, vnode.loc);
@@ -2388,7 +2368,7 @@ export class TypeChecker {
                         rt = rtype.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtype instanceof GenericClassInstanceType) {
+                    } else if (rtype instanceof GenericStructInstanceType) {
                         rt = rtype.genericParameterTypes[1];
                     } else if (rtype == this.t_json) {
                         rt = this.t_json;
@@ -3003,8 +2983,6 @@ export class TypeChecker {
                     }
                 } else if (type instanceof InterfaceType) {
                     throw "TODO"
-                } else if (type instanceof ClassType) {
-                    throw "TODO"
                 } else if (type instanceof PackageType) {
                     if (!type.elements.has(enode.name.value)) {
                         throw new TypeError("Unknown identifier " + enode.name.value + " in " + type.toString(), enode.name.loc);                        
@@ -3091,7 +3069,7 @@ export class TypeChecker {
                 }
                 let elementType = this.checkIsIndexable(enode.lhs, index);
                 // TODO: In case of a map, lhs must equal the map type
-                if (t instanceof GenericClassInstanceType && t.base == this.t_map) {
+                if (t instanceof GenericStructInstanceType && t.base == this.t_map) {
                     if (enode.rhs.isUnifyableLiteral()) {
                         this.unifyLiterals(t.genericParameterTypes[0], enode.rhs, enode.rhs.loc);
                     } else {
@@ -3556,9 +3534,9 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
-                if (t instanceof GenericClassInstanceType && t.base == this.t_map && t.genericParameterTypes[0] == this.t_string) {
+                if (t instanceof GenericStructInstanceType && t.base == this.t_map && t.genericParameterTypes[0] == this.t_string) {
                     for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode((t as GenericClassInstanceType).genericParameterTypes[1], pnode.lhs);
+                        this.checkIsAssignableNode((t as GenericStructInstanceType).genericParameterTypes[1], pnode.lhs);
                     }
                     node.type = t;
                     return true;
@@ -3649,7 +3627,7 @@ export class TypeChecker {
                 return true;
             } else if (from instanceof SliceType && (from.elementType == this.t_json || from.elementType == this.t_string || from.elementType == this.t_null || from.elementType == this.t_bool || this.isNumber(from.elementType))) {
                 return true;
-            } else if (from instanceof GenericClassInstanceType && from.base == this.t_map && from.genericParameterTypes[0] == this.t_string && from.genericParameterTypes[0] == this.t_null && from.genericParameterTypes[0] == this.t_bool && (from.genericParameterTypes[1] == this.t_json || from.genericParameterTypes[1] == this.t_string || this.isNumber(from.genericParameterTypes[1]))) {
+            } else if (from instanceof GenericStructInstanceType && from.base == this.t_map && from.genericParameterTypes[0] == this.t_string && from.genericParameterTypes[0] == this.t_null && from.genericParameterTypes[0] == this.t_bool && (from.genericParameterTypes[1] == this.t_json || from.genericParameterTypes[1] == this.t_string || this.isNumber(from.genericParameterTypes[1]))) {
                 return true;
             }
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
@@ -3719,7 +3697,7 @@ export class TypeChecker {
         if (t instanceof RestrictedType) {
             t = RestrictedType.strip(t);
         }
-        if (t instanceof GenericClassInstanceType) {
+        if (t instanceof GenericStructInstanceType) {
             if (t.base == this.t_map) {
                 return [t.genericParameterTypes[0], t.genericParameterTypes[1]];
             }
@@ -3738,7 +3716,7 @@ export class TypeChecker {
         if (t instanceof RestrictedType) {
             t = RestrictedType.strip(t);
         }
-        if (t instanceof GenericClassInstanceType) {
+        if (t instanceof GenericStructInstanceType) {
             if (t.base == this.t_map) {
                 return t.genericParameterTypes[1];
             }
@@ -4014,7 +3992,7 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (a instanceof GenericClassInstanceType && b instanceof GenericClassInstanceType) {
+        } else if (a instanceof GenericStructInstanceType && b instanceof GenericStructInstanceType) {
             if (this.checkTypeEquality(a.base, b.base, loc, false)) {
                 let ok = true;
                 for(let i = 0; ok && i < a.genericParameterTypes.length; i++) {
@@ -4234,9 +4212,9 @@ export class TypeChecker {
     public t_uint64: Type;
     public t_uint: Type;
     public t_string: Type;
-    public t_map: GenericClassType;
+    public t_map: GenericStructType;
     public t_any: Type;
-    public t_json: ClassType;
+    public t_json: StructType;
     public t_void: Type;
     public t_error: InterfaceType;
 

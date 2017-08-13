@@ -32,19 +32,17 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Type switch statement
 - Generics with interfaces
 - Generics without interfaces
-- @constructor
+- @ constructor
 - Automatically include the runtime souces
 - struct implements
-    - parsing
     - checking
-- struct extends
-    - parsing
-    - checking for recursions
+- JSON: Either support it as planned or remove t_json
 
 # Wish List
 - Package structure
 - Documentation generator
 - A new parser that handles comments and spaces in a sane way
+- Generic interfaces?
 
 ## Pending Fixes
 
@@ -65,4 +63,5 @@ Here the x-es should not be assigned at all if they are used in the if-clause on
 
 ### Check for the assignment of non trivial interfaces
 
-### Const on [:]
+### Avoid types any and null in vars, structs, etc.
+
