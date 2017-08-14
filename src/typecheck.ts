@@ -585,6 +585,24 @@ export class GuardedPointerType extends Type {
     public elementType: Type;
 }
 
+export class MapType extends Type {
+    constructor(keyType: Type, valueType: Type) {
+        super();
+        this.keyType = keyType;
+        this.valueType = valueType;
+    }
+
+    public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "map<" + this.keyType.toString() + "," + this.valueType.toString() + ">";
+    }
+
+    public keyType: Type;
+    public valueType: Type;
+}
+
 export type Restrictions = {
     isConst: boolean;
     isVolatile: boolean;
@@ -905,15 +923,9 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         this.t_string = new BasicType("string");
-        this.t_map = new GenericStructType();
-        this.t_map.name = "map";
-        this.t_map.genericParameterTypes.push(this.t_any);
-        this.t_map.genericParameterNames.push("Key");
-        this.t_map.genericParameterTypes.push(this.t_any);
-        this.t_map.genericParameterNames.push("Value");
         this.t_void = new BasicType("void");
+
         this.t_error = new InterfaceType();
-        // TODO: Add a member function here
         this.t_error.name = "error";
         let toError = new FunctionType();
         toError.name = "toError";
@@ -951,7 +963,6 @@ export class TypeChecker {
         s.registerType("uint", this.t_uint32);
         s.registerType("uint64", this.t_uint64);
         s.registerType("string", this.t_string);
-        s.registerType("map", this.t_map);
         s.registerType("void", this.t_void);
         s.registerType("error", this.t_error);
         return s;
@@ -1920,16 +1931,17 @@ export class TypeChecker {
                             v.type = new RestrictedType(v.type, {isConst: true, isImmutable: false, isVolatile: false});
                         }
                     } else {
-                        if (!(v.type instanceof TupleType)) {
+                        let lt = RestrictedType.strip(v.type);
+                        if (!(lt instanceof TupleType)) {
                             throw new TypeError("Ellipsis identifier in a tuple context must be of tuple type", vnode.loc);
                         }
-                        if (v.type.types.length != rtype.types.length - i) {
+                        if (lt.types.length != rtype.types.length - i) {
                             throw new TypeError("Mismatch in tuple type length", vnode.loc);                                                
                         }
                         if (rnode && rnode.op == "tuple") {
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 let r = rnode.parameters[j];
-                                this.checkIsAssignableNode(v.type.types[j-i], r);
+                                this.checkIsAssignableNode(lt.types[j-i], r);
                             }
                         } else {
                             this.checkIsAssignableType(v.type, new TupleType(rtype.types.slice(i)), vnode.loc);
@@ -1984,16 +1996,17 @@ export class TypeChecker {
                             v.type = this.t_string;
                         }
                     } else {
+                        let lt = RestrictedType.strip(v.type);
                         if (rtype instanceof ArrayLiteralType) {
                             let rt: Type;
-                            if (v.type instanceof ArrayType) {
-                                if (rtype.types.length - i != v.type.size) {
+                            if (lt instanceof ArrayType) {
+                                if (rtype.types.length - i != lt.size) {
                                     throw new TypeError("Mismatch in array type length", vnode.loc);
                                 }
-                                rt = v.type.elementType;
-                            } else if (v.type instanceof SliceType) {
-                                rt = v.type.elementType;
-                            } else if (v.type == this.t_string) {
+                                rt = lt.elementType;
+                            } else if (lt instanceof SliceType) {
+                                rt = lt.elementType;
+                            } else if (lt == this.t_string) {
                                 rt = this.t_byte;
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of array type, slice type, string or json", vnode.loc);
@@ -2002,18 +2015,18 @@ export class TypeChecker {
                                 this.checkIsAssignableNode(rt, rnode.parameters[j]);
                             }
                         } else if (rtype instanceof ArrayType) {
-                            if (!(v.type instanceof ArrayType)) {
+                            if (!(lt instanceof ArrayType)) {
                                 throw new TypeError("Ellipsis identifier must be of array type", vnode.loc);
                             }
-                            if (v.type.size != rtype.size - i) {
+                            if (lt.size != rtype.size - i) {
                                 throw new TypeError("Mismatch in array size", vnode.loc);                                                
                             }
-                            this.checkTypeEquality(v.type.elementType, rtype.elementType, vnode.loc);
+                            this.checkTypeEquality(lt.elementType, rtype.elementType, vnode.loc);
                         } else if (rtype instanceof SliceType) {
-                            if (!(v.type instanceof SliceType)) {
+                            if (!(lt instanceof SliceType)) {
                                 throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                             }
-                            this.checkTypeEquality(v.type.elementType, rtype.elementType, vnode.loc);
+                            this.checkTypeEquality(lt.elementType, rtype.elementType, vnode.loc);
                         } else if (rtype == this.t_string) {
                             this.checkTypeEquality(v.type, this.t_string, vnode.loc);
                         }
@@ -2050,8 +2063,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
-                throw new TypeError("Expected an expression of object type, map or json", vnode.loc);
+            if (!(rtype instanceof ObjectLiteralType) && (!(rtype instanceof MapType) || rtype.keyType != this.t_string)) {
+                throw new TypeError("Expected an expression of type object literal or map<string,...>", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
@@ -2064,33 +2077,32 @@ export class TypeChecker {
                     let v = this.createVar(kv, scope, false, isConst);
                     if (!v.type) {
                         if (rtype instanceof ObjectLiteralType) {
+                            let valueType: Type = null; // TODO
                             for(let j = i; j < rnode.parameters.length; j++) {
 //                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
                             }
-                            let t = new GenericStructInstanceType();
-                            t.base = this.t_map;
-//                            t.genericParameterTypes.push(this.t_string, this.t_json);
-                            v.type = t;
+                            v.type = new MapType(this.t_string, valueType);
                             throw "TODO";
                         } else if (rtype instanceof GenericStructInstanceType) {
                             v.type = rtype;
                         }
                     } else {
+                        let lt = RestrictedType.strip(v.type);
                         if (rtype instanceof ObjectLiteralType) {
                             let rt: Type;
-                            if (v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string) {
-                                rt = v.type.genericParameterTypes[1];
+                            if (lt instanceof MapType && lt.keyType == this.t_string) {
+                                rt = lt.valueType;
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
                             }
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                             }
-                        } else if (rtype instanceof GenericStructInstanceType) {
-                            if (!(v.type instanceof GenericStructInstanceType && v.type.base == this.t_map && v.type.genericParameterTypes[0] == this.t_string)) {
-                                throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
+                        } else if (rtype instanceof MapType) {
+                            if (!(lt instanceof MapType) || lt.keyType != this.t_string) {
+                                throw new TypeError("Ellipsis identifier must be of type map<string, ...>", vnode.loc);
                             }
-                            this.checkTypeEquality(v.type.genericParameterTypes[1], rtype.genericParameterTypes[1], vnode.loc);
+                            this.checkTypeEquality(lt.valueType, rtype.valueType, vnode.loc);
                         }
                     }
                     if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
@@ -2252,8 +2264,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && !(rtype instanceof GenericStructInstanceType && rtype.base == this.t_map && rtype.genericParameterTypes[0] != this.t_string)) {
-                throw new TypeError("Expected an expression of object type, map or json", vnode.loc);
+            if (!(rtype instanceof ObjectLiteralType) && (!(rtype instanceof MapType) || rtype.keyType != this.t_string)) {
+                throw new TypeError("Expected an expression of type object literal or map<string, ...>", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
@@ -2267,8 +2279,8 @@ export class TypeChecker {
                     this.checkIsMutable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
                         let rt: Type;
-                        if (kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string) {
-                            rt = kv.lhs.type.genericParameterTypes[1];
+                        if (kv.lhs.type instanceof MapType && kv.lhs.type.keyType == this.t_string) {
+                            rt = kv.lhs.type.valueType;
                         } else {
                             throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
                         }
@@ -2276,10 +2288,10 @@ export class TypeChecker {
                             this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                         }
                     } else if (rtype instanceof GenericStructInstanceType) {
-                        if (!(kv.lhs.type instanceof GenericStructInstanceType && kv.lhs.type.base == this.t_map && kv.lhs.type.genericParameterTypes[0] == this.t_string)) {
-                            throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
+                        if (!(kv.lhs.type instanceof MapType) || kv.lhs.type.keyType != this.t_string) {
+                            throw new TypeError("Ellipsis identifier must be of type map<string,...>", vnode.loc);
                         }
-                        this.checkTypeEquality(kv.lhs.type.genericParameterTypes[1], rtype.genericParameterTypes[1], vnode.loc);
+                        this.checkTypeEquality(kv.lhs.type.valueType, rtype.valueType, vnode.loc);
                     }
                 } else {
                     let p = kv.lhs;
@@ -2982,25 +2994,32 @@ export class TypeChecker {
                     restrictions = t;
                     t = RestrictedType.strip(t);
                 }
-                let index = 0;
+                let elementType: Type;
                 if (t instanceof TupleType) {
+                    this.checkIsIntNumber(enode.rhs);
                     if (enode.rhs.op != "int") {
                         throw new TypeError("Index inside a tuple must be a constant number", enode.lhs.loc);
                     }
-                    index = parseInt(enode.rhs.value);
-                } else if (t instanceof ArrayType && enode.rhs.op == "int") {
-                    index = parseInt(enode.rhs.value);
-                }
-                let elementType = this.checkIsIndexable(enode.lhs, index);
-                // TODO: In case of a map, lhs must equal the map type
-                if (t instanceof GenericStructInstanceType && t.base == this.t_map) {
-                    if (enode.rhs.isUnifyableLiteral()) {
-                        this.unifyLiterals(t.genericParameterTypes[0], enode.rhs, enode.rhs.loc);
-                    } else {
-                        this.checkTypeEquality(t.genericParameterTypes[0], enode.rhs.type, enode.rhs.loc);
-                    }
-                } else {
+                    let index = parseInt(enode.rhs.value);
+                    elementType = this.checkIsIndexable(enode.lhs, index);
+                } else if (t instanceof ArrayType) {
                     this.checkIsIntNumber(enode.rhs);
+                    let index = 0;
+                    if (enode.rhs.op == "int") {
+                        index = parseInt(enode.rhs.value);
+                    }
+                    elementType = this.checkIsIndexable(enode.lhs, index);
+                } else if (t instanceof MapType) {
+                    if (enode.rhs.isUnifyableLiteral()) {
+                        this.unifyLiterals(t.keyType, enode.rhs, enode.rhs.loc);
+                    } else {
+                        this.checkIsAssignableType(t.keyType, enode.rhs.type, enode.rhs.loc);
+                    }
+                    elementType = t.valueType;
+                } else if (t instanceof SliceType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                    elementType = t.elementType;
+                } else {
+                    throw "Implementation error " + t.toString();
                 }
                 enode.type = elementType;
                 // Volatile does not expand to primitive types and pointers
@@ -3442,9 +3461,9 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
-                if (t instanceof GenericStructInstanceType && t.base == this.t_map && t.genericParameterTypes[0] == this.t_string) {
+                if (t instanceof MapType && t.keyType == this.t_string) {
                     for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode((t as GenericStructInstanceType).genericParameterTypes[1], pnode.lhs);
+                        this.checkIsAssignableNode(t.valueType, pnode.lhs);
                     }
                     node.type = t;
                     return true;
@@ -3589,10 +3608,8 @@ export class TypeChecker {
         if (t instanceof RestrictedType) {
             t = RestrictedType.strip(t);
         }
-        if (t instanceof GenericStructInstanceType) {
-            if (t.base == this.t_map) {
-                return [t.genericParameterTypes[0], t.genericParameterTypes[1]];
-            }
+        if (t instanceof MapType) {
+            return [t.keyType, t.valueType];
         } else if (t == this.t_string) {
             return [this.t_int, this.t_byte];
         } else if (t instanceof ArrayType) {
@@ -3608,11 +3625,7 @@ export class TypeChecker {
         if (t instanceof RestrictedType) {
             t = RestrictedType.strip(t);
         }
-        if (t instanceof GenericStructInstanceType) {
-            if (t.base == this.t_map) {
-                return t.genericParameterTypes[1];
-            }
-        } else if (t == this.t_string) {
+        if (t == this.t_string) {
             if (index < 0) {
                 throw new TypeError("Index out of range", node.loc);
             }
@@ -4102,7 +4115,6 @@ export class TypeChecker {
     public t_uint64: Type;
     public t_uint: Type;
     public t_string: Type;
-    public t_map: GenericStructType;
     public t_any: Type;
     public t_void: Type;
     public t_error: InterfaceType;
