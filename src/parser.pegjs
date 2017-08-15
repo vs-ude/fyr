@@ -218,8 +218,8 @@ primitiveType
   / "^" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
-  / "struct" [ \t]* "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
-        return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : []})
+  / "struct" [ \t]* g:genericParameters? "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
+        return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : [], genericParameters: g});
     }
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})

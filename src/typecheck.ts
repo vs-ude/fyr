@@ -1097,6 +1097,14 @@ export class TypeChecker {
                 t.returnType = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
             }
             return t;
+        } else if (tnode.op == "genericType" && tnode.lhs.op == "id" && tnode.lhs.value == "map") {
+            if (tnode.genericParameters.length != 2) {
+                throw new TypeError("Supplied type arguments do not match signature of map", tnode.loc);
+            }
+            // TODO: Allow all types in maps?
+            let k = this.createType(tnode.genericParameters[0], scope, noStructBody, false);
+            let v = this.createType(tnode.genericParameters[1], scope, noStructBody, false);
+            return new MapType(k, v);
         } else if (tnode.op == "genericType" || tnode.op == "genericInstance") {
             let baset: Type;
             if (tnode.op == "genericType") {
@@ -1110,7 +1118,7 @@ export class TypeChecker {
             if (baset instanceof GenericStructType) {
                 let ct = new GenericStructInstanceType();
                 if (baset.genericParameterTypes.length != tnode.genericParameters.length) {
-                    throw new TypeError("Supplied parameters do not match generic parameter types of " + baset.toString(), tnode.loc);
+                    throw new TypeError("Supplied type arguments do not match signature of " + baset.toString(), tnode.loc);
                 }
 //                let mapping = new Map<Type, Type>();
                 ct.loc = tnode.loc;
