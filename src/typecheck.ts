@@ -3819,6 +3819,41 @@ export class TypeChecker {
         return false;
     }
 
+    public isString(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType == this.t_string;
+        }
+        return t == this.t_string;
+    }
+
+    public isInterface(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof InterfaceType;
+        }
+        return t instanceof InterfaceType;
+    }
+
+    public isSlice(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof SliceType;
+        }
+        return t instanceof SliceType;
+    }
+
+    public isArray(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof ArrayType;
+        }
+        return t instanceof ArrayType;
+    }
+
+    public isGuardedPointer(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof GuardedPointerType;
+        }
+        return t instanceof GuardedPointerType;
+    }
+
     public isNumber(t: Type): boolean {
         if (t instanceof RestrictedType) {
             return this.isNumber(t.elementType);
@@ -4074,6 +4109,19 @@ export class TypeChecker {
             }
         }
         throw new TypeError("The expression is not assignable", node.loc);
+    }
+
+    public stripType(t: Type): Type {
+        if (t instanceof RestrictedType) {
+            t = t.elementType;
+        }
+        if (t instanceof InterfaceType && t.isBoxedType()) {
+            t = t.extendsInterfaces[0];
+            if (t instanceof RestrictedType) {
+                t = t.elementType;
+            }
+        }
+        return t;
     }
 
     private getBuiltinFunction(type: Type, name: string): FunctionType | null {

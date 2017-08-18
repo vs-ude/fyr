@@ -272,21 +272,21 @@ type ReadWriter interface {
 }
 
 func useIface() {
-//    iface1(42)
-//    iface1(true)
-//    iface1(&Point{x:1, y:2})
+    iface1(42)
+    iface1(true)
+    iface1(&Point{x:1, y:2})
 // TODO    iface2(&Point{x:1, y:2})
-//    iface3(42)
+    iface3(42)
 }
 
-//func iface1(something interface{}) {
-//}
+func iface1(something interface{}) {
+}
 
 //func iface2(bar IBar) {
 //}
 
-//func iface3(box interface{int16}) {
-//}
+func iface3(box interface{int16}) {
+}
 
 //func iface4(io Reader & Writer) {
 //}

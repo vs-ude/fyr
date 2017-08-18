@@ -7,10 +7,13 @@ export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" |
 
 export class StructType {
     public addField(name: string, type: Type | StructType, count: number = 1): number {
-        // TODO: Alignment
+        let align = alignmentOf(type);
+        this.alignment = Math.max(this.alignment, align);
+        let alignOffset = (align - this.size % align) % align;
+        this.size += alignOffset;
         let offset = this.size;
         this.fieldOffsetsByName.set(name, this.size);
-        this.size += count * sizeOf(type); // TODO: Include aligned size
+        this.size += count * alignedSizeOf(type);
         this.fields.push([name, type, count]);
         return offset;
     }
@@ -42,10 +45,12 @@ export class StructType {
         return "struct{...}";
     }
 
+    // An array of type [name, type, count].
     public fields: Array<[string, Type | StructType, number]> = [];
     public fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
-    public name: string;
+    public name: string | null;
+    public alignment: number = 1;
 }
 
 export function alignmentOf(x: Type | StructType): number {
@@ -53,7 +58,7 @@ export function alignmentOf(x: Type | StructType): number {
         if (x.fields.length == 0) {
             return 1;
         }
-        return alignmentOf(x.fields[0][1]);
+        return x.alignment;
     }
     switch(x) {
         case "i8":
@@ -101,6 +106,15 @@ export function sizeOf(x: Type | StructType): number {
         case "f64":
             return 8;
     }
+}
+
+export function alignedSizeOf(type: Type | StructType): number {
+    let size = sizeOf(type);
+    if (size == 0) {
+        return 0;
+    }
+    let align = alignmentOf(type);
+    return align * Math.ceil(size/align);
 }
 
 export function hasPointers(t: Type | StructType): boolean {
@@ -639,7 +653,7 @@ export class Builder {
         this._current = n;
     }
 
-    public tmp(t: Type = null): Variable {
+    public tmp(t: Type | StructType = null): Variable {
         let v = new Variable();
         // v.isTemporary = true;
         v.type = t;
