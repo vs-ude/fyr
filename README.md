@@ -29,6 +29,7 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Interfaces
     - Type checking
     - Code generation (including automated boxing and unboxing)
+    - Calling methods on interfaces
 - Type switch statement
 - Parsing of generic structs
 - Generics with interfaces
@@ -67,3 +68,4 @@ Here the x-es should not be assigned at all if they are used in the if-clause on
 
 ### Avoid types any and null in vars, structs, etc.
 
+### Codegen for named return types

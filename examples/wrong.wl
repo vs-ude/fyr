@@ -246,17 +246,19 @@ func useImmo() {
     bar7(p)
 }
 
-//type File struct {
-// TODO    implements ReadWriter
-//}
+type File struct {
+    implements ReadWriter
+}
 
+func File.Read(buffer []byte) (int, error) {
 //func File.Read(buffer []byte) (n int, err error) {
-//    return 0, null
-//}
+    return 0, null
+}
 
+func File.Write(buffer []byte) (int, error) {
 //func File.Write(buffer []byte) (n int, err error) {
-//    return 0, null
-//}
+    return 0, null
+}
 
 type Reader interface {
     func Read(buffer []byte) (n int, err error)
@@ -275,21 +277,28 @@ func useIface() {
     iface1(42)
     iface1(true)
     iface1(&Point{x:1, y:2})
-// TODO    iface2(&Point{x:1, y:2})
+    //iface2(&Point{x:1, y:2})
     iface3(42)
+
+    // TODO var x int = iface5()
+    // TODO iface1(x)
+
+    var file = &File{}
+    // TODO iface2(file)
+    iface4(file)
 }
 
 func iface1(something interface{}) {
 }
 
-//func iface2(bar IBar) {
-//}
+func iface2(bar IBar) {
+}
 
 func iface3(box interface{int16}) {
 }
 
-//func iface4(io Reader & Writer) {
-//}
+func iface4(io Reader & Writer) {
+}
 
 func iface5() interface{int} {
     return 42

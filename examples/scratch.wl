@@ -1,7 +1,9 @@
-func iface5() interface{int} {
-    return 42
+func bar() (n int, t string) {
+    n = 5
+    t = "Hallo"
+    return
 }
 
-func useIt() int {
-    return iface5() * 3
+func foo() (int, string) {
+    return 0, "Hallo"
 }

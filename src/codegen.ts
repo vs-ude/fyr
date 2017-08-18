@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, Type, PackageType, InterfaceType, RestrictedType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, Type, PackageType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 import {SystemCalls} from "./pkg"
@@ -207,6 +207,9 @@ export class CodeGenerator {
             return s;            
         }
         if (t instanceof InterfaceType) {
+            return this.ifaceHeader;
+        }
+        if (t instanceof OrType) {
             return this.ifaceHeader;
         }
         if (t instanceof RestrictedType) {
@@ -985,6 +988,8 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderDouble, [this.typecode(enode.type), 0, v]);
             } else if (this.tc.isNumber(enode.type) || enode.type == this.tc.t_bool) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
+            } else if (enode.type = this.tc.t_null) {
+                return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, 0]);
             } else {
                 throw "Implementation error " + enode.type.toString();
             }

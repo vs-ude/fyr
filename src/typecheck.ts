@@ -220,6 +220,12 @@ export class InterfaceType extends Type {
         for(let key of this.methods.keys()) {
             map.set(key, this.methods.get(key));
         }
+        for(let b of this.extendsInterfaces) {
+            if (!(b instanceof InterfaceType)) {
+                continue;
+            }
+            b.getAllMethods(map);
+        }
         return map;
     }
 
@@ -1443,9 +1449,7 @@ export class TypeChecker {
             }
         }
         for(let iface of s.implements) {
-            if (!this.checkIsAssignableType(iface, new PointerType(s), s.loc, false)) {
-                throw new TypeError(s.toString() + " does not implement " + iface.toString(), s.loc);
-            }
+            this.checkIsAssignableType(iface, new PointerType(s), s.loc);
         }
     }
 
@@ -3611,7 +3615,61 @@ export class TypeChecker {
             if (to.isBoxedType()) {
                 return this.checkIsAssignableType(to.extendsInterfaces[0], from, loc, doThrow, jsonErrorIsHandled);
             }
-            // TODO: Check assignment to interface
+            if (from instanceof InterfaceType) {
+                if (!from.isBoxedType()) {
+                    // Check two interfaces
+                    let fromMethods = from.getAllMethods();
+                    let toMethods = to.getAllMethods();
+                    if (fromMethods.size >= toMethods.size) {
+                        let ok = true;
+                        for(let entry of toMethods.entries()) {
+                            if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false, false)) {
+                                ok = false;
+                                if (doThrow) {
+                                    throw new TypeError("Incompatible method signagture for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
+                                }
+                                break;
+                            }
+                        }
+                        if (ok) {
+                            return true;
+                        }
+                    }
+                } 
+            } else if (from == this.t_null) {
+                return true;
+            } else {
+                let fromStripped = this.stripType(from);
+                if (fromStripped instanceof PointerType) {
+                    let fromElement = this.stripType(fromStripped.elementType);
+                    if (fromElement instanceof StructType) {
+                        let toMethods = to.getAllMethods();
+                        let fromMethods = fromElement.getAllMethodsAndFields();
+                        let ok = true;
+                        for(let entry of toMethods.entries()) {
+                            if (fromMethods.has(entry[0])) {
+                                let fieldOrMethod = fromMethods.get(entry[0]);
+                                if (!(fieldOrMethod instanceof FunctionType) || !this.checkTypeEquality(fieldOrMethod, entry[1], loc, false, false)) {
+                                    ok = false;
+                                    if (doThrow) {
+                                        throw new TypeError("Incompatible method signagture for " + entry[0] + " in types " + fromElement.toString() + " and " + to.toString(), loc);
+                                    }
+                                    break;
+                                }
+                            } else {
+                                ok = false;
+                                if (doThrow) {
+                                    throw new TypeError("Type " + fromElement.toString() + " is missing method " + entry[0] + " as required by " + to.toString(), loc);
+                                }
+                                break;
+                            }
+                        }
+                        if (ok) {
+                            return true;
+                        }
+                    }                
+                }
+            }
         }
         if (!doThrow) {
             return false;
