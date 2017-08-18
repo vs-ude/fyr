@@ -717,7 +717,7 @@ export class CodeGenerator {
                     }
                 } else {
                     let tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
-                    b.assign(null, "return", this.getSSAType(snode.lhs.type), [tmp]);
+                    b.assign(null, "return", this.getSSAType(f.type.returnType), [tmp]);
                 }
                 break;
             case "yield":

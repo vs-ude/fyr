@@ -291,6 +291,10 @@ func iface3(box interface{int16}) {
 //func iface4(io Reader & Writer) {
 //}
 
+func iface5() interface{int} {
+    return 42
+}
+
 type IBar interface {
     func const Read(a int)
 }
