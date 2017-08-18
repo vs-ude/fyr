@@ -262,6 +262,13 @@ export class InterfaceType extends Type {
         return false;
     }
 
+    public unbox(): Type {
+        if (this.extendsInterfaces.length == 1 && !(this.extendsInterfaces[0] instanceof InterfaceType)) {
+            return this.extendsInterfaces[0];
+        }
+        return this;
+    }
+
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -2600,7 +2607,7 @@ export class TypeChecker {
                     enode.op = enode.rhs.op;
                     enode.value = (-parseFloat(enode.rhs.value)).toString(); // TODO: BigNumber
                 }
-                enode.type = enode.rhs.type;
+                enode.type = this.stripType(enode.rhs.type);
                 break;
             case "unary+":
                 this.checkExpression(enode.rhs, scope);
@@ -2609,7 +2616,7 @@ export class TypeChecker {
                     enode.op = enode.rhs.op;
                     enode.value = enode.rhs.value;
                 }
-                enode.type = enode.rhs.type;
+                enode.type = this.stripType(enode.rhs.type);
                 break;
             case "unary^":
                 this.checkExpression(enode.rhs, scope);
@@ -2618,7 +2625,7 @@ export class TypeChecker {
                     enode.op = enode.rhs.op;
                     enode.value = (~parseInt(enode.rhs.value)).toString();
                 }
-                enode.type = enode.rhs.type;
+                enode.type = this.stripType(enode.rhs.type);
                 break;
             case "unary!":
                 this.checkExpression(enode.rhs, scope);
@@ -2627,7 +2634,7 @@ export class TypeChecker {
                     enode.op = enode.rhs.op;
                     enode.value = enode.rhs.value == "true" ? "false" : "true";
                 }
-                enode.type = enode.rhs.type;
+                enode.type = this.t_bool;
                 break;
             case "unary*":
             {
@@ -2688,7 +2695,7 @@ export class TypeChecker {
                     } else {
                         enode.type = this.t_bool;
                     }
-                } else if (enode.lhs.type instanceof UnsafePointerType) {
+                } else if (this.isUnsafePointer(enode.lhs.type)) {
                     if (enode.op == "*" || enode.op == "/") {
                         throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
                     }
@@ -2697,8 +2704,8 @@ export class TypeChecker {
                     } else {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
                     }
-                    enode.type = enode.lhs.type;
-                } else if (enode.rhs.type instanceof UnsafePointerType) {
+                    enode.type = this.stripType(enode.lhs.type);
+                } else if (this.isUnsafePointer(enode.rhs.type)) {
                     if (enode.op == "*" || enode.op == "/") {
                         throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
                     }
@@ -2707,10 +2714,11 @@ export class TypeChecker {
                     } else {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
                     }
-                    enode.type = enode.rhs.type;
+                    enode.type = this.stripType(enode.rhs.type);
                 } else {
                     this.checkIsNumber(enode.lhs);
                     this.checkIsNumber(enode.rhs);
+                    // If lhs and rhs are constants, compute at compile time
                     if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
                         // TODO: parse in a BigNumber representation
                         let l: number = parseFloat(enode.lhs.value);
@@ -2756,7 +2764,7 @@ export class TypeChecker {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
                     }
                     if (enode.op == "+" || enode.op == "-" || enode.op == "*" || enode.op == "/" || enode.op == "float" || enode.op == "int") {
-                        enode.type = enode.lhs.type;
+                        enode.type = this.stripType(enode.lhs.type);
                     } else {
                         enode.type = this.t_bool;
                     }
@@ -2831,7 +2839,7 @@ export class TypeChecker {
                         this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc);
                     }
                 }
-                enode.type = enode.lhs.type;
+                enode.type = this.stripType(enode.lhs.type);
                 break;
             case "==":
             case "!=":
@@ -3531,7 +3539,7 @@ export class TypeChecker {
         if (this.checkTypeEquality(to, from, loc, false)) {
             return true;
         }
-        if (this.isPrimitive(to)) {
+        if (this.isPrimitive(to) && (to instanceof RestrictedType || from instanceof RestrictedType)) {
             // Primitive types do not need restrictions, hence they can always be dropped or added
             if (this.checkIsAssignableType(RestrictedType.strip(to), RestrictedType.strip(from), loc, false, jsonErrorIsHandled)) {
                 return true;
@@ -3612,10 +3620,7 @@ export class TypeChecker {
     }
 
     public checkIsEnumerable(node: Node): [Type, Type] {
-        let t = node.type;
-        if (t instanceof RestrictedType) {
-            t = RestrictedType.strip(t);
-        }
+        let t = this.stripType(node.type);
         if (t instanceof MapType) {
             return [t.keyType, t.valueType];
         } else if (t == this.t_string) {
@@ -3629,10 +3634,7 @@ export class TypeChecker {
     }
 
     public checkIsIndexable(node: Node, index: number, indexCanBeLength: boolean = false): Type {
-        let t = node.type;
-        if (t instanceof RestrictedType) {
-            t = RestrictedType.strip(t);
-        }
+        let t = this.stripType(node.type);
         if (t == this.t_string) {
             if (index < 0) {
                 throw new TypeError("Index out of range", node.loc);
@@ -3706,10 +3708,8 @@ export class TypeChecker {
     }
 
     public checkIsPointer(node: Node, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType && (node.type.elementType instanceof PointerType || node.type.elementType instanceof UnsafePointerType)) {
-            return true;
-        }
-        if (node.type instanceof PointerType || node.type instanceof UnsafePointerType) {
+        let t = this.stripType(node.type);
+        if (t instanceof PointerType || t instanceof UnsafePointerType) {
             return true;
         }
         if (doThrow) {
@@ -3719,10 +3719,8 @@ export class TypeChecker {
     }
 
     public checkIsString(node: Node, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType && node.type.elementType == this.t_string) {
-            return true;
-        }
-        if (node.type == this.t_string) {
+        let t = this.stripType(node.type);
+        if (t == this.t_string) {
             return true;
         }
         if (doThrow) {
@@ -3732,12 +3730,8 @@ export class TypeChecker {
     }
 
     public checkIsSignedNumber(node: Node, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType) {
-            if (node.type.elementType == this.t_float || node.type.elementType == this.t_double || node.type.elementType == this.t_int8 || node.type.elementType == this.t_int16 || node.type.elementType == this.t_int32 || node.type.elementType == this.t_int64) {
-                return true;
-            }            
-        }
-        if (node.type == this.t_float || node.type == this.t_double || node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64) {
+        let t = this.stripType(node.type);
+        if (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64) {
             return true;
         }
         if (doThrow) {
@@ -3747,12 +3741,8 @@ export class TypeChecker {
     }
 
     public checkIsUnsignedNumber(node: Node, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType) {
-            if (node.type.elementType == this.t_uint8 || node.type.elementType == this.t_uint16 || node.type.elementType == this.t_uint32 || node.type.elementType == this.t_uint64) {
-                return true;
-            }
-        }
-        if (node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
+        let t = this.stripType(node.type);
+        if (t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64) {
             return true;
         }
         if (doThrow) {
@@ -3762,10 +3752,8 @@ export class TypeChecker {
     }
 
     public checkIsBool(node: Node, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType && node.type.elementType == this.t_bool) {
-            return true;
-        }
-        if (node.type == this.t_bool) {
+        let t = this.stripType(node.type);
+        if (t == this.t_bool) {
             return true;
         }
         if (doThrow) {
@@ -3794,13 +3782,10 @@ export class TypeChecker {
         return false;
     }
 
+    // TODO: Rename to checkIsAddrInt
     public checkIsInt32Number(node: Node, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType) {
-            if (node.type.elementType == this.t_int32 || node.type.elementType == this.t_uint32) {
-                return true;
-            }
-        }
-        if (node.type == this.t_int32 || node.type == this.t_uint32) {
+        let t = this.stripType(node.type);
+        if (t == this.t_int32 || t == this.t_uint32) {
             return true;
         }
         if (doThrow) {
@@ -3810,9 +3795,7 @@ export class TypeChecker {
     }
 
     public isIntNumber(type: Type): boolean {
-        if (type instanceof RestrictedType) {
-            return this.isIntNumber(type.elementType);
-        }
+        type = this.stripType(type);
         if (type == this.t_int8 || type == this.t_int16 || type == this.t_int32 || type == this.t_int64 || type == this.t_uint8 || type == this.t_uint16 || type == this.t_uint32 || type == this.t_uint64) {
             return true;
         }
@@ -3820,9 +3803,7 @@ export class TypeChecker {
     }
 
     public isString(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType == this.t_string;
-        }
+        t = this.stripType(t);
         return t == this.t_string;
     }
 
@@ -3834,66 +3815,56 @@ export class TypeChecker {
     }
 
     public isSlice(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType instanceof SliceType;
-        }
+        t = this.stripType(t);
         return t instanceof SliceType;
     }
 
     public isArray(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType instanceof ArrayType;
-        }
+        t = this.stripType(t);
         return t instanceof ArrayType;
     }
 
     public isGuardedPointer(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType instanceof GuardedPointerType;
-        }
+        t = this.stripType(t);
         return t instanceof GuardedPointerType;
     }
 
+    public isUnsafePointer(t: Type): boolean {
+        t = this.stripType(t);
+        return t instanceof UnsafePointerType;
+    }
+
     public isNumber(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return this.isNumber(t.elementType);
-        }
+        t = this.stripType(t);
         return (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
 
     public isPrimitive(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return this.isPrimitive(t.elementType);
-        }
+        t = this.stripType(t);
         return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
 
     public isPrimitiveOrPointerOrString(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return this.isPrimitiveOrPointerOrString(t.elementType);
-        }
+        t = this.stripType(t);
         return (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
 
     public isStruct(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType instanceof StructType;
-        }
+        t = this.stripType(t);
         return t instanceof StructType;
     }
 
     public isStructOrArrayOrTuple(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType instanceof StructType || t instanceof ArrayType || t instanceof TupleType;
-        }
+        t = this.stripType(t);
         return t instanceof StructType || t instanceof ArrayType || t instanceof TupleType;
     }
 
     public checkIsIntOrPointerNumber(node: Node, doThrow: boolean = true): boolean {
-        if (node.type == this.t_int8 || node.type == this.t_int16 || node.type == this.t_int32 || node.type == this.t_int64 || node.type == this.t_uint8 || node.type == this.t_uint16 || node.type == this.t_uint32 || node.type == this.t_uint64) {
+        let t = this.stripType(node.type);
+        if (t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64) {
             return true;
         }
-        if (node.type instanceof PointerType || node.type instanceof UnsafePointerType) {
+        if (t instanceof PointerType || t instanceof UnsafePointerType) {
             return true;
         }
         if (doThrow) {
@@ -3902,37 +3873,45 @@ export class TypeChecker {
         return false;
     }
 
-    public checkTypeEquality(a: Type, b: Type, loc: Location, doThrow: boolean = true): boolean {
+    public checkTypeEquality(a: Type, b: Type, loc: Location, doThrow: boolean = true, unbox: boolean = true): boolean {
+        if (unbox) {
+            if (a instanceof InterfaceType && a.isBoxedType()) {
+                a = a.unbox();
+            }
+            if (b instanceof InterfaceType && b.isBoxedType()) {
+                a = b.unbox();
+            }
+        }
         if (a == b) {
             return true;
         }
         if (a instanceof RestrictedType && b instanceof RestrictedType) {
             if (a.isConst == b.isConst && a.isVolatile == b.isVolatile && a.isImmutable == b.isImmutable) {
-                if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+                if (this.checkTypeEquality(a.elementType, b.elementType, loc, false, unbox)) {
                     return true;
                 }
             }
         } else if (a instanceof PointerType && b instanceof PointerType) {
-            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false, false)) {
                 return true;
             }
         } else if (a instanceof UnsafePointerType && b instanceof UnsafePointerType) {
-            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false, false)) {
                 return true;
             }
         } else if (a instanceof SliceType && b instanceof SliceType) {
-            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false, false)) {
                 return true;
             }
         } else if (a instanceof ArrayType && b instanceof ArrayType) {
-            if (a.size == b.size && this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (a.size == b.size && this.checkTypeEquality(a.elementType, b.elementType, loc, false, false)) {
                 return true;
             }
         } else if (a instanceof TupleType && b instanceof TupleType) {
             if (a.types.length == b.types.length) {
                 let ok = true;
                 for(let i = 0; ok && i < a.types.length; i++) {
-                    ok = ok && this.checkTypeEquality(a.types[i], b.types[i], loc, false);
+                    ok = ok && this.checkTypeEquality(a.types[i], b.types[i], loc, false, false);
                 }
                 if (ok) {
                     return true;
@@ -3942,7 +3921,7 @@ export class TypeChecker {
             if (this.checkTypeEquality(a.base, b.base, loc, false)) {
                 let ok = true;
                 for(let i = 0; ok && i < a.genericParameterTypes.length; i++) {
-                    ok = ok && this.checkTypeEquality(a.genericParameterTypes[i], b.genericParameterTypes[i], loc, false);
+                    ok = ok && this.checkTypeEquality(a.genericParameterTypes[i], b.genericParameterTypes[i], loc, false, false);
                 }
                 if (ok) {
                     return true;
@@ -3967,7 +3946,7 @@ export class TypeChecker {
                 for(let t of a.types) {
                     let ok2 = false;
                     for(let t2 of b.types) {
-                        let eq = this.checkTypeEquality(t, t2, loc, false);
+                        let eq = this.checkTypeEquality(t, t2, loc, false, false);
                         if (eq) {
                             ok2 = true;
                             break;
@@ -3985,11 +3964,11 @@ export class TypeChecker {
         } else if (a instanceof FunctionType && b instanceof FunctionType) {
             if (a.parameters.length == b.parameters.length) {
                 // Check the return type. And both functions are either both member functions or both non-member functions.
-                if (this.checkTypeEquality(a.returnType, b.returnType, loc, false) && !!a.objectType == !!b.objectType) {
+                if (this.checkTypeEquality(a.returnType, b.returnType, loc, false, false) && !!a.objectType == !!b.objectType) {
                     let ok = true;
                     for(let i = 0; i < a.parameters.length; i++) {
                         // TODO: Check for ellipsis
-                        if (!this.checkTypeEquality(a.parameters[i].type, b.parameters[i].type, loc, false)) {
+                        if (!this.checkTypeEquality(a.parameters[i].type, b.parameters[i].type, loc, false, false)) {
                             ok = false;
                             break;
                         }
@@ -4003,13 +3982,17 @@ export class TypeChecker {
                     }
                 }
             }
-        } else if (a instanceof InterfaceType && b instanceof InterfaceType) {
+        } else if (a instanceof InterfaceType && b instanceof InterfaceType && a.isBoxedType() && b.isBoxedType()) {
+            if (a.extendsInterfaces.length == b.extendsInterfaces.length && a.extendsInterfaces.length == 1) {
+                return this.checkTypeEquality(a.extendsInterfaces[0], b.extendsInterfaces[0], loc, false, false);
+            }
+        } else if (a instanceof InterfaceType && b instanceof InterfaceType && !a.isBoxedType() && !b.isBoxedType()) {
             let m1 = a.getAllMethods();
             let m2 = b.getAllMethods();
             if (m1.size == m2.size) {
                 let ok = true;
                 for(let entry of m1.entries()) {
-                    if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
+                    if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false, false)) {
                         ok = false;
                         break;
                     }

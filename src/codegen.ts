@@ -964,7 +964,9 @@ export class CodeGenerator {
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         let v = this.processExpressionIntern(f, scope, enode, b, vars);
         if (this.tc.isInterface(targetType) && !this.tc.isInterface(enode.type)) {
-            if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
+            if (this.tc.isUnsafePointer(enode.type)) {
+                return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
+            } else if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), v, 0]);
             } else if (this.tc.isSlice(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderSlice, [this.typecode(enode.type), v]);
@@ -988,10 +990,12 @@ export class CodeGenerator {
             }
         } else if (!this.tc.isInterface(targetType) && this.tc.isInterface(enode.type)) {
             let addr = b.assign(b.tmp("addr"), "addr_of", "addr", [v]);
-            if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
-                return b.assign(b.tmp(), "load", "addr", [v, this.ifaceHeader.fieldOffset("pointer")]);
+            if (this.tc.isUnsafePointer(enode.type)) {
+                return b.assign(b.tmp(), "load", "addr", [addr, this.ifaceHeader32.fieldOffset("value")]);
+            } else if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
+                return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
             } else if (this.tc.isSlice(enode.type)) {
-                return b.assign(b.tmp(), "load", this.sliceHeader, [v, this.ifaceHeaderSlice.fieldOffset("value")]);
+                return b.assign(b.tmp(), "load", this.sliceHeader, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
             } else if (this.tc.isGuardedPointer(enode.type)) {
                 throw "TODO";
             } else if (this.tc.isArray(enode.type)) {
@@ -1000,13 +1004,13 @@ export class CodeGenerator {
             } else if (this.tc.isStruct(enode.type)) {
                 throw "TODO";
             } else if (enode.type == this.tc.t_int64 || enode.type == this.tc.t_uint64) {
-                return b.assign(b.tmp(), "load", "i64", [v, this.ifaceHeader.fieldOffset("value")]);
+                return b.assign(b.tmp(), "load", "i64", [addr, this.ifaceHeader.fieldOffset("value")]);
             } else if (enode.type == this.tc.t_double) {
-                return b.assign(b.tmp(), "load", "f64", [v, this.ifaceHeaderDouble.fieldOffset("value")]);
+                return b.assign(b.tmp(), "load", "f64", [addr, this.ifaceHeaderDouble.fieldOffset("value")]);
             } else if (enode.type == this.tc.t_float) {
-                return b.assign(b.tmp(), "load", "f32", [v, this.ifaceHeaderFloat.fieldOffset("value")]);
+                return b.assign(b.tmp(), "load", "f32", [addr, this.ifaceHeaderFloat.fieldOffset("value")]);
             } else if (this.tc.isNumber(enode.type) || enode.type == this.tc.t_bool) {
-                return b.assign(b.tmp(), "load", "i32", [v, this.ifaceHeader32.fieldOffset("value")]);
+                return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("value")]);
             } else {
                 throw "Implementation error";
             }                
