@@ -1345,7 +1345,7 @@ export class TypeChecker {
         // These method types must be equal
         let methodNames: Map<string, boolean> = new Map<string, boolean>();
         let maps: Map<InterfaceType, Map<string, FunctionType>> = new Map<InterfaceType, Map<string, FunctionType>>()
-        maps.set(iface, iface.getAllMethods());
+        maps.set(iface, iface.methods);
         for(let b of iface.extendsInterfaces) {
             maps.set(b as InterfaceType, (b as InterfaceType).getAllMethods());
         }

@@ -27,8 +27,7 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 ## Todos
 
 - Interfaces
-    - Type checking
-    - Code generation (including automated boxing and unboxing)
+    - Type checking (compare const-ness)
     - Calling methods on interfaces
 - Type switch statement
 - Parsing of generic structs
@@ -36,8 +35,6 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 - Generics without interfaces
 - @ constructor
 - Automatically include the runtime souces
-- struct implements
-    - checking
 - map
     - codegen
 

@@ -284,7 +284,7 @@ func useIface() {
     // TODO iface1(x)
 
     var file = &File{}
-    // TODO iface2(file)
+    iface2(file)
     iface4(file)
 }
 
@@ -305,12 +305,12 @@ func iface5() interface{int} {
 }
 
 type IBar interface {
-    func const Read(a int)
+    func const Read(buffer []byte) (n int, err error)
 }
 
 type IFoo interface {
     extends IBar
-    func const Read(x int)
+    func const Read(buffer []byte) (n int, err error)
 }
 
 type Point3D struct {
