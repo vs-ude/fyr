@@ -3630,6 +3630,7 @@ export class TypeChecker {
                                 }
                                 break;
                             }
+                            // TODO: Check for constness
                         }
                         if (ok) {
                             return true;
@@ -3656,6 +3657,7 @@ export class TypeChecker {
                                     }
                                     break;
                                 }
+                                // TODO: Check for constness
                             } else {
                                 ok = false;
                                 if (doThrow) {
@@ -4025,7 +4027,6 @@ export class TypeChecker {
                 if (this.checkTypeEquality(a.returnType, b.returnType, loc, false, false) && !!a.objectType == !!b.objectType) {
                     let ok = true;
                     for(let i = 0; i < a.parameters.length; i++) {
-                        // TODO: Check for ellipsis
                         if (!this.checkTypeEquality(a.parameters[i].type, b.parameters[i].type, loc, false, false)) {
                             ok = false;
                             break;
@@ -4219,10 +4220,11 @@ export class TypeChecker {
     public builtin_len: FunctionType;
     public builtin_cap: FunctionType;
 
-    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     // List of all interfaces. These are checked for possible errors after they have been defined.
-    private ifaces: Array<InterfaceType> = [];
-    private structs: Array<StructType> = [];
+    public ifaces: Array<InterfaceType> = [];
+    public structs: Array<StructType> = [];
+
+    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
 }
 
 export class TypeError {

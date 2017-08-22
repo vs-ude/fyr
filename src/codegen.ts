@@ -27,7 +27,7 @@ export class CodeGenerator {
         this.ifaceHeader32 = new ssa.StructType();
         this.ifaceHeader32.name = "iface";
         this.ifaceHeader32.addField("typecode", "i32");
-        this.ifaceHeader32.addField("pointer", "addr");
+        this.ifaceHeader32.addField("pointer", "ptr");
         this.ifaceHeader32.addField("value", "i32");
         this.ifaceHeaderFloat = new ssa.StructType();
         this.ifaceHeaderFloat.name = "iface";
@@ -964,11 +964,58 @@ export class CodeGenerator {
         return !this.tc.checkIsIntermediate(node);
     }
 
+    private createInterfaceTables(scope: Scope) {
+        for(let s of this.tc.structs) {
+            let ifaces: Map<number, number> = new Map<number, number>();
+            for(let iface of this.tc.ifaces) {
+                if (this.tc.checkIsAssignableType(iface, new PointerType(s), null, false)) {
+                    let index = this.createInterfaceTable(scope, iface, s);
+                    ifaces.set(this.typecode(iface), index);
+                }
+            }
+            if (ifaces.size > 0) {
+                this.interfaceTables.set(s, ifaces);
+            }
+            // Create a table that lists all interfaces implemented by a struct
+
+        }
+    }
+
+    /**
+     * Returns the offset inside the WebAssembly tabel
+     */
+    private createInterfaceTable(scope: Scope, iface: InterfaceType, s: StructType): number {
+        let toMethods = iface.getAllMethods();
+        let ok = true;
+        let index = -1;
+        for(let key of toMethods.keys()) {
+            let method = s.method(key);
+            let methodObjType = RestrictedType.strip(method.objectType);
+            let methodName = methodObjType.name + "." + key;
+            let f = scope.resolveElement(methodName);
+            if (!(f instanceof Function)) {
+                throw "Implementation error";
+            }
+            let wf = this.funcs.get(f);
+            if (!(wf instanceof wasm.Function)) {
+                throw "Implementation error";
+            }
+            let i = this.wasm.module.addFunctionToTable(wf as wasm.Function);
+            if (index == -1) {
+                index = i;
+            }
+        }
+        return index;
+    }                
+
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         let v = this.processExpressionIntern(f, scope, enode, b, vars);
         if (this.tc.isInterface(targetType) && !this.tc.isInterface(enode.type)) {
             if (this.tc.isUnsafePointer(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
+            } else if (enode.type instanceof PointerType && enode.type.elementType instanceof StructType) {
+                let index = this.interfaceTables.get(enode.type.elementType).get(this.typecode(targetType));
+                return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), v, index]);                
             } else if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), v, 0]);
             } else if (this.tc.isSlice(enode.type)) {
@@ -1937,6 +1984,7 @@ export class CodeGenerator {
     private compareStringFunctionType: ssa.FunctionType;
     private makeStringFunctionType: ssa.FunctionType;
     private copyFunctionType: ssa.FunctionType;
+    private interfaceTables: Map<StructType, Map<number, number>> = new Map<StructType, Map<number, number>>();
 }
 
 export class LinkError {

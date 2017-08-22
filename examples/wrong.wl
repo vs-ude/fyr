@@ -255,7 +255,7 @@ func File.Read(buffer []byte) (int, error) {
     return 0, null
 }
 
-func File.Write(buffer []byte) (int, error) {
+func const File.Write(buffer []byte) (int, error) {
 //func File.Write(buffer []byte) (n int, err error) {
     return 0, null
 }

@@ -53,28 +53,12 @@ export class Module extends Node {
         for(let d of this.data) {
             s += d.toWast(indent + "    ") + "\n";
         }
+
+        // Export functions
         let index = this.funcs.length;
         for(let k of this.exports.keys()) {
             let v = this.exports.get(k);
             if (v instanceof Function) {
-                /*
-                s += "    (func ";
-                for(let i = 1; i < v.parameters.length; i++) {
-                    s += " (param " + v.parameters[i] + ")";
-                } 
-                for(let p of v.results) {
-                    s += " (result " + p + ")";
-                } 
-                s += "\n        i32.const " + (this.dataSize + this.heapSize).toString() + "\n";
-                for(let i = 1; i < v.parameters.length; i++) {
-                    s += "        get_local " + (i-1).toString() + "\n";
-                }
-                s += "        call " + v.index + "\n";
-                if (v.results.length != 0) {
-                    s += "        return\n";
-                }
-                s += "    )\n";
-                */
                 s += indent + "    (export \"" + k + "\" (func " + v.index.toString() + "))\n";
                 index++;
             } else {
@@ -82,6 +66,7 @@ export class Module extends Node {
             } 
         }
 
+        // Table section
         if (this.funcTable.length > 0) {
             s += indent + "    (table " + this.funcTable.length + " anyfunc)\n";
             s += indent + "    (elem (i32.const 0)";
@@ -91,6 +76,7 @@ export class Module extends Node {
             s += ")\n";
         }
 
+        // Function types
         for(let f of this.funcTypes) {
             s += indent + "    (type " + f.name + " (func ";
             if (f.params.length > 0) {
@@ -156,6 +142,25 @@ export class Module extends Node {
         return align64(this.dataSize);
     }
 
+    /**
+     * Returns the name of the function type.
+     */
+    public addFunctionType(params: Array<StackType>, results: Array<StackType>): string {
+        let code = params.join(",") + ";" + results.join(",");
+        if (this.funcTypeByCode.has(code)) {
+            return this.funcTypeByCode.get(code).name;
+        }
+        let ft = new FunctionType("$ftype_" + nameCounter.toString(), params, results);
+        this.funcTypes.push(ft);
+        this.funcTypeByCode.set(code, ft);
+        return ft.name;
+    }
+
+    public addFunctionToTable(f: Function): number {
+        this.funcTable.push(f);
+        return this.funcTable.length - 1;
+    }
+
     public memorySize: number;
     public funcIndex: number = 0;
     public funcs: Array<Function> = [];
@@ -168,6 +173,7 @@ export class Module extends Node {
     private data: Array<Data> = [];
     private memoryImport: {ns: string, obj: string};
     private globals: Array<Global> = [];
+    private funcTypeByCode: Map<string, FunctionType> = new Map<string, FunctionType>();
 }
 
 export class FunctionImport {
@@ -677,6 +683,23 @@ export class Call extends Node {
     }
 
     public index: number | string;
+}
+
+export class CallIndirect extends Node {
+    constructor(typeName: string) {
+        super();
+        this.typeName = typeName;
+    }
+
+    public get op(): string {
+        return "call_indirect";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "call_indirect " + this.typeName;
+    }
+
+    public typeName: string;
 }
 
 export class Br extends Node {
