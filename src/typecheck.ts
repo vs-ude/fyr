@@ -267,6 +267,21 @@ export class InterfaceType extends Type {
         return this;
     }
 
+    public method(name: string): FunctionType {
+        if (this.methods.has(name)) {
+            return this.methods.get(name);
+        }
+        for(let iface of this.extendsInterfaces) {
+            if (iface instanceof InterfaceType) {
+                let m = iface.method(name);
+                if (m) {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -2926,7 +2941,12 @@ export class TypeChecker {
                         enode.type = method;
                     }
                 } else if (type instanceof InterfaceType) {
-                    throw "TODO"
+                    let name = enode.name.value;
+                    let method = type.method(name);
+                    if (!method) {
+                        throw new TypeError("Unknown field " + name + " in " + type.toString(), enode.name.loc);
+                    }
+                    enode.type = method;
                 } else if (type instanceof PackageType) {
                     if (!type.elements.has(enode.name.value)) {
                         throw new TypeError("Unknown identifier " + enode.name.value + " in " + type.toString(), enode.name.loc);                        

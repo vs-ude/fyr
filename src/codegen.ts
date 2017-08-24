@@ -982,6 +982,7 @@ export class CodeGenerator {
                     } else {
                         index = this.interfaceTableNames.length;
                         this.interfaceTableNames.push(m.name);
+                        this.interfaceTableIndex.set(m.name, index);
                     }
                     methods.set(m.name, index);
                     minOffset = Math.min(minOffset, index);
@@ -995,7 +996,7 @@ export class CodeGenerator {
                 let index = methods.get(m);
                 let method = s.method(m);
                 let methodObjType = RestrictedType.strip(method.objectType);
-                let methodName = methodObjType.name + "." + method.name;
+                let methodName = methodObjType.name + "." + m;
                 let f = scope.resolveElement(methodName);
                 if (!(f instanceof Function)) {
                     throw "Implementation error";
@@ -1401,6 +1402,7 @@ export class CodeGenerator {
             {
                 let f: Function;
                 let t: FunctionType;
+                let findex: ssa.Variable;
                 let args: Array<ssa.Variable | string | number> = [];
                 let objPtr: ssa.Variable | ssa.Pointer | number | null = null;
                 let striplhs = this.tc.stripType(enode.lhs.type);
@@ -1530,6 +1532,22 @@ export class CodeGenerator {
                             let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
                             objPtr = b.assign(b.tmp(), "addr_of", "ptr", [value]);
                         }
+                    } else if (ltype instanceof InterfaceType) {
+                        objType = ltype;
+                        let ifacePtr: ssa.Pointer;
+                        if (this.isLeftHandSide(enode.lhs.lhs)) {
+                            let p = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                            if (p instanceof ssa.Variable) {
+                                ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [p]), 0);
+                            } else {
+                                ifacePtr = p;
+                            }
+                        } else {
+                            let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
+                            ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [value]), 0);
+                        }                        
+                        objPtr = b.assign(b.tmp(), "load", "ptr", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("pointer")]);
+                        findex = b.assign(b.tmp(), "load", "s32", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("value")]);
                     } else {
                         throw "Implementation error"
                     }
@@ -1543,6 +1561,14 @@ export class CodeGenerator {
                         }
                         f = e;
                         t = f.type;
+                    } else if (objType instanceof InterfaceType) {
+                        let name = enode.lhs.name.value;
+                        let method = objType.method(name);
+                        t = method;
+                        let findex2 = this.interfaceTableIndex.get(name);
+                        if (findex2 != 0) {
+                            findex = b.assign(b.tmp(), "add", "s32", [findex, findex2]);
+                        }
                     } else {
                         throw "Implementation error";
                     }
@@ -1553,6 +1579,8 @@ export class CodeGenerator {
                 
                 if (f) {
                     args.push(this.funcs.get(f).index);
+                } else if (findex) {
+                    args.push(findex);
                 } else if (t.callingConvention == "system") {
                     args.push(t.systemCallType);
                 }
@@ -1589,6 +1617,9 @@ export class CodeGenerator {
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
                     return b.call(b.tmp(), ft, args);
+                } else if (findex) {
+                    let ft = this.getSSAFunctionType(t);
+                    return b.callIndirect(b.tmp(), ft, args);
                 } else if (t.callingConvention == "system") {
                     let ft = this.getSSAFunctionType(t);
                     return b.call(b.tmp(), ft, args);

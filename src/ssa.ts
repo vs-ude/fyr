@@ -2,7 +2,7 @@ import * as wasm from "./wasm"
 import {TypeMapper, TypeMap} from "./gc"
 import {SystemCalls} from "./pkg"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
+export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr";
 
 export class StructType {
@@ -501,6 +501,30 @@ export class Builder {
         return n.assign;
     }
 
+    public callIndirect(assign: Variable, type: FunctionType, args: Array<Variable | string | number>): Variable {
+        let n = new Node(assign, "call_indirect", type, args);
+        if (assign && assign.type) {
+            if (!compareTypes(assign.type, type.result)) {
+                throw "Variable " + assign.name + " used with wrong type";
+            }
+        } else if (assign) {
+            assign.type = type.result;
+        }
+
+        if (this._current) {
+            this._current.next.push(n);
+            n.prev.push(this._current);
+        } else {
+            this._node = n;
+        }
+        this._current = n;
+        for(let b of this._blocks) {
+            b.isAsync = b.isAsync || type.callingConvention == "fyrCoroutine";
+        }
+        this.countReadsAndWrites(n);
+        return n.assign;
+    }
+
     public br(to: Node) {
         let j = 0;
         for(let i = this._blocks.length - 1; i >= 0; i--) {
@@ -745,7 +769,7 @@ export class Optimizer {
                 n.assign.writeCount++;
             }
             // Remove assignments to variables which are not read
-            if (n.kind == "call" && n.assign && n.assign.readCount == 0) {
+            if ((n.kind == "call" || n.kind == "call_indirect") && n.assign && n.assign.readCount == 0) {
                 n.assign.writeCount--;
                 n.assign = null;
             } else if (n.kind == "end" && n.prev[1]) { // The 'end' belongs to an 'if'?
@@ -764,7 +788,7 @@ export class Optimizer {
                 continue;
             } else if (n.kind == "copy" && typeof(n.args[0]) == "number") {
                 n.kind = "const";
-            } else if (n.kind != "call" && n.assign && n.assign.readCount == 0) {
+            } else if ((n.kind != "call" && n.kind != "call_indirect") && n.assign && n.assign.readCount == 0) {
                 let n2 = n.prev[0];
                 for(let a of n.args) {
                     if (a instanceof Variable) {
@@ -904,7 +928,7 @@ export class Optimizer {
             } else if (n.kind == "end" && (n.blockPartner.kind == "block" || n.blockPartner.kind == "loop")) {
                 let blockDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
                 n = n.blockPartner;
-            } else if (n.kind == "call" || n.kind == "alloc" || n.kind == "call_end" || n.kind == "call_begin") {
+            } else if (n.kind == "call" || n.kind == "call_indirect" || n.kind == "alloc" || n.kind == "call_end" || n.kind == "call_begin") {
                 for(let v of varsRead) {
                     v.gcDiscoverable = true;
                 }
@@ -1050,8 +1074,8 @@ export class SMTransformer {
                         n.blockPartner = n.blockPartner.blockPartner;
                     }
                     n = n.next[0];
-                } else if (n.kind == "call" && (n.type as FunctionType).callingConvention == "fyrCoroutine") {
-                    n.kind = "call_begin";
+                } else if ((n.kind == "call" || n.kind == "call_indirect") && (n.type as FunctionType).callingConvention == "fyrCoroutine") {
+                    n.kind = n.kind == "call" ? "call_begin" : "call_indirect_begin";
                     let result = new Node(n.assign, "call_end", n.type, []);
                     n.assign = null;
                     let end = new Node(null, "goto_step", undefined, []);
@@ -2100,7 +2124,7 @@ export class Wasm32Backend {
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
-            } else if (n.kind == "call") {
+            } else if (n.kind == "call" || n.kind == "call_indirect") {
                 if (!(n.type instanceof FunctionType)) {
                     throw "Implementation error"
                 }
@@ -2188,7 +2212,7 @@ export class Wasm32Backend {
      * stack: If a number is passed, store the value on the heapStack with the number as offset.
      */
     private emitAssign(type: Type | StructType, n: Node | Variable | number, dest: "heap" | "heapStack" | "wasmStack" | null, destOffset: number, code: Array<wasm.Node>) {
-        if (dest === null && (n instanceof Variable || typeof(n) == "number" || (n instanceof Node && n.kind != "call" && !n.assign))) {
+        if (dest === null && (n instanceof Variable || typeof(n) == "number" || (n instanceof Node && n.kind != "call" && n.kind != "call_indirect" && !n.assign))) {
             throw "Implementation error: No assignment";
         }
 
@@ -2197,7 +2221,7 @@ export class Wasm32Backend {
                 throw "Implementation error: StructType on wasmStack is not possible";
             }
             // Synchronous function call that returns a StructType?
-            if (n instanceof Node && n.kind == "call") {
+            if (n instanceof Node && (n.kind == "call" || n.kind == "call_indirect")) {
                 if (!(n.type instanceof FunctionType)) {
                     throw "Implementation error " + n.toString("");
                 }
@@ -2235,6 +2259,7 @@ export class Wasm32Backend {
                 code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
                 code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
                 // Put parameters on wasm/heap stack
+                let paramTypes: Array<wasm.StackType> = [];
                 for(let i = 0; i < n.type.params.length; i++) {
                     code.push(new wasm.Comment("parameter " + i.toString()));
                     // Pointers must be passed on the stack, too
@@ -2244,6 +2269,9 @@ export class Wasm32Backend {
 //                    code.push(new wasm.Comment("<<parameter " + i.toString()));
                         this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", n.type.stackFrame.fieldOffset("$p" + i.toString()), code);
                     } else {
+                        if (n.kind == "call_indirect") {
+                            paramTypes.push(this.stackTypeOf(n.type.params[i] as Type));
+                        }
                         this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", 0, code);                    
                     }
                 }
@@ -2265,8 +2293,17 @@ export class Wasm32Backend {
                     if (n.type.callingConvention == "fyr" || n.type.callingConvention == "fyrCoroutine") {
                         // Put SP on wasm stack
                         code.push(new wasm.GetLocal(this.spLocal));
+                        if (n.kind == "call_indirect") {
+                            paramTypes.push("i32");
+                        }
                     }
-                    code.push(new wasm.Call(n.args[0] as number | string));
+                    if (n.kind == "call_indirect") {
+                        this.emitAssign("s32", n.args[0], "wasmStack", 0, code);
+                        let typeName = this.module.addFunctionType(paramTypes, []);
+                        code.push(new wasm.CallIndirect(typeName));
+                    } else {
+                        code.push(new wasm.Call(n.args[0] as number | string));
+                    }
                 }
                 // Assign
                 if (n.assign) {
@@ -2529,7 +2566,7 @@ export class Wasm32Backend {
     }
 
     private emitWordAssign(type: Type, n: Node | Variable | number, stack: "wasmStack" | null, code: Array<wasm.Node>) {
-        if (stack == null && (n instanceof Variable || typeof(n) == "number" || (n.kind != "call" && !n.assign))) {
+        if (stack == null && (n instanceof Variable || typeof(n) == "number" || (n.kind != "call" && n.kind != "call_indirect" && !n.assign))) {
             throw "Implementation error: No assignment"
         }
 
@@ -2730,7 +2767,7 @@ export class Wasm32Backend {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
             }
             n = n.next[0];
-        } else if (n.kind == "call") {
+        } else if (n.kind == "call" || n.kind == "call_indirect") {
             if (!(n.type instanceof FunctionType)) {
                 throw "Implementation error " + n.toString("");
             }
@@ -2756,16 +2793,23 @@ export class Wasm32Backend {
                 code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
             }
             // Put parameters on the stack
+            let paramTypes: Array<wasm.StackType> = [];
             for(let i = 0; i < n.type.params.length; i++) {
                 code.push(new wasm.Comment("parameter " + i.toString()));
                 // Pointers must be pased on the stack
                 if (n.type.params[i] instanceof StructType || n.type.params[i] == "ptr") {
                     this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", n.type.stackFrame.fieldOffset("$p" + i.toString()), code);
                 } else {
+                    if (n.kind == "call_indirect") {
+                        paramTypes.push(this.stackTypeOf(n.type.params[i] as Type))
+                    }
                     this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", 0, code);                    
                 }
             }
             if (n.type.callingConvention == "fyr") {
+                if (n.kind == "call_indirect") {
+                    paramTypes.push("i32");
+                }
                 code.push(new wasm.GetLocal(this.spLocal));
             }
             // Call the function
@@ -2803,7 +2847,17 @@ export class Wasm32Backend {
                     throw "Implementation error. Unknown system function " + n.args[0];
                 }
             } else {
-                code.push(new wasm.Call(n.args[0] as number));
+                if (n.kind == "call_indirect") {
+                    this.emitAssign("s32", n.args[0], "wasmStack", 0, code);
+                    let resultTypes = [];
+                    if (n.type.result) {
+                        resultTypes.push(n.type.result);
+                    }
+                    let typeName = this.module.addFunctionType(paramTypes, resultTypes);
+                    code.push(new wasm.CallIndirect(typeName));
+                } else {
+                    code.push(new wasm.Call(n.args[0] as number));
+                }
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type.result as Type, n.assign, stack == "wasmStack", code);
