@@ -78,7 +78,11 @@ export class CodeGenerator {
                 if (e.isImported) {
                     throw "Implementation error";
                 }
-                let wf = this.wasm.declareFunction(e.name);
+                let name = e.name;
+                if (e.type.objectType) {
+                    name = RestrictedType.strip(e.type.objectType).name + "." + name;
+                }
+                let wf = this.wasm.declareFunction(name);
                 this.funcs.set(e, wf);
             } else if (e instanceof Variable) {
                 let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
