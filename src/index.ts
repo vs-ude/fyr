@@ -37,7 +37,7 @@ function compileModules() {
         }
     }
 
-    try {
+//    try {
         // Run the type checker
         let tc = new typecheck.TypeChecker();
         pkg.initPackages(tc);
@@ -45,7 +45,7 @@ function compileModules() {
         // Generate IR and WASM code
         let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck);
         cg.processModule(mnode);
-    } catch(ex) {
+/*    } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;                
@@ -59,7 +59,7 @@ function compileModules() {
             console.log(ex);
             throw ex;
         }
-    }
+    } */
 }
 
 program

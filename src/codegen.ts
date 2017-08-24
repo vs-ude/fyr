@@ -964,48 +964,52 @@ export class CodeGenerator {
         return !this.tc.checkIsIntermediate(node);
     }
 
-    private createInterfaceTables(scope: Scope) {
-        for(let s of this.tc.structs) {
-            let ifaces: Map<number, number> = new Map<number, number>();
-            for(let iface of this.tc.ifaces) {
-                if (this.tc.checkIsAssignableType(iface, new PointerType(s), null, false)) {
-                    let index = this.createInterfaceTable(scope, iface, s);
-                    ifaces.set(this.typecode(iface), index);
+    private createInterfaceTable(scope: Scope, s: StructType): number {
+        let methods = new Map<string, number>();
+        let t = new PointerType(s);
+        let offset = this.interfaceTableLength;
+        let minOffset = 0xffffff;
+        let maxOffset = -1;
+        for(let iface of this.tc.ifaces) {
+            if (this.tc.checkIsAssignableType(iface, t, null, false)) {
+                for(let m of iface.getAllMethods().values()) {
+                    if (methods.has(m.name)) {
+                        continue;
+                    }
+                    let index: number = -1;
+                    if (this.interfaceTableIndex.has(m.name)) {
+                        index = this.interfaceTableIndex.get(m.name);
+                    } else {
+                        index = this.interfaceTableNames.length;
+                        this.interfaceTableNames.push(m.name);
+                    }
+                    methods.set(m.name, index);
+                    minOffset = Math.min(minOffset, index);
+                    maxOffset = Math.max(maxOffset, index);
                 }
             }
-            if (ifaces.size > 0) {
-                this.interfaceTables.set(s, ifaces);
-            }
-            // Create a table that lists all interfaces implemented by a struct
-
         }
-    }
-
-    /**
-     * Returns the offset inside the WebAssembly tabel
-     */
-    private createInterfaceTable(scope: Scope, iface: InterfaceType, s: StructType): number {
-        let toMethods = iface.getAllMethods();
-        let ok = true;
-        let index = -1;
-        for(let key of toMethods.keys()) {
-            let method = s.method(key);
-            let methodObjType = RestrictedType.strip(method.objectType);
-            let methodName = methodObjType.name + "." + key;
-            let f = scope.resolveElement(methodName);
-            if (!(f instanceof Function)) {
-                throw "Implementation error";
+        if (methods.size != 0) {
+            let tableStart = offset - minOffset;
+            for(let m of methods.keys()) {
+                let index = methods.get(m);
+                let method = s.method(m);
+                let methodObjType = RestrictedType.strip(method.objectType);
+                let methodName = methodObjType.name + "." + method.name;
+                let f = scope.resolveElement(methodName);
+                if (!(f instanceof Function)) {
+                    throw "Implementation error";
+                }
+                let wf = this.funcs.get(f);
+                if (wf instanceof wasm.FunctionImport) {
+                    throw "Implementation error";
+                }
+                this.wasm.module.addFunctionToTable(wf, tableStart + index);
             }
-            let wf = this.funcs.get(f);
-            if (!(wf instanceof wasm.Function)) {
-                throw "Implementation error";
-            }
-            let i = this.wasm.module.addFunctionToTable(wf as wasm.Function);
-            if (index == -1) {
-                index = i;
-            }
+            this.interfaceTableLength = Math.max(this.interfaceTableLength, maxOffset - minOffset + 1);
+            return tableStart;
         }
-        return index;
+        return 0;
     }                
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
@@ -1014,7 +1018,7 @@ export class CodeGenerator {
             if (this.tc.isUnsafePointer(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
             } else if (enode.type instanceof PointerType && enode.type.elementType instanceof StructType) {
-                let index = this.interfaceTables.get(enode.type.elementType).get(this.typecode(targetType));
+                let index = this.createInterfaceTable(scope, enode.type.elementType);
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), v, index]);                
             } else if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), v, 0]);
@@ -1984,7 +1988,9 @@ export class CodeGenerator {
     private compareStringFunctionType: ssa.FunctionType;
     private makeStringFunctionType: ssa.FunctionType;
     private copyFunctionType: ssa.FunctionType;
-    private interfaceTables: Map<StructType, Map<number, number>> = new Map<StructType, Map<number, number>>();
+    private interfaceTableNames: Array<string> = [];
+    private interfaceTableIndex: Map<string, number> = new Map<string, number>();
+    private interfaceTableLength: number = 0;
 }
 
 export class LinkError {

@@ -81,16 +81,11 @@ export class FunctionParameter implements ScopeElement {
 
 // Typedef represents the result of a 'type' statement, i.e.
 // a named type which is of course subject to a scope.
-export class Typedef implements ScopeElement {
-    public instantiate(): Type {
-        return this._tc.instantiateTypedef(this);
-    }
-
+export class Typedef {
     // The name of the Typedef
     public name: string;
     // The Type defined by the Typedef
     public type: Type;
-    public loc: Location;
     // The AST of the Typedef
     public node: Node;
     // The scope to which the typedef belongs
@@ -125,9 +120,6 @@ export class Scope {
                 return this.parent.resolveType(name);
             }
             return null;
-        } else if (t instanceof Typedef) {
-            let newt = t.instantiate();
-            return newt;
         }
         return t;
     }
@@ -1108,6 +1100,8 @@ export class TypeChecker {
             }
             if (tnode.rhs) {
                 t.returnType = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            } else {
+                t.returnType = this.t_void;
             }
             return t;
         } else if (tnode.op == "genericType" && tnode.lhs.op == "id" && tnode.lhs.value == "map") {
@@ -1173,6 +1167,8 @@ export class TypeChecker {
                 }
                 if (fnode.rhs) {
                     ft.returnType = this.createType(fnode.rhs, s, noStructBody, allowVolatile);
+                } else {
+                    ft.returnType = this.t_void;
                 }
                 return ft;
             }
@@ -1600,39 +1596,27 @@ export class TypeChecker {
 
     private createTypedef(tnode: Node, scope: Scope): Typedef {
         let t = new Typedef();
-        t.loc = tnode.loc;
         t.name = tnode.name.value;
         t.node = tnode;
         t.scope = scope;
-        t._tc = this;
-        scope.registerType(t.name, t);
-        return t;
-    }
-
-    public instantiateTypedef(t: Typedef): Type {
-        if (t._mark) {
-            throw new TypeError("Recursive type definition of " + t.name, t.node.loc);
-        }
         if (t.node.rhs.op == "structType") {
             let s = new StructType();
-            s.loc = t.loc;
+            s.loc = t.node.loc;
             s.name = t.name;
             this.structs.push(s);
             t.type = s;
+            scope.registerType(t.name, s, tnode.loc);
         } else if (t.node.rhs.op == "interfaceType") {
             let iface = new InterfaceType();
-            iface.loc = t.loc;
+            iface.loc = t.node.loc;
             iface.name = t.name;
             this.ifaces.push(iface);
             t.type = iface;
+            scope.registerType(t.name, iface, tnode.loc);
         } else {
-            t._mark = true;
-            t.type = this.createType(t.node.rhs, t.scope);
-            t._mark = false;
+            throw new TypeError("A type must be a struct or an interface", tnode.loc);
         }
-        t.type.name = t.name;
-        t.scope.replaceType(t.name, t.type);
-        return t.type;
+        return t;
     }
 
     private createImport(inode: Node, scope: Scope) {
@@ -1777,14 +1761,35 @@ export class TypeChecker {
 
         let scope = this.createScope();
         mnode.scope = scope;
-        // Iterate over all files and declare all types
+
+        // Iterate over all files and process all imports
         for(let fnode of mnode.statements) {
             fnode.scope = new Scope(scope);
+            for (let snode of fnode.statements) {
+                if (snode.op == "import") {
+                    this.createImport(snode, fnode.scope);
+                }
+            }
+        }
+
+        // Iterate over all files and declare all types.
+        // The body of structs and interfaces is processed after all types are declared,
+        // because types can reference themselves or each other cross-wise.
+        for(let fnode of mnode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "typedef") {
                     let t = this.createTypedef(snode, scope);
                     typedefs.push(t);
                 }
+            }
+        }
+
+        // Define all types which have been declared before
+        for(let t of typedefs) {
+            if (t.type instanceof StructType) {
+                this.createStructType(t.node.rhs, t.scope, t.type);
+            } else if (t.type instanceof InterfaceType) {
+                this.createInterfaceType(t.node.rhs, t.scope, t.type);
             }
         }
 
@@ -1804,7 +1809,7 @@ export class TypeChecker {
                     v.node = snode;
                     globalVariables.push(v);
                 } else if (snode.op == "import") {
-                    this.createImport(snode, fnode.scope);
+                    // Do nothing by intention
                 } else if (snode.op == "typedef") {
                     // Do nothing by intention
                 } else if (snode.op == "comment") {
@@ -1812,23 +1817,6 @@ export class TypeChecker {
                 } else {
                     throw "Implementation error " + snode.op;
                 }
-            }
-        }
-
-        // Instantiate the typedefs.
-        // Only the body of structs is not instantiated here to allow for recursion in StructType.
-        for(let t of typedefs) {
-            if (!t.type) {
-                this.instantiateTypedef(t);
-            }
-        }
-
-        // Check fields of structs and interfaces
-        for(let t of typedefs) {
-            if (t.type instanceof StructType) {
-                this.createStructType(t.node.rhs, t.scope, t.type);
-            } else if (t.type instanceof InterfaceType) {
-                this.createInterfaceType(t.node.rhs, t.scope, t.type);
             }
         }
 
@@ -3626,7 +3614,7 @@ export class TypeChecker {
                             if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false, false)) {
                                 ok = false;
                                 if (doThrow) {
-                                    throw new TypeError("Incompatible method signagture for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
+                                    throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
                                 }
                                 break;
                             }
@@ -3653,7 +3641,7 @@ export class TypeChecker {
                                 if (!(fieldOrMethod instanceof FunctionType) || !this.checkTypeEquality(fieldOrMethod, entry[1], loc, false, false)) {
                                     ok = false;
                                     if (doThrow) {
-                                        throw new TypeError("Incompatible method signagture for " + entry[0] + " in types " + fromElement.toString() + " and " + to.toString(), loc);
+                                        throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + fromElement.toString() + " and " + to.toString(), loc);
                                     }
                                     break;
                                 }

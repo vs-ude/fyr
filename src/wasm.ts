@@ -69,11 +69,16 @@ export class Module extends Node {
         // Table section
         if (this.funcTable.length > 0) {
             s += indent + "    (table " + this.funcTable.length + " anyfunc)\n";
-            s += indent + "    (elem (i32.const 0)";
-            for(let f of this.funcTable) {
-                s += " " + f.index.toString();
+            for(let i = 0; i < this.funcTable.length; i++) {
+                if (!this.funcTable[i]) {
+                    continue;
+                }
+                s += indent + "    (elem (i32.const " + i.toString() + ")";
+                for(; i < this.funcTable.length && this.funcTable[i]; i++) {
+                    s += " " + this.funcTable[i].index.toString();
+                }
+                s += ")\n";
             }
-            s += ")\n";
         }
 
         // Function types
@@ -156,9 +161,8 @@ export class Module extends Node {
         return ft.name;
     }
 
-    public addFunctionToTable(f: Function): number {
-        this.funcTable.push(f);
-        return this.funcTable.length - 1;
+    public addFunctionToTable(f: Function, index: number) {
+        this.funcTable[index] = f;
     }
 
     public memorySize: number;

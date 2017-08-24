@@ -1,9 +1,25 @@
-func bar() (n int, t string) {
-    n = 5
-    t = "Hallo"
-    return
+type IFoo interface {
+    func Hudel()
+    func Dudel()
 }
 
-func foo() (int, string) {
-    return 0, "Hallo"
+type S struct {
+}
+
+func S.Hudel() {
+}
+
+func S.Dudel() {
+}
+
+func S.AberAber() {
+}
+
+func create() IFoo {
+    return &S{}
+}
+
+func main() {
+    var iface = create()
+    iface.Hudel()
 }
