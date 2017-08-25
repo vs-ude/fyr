@@ -200,6 +200,16 @@ func foo() {
     const buf [4]byte = [1,2,3,4]
     //arr4(buf[:])
     arr5(buf[:])
+
+    var buf2 []byte = [1, 2, 3]
+    slice1(buf2)
+    arr4(buf2)
+    arr5(buf2)
+    //arr4(buf[:])
+    arr5(buf[:])
+}
+
+func slice1(s []byte) {
 }
 
 func arr() [4]byte {
