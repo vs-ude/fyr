@@ -3281,13 +3281,7 @@ export class TypeChecker {
                 } else if (t instanceof RestrictedType && enode.rhs.type instanceof RestrictedType && t.elementType == enode.rhs.type.elementType && this.isPrimitive(t.elementType)) {
                     throw "TODO: This rule should ne useless";
                     // enode.type = t;
-                } else if (t instanceof SliceType && enode.rhs.type instanceof RestrictedType && this.checkTypeEquality(t, enode.rhs.type.elementType, enode.loc, false) && (!enode.rhs.type.isConst || this.isPrimitive(t.elementType))) {
-                    // A restricted slice can be converted to a non-volatile slice by copying it.
-                    // However, const can only be removed for primitives
-                    enode.type = t;
                 } else {
-                    console.log(enode.rhs.type);
-                    console.log(t);
                     throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
 //                    throw "TODO: conversion not possible or not implemented";
                 }

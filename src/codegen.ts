@@ -1949,14 +1949,6 @@ export class CodeGenerator {
                     let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);
                     b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, src, l]);
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
-                } else if (t instanceof SliceType && t2 instanceof SliceType) {
-                    // A volatile slice can be converted to a non-volatile slice by copying it.
-                    let head = b.assign(b.tmp(), "addr_of", "addr", [expr]);
-                    let ptr = b.assign(b.tmp(), "load", "addr", [head, this.sliceHeader.fieldOffset("data_ptr")]);
-                    let l = b.assign(b.tmp(), "load", "i32", [head, this.sliceHeader.fieldOffset("length")]);
-                    let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);
-                    b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, ptr, l]);
-                    return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
                 } else {
                     throw "TODO: conversion not implemented";
                 }
