@@ -768,7 +768,7 @@ export class SliceType extends Type {
         if (this.name) {
             return this.name;
         }
-        return "[]" + this.elementType.name;
+        return "[]" + this.elementType.toString();
     }
 
     public elementType: Type;
@@ -997,6 +997,9 @@ export class TypeChecker {
             return t;
         } else if (tnode.op == "constType") {
             let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            if (this.isPrimitive(c)) {
+                throw new TypeError("const is not allowed for primitive types", tnode.loc);
+            }
             if (c instanceof RestrictedType) {
                 let r = new RestrictedType(c.elementType);
                 r.isImmutable = c.isImmutable;
@@ -1239,7 +1242,7 @@ export class TypeChecker {
                 if (pnode.op == "strType") {
                     continue;
                 }
-                let pt = this.createType(pnode, scope, noStructBody, allowVolatile);
+                let pt = this.createType(pnode, scope, noStructBody, false);
                 if (pt instanceof OrType) {
                     t.types = t.types.concat(pt.types);
                 }
@@ -1250,7 +1253,7 @@ export class TypeChecker {
             let t = new InterfaceType();
             for(let i = 0; i < tnode.parameters.length; i++) {
                 let pnode = tnode.parameters[i];
-                let pt = this.createType(pnode, scope, noStructBody, allowVolatile);
+                let pt = this.createType(pnode, scope, noStructBody, false);
                 if (!(pt instanceof InterfaceType)) {
                     throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
                 }
@@ -1594,12 +1597,12 @@ export class TypeChecker {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
-            v.type = this.createType(vnode.rhs, scope);
-            if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
+            v.type = this.createType(vnode.rhs, scope, false, true);
+            if (isConst && !this.isPrimitiveOrPointer(v.type)) {
                 v.type = RestrictedType.makeConst(v.type);
             }
             // All non-global variables are volatile. However, on primitives, strings and pointers, being volatile makes no difference.
-            if (!isGlobal && !this.isPrimitiveOrPointerOrString(v.type)) {
+            if (!isGlobal && this.isStructOrArrayOrTuple(v.type)) {
                 v.type = RestrictedType.makeVolatile(v.type);
             }
         }
@@ -1919,7 +1922,7 @@ export class TypeChecker {
                 } else {
                     v.type = rtype;
                 }
-                if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
+                if (isConst && !this.isPrimitiveOrPointer(v.type)) {
                     v.type = RestrictedType.makeConst(v.type);
                 }
             } else {
@@ -1969,7 +1972,7 @@ export class TypeChecker {
                             this.checkIsAssignableType(v.type, new TupleType(rtype.types.slice(i)), vnode.loc);
                         }
                     }
-                    if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
+                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
                         v.type = RestrictedType.makeConst(v.type);
                     }
                     break;
@@ -2053,7 +2056,7 @@ export class TypeChecker {
                             this.checkTypeEquality(v.type, this.t_string, vnode.loc);
                         }
                     }
-                    if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
+                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
                         v.type = RestrictedType.makeConst(v.type);
                     }
                     break;
@@ -2127,7 +2130,7 @@ export class TypeChecker {
                             this.checkTypeEquality(lt.valueType, rtype.valueType, vnode.loc);
                         }
                     }
-                    if (isConst && !this.isPrimitiveOrPointerOrString(v.type)) {
+                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
                         v.type = RestrictedType.makeConst(v.type);
                     }
                 } else {
@@ -2903,7 +2906,7 @@ export class TypeChecker {
                     if (field) {
                         enode.type = field.type;
                         // Volatile does not expand to primitive types and pointers
-                        if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointerOrString(enode.type)) {
+                        if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointer(enode.type)) {
                             if (!restrictions.isConst && !restrictions.isImmutable) {
                                 restrictions = null;
                             } else {
@@ -2911,7 +2914,7 @@ export class TypeChecker {
                             }
                         }
                         // Intermediates which are not primitives or pointers or strings are always volatile, because they live on the stack
-                        if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointerOrString(enode.type)) {
+                        if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointer(enode.type)) {
                             if (restrictions) {
                                 restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: true};
                             } else {
@@ -2954,7 +2957,7 @@ export class TypeChecker {
                     enode.type = type.elements.get(enode.name.value);
                 } else {
                     let name = enode.name.value;
-                    let method = this.getBuiltinFunction(type, name);
+                    let method = this.getBuiltinFunction(enode.lhs.type, name, enode.name.loc);
                     if (!method) {
                         throw new TypeError("Unknown method " + name + " in " + type.toString(), enode.name.loc);
                     }
@@ -3051,7 +3054,7 @@ export class TypeChecker {
                 }
                 enode.type = elementType;
                 // Volatile does not expand to primitive types and pointers
-                if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointerOrString(enode.type)) {
+                if (restrictions && restrictions.isVolatile && this.isPrimitiveOrPointer(enode.type)) {
                     if (!restrictions.isConst && !restrictions.isImmutable) {
                         restrictions = null;
                     } else {
@@ -3060,7 +3063,7 @@ export class TypeChecker {
                 }
                 if (t instanceof ArrayType || t instanceof TupleType) {
                     // Intermediates which are not primitives or pointers or strings are always volatile, because they live on the stack
-                    if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointerOrString(enode.type)) {
+                    if (this.checkIsIntermediate(enode.lhs) && !this.isPrimitiveOrPointer(enode.type)) {
                         if (restrictions) {
                             restrictions = {isConst: restrictions.isConst, isImmutable: restrictions.isImmutable, isVolatile: true};
                         } else {
@@ -3283,6 +3286,8 @@ export class TypeChecker {
                     // However, const can only be removed for primitives
                     enode.type = t;
                 } else {
+                    console.log(enode.rhs.type);
+                    console.log(t);
                     throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
 //                    throw "TODO: conversion not possible or not implemented";
                 }
@@ -3912,7 +3917,7 @@ export class TypeChecker {
         return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
 
-    public isPrimitiveOrPointerOrString(t: Type): boolean {
+    public isPrimitiveOrPointer(t: Type): boolean {
         t = this.stripType(t);
         return (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
     }
@@ -4161,6 +4166,24 @@ export class TypeChecker {
         throw new TypeError("The expression is not assignable", node.loc);
     }
 
+    public isConst(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            if (t.isConst) {
+                return true;
+            }
+            t = t.elementType;
+        }
+        if (t instanceof InterfaceType && t.isBoxedType()) {
+            t = t.extendsInterfaces[0];
+            if (t instanceof RestrictedType) {
+                if (t.isConst) {
+                    return true;
+                }
+            }
+        }
+        return false;        
+    }
+    
     public stripType(t: Type): Type {
         if (t instanceof RestrictedType) {
             t = t.elementType;
@@ -4174,7 +4197,8 @@ export class TypeChecker {
         return t;
     }
 
-    private getBuiltinFunction(type: Type, name: string): FunctionType | null {
+    private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
+        let type = this.stripType(t);
         if (type == this.t_string) {
             if (name == "len") {
                 return this.builtin_len;
@@ -4185,6 +4209,9 @@ export class TypeChecker {
             } else if (name == "cap") {
                 return this.builtin_cap;
             } else if (name == "append") {
+                if (this.isConst(t)) {
+                    throw new TypeError("append is not allowed on const slices", loc);
+                }
                 let ft = new FunctionType()
                 ft.name = "append";
                 ft.callingConvention = "system";
@@ -4196,6 +4223,17 @@ export class TypeChecker {
                 ft.parameters.push(p);
                 ft.returnType = type;
                 return ft;
+            } else if (name == "clone") {
+                if (this.isConst(t)) {
+                    // TODO: This restriction could be lifted
+                    throw new TypeError("clone is not allowed on const slices", loc);
+                }
+                let ft = new FunctionType()
+                ft.name = "clone";
+                ft.callingConvention = "system";
+                ft.objectType = type;
+                ft.returnType = type;
+                return ft;                
             }
         } else if (type instanceof ArrayType) {
             if (name == "len") {

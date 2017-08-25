@@ -18,8 +18,31 @@ func demoSlice2() []int {
 
 func demoSlice() []int {
     var arr [256]int
+    logNumber(arr.len())
+//    var slice const &[]int = arr[:]
     var slice = arr[:]
-    return <[]int>slice[4:8]
+    return slice[4:8].clone()
+}
+
+func wrong(p &Point) {
+    p.mul()
+    var arr [1]&Point
+    arr[0] = p
+}
+
+func wrong2() Point {
+    var p Point
+    return p
+}
+
+func wrong3() (int, int) {
+    var a = (1, 2)
+    return a
+}
+
+func wrong4() [1]Point {
+    var arr [1]Point
+    return arr
 }
 
 func demoString() string {
@@ -139,10 +162,6 @@ func foo() {
     //pi = 3
     const answer = 42
     //answer = 43
-    var i const int = 5
-    var j const int = 6
-    i = j + 1
-    i++
     var p const *Point = &{x:1, y:2}
     bar(p)
     p.mul()

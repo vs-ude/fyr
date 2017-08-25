@@ -1447,6 +1447,29 @@ export class CodeGenerator {
                         return b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
                     }
                     throw "Implementation error";
+                } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "clone") {
+                    // A volatile slice can be converted to a non-volatile slice by copying it.
+                    let objType = this.tc.stripType(enode.lhs.lhs.type);
+                    if (!(objType instanceof SliceType)) {
+                        throw "Implementation error";
+                    }
+                    let elementType = this.getSSAType(RestrictedType.strip(objType.elementType));
+                    let size = ssa.sizeOf(elementType);
+                    // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
+                    let head_addr: ssa.Variable | ssa.Pointer;
+                    if (this.isLeftHandSide(enode.lhs.lhs)) {
+                        head_addr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                    } else {
+                        head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
+                    }
+                    if (head_addr instanceof ssa.Variable) {
+                        head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                    }
+                    let data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
+                    let len = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
+                    let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [len]);
+                    b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, data_ptr, len]);
+                    return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, len, len]);
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "append") {
                     let objType = this.tc.stripType(enode.lhs.lhs.type);
                     if (!(objType instanceof SliceType)) {
