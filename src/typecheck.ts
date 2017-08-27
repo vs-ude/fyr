@@ -988,7 +988,7 @@ export class TypeChecker {
         return s;
     }
 
-    public createType(tnode: Node, scope: Scope, noStructBody: boolean = false, allowVolatile: boolean = false): Type {
+    public createType(tnode: Node, scope: Scope, allowVolatile: boolean = false): Type {
         if (tnode.op == "basicType") {
             let t = scope.resolveType(tnode.value);
             if (!t) {
@@ -996,7 +996,7 @@ export class TypeChecker {
             }
             return t;
         } else if (tnode.op == "constType") {
-            let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let c = this.createType(tnode.rhs, scope, allowVolatile);
             if (this.isPrimitive(c)) {
                 throw new TypeError("const is not allowed for primitive types", tnode.loc);
             }
@@ -1012,7 +1012,7 @@ export class TypeChecker {
             return r;
         } else if (tnode.op == "immutablePointerType") {
             // TODO: Immutable makes no sense
-            let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let c = this.createType(tnode.rhs, scope, allowVolatile);
             if (c instanceof RestrictedType) {
                 let r = new RestrictedType(new PointerType(c.elementType));
                 r.isVolatile = c.isVolatile;
@@ -1029,7 +1029,7 @@ export class TypeChecker {
                 throw new TypeError("Volatile types are not allowed in this context", tnode.loc);
             }
             // Internally, a reference type is the same as a volatile pointer
-            let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let c = this.createType(tnode.rhs, scope, allowVolatile);
             let elementType = RestrictedType.strip(c);
             if (!(elementType instanceof SliceType)) {
                 elementType = new PointerType(elementType);
@@ -1045,7 +1045,7 @@ export class TypeChecker {
             r.isVolatile = true;
             return r;
         } else if (tnode.op == "pointerType") {
-            let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let t = this.createType(tnode.rhs, scope, allowVolatile);
             let restrictions: Restrictions;
             if (t instanceof RestrictedType) {
                 restrictions = t;
@@ -1057,7 +1057,7 @@ export class TypeChecker {
             }
             return t;
         } else if (tnode.op == "unsafePointerType") {
-            let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let t = this.createType(tnode.rhs, scope, allowVolatile);
             let restrictions: Restrictions;
             if (t instanceof RestrictedType) {
                 restrictions = t;
@@ -1069,7 +1069,7 @@ export class TypeChecker {
             }
             return t;
         } else if (tnode.op == "guardedPointerType") {
-            let t = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+            let t = this.createType(tnode.rhs, scope, allowVolatile);
             let restrictions: Restrictions;
             if (t instanceof RestrictedType) {
                 restrictions = t;
@@ -1081,12 +1081,12 @@ export class TypeChecker {
             }
             return t;
         } else if (tnode.op == "sliceType") {
-            let t = new SliceType(this.createType(tnode.rhs, scope, noStructBody, allowVolatile));
+            let t = new SliceType(this.createType(tnode.rhs, scope, allowVolatile));
             return t
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
             for(let p of tnode.parameters) {
-                let pt = this.createType(p, scope, noStructBody, allowVolatile);
+                let pt = this.createType(p, scope, allowVolatile);
                 types.push(pt);
             }
             let t = new TupleType(types);
@@ -1097,7 +1097,7 @@ export class TypeChecker {
                 throw new TypeError("Expected a constant number for array size", tnode.lhs.loc);
             }
             // TODO: Check range before parseInt
-            let t = new ArrayType(this.createType(tnode.rhs, scope, noStructBody, allowVolatile), parseInt(tnode.lhs.value));
+            let t = new ArrayType(this.createType(tnode.rhs, scope, allowVolatile), parseInt(tnode.lhs.value));
             return t;
         } else if (tnode.op == "funcType") {
             let t = new FunctionType();
@@ -1109,7 +1109,7 @@ export class TypeChecker {
                         p.ellipsis = true;
                         pnode = pnode.lhs;
                     }
-                    p.type = this.createType(pnode, scope, noStructBody, allowVolatile);
+                    p.type = this.createType(pnode, scope, allowVolatile);
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
@@ -1118,7 +1118,7 @@ export class TypeChecker {
                 }
             }
             if (tnode.rhs) {
-                t.returnType = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
+                t.returnType = this.createType(tnode.rhs, scope, allowVolatile);
             } else {
                 t.returnType = this.t_void;
             }
@@ -1128,8 +1128,8 @@ export class TypeChecker {
                 throw new TypeError("Supplied type arguments do not match signature of map", tnode.loc);
             }
             // TODO: Allow all types in maps?
-            let k = this.createType(tnode.genericParameters[0], scope, noStructBody, false);
-            let v = this.createType(tnode.genericParameters[1], scope, noStructBody, false);
+            let k = this.createType(tnode.genericParameters[0], scope, false);
+            let v = this.createType(tnode.genericParameters[1], scope, false);
             return new MapType(k, v);
         } else if (tnode.op == "genericType" || tnode.op == "genericInstance") {
             let baset: Type;
@@ -1151,7 +1151,7 @@ export class TypeChecker {
                 ct.base = baset;
                 for(let i = 0; i < tnode.genericParameters.length; i++) {
                     let pnode = tnode.genericParameters[i];
-                    let pt = this.createType(pnode, scope, noStructBody, allowVolatile);
+                    let pt = this.createType(pnode, scope, allowVolatile);
                     ct.genericParameterTypes.push(pt);
                     // TODO: Check that pt extends baset.genericParameterTypes[i]
 //                    mapping.set(pt, baset.genericParameterTypes[i]);
@@ -1165,7 +1165,7 @@ export class TypeChecker {
                 ft.loc = tnode.loc;
                 for(let i = 0; i < tnode.genericParameters.length; i++) {
                     let pnode = tnode.genericParameters[i];
-                    let pt = this.createType(pnode, scope, noStructBody, allowVolatile);
+                    let pt = this.createType(pnode, scope, allowVolatile);
                     ft.genericParameterTypes.push(pt);
                     // TODO: Check that pt extends baset.genericParameterTypes[i]
                     s.registerType(baset.genericParameterNames[i], pt);
@@ -1179,13 +1179,13 @@ export class TypeChecker {
                             pnode = pnode.lhs;
                         }
                         p.name = pnode.name.value;
-                        p.type = this.createType(pnode, s, noStructBody, allowVolatile);
+                        p.type = this.createType(pnode, s, allowVolatile);
                         p.loc = pnode.loc;
                         ft.parameters.push(p);
                     }
                 }
                 if (fnode.rhs) {
-                    ft.returnType = this.createType(fnode.rhs, s, noStructBody, allowVolatile);
+                    ft.returnType = this.createType(fnode.rhs, s, allowVolatile);
                 } else {
                     ft.returnType = this.t_void;
                 }
@@ -1243,7 +1243,7 @@ export class TypeChecker {
                 if (pnode.op == "strType") {
                     continue;
                 }
-                let pt = this.createType(pnode, scope, noStructBody, false);
+                let pt = this.createType(pnode, scope, false);
                 if (pt instanceof OrType) {
                     t.types = t.types.concat(pt.types);
                 }
@@ -1254,7 +1254,7 @@ export class TypeChecker {
             let t = new InterfaceType();
             for(let i = 0; i < tnode.parameters.length; i++) {
                 let pnode = tnode.parameters[i];
-                let pt = this.createType(pnode, scope, noStructBody, false);
+                let pt = this.createType(pnode, scope, false);
                 if (!(pt instanceof InterfaceType)) {
                     throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
                 }
@@ -1263,18 +1263,8 @@ export class TypeChecker {
             this.ifaces.push(t);
             return t;
         } else if (tnode.op == "structType") {
-            if (noStructBody) {
-                let t = new StructType();
-                this.structs.push(t);
-                return t;
-            }
             return this.createStructType(tnode, scope);
         } else if (tnode.op == "interfaceType") {
-            if (noStructBody) {
-                let t = new InterfaceType();
-                this.ifaces.push(t);
-                return t;
-            }
             return this.createInterfaceType(tnode, scope);
         }
         throw "Implementation error for type " + tnode.op
@@ -1499,7 +1489,7 @@ export class TypeChecker {
         // A member function?
         if (fnode.lhs) {
             let obj = fnode.lhs;
-            f.type.objectType = this.createType(obj, f.scope, true, true);
+            f.type.objectType = this.createType(obj, f.scope, true);
             // Strip a '&'
             if (f.type.objectType instanceof RestrictedType && f.type.objectType.isVolatile && f.type.objectType.elementType instanceof PointerType) {
                 f.type.objectType = new RestrictedType(f.type.objectType.elementType.elementType, f.type.objectType);
@@ -1533,7 +1523,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope, false, true);
+                p.type = this.createType(pnode, f.scope, true);
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -1598,7 +1588,7 @@ export class TypeChecker {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
-            v.type = this.createType(vnode.rhs, scope, false, true);
+            v.type = this.createType(vnode.rhs, scope, true);
             // Const makes no difference on primitives
             if (isConst && !this.isPrimitive(v.type)) {
                 v.type = RestrictedType.makeConst(v.type);

@@ -157,7 +157,124 @@ The notation of a reference pointer is `&*Point`. Reference pointers are used fr
 
 A pointer type is automatically coerced to its equivalent reference type where required.
 
-A value type 
+A value type ... TODO
+
+## Const Types
+
+A type marked as const becomes immutable. That means, the bytes storing the instance of the type cannot be altered (except for an assignment).
+Furthermore, it is impossible to derive a non-const-value from a const-value.
+The only exception are types which cannot be marked as const.
+
+Primitive types cannot be marked as const, since they are immutable by definition. The same applies to strings, since they are immutable by definition as well.
+
+### Const Pointers and Const Boxes
+
+Pointer-like types are immutable by definition, too, because the bytes holding the pointer are either replaced alltogether (during an assignment) or not at all. Nevertheless, `const` can be applied to pointer types. The `const` restriction extends to the type the pointer is pointing to. Hence, the following two types are considered to be equal and can be assigned to each other:
+
+```
+var a const *Widget
+var b *const Widget
+a = b
+b = a
+
+var x const []*Widget
+var y []const *Widget
+x = y
+y = x
+```
+
+The same applies to boxed types as in
+
+```
+var ptr const interface{*T}
+```
+
+In the above example, `ptr` is a boxed pointer that points to an instance of `T`.
+Since the box is const, the contained pointer is const and consequently, the value stored in the box is const, too.
+
+The compiler will always normalize types by pulling the `const` in front of the pointer and in front of any boxing. Hence, `*const Widget` is not idiomatic Fyr. Use `const *Widget` instead. The same holds for `[]*const Widget`, which is normalized to `const []*Widget`.
+Furthermore, `const` is pulled out of a box. i.e. the type `interface{const *T}` is normalized to `const interface{*T}`.
+
+Dereferencing a const-pointer results in a const value, i.e. in the follwing example the type of `v` is `const S`.
+
+```
+type S struct {
+}
+
+var ptr const *S = ...
+var v = *ptr
+```
+
+### Const Coercion
+
+The type `T` is always assignable to `const T`.
+
+However, assigning `const T` to `T` is not always possible since it could allow to retrieve a non-const value from a const type.
+This assignment is only allowed if `T` is a value-type that either does not contain any pointer or all contained pointers are const.
+
+The const boxed type `const interface{T}` and the empty interface `const interface{}` cannot be assigned to their non-const counterparts, because at compile time it is unknown what is contained by the empty interface.
+The same applies to generics which must provide one code for all types, some of which are const-assignable, other not.
+Consequently, it is not allowed for all boxed types. 
+
+### Const and Comparison
+
+Const types and their non-const counterparts are comparable using `==`, `!=`, `<` etc. if the non-const type is comparable.
+
+### Const and Assignment
+
+A variable storing a const type can still be assignable as in the following example:
+
+```
+var w const *Widget = null
+w = createButton()
+```
+
+Hence, const means that a type becomes immutable, but the variable holding the type instance can still be assignable. To make a variable non-assignable, replace `var` with `const` as in the following example:
+
+```
+const w *Widget = createButton()
+// The following line results in an error since w is not assignable
+w = thisWontWork() 
+```
+
+Both concepts can be combined as in the following example
+
+```
+const w const *Widget = createButton()
+```
+
+Here `w` holds a pointer to an immutable `Widget` and the variable `w` is non-assignable. Note that there might still exist another non-const pointer to the same `Widget`. Hence, the widget might still mutate, but using a const-pointer the `Widget` cannot be mutated.
+
+## The Empty Interface Type
+
+The type `interface{}` is the empty interface and is considered to be a value type. All types can be assigned to it, except for reference types.
+
+It is explicitly allowed to store const types in an empty interface.
+
+## Box Types
+
+Boxing is required by Fyr's implementation of generics.
+Outside generics, there is no need to work with boxed types.
+A generic function has only one code that works for all types, which reduces code size.
+Therefore, generic functions treat all generic types as boxed types.
+
+A type `T` is boxed by the type `interface{T}`. The boxed type can be used anywhere where the unboxed type can be used.
+Thus, boxed types are automatically coerced to their boxed type.
+The only exception is that the address operator `&`. When applied to a boxed type, `&` returns a pointer to an interface `*interface{T}`, whereas `&` applied to `T` yields a pointer to `T`, i.e. `*T`.
+
+```
+var a interface{int} = 42
+// a is automatically coerced to int
+var x int = a * 2
+```
+
+The type `T` is automatically coerced to the type `interface{T}` where required.
+
+```
+var i int = 42
+// i is automatically coered to interface{int}
+var a interface{int} = i
+```
 
 ## Immutability
 
@@ -190,120 +307,3 @@ const i = 42
 // The following line yields an error
 i = 43
 ```
-
-## Const Types
-
-A type marked as const becomes immutable. That means, the bytes storing the instance of the type cannot be altered (except for an assignment).
-Furthermore, it is impossible to derive a non-const-value from a const-value.
-The only exception are types which cannot be marked as const.
-
-Primitive types cannot be marked as const, since they are immutable by definition. The same applies to strings, since they are immutable by definition as well.
-
-Pointer-like types are immutable by definition, too, because the bytes holding the pointer are either replaced alltogether (during an assignment) or not at all. Nevertheless, `const` can be applied to pointer types. The `const` restriction extends to the type the pointer is pointing to. Hence, the following two types are considered to be equal and can be assigned to each other:
-
-```
-var a const *Widget
-var b *const Widget
-a = b
-b = a
-
-var x const []*Widget
-var y []const *Widget
-x = y
-y = x
-```
-
-The same applies to boxed types as in
-
-```
-var ptr const interface{*T}
-```
-
-In the above example, `ptr` is a boxed pointer that points to an instance of `T`.
-Since the box is const, the contained pointer is const and consequently, the value stored in the box is const, too.
-
-The compiler will always normalize types by pulling the `const` in front of the pointer and in front of any boxing. Hence, `*const Widget` is not idiomatic Fyr. Use `const *Widget` instead. The same holds for `[]*const Widget`, which is normalized to `const []*Widget`.
-
-However, `const` is not pulled out of a box. i.e. the type `interface{const *T}` is not further normalized.
-
-Dereferencing a const-pointer results in a const value, i.e. in the follwing example the type of `v` is `const S`.
-
-```
-type S struct {
-}
-
-var ptr const *S = ...
-var v = *ptr
-```
-
-### Const Coercion
-
-The type `T` is always assignable to `const T`.
-
-However, assigning `const T` to `T` is not always possible since it could allow to retrieve a non-const value from a const type.
-This assignment is only allowed if `T` is a value-type that either does not contain any pointer or all contained pointers are const.
-
-The const boxed type `const interface{T}` and the empty interface `const interface{}` cannot be assigned to their non-const counterparts, because at compile time it is unknown what is contained by the empty interface.
-The same applies to generics which must provide one code for all types, some of which are const-assignable, other not.
-Consequently, it is not allowed for all boxed types. 
-
-### Const and comparison
-
-Const types and their non-const counterparts are comparable using `==`, `!=`, `<` etc. if the non-const type is comparable.
-
-### Const and assignment
-
-A variable storing a const type can still be assignable as in the following example:
-
-```
-var w const *Widget = null
-w = createButton()
-```
-
-Hence, const means that a type becomes immutable, but the variable holding the type instance can still be assignable. To make a variable non-assignable, replace `var` with `const` as in the following example:
-
-```
-const w *Widget = createButton()
-// The following line results in an error since w is not assignable
-w = thisWontWork() 
-```
-
-Both concepts can be combined as in the following example
-
-```
-const w const *Widget = createButton()
-```
-
-Here `w` holds a pointer to an immutable `Widget` and the variable `w` is non-assignable. Note that there might still exist another non-const pointer to the same `Widget`. Hence, the widget might still mutate, but using a const-pointer the `Widget` cannot be mutated.
-
-## The Empty Interface
-
-The type `interface{}` is the empty interface and is considered to be a value type. All types can be assigned to it, except for reference types.
-
-It is explicitly allowed to store const types in an empty interface.
-
-## Boxing
-
-Boxing is required by Fyr's implementation of generics.
-Outside generics, there is no need to work with boxed types.
-A generic function has only one code that works for all types, which reduces code size.
-Therefore, generic functions treat all generic types as boxed types.
-
-A type `T` is boxed by the type `interface{T}`. The boxed type can be used anywhere where the unboxed type can be used.
-Thus, boxed types are automatically coerced to their boxed type.
-The only exception is that the address operator `&`. When applied to a boxed type, `&` returns a pointer to an interface `*interface{T}`, whereas `&` applied to `T` yields a pointer to `T`, i.e. `*T`.
-
-```
-var a interface{int} = 42
-// a is automatically coerced to int
-var x int = a * 2
-```
-
-The type `T` is automatically coerced to the type `interface{T}` where required.
-
-```
-var i int = 42
-// i is automatically coered to interface{int}
-var a interface{int} = i
-```
-
