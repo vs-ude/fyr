@@ -1011,6 +1011,7 @@ export class TypeChecker {
             r.isConst = true;
             return r;
         } else if (tnode.op == "immutablePointerType") {
+            // TODO: Immutable makes no sense
             let c = this.createType(tnode.rhs, scope, noStructBody, allowVolatile);
             if (c instanceof RestrictedType) {
                 let r = new RestrictedType(new PointerType(c.elementType));
@@ -1598,7 +1599,8 @@ export class TypeChecker {
             }
         } else {
             v.type = this.createType(vnode.rhs, scope, false, true);
-            if (isConst && !this.isPrimitiveOrPointer(v.type)) {
+            // Const makes no difference on primitives
+            if (isConst && !this.isPrimitive(v.type)) {
                 v.type = RestrictedType.makeConst(v.type);
             }
             // All non-global variables are volatile. However, on primitives, strings and pointers, being volatile makes no difference.
@@ -2671,8 +2673,12 @@ export class TypeChecker {
             case "unary&":
             {
                 this.checkExpression(enode.rhs, scope);
-                this.checkIsAddressable(enode.rhs, scope);
+                this.checkIsAddressable(enode.rhs, scope, true);
+                // The & operator does not perform automatic unboxing
                 let t = enode.rhs.type;
+                if (this.isVolatile(t)) {
+                    throw new TypeError("Taking the address of local variables is not allowed", enode.loc);
+                }
                 let restrictions: Restrictions = null;
                 if (t instanceof RestrictedType) {
                     restrictions = t;
@@ -3728,17 +3734,22 @@ export class TypeChecker {
         throw new TypeError("The type " + t.toString() + " is not indexable", node.loc);
     }
 
-    public checkIsAddressable(node: Node, scope: Scope, direct: boolean = true): boolean {
+    public checkIsAddressable(node: Node, scope: Scope, withAmpersand: boolean): boolean {
         switch (node.op) {
             case "id":
                 let element = scope.resolveElement(node.value);
                 if (element instanceof Variable) {
                     if (element.isGlobal) {
                         return true;
-                    }                
-                    return true;
-                }
-                if (element instanceof FunctionParameter) {
+                    }
+                    if (!withAmpersand) {              
+                        return true;
+                    }
+                    throw new TypeError("Cannot take address of local variable", node.loc);
+                } else if (element instanceof FunctionParameter) {
+                    if (!withAmpersand) {
+                        return true;
+                    }
                     throw new TypeError("Cannot take address of function parameter", node.loc);
                 }
                 break;
@@ -3767,8 +3778,8 @@ export class TypeChecker {
             case "tuple":
             case "object":
                 // "&{x:1, y:2}" is allowed whereas "&({x:1, y:2}.x)"" is not allowed.
-                if (direct) {
-                    return false;
+                if (withAmpersand) {
+                    return true;
                 }
         }
         throw new TypeError("Cannot take address of intermediate value", node.loc);
@@ -3908,12 +3919,12 @@ export class TypeChecker {
 
     public isPrimitive(t: Type): boolean {
         t = this.stripType(t);
-        return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+        return (t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void);
     }
 
     public isPrimitiveOrPointer(t: Type): boolean {
         t = this.stripType(t);
-        return (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+        return (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t == this.t_bool || t == this.t_string || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void);
     }
 
     public isStruct(t: Type): boolean {
@@ -4177,7 +4188,32 @@ export class TypeChecker {
         }
         return false;        
     }
-    
+
+    public isVolatile(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            if (t.isVolatile) {
+                return true;
+            }
+            t = t.elementType;
+        }
+        if (t instanceof InterfaceType && t.isBoxedType()) {
+            t = t.extendsInterfaces[0];
+            if (t instanceof RestrictedType) {
+                if (t.isVolatile) {
+                    return true;
+                }
+            }
+        }
+        return false;        
+    }
+
+    public isReference(t: Type): boolean {
+        if (t instanceof RestrictedType && t.elementType instanceof InterfaceType && t.elementType.isBoxedType()) {
+            t = t.elementType.extendsInterfaces[0];
+        }
+        return (t instanceof RestrictedType && t.isVolatile && t.elementType instanceof PointerType);
+    }
+
     public stripType(t: Type): Type {
         if (t instanceof RestrictedType) {
             t = t.elementType;

@@ -1335,23 +1335,23 @@ export class CodeGenerator {
             }
             case "unary&":
             {
-                if (this.tc.checkIsAddressable(enode.rhs, scope)) {
-                    let p = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
-                    if (p instanceof ssa.Pointer) {
-                        if (p.offset == 0) {
-                            return p.variable;
-                        }
-                        return b.assign(b.tmp(), "add", "ptr", [p.variable, p.offset]);
-                    }
-                    return b.assign(b.tmp(), "addr_of", "ptr", [p]);                
+                if (enode.rhs.op == "bool" || enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str" || enode.rhs.op == "array" || enode.rhs.op == "tuple" || enode.rhs.op == "object") {
+                    // Make a copy of a literal
+                    let t = this.tc.stripType(enode.rhs.type);
+                    let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
+                    let s = this.getSSAType(t);
+                    let copy = b.assign(b.tmp("ptr"), "alloc", s, [1]);
+                    b.assign(b.mem, "store", s, [copy, 0, p]);
+                    return copy;
                 }
-                // Make a copy of a literal
-                let t = this.tc.stripType(enode.rhs.type);
-                let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
-                let s = this.getSSAType(t);
-                let copy = b.assign(b.tmp("ptr"), "alloc", s, [1]);
-                b.assign(b.mem, "store", s, [copy, 0, p]);
-                return copy;
+                let p = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
+                if (p instanceof ssa.Pointer) {
+                    if (p.offset == 0) {
+                        return p.variable;
+                    }
+                    return b.assign(b.tmp(), "add", "ptr", [p.variable, p.offset]);
+                }
+                return b.assign(b.tmp(), "addr_of", "ptr", [p]);                
             }
             case "||":
             {

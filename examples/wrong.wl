@@ -148,6 +148,10 @@ func p4() P {
     return {}
 }
 
+func p5(p const &Point) {
+    var copy Point = p
+}
+
 func usePoint() {
     p3().mul()
 //    p3().wontWork()
@@ -172,12 +176,12 @@ func foo() {
     p2.wontWork()
     p = p2
     const p3 const Point = *p2
-    bar_ref(&p3)
-    //bar(&p3)
+    bar_ref(p3)
+    //bar(p3)
 
     const p4 Point = *p2
-    bar_ref(&p4)
-    //bar(&p4)
+    bar_ref(p4)
+    //bar(p4)
     //p4.x = 0
 
     const hash []byte = [1,2,3,4]
@@ -235,6 +239,10 @@ func arr4(data &[]byte) {
 
 func arr5(data const &[]byte) {
     //data[0] = 0
+}
+
+func arr6(data [4]byte) {
+    var slice = data[:]
 }
 
 func bar(p const *Point) {
