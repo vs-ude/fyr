@@ -227,9 +227,6 @@ primitiveType
   / "&" [ \t]* t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t})
     }
-  / "@" [ \t]* t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "immutablePointerType", rhs: t})
-    }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
     }
@@ -258,7 +255,7 @@ interfaceMembers
   } 
 
 interfaceMember
-  = "func" [ \t]+ c:("const" [ \t]+)? name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
+  = "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -269,6 +266,9 @@ interfaceMember
       let scope = undefined;
       if (c) {
           scope = new ast.Node({loc: fl(location()), op: "constType", rhs: scope});
+      }
+      if (v) {
+          scope = new ast.Node({loc: fl(location()), op: "referenceType", rhs: scope});
       }
       return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }

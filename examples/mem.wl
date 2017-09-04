@@ -91,7 +91,7 @@ func initializeMemory() #void {
     var heap = system.heap()
     var heapEnd #void = system.currentMemory() * system.pageSize()
     // Put the RootBlock on the heap
-    root = <#RootBlock>heap
+    root = heap
     heap += 32880 // TODO: sizeOf(RootBlock)
     // The first allocatable heap block starts at the next 64K boundary.
     var b #Block = (<uint>heap &^ 0xffff) + (1 << 16)

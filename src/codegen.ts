@@ -1935,14 +1935,6 @@ export class CodeGenerator {
                     return expr;
                 } else if (t instanceof PointerType && t2 instanceof UnsafePointerType) {
                     return expr;
-                } else if (t instanceof RestrictedType && t.elementType == t2 && this.tc.isPrimitive(t2)) {
-                    throw "Useless";
-                    // return expr;
-                } else if (t2 instanceof RestrictedType && t2.elementType == t && this.tc.isPrimitive(t)) {
-                    throw "Useless";
-                    // return expr;
-                } else if (t instanceof RestrictedType && t2 instanceof RestrictedType && t.elementType == t2.elementType && this.tc.isPrimitive(t.elementType)) {
-                    return expr;
                 } else if (t instanceof SliceType && t.elementType == this.tc.t_byte && t2 == this.tc.t_string) {
                     let l = b.assign(b.tmp(), "load", "i32", [expr]);
                     let src = b.assign(b.tmp("addr"), "add", "i32", [expr, 4]);
@@ -1992,11 +1984,15 @@ export class CodeGenerator {
     }
 
     public isSigned(t: Type): boolean {
+        t = this.tc.stripType(t);
         if (t == this.tc.t_int8 || t == this.tc.t_int16 || t == this.tc.t_int32 || t == this.tc.t_int64 || t == this.tc.t_float || t == this.tc.t_double) {
             return true;
         }
         if (t == this.tc.t_uint8 || t == this.tc.t_uint16 || t == this.tc.t_uint32 || t == this.tc.t_uint64) {
             return false;
+        }
+        if (this.tc.isUnsafePointer(t)) {
+            return true;
         }
         throw "CodeGen: Implementation error: signed check on non number type " + t.toString();       
     }

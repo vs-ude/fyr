@@ -90,10 +90,10 @@ struct {
 interface {*int}
 ```
 
-## Pointer-like Types
+## Pointe Types
 
 There are six kinds of pointers.
-- Normal pointers as in `*Widget`. Only these normal pointers and unsafe pointers (see below) are called pointers. The term pointer-like includes all entries in this list.
+- Safe pointers as in `*Widget`.
 - Unsafe pointers as in `#int`
 - Slices as in `[]int`. A slice is a pointer to the underlying array.
 - Interfaces are pointers as well as long as the interface contains at least one function. However, boxed types like `interface{int}` or the empty `interface{}` are not pointers.
@@ -132,11 +132,19 @@ Conversion between normal pointers and unsafe pointers requires a type cast.
 
 ## Reference Types
 
-References are a restricted kind of pointers which can optionally point to an address on the stack. The compile guarantees that the lifetime of a reference is never longer than the lifetime of the stack-variable it is pointing to. To achieve this restriction, reference types are only allowed on function parameters and local variables. Consequently, the return type of a function cannot be a reference type. In general, a reference cannot be used to compose more complex types. Hence, references cannot appear in structs, tuples or arrays. Furthermore, there are no pointers to reference types and no references pointing to references etc. For example, `[]&int` is not allowed, whereas `&[]int` is ok.
+References are a restricted kind of pointers which can optionally point to an address on the stack.
+The compile guarantees that the lifetime of a reference is never longer than the lifetime of the stack-variable it is pointing to.
+To guarantee this restriction, reference types are only allowed on function parameters and local variables.
+Consequently, the return type of a function cannot be a reference type.
+
+Reference types cannot be used to compose more complex types.
+Hence, references cannot appear in structs, tuples or arrays.
+Furthermore, there are no pointers to reference types and no references pointing to references etc. For example, `[]&int` is not allowed, whereas `&[]int` is ok.
 
 Pointer-like types can be turned into a reference type by prepending `&` as in `&[]int`. In this example, the type is a slice which points to an underlying array of integers. This array can be located on the stack or the heap.
 
-A non-reference pointer can be assinged to a reference pointer if both point to the same type. The other way round is not allowed, because this could mean that the lifetime of the pointer is longer than the lifetime of the stack-variable it is pointing to.
+A non-reference pointer can be assinged to a reference pointer if both point to the same type.
+The other way round is not allowed, because this could mean that the lifetime of the pointer is longer than the lifetime of the stack-variable it is pointing to.
 
 References are not allowed on strings, maps and unsafe pointers.
 The bytes of a string can never exist on the stack.
@@ -161,11 +169,15 @@ A value type ... TODO
 
 ## Const Types
 
-A type marked as const becomes immutable. That means, the bytes storing the instance of the type cannot be altered (except for an assignment).
+A type marked as const becomes immutable.
+That means, the bytes storing the instance of the type cannot be altered (except for an assignment).
 Furthermore, it is impossible to derive a non-const-value from a const-value.
 The only exception are types which cannot be marked as const.
 
-Primitive types cannot be marked as const, since they are immutable by definition. The same applies to strings, since they are immutable by definition as well.
+Primitive types cannot be marked as const, since they are immutable by definition.
+The same applies to strings, since they are immutable by definition as well.
+
+For const structs, arrays, slices, tuples and maps, being const means that the elements are neither immutable nor assignable, because assigning to an element means mutating the struct/array/slice/tuple/map.
 
 ### Const Pointers and Const Boxes
 
@@ -183,17 +195,21 @@ x = y
 y = x
 ```
 
-The same applies to boxed types as in
+The same applies to boxed types as in the following example, where `ptr` is a boxed pointer that points to an instance of `T`.
+Since the box is const, the contained pointer is const and consequently, the value stored in the box is const, too.
 
 ```
 var ptr const interface{*T}
 ```
 
-In the above example, `ptr` is a boxed pointer that points to an instance of `T`.
-Since the box is const, the contained pointer is const and consequently, the value stored in the box is const, too.
-
-The compiler will always normalize types by pulling the `const` in front of the pointer and in front of any boxing. Hence, `*const Widget` is not idiomatic Fyr. Use `const *Widget` instead. The same holds for `[]*const Widget`, which is normalized to `const []*Widget`.
+The compiler will always normalize types by pulling the `const` in front of the pointer and in front of any boxing.
+Hence, `*const Widget` is not idiomatic Fyr.
+Use `const *Widget` instead.
 Furthermore, `const` is pulled out of a box. i.e. the type `interface{const *T}` is normalized to `const interface{*T}`.
+
+However, a slice/array/map of const elements is not normalized to a const slice of non-const elements.
+In the case of  `[]const T` the slice elements can still be assigned to.
+In comparison, in the case of `const []T` all elements are consts and the elements of the slice cannot be assigned to.
 
 Dereferencing a const-pointer results in a const value, i.e. in the follwing example the type of `v` is `const S`.
 
@@ -275,6 +291,11 @@ var i int = 42
 // i is automatically coered to interface{int}
 var a interface{int} = i
 ```
+
+## Map Type
+
+They key and value types of a map must not be references.
+The key is either a primitive type, a string, an unsafe pointer type, or a safe pointer type.
 
 ## Immutability
 

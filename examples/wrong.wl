@@ -134,7 +134,11 @@ func Point.wontWork() int {
     return this.x
 }
 
-// func &Point.notAllowed() &Point {
+// TODO
+func &Point.notAllowed() &Point {
+    return this
+}
+
 func &Point.testme() Point {
 //    var a &Point = this
     return *this
@@ -149,7 +153,7 @@ func p4() P {
 }
 
 func p5(p const &Point) {
-    var copy Point = p
+    var copy Point = *p
 }
 
 func usePoint() {
@@ -176,11 +180,11 @@ func foo() {
     p2.wontWork()
     p = p2
     const p3 const Point = *p2
-    bar_ref(p3)
+    bar_ref(&p3)
     //bar(p3)
 
     const p4 Point = *p2
-    bar_ref(p4)
+    bar_ref(&p4)
     //bar(p4)
     //p4.x = 0
 
@@ -265,29 +269,11 @@ func bar5(p &Point) {
 func bar6(p *Point) {
 }
 
-func bar7(p @Point) {
-}
-
-func immo1() @Point {
-    return &{x: 1, y: 2}
-}
-
-// TODO func immo2() @Point {
-//    return @Point{x: 1, y: 2}
-//}
-
-func useImmo() {
-    var p = immo1()
-    bar_ref(p)
-    bar(p)
-    bar7(p)
-}
-
 type File struct {
     implements ReadWriter
 }
 
-func File.Read(buffer []byte) (int, error) {
+func &File.Read(buffer []byte) (int, error) {
 //func File.Read(buffer []byte) (n int, err error) {
     return 0, null
 }
@@ -342,12 +328,12 @@ func iface5() interface{int} {
 }
 
 type IBar interface {
-    func const Read(buffer []byte) (n int, err error)
+    func Read(buffer []byte) (n int, err error)
 }
 
 type IFoo interface {
     extends IBar
-    func const Read(buffer []byte) (n int, err error)
+    func Read(buffer []byte) (n int, err error)
 }
 
 type Point3D struct {
@@ -359,4 +345,9 @@ func use3D() int {
     var p Point3D
     return p.z + p.y + p.Point.x
     p.mul()
+}
+
+func uiui() {
+    var arr [32]byte
+    var slice &[]byte = arr[:]
 }
