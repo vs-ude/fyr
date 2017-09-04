@@ -441,9 +441,9 @@ export class CodeGenerator {
                     let tmp = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                     if (dest instanceof ssa.Pointer) {
-                        b.assign(b.mem, "store", this.getSSAType(snode.rhs.type), [dest.variable, dest.offset, tmp]);
+                        b.assign(b.mem, "store", this.getSSAType(snode.lhs.type), [dest.variable, dest.offset, tmp]);
                     } else {
-                        b.assign(dest, "copy", this.getSSAType(snode.rhs.type), [tmp]);
+                        b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [tmp]);
                     }
                 }
                 break;
