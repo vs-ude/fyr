@@ -9,6 +9,7 @@ type IFoo interface {
 }
 
 type S struct {
+    x int
 }
 
 func S.Hudel() {
@@ -52,14 +53,17 @@ func dummy(arg &[]byte, arg2 []&S) {
     var arr []&IFoo
     var s S
     arr[0] = &s
+    var ptr &int = &s.x
     if (buf[0] == 0) {
+        var ptr2 &int = &s.x
         var buf2 [256]byte
         var slice2 = buf2[:]
         slice2 = buf[:]
         buf = buf2
         slice2 = arg
-//        var s2 S
+        var s2 S
 //        arr[0] = &s2
+        ptr = &s.x
     }
     arg[0] = 45
 //    arg2[0] = arg2[1]
