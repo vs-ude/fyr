@@ -46,7 +46,7 @@ func main() {
     iface.Hudel()
 }
 
-func dummy(arg &[]byte) {
+func dummy(arg &[]byte, arg2 []&S) {
     var buf [256]byte
     var slice = buf[:]
     var arr []&IFoo
@@ -58,8 +58,11 @@ func dummy(arg &[]byte) {
         slice2 = buf[:]
         buf = buf2
         slice2 = arg
-        var s2 S
-        arr[0] = &s2
+//        var s2 S
+//        arr[0] = &s2
     }
-    arg = slice
+    arg[0] = 45
+//    arg2[0] = arg2[1]
+//    arg = slice
+//    arg2[0] = &s
 }

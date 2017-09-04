@@ -186,7 +186,8 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
-    public parent: Scope | null = null; 
+    public parent: Scope | null = null;
+    public isPseudoScope: boolean; 
 }
 
 export interface GenericType {
@@ -1398,9 +1399,11 @@ export class TypeChecker {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
         }
+        let pseudoScope = new Scope(parentScope);  
+        pseudoScope.isPseudoScope = true;      
         let f: Function = new Function();
         f.name = fnode.name.value;
-        f.scope.parent = parentScope;
+        f.scope.parent = pseudoScope;
         f.node = fnode;
         f.loc = fnode.loc;
         if (fnode.genericParameters) {
@@ -1462,7 +1465,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope);
+                p.type = this.createType(pnode, pseudoScope);
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -2959,7 +2962,7 @@ export class TypeChecker {
                     enode.type = this.makeConst(enode.type, enode.loc);
                 }
                 if (isScoped) {
-                    enode.type = this.makeScoped(enode.type, scope, enode.loc);
+                    enode.type = this.makeScoped(enode.type, isScoped, enode.loc);
                 }
                 break;
             }
@@ -3413,6 +3416,12 @@ export class TypeChecker {
             }
             return false;
         }
+        if (toScope && toScope.isPseudoScope && fromScope && fromScope.isPseudoScope) {
+            if (doThrow) {            
+                throw new TypeError("Mismatch of variable scope", loc);
+            }
+            return false;            
+        }
         return true;
     }
 
@@ -3463,13 +3472,13 @@ export class TypeChecker {
             }
             return false;
         }
-        if (!isCopied) {            
+        if (!isCopied) {
             if (!this.checkIsAssignableScope(toIsScoped, fromIsScoped, loc, false, isFunctionParameter)) {
                 throw new TypeError("Mismatch in variable scope. Cannot assign " + from.toString() + " to " + to.toString(), loc);
             }
         }
 
-        if (to == from) {
+        if (to == from && (this.isPrimitive(to) || to == this.t_string)) {
             return true;
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
