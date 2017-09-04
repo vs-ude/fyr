@@ -3584,7 +3584,7 @@ export class TypeChecker {
                 return true;
             } else {
                 if (from instanceof PointerType || from instanceof UnsafePointerType) {
-                    this.checkIsAssignableScope(to.pointerScope, this.isScoped(from), loc);
+                    this.checkIsAssignableScope(to.pointerScope, this.isScoped(from.elementType), loc);
                     let fromElement = this.stripType(from.elementType);
                     if (fromElement instanceof StructType) {
                         let toMethods = to.getAllMethods();

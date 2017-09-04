@@ -45,3 +45,21 @@ func main() {
     iface = create2()
     iface.Hudel()
 }
+
+func dummy(arg &[]byte) {
+    var buf [256]byte
+    var slice = buf[:]
+    var arr []&IFoo
+    var s S
+    arr[0] = &s
+    if (buf[0] == 0) {
+        var buf2 [256]byte
+        var slice2 = buf2[:]
+        slice2 = buf[:]
+        buf = buf2
+        slice2 = arg
+        var s2 S
+        arr[0] = &s2
+    }
+    arg = slice
+}
