@@ -3546,10 +3546,6 @@ export class TypeChecker {
                 } else {
                     if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
                         return true;
-                    } else {
-                        console.log("FAIL");
-                        console.log(to)
-                        console.log(from)
                     }
                 }
             }
@@ -3703,7 +3699,7 @@ export class TypeChecker {
             }
             case "[":
                 let t = RestrictedType.strip(node.lhs.type);                
-                if (t instanceof SliceType) {
+                if (t instanceof SliceType || t instanceof GuardedPointerType || t instanceof UnsafePointerType) {
                     return true;
                 }
                 if (t instanceof ArrayType || t instanceof TupleType) {

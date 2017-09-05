@@ -66,7 +66,7 @@ func insertStringKey(m #StringMapEntry, key string, valuePtr #void, valueSize ui
         h.freeNext = m[freeIndex].listNext        
         m[freeIndex].hash = hash
         m[freeIndex].key = key
-//        copy(&m[freeIndex].value, valuePtr, valueSize)
+        copy(&m[freeIndex].value, valuePtr, valueSize)
         // The default location for this hash
         var index = hash % newSize + 1
         m[freeIndex].listNext = m[index].hashNext
