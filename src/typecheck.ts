@@ -3142,27 +3142,27 @@ export class TypeChecker {
                 let t = this.createType(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
-                if (this.isIntNumber(t) && right instanceof UnsafePointerType) {
+                if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
+                    // Unsafe pointers can be converted to 32-bit integers
                     enode.type = t;
-                } else if (this.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
+                } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || right == this.t_string || this.isInt32Number(right))) {
+                    // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
                     enode.type = t;
-                } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || right == this.t_string)) {
-                    enode.type = t;
-                } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.checkIsIntNumber(enode.rhs, false))) {
+                } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.isIntNumber(right))) {
+                    // bool and all integers can be converted into each other
                     enode.type = t;
                 } else if (t == this.t_string && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
                 } else if (t == this.t_string && right instanceof SliceType && right.elementType == this.t_byte) {
-                    // A slice of bytes can be converted to a string by copying it
-                    enode.type = t;
-                } else if (t == this.t_string && right instanceof RestrictedType && right.elementType instanceof SliceType && right.elementType.elementType == this.t_byte) {
-                    // A restricted slice of bytes can be converted to a string by copying it. Copying removes all restrictions
-                    enode.type = t;
-                } else if (t instanceof PointerType && right instanceof UnsafePointerType && t.elementType == right.elementType) {
+                    // A slice of bytes can be converted to a string by copying it by copying it.
+                    // Restrictions are irrelevant.
                     enode.type = t;
                 } else if (t instanceof SliceType && t.elementType == this.t_byte && right == this.t_string) {
+                    // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
+                } else if (this.checkIsAssignableType(t, right, enode.loc, false)) {
+                    throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);                    
                 } else {
                     throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
 //                    throw "TODO: conversion not possible or not implemented";
@@ -3478,7 +3478,7 @@ export class TypeChecker {
             }
         }
 
-        if (to == from && (this.isPrimitive(to) || to == this.t_string)) {
+        if (to == from && (this.isPrimitive(to) || to == this.t_string || to instanceof StructType)) {
             return true;
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
@@ -3519,26 +3519,37 @@ export class TypeChecker {
                     }
                 }
             }
-        } else if (to instanceof PointerType && (from instanceof PointerType || from instanceof UnsafePointerType)) {
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+        } else if (to instanceof PointerType) {
+            if (from == this.t_null) {
+                // null can be assigned to any pointer type
                 return true;
+            } else if (from instanceof PointerType || from instanceof UnsafePointerType) {
+                if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+                    return true;
+                }
             }
         } else if (to instanceof GuardedPointerType && from instanceof GuardedPointerType) {
             if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
                 return true;
             }            
         } else if (to instanceof UnsafePointerType) {
-            if (from == this.t_int || from == this.t_uint) {
+            if (from == this.t_int || from == this.t_uint || from == this.t_null) {
+                // 32-bit integers and null can be assigned to an usafe pointer type
                 return true;
-            } else if (from instanceof UnsafePointerType || from instanceof PointerType) {
-                // Safe and unsafe pointers to anything can be converted to #void
+            } else if (from instanceof UnsafePointerType || from instanceof PointerType) {                
                 if (to.elementType == this.t_void) {
+                    // Safe and unsafe pointers to anything can be assigned to #void
                     return true;
                 } else if (from.elementType == this.t_void) {
+                    // #void can be assigned to any unsafe pointer
                     return true;
                 } else {
                     if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
                         return true;
+                    } else {
+                        console.log("FAIL");
+                        console.log(to)
+                        console.log(from)
                     }
                 }
             }
@@ -4153,6 +4164,11 @@ export class TypeChecker {
         return false;
     }
 
+    public isInt32Number(t: Type): boolean {
+        t = this.stripType(t);
+        return t == this.t_int32 || t == this.t_uint32;
+    }
+    
     public isPrimitive(t: Type): boolean {
         t = this.stripType(t);
         return (t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void);

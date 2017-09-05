@@ -112,7 +112,7 @@ func initializeMemory() #void {
 
     // Allocate the stack and hold a pointer to it so that GC can find it
     var stack_block_nr = heapEndBlockNr - stackBlockCount
-    coroutine.stack = <*Stack><#Stack>(stack_block_nr << 16)
+    coroutine.stack = <#Stack>(stack_block_nr << 16)
     coroutine.stackSize = stackBlockCount << 16
     // The stack has a 0-typemap which indicates that this is a stack,
     // followed by a pointer to the end of the stack, followed by a location for storing the SP
@@ -804,22 +804,22 @@ func appendSlice(a *void, alen uint, acap uint, b *void, blen uint, bcap int, el
         if (bcap < 0 && b != null) {
             var newptr = alloc(blen, elementSize, typemap)
             copy(<#byte>newptr, <#byte>bptr, blen * elementSize)
-            return {data_ptr: <*void>newptr, length: blen, cap: blen}
+            return {data_ptr: newptr, length: blen, cap: blen}
         }
-        return {data_ptr: <*void>bptr, length: blen, cap: <uint>bcap}        
+        return {data_ptr: bptr, length: blen, cap: <uint>bcap}        
     }
     if (b == null) {
-        return {data_ptr: <*void>aptr, length: alen, cap: acap}
+        return {data_ptr: aptr, length: alen, cap: acap}
     }
     var l = alen + blen
     if (alen + blen > acap) {
         var newptr = alloc(l, elementSize, typemap)
         copy(<#byte>newptr, <#byte>aptr, alen * elementSize)
         copy(<#byte>newptr + alen * elementSize, <#byte>bptr, blen * elementSize)
-        return {data_ptr: <*void>newptr, length: l, cap: l}
+        return {data_ptr: newptr, length: l, cap: l}
     }
     copy(<#byte>aptr + alen * elementSize, <#byte>bptr, blen * elementSize)   
-    return {data_ptr: <*void>aptr, length: l, cap: acap}
+    return {data_ptr: aptr, length: l, cap: acap}
 }
 
 func growSlice(ptr *void, len uint, cap uint, add uint, elementSize uint, typemap #int) Slice {
@@ -831,7 +831,7 @@ func growSlice(ptr *void, len uint, cap uint, add uint, elementSize uint, typema
         }
         var newptr = alloc(cap, elementSize, typemap)
         copy(<#byte>newptr, <#byte><#void>ptr, len * elementSize)
-        ptr = <*void>newptr
+        ptr = newptr
     }
 
     return {data_ptr: ptr, length: l, cap: cap}

@@ -29,15 +29,7 @@ type StringMapEntry struct {
     value byte
 }
 
-func alloc(elementCount uint, elementSize uint, typeMap #int) #void {
-    return 0
-}
-
-func copy(dest #byte, src #byte, count uint) {
-}
-
 func insertStringKey(m #StringMapEntry, key string, valuePtr #void, valueSize uint, typemap #int) #StringMapEntry {
-// var h #MapHead = <#MapHead>m
     var h = <#MapHead>m
     var size uint
     var newSize uint
@@ -83,21 +75,19 @@ func insertStringKey(m #StringMapEntry, key string, valuePtr #void, valueSize ui
 
         // Copy over the old map if required.
         if (size == 0) {
-//            return m
+            return m
         }
         size--
         key = m[size].key
         hash = m[size].hash
         valuePtr = &m[size].value
     }
-//    return m
-return 0
+    return m
 }
 
 func lookupStringKey(m #StringMapEntry, key string) #void {
     if (m == null) {
-        return 0
-//        return null
+        return null
     }
     var h = <#MapHead>m
     // Hash the key. The hash must not be 1
@@ -112,8 +102,7 @@ func lookupStringKey(m #StringMapEntry, key string) #void {
         }
         index = m[index].listNext
     }
-//    return null
-    return 0
+    return null
 }
 
 func removeStringKey(m #StringMapEntry, key string) bool {
