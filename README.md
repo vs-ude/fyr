@@ -26,13 +26,10 @@ The file `mem.wl` must always be part of the compilation, since this is currentl
 
 ## Todos
 
-- Interfaces
-    - Type checking (compare const-ness)
 - Type switch statement
 - Parsing of generic structs
 - Generics with interfaces
 - Generics without interfaces
-- @ constructor
 - Automatically include the runtime souces
 - map
     - codegen
@@ -60,8 +57,6 @@ If an if-clause is pruned, decrease the reference count of all variables used th
 ```
 Here the x-es should not be assigned at all if they are used in the if-clause only.
 
-### Check for the assignment of non trivial interfaces
-
 ### Avoid types any and null in vars, structs, etc.
 
 ### Codegen for named return types
@@ -73,14 +68,19 @@ Here the x-es should not be assigned at all if they are used in the if-clause on
 All numeric types (`int`, `uint`, ...) and `bool` are primitives.
 Furthermore, `null` and `void` are primitives as well.
 Primitive types are immutable, however, they can be assignable.
-Hence, either all bytes or a primitive are changed at once.
-It is not possible to change single bytes of a primitive type (except when using unsafe pointers).
+Hence, during an assignment all bytes of a primitive are overwritten, but it is not possible to mutate single bytes of a primitive without assigning to it.
+An exception if of course the use of unsafe pointers which can change all memory.
+However, mutating a primitive this way is considered to result in undefined behavior.
 
 ## Value Types
 
-Structs, arrays, tuples and primitive types are value types. Value types are copied when being assigned. Value types can be mutable (such as structs), but are mot necessarily mutable (such as `int` which is a primitive).
+Structs, arrays, tuples and primitive types are value types.
+Value types are copied when being assigned.
+Some value types are mutable (such as structs), but they are not necessarily mutable (such as `int` which is a primitive).
 
-Boxed types such as `interface{int}` and the empty `interface{}` are value types, too, because they store copies of data instead of pointing to them. A boxed pointer like `interface{*int}` is im this respect similat to a struct with only one field pointing to an int. The struct itself is a value type, but it contains a pointer type.
+Boxed types such as `interface{int}` and the empty `interface{}` are value types, too, because they store copies of data instead of pointing to them.
+A boxed pointer like `interface{*int}` is in this respect similar to a struct with only one field pointing to an int.
+The following examples shows such a struct that is a value type, but it contains a pointer type.
 
 ```
 // Value types which contain a pointer.
@@ -90,7 +90,12 @@ struct {
 interface {*int}
 ```
 
-## Pointe Types
+### Pure Value Types
+
+A value type that does not contain any pointer types is a pure value.
+Therefore, an assignment of a pure value results necessarily in a deep copy of this value.
+
+## Pointer Types
 
 There are six kinds of pointers.
 - Safe pointers as in `*Widget`.
