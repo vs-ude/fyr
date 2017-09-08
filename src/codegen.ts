@@ -449,6 +449,29 @@ export class CodeGenerator {
                         ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [val]), 0);
                     }
                     processAssignment(snode.lhs, snode.rhs.type, destinations, 0, ptr);
+                } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
+                    let mtype: MapType = this.tc.stripType(snode.lhs.lhs.type) as MapType;
+                    let m = this.processExpression(f, scope, snode.lhs.lhs, b, vars, mtype);
+                    let key = this.processExpression(f, scope, snode.lhs.rhs, b, vars, mtype.keyType);
+                    let value = this.processExpression(f, scope, snode.rhs, b, vars, mtype.valueType);
+                    let keyType: number;
+                    let size: number;
+                    let hash: ssa.Variable;
+                    let tuplePtr: ssa.Variable;
+                    if (mtype.keyType == this.tc.t_string) {
+                        hash = b.call(b.tmp(), this.hashStringFunctionType, [SystemCalls.hashString, key]);
+                        keyType = 1
+                        let tupleType = new ssa.StructType();
+                        tupleType.addField("key", "ptr")
+                        tupleType.addField("value", this.getSSAType(mtype.valueType));
+                        size = ssa.sizeOf(tupleType);
+                        let tuple = b.assign(b.tmp(), "struct", tupleType, [key, value]);
+                        tuplePtr = b.assign(b.tmp(), "addr_of", "addr", [tuple]);
+                    } else {
+                        throw "TODO"
+                    }
+                    let tmp = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
+                    b.call(null, this.setMapFunctionType, [SystemCalls.setMap, m, hash, keyType, tuplePtr, size])
                 } else {
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                     let tmp = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
@@ -1144,7 +1167,7 @@ export class CodeGenerator {
                         entry.addField("key", "ptr")
                         entry.addField("value", this.getSSAType(t.valueType));                        
                         let entryTypeMap = this.wasm.typeMapper.mapType(entry);
-                        let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 0, entryTypeMap.addr]);
+                        let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
                         if (enode.parameters) {
                             let tuple = new ssa.StructType();
                             tuple.addField("key", "ptr")

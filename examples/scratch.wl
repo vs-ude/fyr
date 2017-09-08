@@ -73,8 +73,10 @@ func dummy(arg &[]byte, arg2 []&S) {
 
 func mapDemo() int {
     var m map<string, int> = {bar: 21, foo: 42, hudel: 11}
+    m["dodo"] = 123
     logNumber(<uint>m["bar"])
     logNumber(<uint>m["foo"])
     logNumber(<uint>m["hudel"])
+    logNumber(<uint>m["dodo"])
     return m["foo"]
 }

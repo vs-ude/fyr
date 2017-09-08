@@ -66,21 +66,25 @@ func setMap(head *MapHead, hash uint64, keyType int32, tuplePtr *void, tupleSize
 
     // An entry with this key does currently not exist? Create a new entry
     if (tuple == null) {
+        // Determine the size of the table
         var iptr #int = <#int>h - 1
         var entryTypeMap #int = -*(iptr - 1)
+        var entrySize = <uint>*entryTypeMap << 2
+
         // No space left? Resize the table
         if (h.free == 0) {
-            var headTypeMap #int = *iptr
+            var headTypeMap #int = -*iptr
             var head2 = createMap(headTypeMap, h.size * 2, entryTypeMap)
             var h2 #MapHead = head2
-            var m2 = <#MapEntry>(h2 + 1)
-            for(var head = h; head != null; head = head.nextHead) {
-                var entry = <#MapEntry>(head + 1)
-                for(var i = 0; i < head.size; i++) {
-                    var index = <uint>(entry.hash % <uint64>h2.size)
-                    entry.hashNext = m2[index].hashNext
-                    m2[index].hashNext = entry
-                    entry++
+            var m2 = <#void>(h2 + 1)
+            for(var mh = h; mh != null; mh = mh.nextHead) {
+                var oldEntry = <#MapEntry>(mh + 1)
+                for(var i = 0; i < mh.size; i++) {
+                    var index = <uint>(oldEntry.hash % <uint64>h2.size)
+                    var newEntry = <#MapEntry>(m2 + index * entrySize)
+                    oldEntry.listNext = newEntry.hashNext
+                    newEntry.hashNext = oldEntry
+                    oldEntry = <#void>oldEntry + entrySize
                 }
             }
             h2.nextHead = h.nextHead
@@ -96,7 +100,6 @@ func setMap(head *MapHead, hash uint64, keyType int32, tuplePtr *void, tupleSize
         p.hash = hash
         // The default location for this hash
         var index = <uint>(hash % <uint64>h.size)
-        var entrySize = <uint>*entryTypeMap << 2
         var p2 = <#MapEntry>(<#void>m + index * entrySize)
         p.listNext = p2.hashNext
         p2.hashNext = p
@@ -123,6 +126,7 @@ func lookupMap(h #MapHead, hash uint64, keyType int32, tupleKeyPtr #void) #void 
             return &p.key
         }
     }
+    
     return null
 }
 
