@@ -162,10 +162,10 @@ func split(f #FreeArea, index uint) {
     block.area[area_nr >> 1] |= <byte>(4 << ((area_nr & 1) << 2))
 }
 
-func allocBlocks(elementCount uint, elementSize uint, typeMap #int, epoch uint, has_gc bool) #void {
-    var size = elementCount * elementSize
+func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uint, headTypeMap #int, epoch uint, has_gc bool) #void {
+    var size = elementCount * elementSize + headSize
     var flags uint = epoch | 4
-    if (typeMap != 0) {
+    if (typeMap != null) {
         // Add space for the type typeMap
         size += 4 // Additional 4 bytes for the typeMap pointer
         if (elementCount != 1) {
@@ -173,6 +173,10 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, epoch uint, 
         }
         flags |= 8
     }
+    if (headTypeMap != null) {
+        size += 4 // Additional 4 bytes for the typeMap pointer
+    }
+
     // Round the size up to the next block size and compute the block count
     var count = (size + 0xffff) / (1<<16)
     // Compute the block-count as a power of two
@@ -195,7 +199,7 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, epoch uint, 
             return 0
         }
         garbageCollect()
-        return allocBlocks(elementCount, elementSize, typeMap, epoch, true)
+        return allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, epoch, true)
     }
 
     var f #FreeBlock = root.freeBlocks[index]
@@ -248,35 +252,49 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, epoch uint, 
 
     if (typeMap != 0) {
         var start #int = <#int>f
-        if (elementCount == 1) {
+        if (elementCount == 1 && headTypeMap == null) {
             *start = <int>typeMap
             f = <uint>f + 4
-        } else {
+        } else if (headTypeMap == null) {
             *start = -<int>elementCount
             start++
             *start = <int>typeMap            
             f = <uint>f + 8
+        } else {
+            *start = -<int>elementCount
+            start++
+            *start = -<int>typeMap
+            start++
+            *start = -<int>headTypeMap
+            f = <uint>f + 12
         }
+    } else if (headTypeMap != null) {
+        var start #int = <#int>f
+        *start = <int>headTypeMap
+        f = <uint>f + 4
     }
     return <#void>f
 }
 
-func alloc(elementCount uint, elementSize uint, typeMap #int) #void {
+func alloc(elementCount uint, elementSize uint, typeMap #int, headSize uint, headTypeMap #int) #void {
     // Determine the brutto size (i.e. including space for the TypeMap)
-    var size = elementCount * elementSize
+    var size = elementCount * elementSize + headSize
     var flags = 4 | gcEpoch
-    if (typeMap != 0) {
+    if (typeMap != null) {
         size += 4 // Additional 4 bytes for the typeMap pointer
         if (elementCount != 1) {
             size += 4 // additional 4 bytes for the elementCount
         }
         flags |= 8
     }
+    if (headTypeMap != null) {
+        size += 4 // Additional 4 bytes for the typeMap pointer        
+    }
 
     // Needs entire blocks?
     if (size > 1<<15) {
         // Allocate a sequence of blocks
-        return allocBlocks(elementCount, elementSize, typeMap, gcEpoch, false)
+        return allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, gcEpoch, false)
     }
 
     // Determine the granularity
@@ -338,15 +356,26 @@ func alloc(elementCount uint, elementSize uint, typeMap #int) #void {
         // Store the TypeMap for the GC
         if (typeMap != 0) {
             var start #int = <#int>f
-            if (elementCount == 1) {
+            if (elementCount == 1 && headTypeMap == null) {
                 *start = <int>typeMap
                 f = <uint>f + 4
-            } else {
+            } else if (headTypeMap == null) {
                 *start = -<int>elementCount
                 start++
                 *start = <int>typeMap            
                 f = <uint>f + 8
+            } else {
+                *start = -<int>elementCount
+                start++
+                *start = -<int>typeMap
+                start++
+                *start = -<int>headTypeMap
+                f = <uint>f + 12
             }
+        } else if (headTypeMap != null) {
+            var start #int = <#int>f
+            *start = <int>headTypeMap
+            f = <uint>f + 4
         }
 
         // Increase the count of allocated areas
@@ -355,8 +384,8 @@ func alloc(elementCount uint, elementSize uint, typeMap #int) #void {
     }
 
     // Nothing free. Add one more block and allocate again
-    initializeBlock(<#Block>allocBlocks(1, 65536, 0, 1 | 2, false))
-    return alloc(elementCount, elementSize, typeMap)
+    initializeBlock(<#Block>allocBlocks(1, 65536, 0, 0, null, 1 | 2, false))
+    return alloc(elementCount, elementSize, typeMap, headSize, headTypeMap)
 }
 
 func free(ptr #void) {
@@ -649,23 +678,30 @@ func markBlocks(block_nr uint) {
 func traverseHeapArea(ptr #void) {
     var iptr #int = <uint>ptr
     var first = *iptr
+    iptr++
     if (first > 0) {
         var typemap #int = <uint>first
-        traverseType(<uint>iptr + 4, typemap)
+        traverseType(<uint>iptr, typemap)
         return
     }
     if (first == 0) {
         traverseStack(<#Stack>ptr)
         return
     }
-    var elementCount = <uint>(-first)
+    var elementCount = -first
+    var typemap #int = *iptr
     iptr++
-    var typemap #int = <uint>*iptr
+    var data #uint = <#uint>iptr
+    if (<int>typemap < 0) {
+        typemap = -<int>typemap
+        var typemap2 = *iptr
+        data++
+        traverseType(data, *iptr)
+        data += *typemap
+    }
     var size uint = <uint>*typemap
-    iptr++
-    var data #uint = <uint>iptr
     // Now inspect all elements according to the type map
-    for(var i uint = 0; i < elementCount; i++) {
+    for(var i = 0; i < elementCount; i++) {
         traverseType(data, typemap)
         data += size
     }
@@ -741,7 +777,7 @@ func copy(dest #byte, src #byte, count uint) {
 func concatString(str1 string, str2 string) string {
     var s1 = *<#uint>str1
     var s2 = *<#uint>str2
-    var p #void = alloc(4 + s1 + s2, 1, 0)
+    var p #void = alloc(4 + s1 + s2, 1, null, 0, null)
     *<#uint>p = s1 + s2
     var dest #byte = <#byte>p + 4
     var src #byte = <#byte>str1 + 4
@@ -782,7 +818,7 @@ func compareString(str1 string, str2 string) int {
 }
 
 func makeString(src #byte, length uint) string {
-    var p #byte = <#byte>alloc(4 + length, 1, 0)
+    var p #byte = <#byte>alloc(4 + length, 1, null, 0, null)
     *<#uint>p = length
     var dest = p + 4
     for(var i uint = 0; i < length; i++) {
@@ -802,7 +838,7 @@ func appendSlice(a *void, alen uint, acap uint, b *void, blen uint, bcap int, el
     var bptr #void = <#void>b
     if (a == null) {
         if (bcap < 0 && b != null) {
-            var newptr = alloc(blen, elementSize, typemap)
+            var newptr = alloc(blen, elementSize, typemap, 0, null)
             copy(<#byte>newptr, <#byte>bptr, blen * elementSize)
             return {data_ptr: newptr, length: blen, cap: blen}
         }
@@ -813,7 +849,7 @@ func appendSlice(a *void, alen uint, acap uint, b *void, blen uint, bcap int, el
     }
     var l = alen + blen
     if (alen + blen > acap) {
-        var newptr = alloc(l, elementSize, typemap)
+        var newptr = alloc(l, elementSize, typemap, 0, null)
         copy(<#byte>newptr, <#byte>aptr, alen * elementSize)
         copy(<#byte>newptr + alen * elementSize, <#byte>bptr, blen * elementSize)
         return {data_ptr: newptr, length: l, cap: l}
@@ -829,7 +865,7 @@ func growSlice(ptr *void, len uint, cap uint, add uint, elementSize uint, typema
         if (l > cap) {
             cap = l
         }
-        var newptr = alloc(cap, elementSize, typemap)
+        var newptr = alloc(cap, elementSize, typemap, 0, null)
         copy(<#byte>newptr, <#byte><#void>ptr, len * elementSize)
         ptr = newptr
     }

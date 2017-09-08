@@ -70,3 +70,11 @@ func dummy(arg &[]byte, arg2 []&S) {
 //    arg = slice
 //    arg2[0] = &s
 }
+
+func mapDemo() int {
+    var m map<string, int> = {bar: 21, foo: 42, hudel: 11}
+    logNumber(<uint>m["bar"])
+    logNumber(<uint>m["foo"])
+    logNumber(<uint>m["hudel"])
+    return m["foo"]
+}

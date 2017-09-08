@@ -3,133 +3,173 @@ import . {
     func logNumber(uint)
 } from "imports"
 
-func hashString(str string) uint32 {
-    var len = *<#uint>str
-    var ptr #byte = <#byte>str + 4
-    var result uint32 = 1
+func hashString(ptr #byte) uint64 {
+    if (ptr == null) {
+        return 1
+    }
+    var len = *<#uint>ptr
+    ptr += 4
+    var result uint64 = <uint64>len
     for(var i uint = 0; i < len; i++) {
-        result = 31 * result + <uint32>ptr[i]
+        result = 31 * result + <uint64>ptr[i]
+    }
+    if (result == 0) {
+        return 1
     }
     return result
 }
 
 type MapHead struct {
-    size uint
-    used uint
-    freeNext uint
+    nextHead *MapHead
+    size int
+    free int
+    freeList #MapEntry
 }
 
-type StringMapEntry struct {
-    // A value of 0 means end of list
-    hashNext uint
-    // A value of 0 means end of list
-    listNext uint
-    hash uint
-    key string
-    value byte
+type MapEntry struct {
+    // A value of null means end of list
+    hashNext #MapEntry
+    // A value of null means end of list
+    listNext #MapEntry
+    hash uint64
+    key uint32
+    value uint32
 }
 
-func insertStringKey(m #StringMapEntry, key string, valuePtr #void, valueSize uint, typemap #int) #StringMapEntry {
-    var h = <#MapHead>m
-    var size uint
-    var newSize uint
-    // Allocate a map of null
-    if (m == null) {
-        newSize = 16
-    } else if (h.used == h.size) {
-        size = h.size
-        newSize = size * 2
-    } else {
-        size = h.size
-        newSize = h.size
+func createMap(headTypeMap #int, count int, entryTypeMap #int) *MapHead {
+    var entrySize = <uint>*entryTypeMap << 2
+    var headSize = <uint>*headTypeMap << 2
+    var h = <#MapHead>alloc(<uint>count, entrySize, entryTypeMap, headSize, headTypeMap)
+    var m = <#MapEntry>(h + 1)
+    h.size = count
+    h.free = count
+    h.freeList = m
+    for(var i = 1; i < count; i++) {
+        var m2 = <#MapEntry>(<#void>m + entrySize)
+        m.listNext = m2
+        m = m2
     }
-    // Allocate a new or larger map
-    if (size != newSize) {
-        var m2 = <#StringMapEntry>alloc(newSize + 1, 4 + 4 + valueSize, typemap)
-        var h2 = <#MapHead>m2
-        h2.size = newSize
-        h2.used = h.used
-        h2.freeNext = 1
-        for(var i uint = 1; i < newSize; i++) {
-            m2[i].listNext = i
+    m.listNext = null
+    return h
+}
+
+func setMap(head *MapHead, hash uint64, keyType int32, tuplePtr *void, tupleSize uint) {
+    var h #MapHead = head
+    if (h == null) {
+        // TODO throw
+    } else if (h.nextHead != null) {
+        h = h.nextHead
+    }
+    var m = <#MapEntry>(h + 1)
+    // Lookup the key. If it already exists, overwrite it
+    var tuple #void = lookupMap(h, hash, keyType, tuplePtr)
+
+    // An entry with this key does currently not exist? Create a new entry
+    if (tuple == null) {
+        var iptr #int = <#int>h - 1
+        var entryTypeMap #int = -*(iptr - 1)
+        // No space left? Resize the table
+        if (h.free == 0) {
+            var headTypeMap #int = *iptr
+            var head2 = createMap(headTypeMap, h.size * 2, entryTypeMap)
+            var h2 #MapHead = head2
+            var m2 = <#MapEntry>(h2 + 1)
+            for(var head = h; head != null; head = head.nextHead) {
+                var entry = <#MapEntry>(head + 1)
+                for(var i = 0; i < head.size; i++) {
+                    var index = <uint>(entry.hash % <uint64>h2.size)
+                    entry.hashNext = m2[index].hashNext
+                    m2[index].hashNext = entry
+                    entry++
+                }
+            }
+            h2.nextHead = h.nextHead
+            h.nextHead = h2
+            head = head2
+            h = h2
+            m = m2
         }
-        m2[newSize].listNext = 0
-    }
-    // Hash the key. The hash must not be 1
-    var hash = hashString(key)
-    if (hash == 0) {
-        hash = 1
-    }
-    for {
+
         // Get a free entry and fill it
-        var freeIndex = h.freeNext
-        h.freeNext = m[freeIndex].listNext        
-        m[freeIndex].hash = hash
-        m[freeIndex].key = key
-        copy(&m[freeIndex].value, valuePtr, valueSize)
+        var p = h.freeList
+        h.freeList = p.listNext
+        p.hash = hash
         // The default location for this hash
-        var index = hash % newSize + 1
-        m[freeIndex].listNext = m[index].hashNext
-        m[index].hashNext = freeIndex
-        h.used++
-
-        // Copy over the old map if required.
-        if (size == 0) {
-            return m
-        }
-        size--
-        key = m[size].key
-        hash = m[size].hash
-        valuePtr = &m[size].value
+        var index = <uint>(hash % <uint64>h.size)
+        var entrySize = <uint>*entryTypeMap << 2
+        var p2 = <#MapEntry>(<#void>m + index * entrySize)
+        p.listNext = p2.hashNext
+        p2.hashNext = p
+        h.free--
+        tuple = &p.key
     }
-    return m
+    copy(tuple, tuplePtr, tupleSize)
 }
 
-func lookupStringKey(m #StringMapEntry, key string) #void {
-    if (m == null) {
+// We use unsafe pointers here because it is faster and we know that lookup does not cause any allocations
+func lookupMap(h #MapHead, hash uint64, keyType int32, tupleKeyPtr #void) #void {
+    if (h == null) {
         return null
+    } else if (h.nextHead != null) {
+        h = h.nextHead
     }
-    var h = <#MapHead>m
-    // Hash the key. The hash must not be 1
-    var hash = hashString(key)
-    if (hash == 0) {
-        hash = 1
-    }
-    var index = m[hash % h.size + 1].hashNext
-    for (index != 0) {
-        if (m[index].hash == hash && m[index].key == key) {
-            return &m[index].value
+    var iptr #int = <#int>h - 2
+    var entryTypeMap #int = -*iptr
+    var m = <#void>(h + 1)
+    var entrySize = <uint>*entryTypeMap << 2
+    // Iterate over the list at this hash position
+    for (var p = (<#MapEntry>(m + <uint>(hash % <uint64>h.size) * entrySize)).hashNext; p != null; p = p.listNext) {
+        if (p.hash == hash && compareMapKey(p, keyType, tupleKeyPtr)) {
+            return &p.key
         }
-        index = m[index].listNext
     }
     return null
 }
 
-func removeStringKey(m #StringMapEntry, key string) bool {
-    if (m == null) {
+// We use unsafe pointers here because it is faster and we know that compare does not cause any allocations
+func compareMapKey(p #MapEntry, keyType int32, tupleKeyPtr #void) bool {
+    if (keyType == 1) {
+        return compareString(<string>tupleKeyPtr, <string><#void>p.key) == 0
+    } else if (keyType == 2) {
+        return *<#uint32>p.key == *<#uint32>tupleKeyPtr
+    } else if (keyType == 3) {
+        return *<#uint64>&p.key == *<#uint64>tupleKeyPtr
+    } else if (keyType == 4) {
+        return *<#float>&p.key == *<#float>tupleKeyPtr
+    } else if (keyType == 5) {
+        return *<#double>&p.key == *<#double>tupleKeyPtr
+    } else {
+        // TODO: Throw
+    }
+    return false;
+}
+
+// We use unsafe pointers here because they are faster and remove does not perform any allocations
+func removeMapKey(h #MapHead, hash uint64, keyType int32, tupleKeyPtr #void) bool {
+    if (h == null) {
         return false
+    } else if (h.nextHead != null) {
+        h = h.nextHead
     }
-    var h = <#MapHead>m
-    // Hash the key. The hash must not be 1
-    var hash = hashString(key)
-    if (hash == 0) {
-        hash = 1
-    }
-    var prevIndex uint = 0
-    var index = m[hash % h.size + 1].hashNext
-    for (index != 0) {
-        if (m[index].hash == hash && m[index].key == key) {
-            if (prevIndex != 0) {
-                m[prevIndex].listNext = m[index].listNext
+    var iptr #int = <#int>h - 1
+    var entryTypeMap #int = -*(iptr - 1)
+    var entrySize = <uint>*entryTypeMap << 2
+    var m = <#MapEntry>(h + 1)
+    var prev #MapEntry
+    // Iterate over the list at this hash position
+    for (var p = (<#MapEntry>(m + <uint>(hash % <uint64>h.size) * entrySize)).hashNext; p != null; p = p.listNext) {
+        if (p.hash == hash && compareMapKey(p, keyType, tupleKeyPtr)) {
+            if (prev != null) {
+                prev.listNext = p.listNext
             } else {
-                m[hash % h.size + 1].hashNext = 0
+                (<#MapEntry>(<#void>m + <uint>(hash % <uint64>h.size) * <uint>*entryTypeMap)).hashNext = p.listNext
             }
-            m[index].hash = 0
-            m[index].listNext = h.freeNext
-            h.freeNext = index
+            p.hash = 0
+            p.listNext = h.freeList
+            h.freeList = p
+            h.free++
             return true
         }
-        index = m[index].listNext
     }
     return false
 }

@@ -2496,6 +2496,11 @@ export class Wasm32Backend {
                 break;
             }
             default:
+            {
+                let tmp = this.getTmpLocal("i32");
+                code.push(new wasm.SetLocal(tmp));
+                code.push(new wasm.GetLocal(this.spLocal));
+                code.push(new wasm.GetLocal(tmp));
                 if (srcOffset != 0) {
                     code.push(new wasm.Constant("i32", srcOffset));
                     code.push(new wasm.BinaryInstruction("i32", "add"));                    
@@ -2510,6 +2515,7 @@ export class Wasm32Backend {
                 code.push(new wasm.Constant("i32", sizeOf(type)));
                 code.push(new wasm.Call(this.copyFunctionIndex));
                 break;
+            }
         }
     }
 
@@ -2645,6 +2651,19 @@ export class Wasm32Backend {
             } else {
                 code.push(new wasm.Constant("i32", m.addr));
             }
+            if (n.args.length == 2) {
+                let headType = (n.args[1] as Variable).type;
+                let headSize = sizeOf(headType);
+                code.push(new wasm.Constant("i32", headSize));
+                let m = this.typeMapper.mapType(headType);
+                if (!m) {
+                    throw "Implementation error. headType must have a TypeMap"                    
+                }
+                code.push(new wasm.Constant("i32", m.addr));                
+            } else {
+                code.push(new wasm.Constant("i32", 0));
+                code.push(new wasm.Constant("i32", 0));                
+            }
             code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.Call(this.allocFunctionIndex));
             if (n.assign) {
@@ -2738,6 +2757,7 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
             }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
             code.push(new wasm.Extend(isSigned(n.type)));
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
@@ -2750,6 +2770,7 @@ export class Wasm32Backend {
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
             }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
             code.push(new wasm.Wrap());
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
@@ -2842,7 +2863,19 @@ export class Wasm32Backend {
                     code.push(new wasm.Call(this.concatStringFunctionIndex));                    
                 } else if (n.args[0] == SystemCalls.compareString) {
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.compareStringFunctionIndex));                    
+                    code.push(new wasm.Call(this.compareStringFunctionIndex));
+                } else if (n.args[0] == SystemCalls.createMap) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.createMapFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.setMap) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.setMapFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.lookupMap) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.lookupMapFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.hashString) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.hashStringFunctionIndex));                    
                 } else {
                     throw "Implementation error. Unknown system function " + n.args[0];
                 }
@@ -3106,7 +3139,8 @@ export class Wasm32Backend {
     }
 
     public module: wasm.Module;
-
+    public typeMapper: TypeMapper;
+    
     private tr: SMTransformer;
     private optimizer: Optimizer;
     private funcs: Array<{node: Node, wf: wasm.Function}>;
@@ -3120,6 +3154,10 @@ export class Wasm32Backend {
     private makeStringFunctionIndex: string = "$makeString";
     private compareStringFunctionIndex: string = "$compareString";
     private concatStringFunctionIndex: string = "$concatString";
+    private hashStringFunctionIndex: string = "$hashString";
+    private createMapFunctionIndex: string = "$createMap";
+    private setMapFunctionIndex: string = "$setMap";
+    private lookupMapFunctionIndex: string = "$lookupMap";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;
@@ -3145,7 +3183,6 @@ export class Wasm32Backend {
     private wfIsAsync: boolean;
     private emitIR: boolean;
     private emitIRFunction: string | null;
-    private typeMapper: TypeMapper;
     private heapGlobalVariable: wasm.Global;
     private heapGlobalVariableIndex: number;
     private typemapGlobalVariable: wasm.Global;

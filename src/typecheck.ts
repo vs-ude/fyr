@@ -2824,7 +2824,7 @@ export class TypeChecker {
                             enode.type = this.makeConst(enode.type, enode.loc);
                         }
                         if (isScoped) {
-                            enode.type = this.makeScoped(enode.type, scope, enode.loc);
+                            enode.type = this.makeScoped(enode.type, isScoped, enode.loc);
                         }
                     } else {
                         let method = type.method(name);
@@ -3361,8 +3361,10 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
                 if (t instanceof MapType && t.keyType == this.t_string) {
-                    for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode(t.valueType, pnode.lhs);
+                    if (node.parameters) {
+                        for(let pnode of node.parameters) {
+                            this.checkIsAssignableNode(t.valueType, pnode.lhs);
+                        }
                     }
                     node.type = t;
                     return true;

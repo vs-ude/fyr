@@ -103,6 +103,19 @@ export class TypeMapper {
     public globalMapping: TypeMap; 
 }
 
+/**
+ * A typemap is a list of 32-bit signed integers.
+ * The first integer defines the size of the type in multiples of 4 bytes, since all types with pointers are at least 32-bit aligned.
+ * The second integer denotes the number of further entries in the typemap.
+ * All following integers are offsets (positive), counts (negativ) or pointers to other typemaps (negative).
+ * An offset is an offset inside a type instance where a pointer can be found.
+ * A count (negative) is always followed by a pointer to another typemap (negative).
+ * The meaning is that the type instance contains "-count" instances of a type described by the following typemap.
+ * The MSB of the count must be cleared to obtain the real count value. 
+ * A pointer to another typemap is negative, hence its MSB must be cleared to obtain the real pointer.
+ * This real pointer is the address of another typemap.
+ * A pointer to another typemap can only be encountered following a count.
+ */
 export class TypeMap {
 
     public declare(module: wasm.Module) {
@@ -113,7 +126,7 @@ export class TypeMap {
     public define() {
         let arr = new ArrayBuffer(4 + 4 + this.offsets.length * 4);
         let a32 = new Int32Array(arr);
-        a32[0] = (this.typeSize + 3) / 4; // Size of a type instance as multiple of 4 bytes
+        a32[0] = Math.floor((this.typeSize + 3) / 4); // Size of a type instance as multiple of 4 bytes
         a32[1] = this.offsets.length;     // Number of locations where pointers can be found
         for(let i = 0; i < this.offsets.length; i++) {
             let o = this.offsets[i];

@@ -18,6 +18,10 @@ export enum SystemCalls {
     makeString = -12,
     concatString = -13,
     compareString = -14,
+    createMap = -15,
+    setMap = -16,
+    hashString = -17,
+    lookupMap = -18
 }
 
 export class Package {

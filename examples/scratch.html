@@ -37,8 +37,11 @@
             ).then(results => {
                 console.log("Init root ...")
                 let stack = results.instance.exports.initializeMemory();
-                console.log("main ..., stack=", stack);
-                results.instance.exports.main(stack);
+//                console.log("main ..., stack=", stack);
+//                results.instance.exports.main(stack);
+                console.log("mapDemo ..., stack=", stack);
+                let m = results.instance.exports.mapDemo(stack);
+                console.log("m=", m);
                 console.log("Done");
             });
         </script>

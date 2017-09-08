@@ -778,7 +778,7 @@ export class Extend extends Node {
     }    
 
     public toWast(indent: string): string {
-        return indent + "i64.wrap/i32_" + (this.signed ? "_s" : "_u");
+        return indent + "i64.extend" + (this.signed ? "_s" : "_u") + "/i32";
     }
 
     private signed: boolean;
