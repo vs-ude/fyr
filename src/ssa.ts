@@ -2869,10 +2869,13 @@ export class Wasm32Backend {
                     code.push(new wasm.Call(this.createMapFunctionIndex));                    
                 } else if (n.args[0] == SystemCalls.setMap) {
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.setMapFunctionIndex));                    
+                    code.push(new wasm.Call(this.setMapFunctionIndex));
                 } else if (n.args[0] == SystemCalls.lookupMap) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.lookupMapFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.removeMapKey) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.removeMapKeyFunctionIndex));                    
                 } else if (n.args[0] == SystemCalls.hashString) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.hashStringFunctionIndex));                    
@@ -3158,6 +3161,7 @@ export class Wasm32Backend {
     private createMapFunctionIndex: string = "$createMap";
     private setMapFunctionIndex: string = "$setMap";
     private lookupMapFunctionIndex: string = "$lookupMap";
+    private removeMapKeyFunctionIndex: string = "$removeMapKey";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;

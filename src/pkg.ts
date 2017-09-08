@@ -21,7 +21,8 @@ export enum SystemCalls {
     createMap = -15,
     setMap = -16,
     hashString = -17,
-    lookupMap = -18
+    lookupMap = -18,
+    removeMapKey = 19
 }
 
 export class Package {
