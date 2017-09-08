@@ -4394,6 +4394,19 @@ export class TypeChecker {
             if (name == "len") {
                 return this.builtin_len;
             }
+        } else if (type instanceof MapType) {
+            if (name == "remove") {
+                let ft = new FunctionType()
+                ft.name = "remove";
+                ft.callingConvention = "system";
+                ft.objectType = type;
+                let p = new FunctionParameter();
+                p.name = "key";
+                p.type = type.keyType;
+                ft.parameters.push(p);
+                ft.returnType = this.t_bool;
+                return ft;                                
+            }
         }
         return null;
     }

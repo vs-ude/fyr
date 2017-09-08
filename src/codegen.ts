@@ -54,9 +54,9 @@ export class CodeGenerator {
         this.compareStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "i32", "system");
         this.concatStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
         this.createMapFunctionType = new ssa.FunctionType(["addr", "i32", "addr"], "ptr", "system");
-        this.setMapFunctionType = new ssa.FunctionType(["ptr", "i64", "i32", "ptr", "i32"], null, "system");
-        this.lookupMapFunctionType = new ssa.FunctionType(["addr", "i64", "i32", "addr"], "addr", "system");
-        this.removeMapKeyFunctionType = new ssa.FunctionType(["addr", "i64", "i32", "addr"], "i32", "system");
+        this.setMapFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
+        this.lookupMapFunctionType = new ssa.FunctionType(["addr", "addr"], "ptr", "system");
+        this.removeMapKeyFunctionType = new ssa.FunctionType(["addr", "addr"], "i32", "system");
         this.hashStringFunctionType = new ssa.FunctionType(["addr"], "i64", "system");
     }
 
@@ -454,24 +454,12 @@ export class CodeGenerator {
                     let m = this.processExpression(f, scope, snode.lhs.lhs, b, vars, mtype);
                     let key = this.processExpression(f, scope, snode.lhs.rhs, b, vars, mtype.keyType);
                     let value = this.processExpression(f, scope, snode.rhs, b, vars, mtype.valueType);
-                    let keyType: number;
-                    let size: number;
-                    let hash: ssa.Variable;
-                    let tuplePtr: ssa.Variable;
-                    if (mtype.keyType == this.tc.t_string) {
-                        hash = b.call(b.tmp(), this.hashStringFunctionType, [SystemCalls.hashString, key]);
-                        keyType = 1
-                        let tupleType = new ssa.StructType();
-                        tupleType.addField("key", "ptr")
-                        tupleType.addField("value", this.getSSAType(mtype.valueType));
-                        size = ssa.sizeOf(tupleType);
-                        let tuple = b.assign(b.tmp(), "struct", tupleType, [key, value]);
-                        tuplePtr = b.assign(b.tmp(), "addr_of", "addr", [tuple]);
+                    if (mtype.keyType == this.tc.t_string) {                        
+                        let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, key]);
+                        b.assign(b.mem, "store", this.getSSAType(mtype.valueType), [dest, 0, value]);
                     } else {
                         throw "TODO"
                     }
-                    let tmp = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
-                    b.call(null, this.setMapFunctionType, [SystemCalls.setMap, m, hash, keyType, tuplePtr, size])
                 } else {
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                     let tmp = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
@@ -1169,17 +1157,11 @@ export class CodeGenerator {
                         let entryTypeMap = this.wasm.typeMapper.mapType(entry);
                         let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
                         if (enode.parameters) {
-                            let tuple = new ssa.StructType();
-                            tuple.addField("key", "ptr")
-                            tuple.addField("value", this.getSSAType(t.valueType));                            
                             for(let p of enode.parameters) {
                                 let [off, len] = this.wasm.module.addString(p.name.value);
                                 let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
-                                let tupleVar = b.assign(b.tmp(), "struct", tuple, [off, value]);
-                                let tupleVarAddr = b.assign(b.tmp(), "addr_of", "addr", [tupleVar]);
-                                // TODO: Precompute the hash
-                                let hash = b.call(b.tmp(), this.hashStringFunctionType, [SystemCalls.hashString, off]);
-                                b.call(null, this.setMapFunctionType, [SystemCalls.setMap, m, hash, 1, tupleVarAddr, ssa.sizeOf(tuple)]);
+                                let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, off]);
+                                b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
                             }
                         }
                         return m;
@@ -1592,6 +1574,18 @@ export class CodeGenerator {
                         }
                         return b.assign(b.tmp(), "struct", this.sliceHeader, [data_ptr, new_len, cap]);
                     }
+                } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "remove") {
+                    let objType = this.tc.stripType(enode.lhs.lhs.type);
+                    if (!(objType instanceof MapType)) {
+                        throw "Implementation error";
+                    }
+                    let m = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType);
+                    let key = this.processExpression(f, scope, enode.parameters[0], b, vars, objType.keyType);
+                    if (objType.keyType == this.tc.t_string) {
+                        return b.call(b.tmp(), this.removeMapKeyFunctionType, [SystemCalls.removeMapKey, m, key]);
+                    } else {
+                        throw "TODO";
+                    }
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system") {
                     t = striplhs;
                 } else if (enode.lhs.op == "id") {
@@ -1929,21 +1923,20 @@ export class CodeGenerator {
             case "[":
             {
                 let t = this.tc.stripType(enode.lhs.type);
-                if (t instanceof MapType) {
-                    let keyType = this.tc.stripType(t.keyType);
+                if (t instanceof MapType) {                    
                     let m = this.processExpression(f, scope, enode.lhs, b, vars, t);
-                    let key = this.processExpression(f, scope, enode.rhs, b, vars, keyType);
-                    let hash = b.call(b.tmp(), this.hashStringFunctionType, [SystemCalls.hashString, key]);
-                    // TODO: Precompute the hash
-                    let result = b.call(b.tmp(), this.lookupMapFunctionType, [SystemCalls.lookupMap, m, hash, 1, key]);
+                    let key = this.processExpression(f, scope, enode.rhs, b, vars, t.keyType);
+                    let result: ssa.Variable;
+                    if (t.keyType == this.tc.t_string) {
+                        result = b.call(b.tmp(), this.lookupMapFunctionType, [SystemCalls.lookupMap, m, key]);
+                    } else {
+                        throw "TODO"
+                    }
                     let check = b.assign(b.tmp("i32"), "eqz", "addr", [result]);
                     b.ifBlock(check);
                     b.assign(null, "trap", null, []);
                     b.end();
-                    let tuple = new ssa.StructType();
-                    tuple.addField("key", "ptr")
-                    tuple.addField("value", this.getSSAType(t.valueType));                            
-                    return b.assign(b.tmp(), "load", this.getSSAType(this.tc.stripType(enode.type)), [result, tuple.fieldOffset("value")]);
+                    return b.assign(b.tmp(), "load", this.getSSAType(this.tc.stripType(t.valueType)), [result, 0]);
                 }
                 // Note: processLeftHandExpression implements the non-left-hand cases as well.
                 let ptr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;

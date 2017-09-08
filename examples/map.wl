@@ -53,7 +53,7 @@ func createMap(headTypeMap #int, count int, entryTypeMap #int) *MapHead {
     return h
 }
 
-func setMap(head *MapHead, hash uint64, keyType int32, tuplePtr *void, tupleSize uint) {
+func setMap(head *MapHead, key string) #void {
     var h #MapHead = head
     if (h == null) {
         // TODO throw
@@ -62,7 +62,7 @@ func setMap(head *MapHead, hash uint64, keyType int32, tuplePtr *void, tupleSize
     }
     var m = <#MapEntry>(h + 1)
     // Lookup the key. If it already exists, overwrite it
-    var tuple #void = lookupMap(h, hash, keyType, tuplePtr)
+    var tuple #void = lookupMap(h, <#void>key)
 
     // An entry with this key does currently not exist? Create a new entry
     if (tuple == null) {
@@ -94,67 +94,54 @@ func setMap(head *MapHead, hash uint64, keyType int32, tuplePtr *void, tupleSize
             m = m2
         }
 
+        // Compute the hash for the string
+        var hash = hashString(<#void>key)
+
         // Get a free entry and fill it
         var p = h.freeList
         h.freeList = p.listNext
         p.hash = hash
+        p.key = <uint><#void>key
         // The default location for this hash
         var index = <uint>(hash % <uint64>h.size)
         var p2 = <#MapEntry>(<#void>m + index * entrySize)
         p.listNext = p2.hashNext
         p2.hashNext = p
         h.free--
-        tuple = &p.key
+        tuple = &p.value
     }
-    copy(tuple, tuplePtr, tupleSize)
+    return tuple
 }
 
 // We use unsafe pointers here because it is faster and we know that lookup does not cause any allocations
-func lookupMap(h #MapHead, hash uint64, keyType int32, tupleKeyPtr #void) #void {
+func lookupMap(h #MapHead, key #void) #void {
     if (h == null) {
         return null
     } else if (h.nextHead != null) {
         h = h.nextHead
     }
+    var hash = hashString(key)
     var iptr #int = <#int>h - 2
     var entryTypeMap #int = -*iptr
     var m = <#void>(h + 1)
     var entrySize = <uint>*entryTypeMap << 2
     // Iterate over the list at this hash position
     for (var p = (<#MapEntry>(m + <uint>(hash % <uint64>h.size) * entrySize)).hashNext; p != null; p = p.listNext) {
-        if (p.hash == hash && compareMapKey(p, keyType, tupleKeyPtr)) {
-            return &p.key
+        if (p.hash == hash && <string><#void>(p.key) == <string>key) {
+            return &p.value
         }
     }
-    
     return null
 }
 
-// We use unsafe pointers here because it is faster and we know that compare does not cause any allocations
-func compareMapKey(p #MapEntry, keyType int32, tupleKeyPtr #void) bool {
-    if (keyType == 1) {
-        return compareString(<string>tupleKeyPtr, <string><#void>p.key) == 0
-    } else if (keyType == 2) {
-        return *<#uint32>p.key == *<#uint32>tupleKeyPtr
-    } else if (keyType == 3) {
-        return *<#uint64>&p.key == *<#uint64>tupleKeyPtr
-    } else if (keyType == 4) {
-        return *<#float>&p.key == *<#float>tupleKeyPtr
-    } else if (keyType == 5) {
-        return *<#double>&p.key == *<#double>tupleKeyPtr
-    } else {
-        // TODO: Throw
-    }
-    return false;
-}
-
 // We use unsafe pointers here because they are faster and remove does not perform any allocations
-func removeMapKey(h #MapHead, hash uint64, keyType int32, tupleKeyPtr #void) bool {
+func removeMapKey(h #MapHead, key #void) bool {
     if (h == null) {
         return false
     } else if (h.nextHead != null) {
         h = h.nextHead
     }
+    var hash = hashString(key)
     var iptr #int = <#int>h - 1
     var entryTypeMap #int = -*(iptr - 1)
     var entrySize = <uint>*entryTypeMap << 2
@@ -162,7 +149,7 @@ func removeMapKey(h #MapHead, hash uint64, keyType int32, tupleKeyPtr #void) boo
     var prev #MapEntry
     // Iterate over the list at this hash position
     for (var p = (<#MapEntry>(m + <uint>(hash % <uint64>h.size) * entrySize)).hashNext; p != null; p = p.listNext) {
-        if (p.hash == hash && compareMapKey(p, keyType, tupleKeyPtr)) {
+        if (p.hash == hash && <string><#void>(p.key) == <string>key) {
             if (prev != null) {
                 prev.listNext = p.listNext
             } else {
