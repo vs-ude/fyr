@@ -19,26 +19,32 @@ Running `npm build:parser` will only generate fresh JavaScript from the `parser.
 ## Running the compiler
 
 ```
-node ./lib/index.js compile examples/mem.wl examples/example3.wl
+node ./lib/index.js compile examples/mem.wl examples/map.wl examples/example3.wl
 ```
 
-The file `mem.wl` must always be part of the compilation, since this is currently the fyr runtime.
+The files `mem.wl` and `map.wl` must always be part of the compilation, since this is currently the fyr runtime.
 
 ## Todos
 
 - Type switch statement
-- Parsing of generic structs
-- Generics with interfaces
-- Generics without interfaces
+- 'is' expression on interfaces
 - Automatically include the runtime souces
 - map
-    - codegen
+    - tuple assignment
+    - iteration
+- Coroutines and interfaces
+- Builtin Math functions
 
 # Wish List
+- Generics
+- Components
+- Models
+- Services
 - Package structure
 - Documentation generator
 - A new parser that handles comments and spaces in a sane way
-- Generic interfaces?
+- Iteration over custom types
+- Custom types as keys in a map
 
 ## Pending Fixes
 
