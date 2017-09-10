@@ -370,6 +370,15 @@ export class StructType extends Type {
         return base;
     }
 
+    public doesExtend(parent: StructType): boolean {
+        if (this.extends == parent) {
+            return true;
+        } else if (this.extends) {
+            return this.doesExtend(parent);
+        }
+        return false;
+    }
+
     public extends: StructType;
     public implements: Array<InterfaceType> = [];
     // Fields of the struct, ordered by their appearance in the code
@@ -3532,11 +3541,26 @@ export class TypeChecker {
                 // null can be assigned to any pointer type
                 return true;
             } else if (from instanceof PointerType || from instanceof UnsafePointerType) {
-                if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+                // Pointers to derived types can be assigned to pointers of the super type
+                let fromElement = from.elementType;
+                if (this.isStruct(to.elementType) && this.isStruct(fromElement)) {
+                    let toStruct = this.stripType(to.elementType) as StructType;
+                    let fromStruct = this.stripType(from.elementType) as StructType;
+                    if (toStruct != fromStruct) {
+                        if (fromStruct.doesExtend(toStruct)) {
+                            fromElement = this.rebox(fromElement, toStruct);
+                        }
+                    }
+                }
+                if (this.checkIsAssignableType(to.elementType, fromElement, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
                     return true;
                 }
             }
         } else if (to instanceof GuardedPointerType && from instanceof GuardedPointerType) {
+            if (from == this.t_null) {
+                // null can be assigned to any pointer type
+                return true;
+            }
             if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
                 return true;
             }            
@@ -3552,6 +3576,17 @@ export class TypeChecker {
                     // #void can be assigned to any unsafe pointer
                     return true;
                 } else {
+                    // Pointers to derived types can be assigned to pointers of the super type
+                    let fromElement = from.elementType;
+                    if (this.isStruct(to.elementType) && this.isStruct(fromElement)) {
+                        let toStruct = this.stripType(to.elementType) as StructType;
+                        let fromStruct = this.stripType(from.elementType) as StructType;
+                        if (toStruct != fromStruct) {
+                            if (fromStruct.doesExtend(toStruct)) {
+                                fromElement = this.rebox(fromElement, toStruct);
+                            }
+                        }
+                    }
                     if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
                         return true;
                     }
@@ -4348,6 +4383,23 @@ export class TypeChecker {
             return t.extendsInterfaces[0];
         }
         return t;
+    }
+
+    public rebox(oldT: Type, newT: Type): Type {
+        let result = newT;
+        if (oldT instanceof RestrictedType) {
+            if (oldT.elementType instanceof InterfaceType && oldT.elementType.isBoxedType()) {
+                let i = new InterfaceType();
+                i.extendsInterfaces.push(result);
+                result = i;
+            }
+            result = new RestrictedType(result, oldT);
+        } else if (oldT instanceof InterfaceType && oldT.isBoxedType()) {
+            let i = new InterfaceType();
+            i.extendsInterfaces.push(result);
+            result = i;
+        }
+        return result;
     }
 
     public pointerElementType(t: Type): Type {

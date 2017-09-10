@@ -103,3 +103,17 @@ func mapDemo2() int {
     logString("Returning")
     return m[&s2]
 }
+
+type T1 struct {
+}
+
+type T2 struct {
+    extends T1
+}
+
+func typeTest() {
+    var t1 T1
+    var t2 T2
+    var p = &t1
+    p = &t2
+}
