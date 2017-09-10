@@ -1050,6 +1050,9 @@ export class TypeChecker {
             // TODO: Allow all types in maps?
             let k = this.createType(tnode.genericParameters[0], scope);
             let v = this.createType(tnode.genericParameters[1], scope);
+            if (!this.isIntNumber(k) && k != this.t_string && !this.isPointer(k)) {
+                throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
+            }
             return new MapType(k, v);
         } else if (tnode.op == "genericType" || tnode.op == "genericInstance") {
             let baset: Type;
