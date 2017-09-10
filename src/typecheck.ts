@@ -3371,6 +3371,9 @@ export class TypeChecker {
                     }
                     node.type = t;
                     return true;
+                } else if (t instanceof MapType && (!node.parameters || node.parameters.length == 0)) {
+                    node.type = t;
+                    return true;
                 } else if (t instanceof StructType) {
                     if (node.parameters) {
                         for(let pnode of node.parameters) {

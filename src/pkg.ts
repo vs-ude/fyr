@@ -22,7 +22,10 @@ export enum SystemCalls {
     setMap = -16,
     hashString = -17,
     lookupMap = -18,
-    removeMapKey = -19
+    removeMapKey = -19,
+    setNumericMap = -20,
+    lookupNumericMap = -21,
+    removeNumericMapKey = -22
 }
 
 export class Package {

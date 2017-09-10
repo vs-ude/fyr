@@ -2866,7 +2866,7 @@ export class Wasm32Backend {
                     code.push(new wasm.Call(this.compareStringFunctionIndex));
                 } else if (n.args[0] == SystemCalls.createMap) {
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.createMapFunctionIndex));                    
+                    code.push(new wasm.Call(this.createMapFunctionIndex));
                 } else if (n.args[0] == SystemCalls.setMap) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.setMapFunctionIndex));
@@ -2879,6 +2879,15 @@ export class Wasm32Backend {
                 } else if (n.args[0] == SystemCalls.hashString) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.hashStringFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.setNumericMap) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.setNumericMapFunctionIndex));
+                } else if (n.args[0] == SystemCalls.lookupNumericMap) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.lookupNumericMapFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.removeNumericMapKey) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.removeNumericMapKeyFunctionIndex));                    
                 } else {
                     throw "Implementation error. Unknown system function " + n.args[0];
                 }
@@ -3162,6 +3171,9 @@ export class Wasm32Backend {
     private setMapFunctionIndex: string = "$setMap";
     private lookupMapFunctionIndex: string = "$lookupMap";
     private removeMapKeyFunctionIndex: string = "$removeMapKey";
+    private setNumericMapFunctionIndex: string = "$setNumericMap";
+    private lookupNumericMapFunctionIndex: string = "$lookupNumericMap";
+    private removeNumericMapKeyFunctionIndex: string = "$removeNumericMapKey";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;

@@ -169,6 +169,7 @@ func removeMapKey(h #MapHead, key #void) bool {
             h.free++
             return true
         }
+        prev = p
     }
     return false
 }
@@ -226,6 +227,8 @@ func removeNumericMapKey(h #MapHead, key uint64) bool {
     // Iterate over the list at this hash position
     for (var p = <#NumericMapEntry>((<#MapEntry>(m + <uint>(key % <uint64>h.size) * entrySize)).hashNext); p != null; p = <#NumericMapEntry>p.listNext) {
         if (p.hash == key) {
+            logString("Found key")
+            logNumber(<uint>key)
             if (prev != null) {
                 prev.listNext = p.listNext
             } else {
@@ -237,6 +240,7 @@ func removeNumericMapKey(h #MapHead, key uint64) bool {
             h.free++
             return true
         }
+        prev = p
     }
     return false
 }

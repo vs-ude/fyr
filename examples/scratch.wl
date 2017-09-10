@@ -83,3 +83,23 @@ func mapDemo() int {
     m.remove("bar")
     return m["foo"]
 }
+
+func mapDemo2() int {
+    var m map<&S, int> = {}
+    var s1 S
+    var s2 S
+    var s3 S
+    m[&s1] = 1
+    m[&s2] = 2
+    m[&s3] = 3
+    logString("Reading")
+    logNumber(<uint>m[&s1])
+    logNumber(<uint>m[&s2])
+    logNumber(<uint>m[&s3])
+    logString("Removing")
+    m.remove(&s1)
+    logString("Reading 2")
+    logNumber(<uint>m[&s2])
+    logString("Returning")
+    return m[&s2]
+}

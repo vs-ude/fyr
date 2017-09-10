@@ -58,6 +58,9 @@ export class CodeGenerator {
         this.lookupMapFunctionType = new ssa.FunctionType(["addr", "addr"], "ptr", "system");
         this.removeMapKeyFunctionType = new ssa.FunctionType(["addr", "addr"], "i32", "system");
         this.hashStringFunctionType = new ssa.FunctionType(["addr"], "i64", "system");
+        this.setNumericMapFunctionType = new ssa.FunctionType(["ptr", "i64"], "ptr", "system");
+        this.lookupNumericMapFunctionType = new ssa.FunctionType(["addr", "i64"], "ptr", "system");
+        this.removeNumericMapKeyFunctionType = new ssa.FunctionType(["addr", "i64"], "i32", "system");
     }
 
     public processModule(mnode: Node) {
@@ -454,11 +457,18 @@ export class CodeGenerator {
                     let m = this.processExpression(f, scope, snode.lhs.lhs, b, vars, mtype);
                     let key = this.processExpression(f, scope, snode.lhs.rhs, b, vars, mtype.keyType);
                     let value = this.processExpression(f, scope, snode.rhs, b, vars, mtype.valueType);
-                    if (mtype.keyType == this.tc.t_string) {                        
+                    if (mtype.keyType == this.tc.t_string) {
                         let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, key]);
                         b.assign(b.mem, "store", this.getSSAType(mtype.valueType), [dest, 0, value]);
                     } else {
-                        throw "TODO"
+                        let key64: ssa.Variable | number;
+                        if (mtype.keyType == this.tc.t_int64 || mtype.keyType == this.tc.t_uint64) {
+                            key64 = key;
+                        } else {
+                            key64 = b.assign(b.tmp(), "extend", this.getSSAType(mtype.keyType), [key]);
+                        }   
+                        let dest = b.call(b.tmp(), this.setNumericMapFunctionType, [SystemCalls.setNumericMap, m, key64]);
+                        b.assign(b.mem, "store", this.getSSAType(mtype.valueType), [dest, 0, value]);
                     }
                 } else {
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
@@ -1144,30 +1154,29 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", st, args);                
                 } else if (t instanceof MapType) {
-                    if (t.keyType == this.tc.t_string) {
-                        let mapHeadTypeMap = this.wasm.typeMapper.mapType(this.mapHead);
-                        // TODO: Reuse this type where possible
-                        let entry = new ssa.StructType()
-                        entry.name = "map";
-                        entry.addField("hashNext", "addr")
-                        entry.addField("listNext", "addr")
-                        entry.addField("hash", "i64")
-                        entry.addField("key", "ptr")
-                        entry.addField("value", this.getSSAType(t.valueType));                        
-                        let entryTypeMap = this.wasm.typeMapper.mapType(entry);
-                        let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
-                        if (enode.parameters) {
-                            for(let p of enode.parameters) {
-                                let [off, len] = this.wasm.module.addString(p.name.value);
-                                let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
-                                let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, off]);
-                                b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
+                    let mapHeadTypeMap = this.wasm.typeMapper.mapType(this.mapHead);
+                    // TODO: Reuse this type where possible
+                    let entry = new ssa.StructType()
+                    entry.name = "map";
+                    entry.addField("hashNext", "addr")
+                    entry.addField("listNext", "addr")
+                    entry.addField("hash", "i64")
+                    entry.addField("key", "ptr")
+                    entry.addField("value", this.getSSAType(t.valueType));                        
+                    let entryTypeMap = this.wasm.typeMapper.mapType(entry);
+                    let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
+                    if (enode.parameters) {
+                        for(let p of enode.parameters) {
+                            if (t.keyType != this.tc.t_string) {
+                                throw "Implementation error";
                             }
+                            let [off, len] = this.wasm.module.addString(p.name.value);
+                            let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
+                            let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, off]);
+                            b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
                         }
-                        return m;
-                    } else {
-                        throw "TODO"                    
                     }
+                    return m;
                 }
                 throw "Implementation error";
             }
@@ -1584,7 +1593,13 @@ export class CodeGenerator {
                     if (objType.keyType == this.tc.t_string) {
                         return b.call(b.tmp(), this.removeMapKeyFunctionType, [SystemCalls.removeMapKey, m, key]);
                     } else {
-                        throw "TODO";
+                        let key64: ssa.Variable | number;
+                        if (objType.keyType == this.tc.t_int64 || objType.keyType == this.tc.t_uint64) {
+                            key64 = key;
+                        } else {
+                            key64 = b.assign(b.tmp(), "extend", this.getSSAType(objType.keyType), [key]);
+                        }   
+                        return b.call(b.tmp(), this.removeNumericMapKeyFunctionType, [SystemCalls.removeNumericMapKey, m, key64]);
                     }
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system") {
                     t = striplhs;
@@ -1930,7 +1945,13 @@ export class CodeGenerator {
                     if (t.keyType == this.tc.t_string) {
                         result = b.call(b.tmp(), this.lookupMapFunctionType, [SystemCalls.lookupMap, m, key]);
                     } else {
-                        throw "TODO"
+                        let key64: ssa.Variable | number;
+                        if (t.keyType == this.tc.t_int64 || t.keyType == this.tc.t_uint64) {
+                            key64 = key;
+                        } else {
+                            key64 = b.assign(b.tmp(), "extend", this.getSSAType(t.keyType), [key]);
+                        }   
+                        result = b.call(b.tmp(), this.lookupNumericMapFunctionType, [SystemCalls.lookupNumericMap, m, key64]);
                     }
                     let check = b.assign(b.tmp("i32"), "eqz", "addr", [result]);
                     b.ifBlock(check);
@@ -2116,6 +2137,9 @@ export class CodeGenerator {
     private hashStringFunctionType: ssa.FunctionType;
     private lookupMapFunctionType: ssa.FunctionType;
     private removeMapKeyFunctionType: ssa.FunctionType;
+    private setNumericMapFunctionType: ssa.FunctionType;
+    private lookupNumericMapFunctionType: ssa.FunctionType;
+    private removeNumericMapKeyFunctionType: ssa.FunctionType;
     private copyFunctionType: ssa.FunctionType;
     private interfaceTableNames: Array<string> = [];
     private interfaceTableIndex: Map<string, number> = new Map<string, number>();
