@@ -463,6 +463,15 @@ export class FunctionType extends Type {
 //    public callingConvention: CallingConvention = "fyrCoroutine";
 }
 
+export class PolymorphFunctionType extends FunctionType {
+    public instances: Array<FunctionType> = [];
+    public genericParameters: Array<GenericParameter> = [];
+    public node: Node;
+}
+
+export class GenericParameter extends Type {
+}
+
 export class GenericFunctionType extends FunctionType implements GenericType {
     constructor() {
         super();
@@ -2981,14 +2990,39 @@ export class TypeChecker {
             case "(":
             {
                 this.checkExpression(enode.lhs, scope);
+                if (enode.parameters) {
+                    for(let pnode of enode.parameters) {
+                        if (pnode.op == "unary...") {
+                            this.checkExpression(pnode.rhs, scope);
+                        } else {
+                            this.checkExpression(pnode, scope);
+                        }
+                    }
+                }
                 let t = this.stripType(enode.lhs.type);
                 if (!(t instanceof FunctionType)) {
                     throw new TypeError("Expression is not a function", enode.loc);
                 }
                 let ft: FunctionType = t;
                 if (ft instanceof GenericFunctionType) {
-                    throw "TODO: Derive the generic parameters"
+                    throw "TODO: Generics";
+                } else if (ft instanceof PolymorphFunctionType) {
+                    var ok = false;
+                    for(let it of ft.instances) {
+                        if (this.checkFunctionArguments(it, enode.parameters, scope, enode.loc, false)) {
+                            ok = true;
+                            ft = it;
+                            enode.lhs.type = ft;    
+                            break;
+                        }                        
+                    }
+                    if (!ok) {
+                        throw new TypeError("Parameters match no instance of the polymorphic function " + ft.name, enode.loc);
+                    }
+                } else {
+                    this.checkFunctionArguments(ft, enode.parameters, scope, enode.loc);
                 }
+                /*
                 // Type check all parameters
                 if (enode.parameters) {
                     if (ft.parameters.length != enode.parameters.length) {
@@ -3019,6 +3053,7 @@ export class TypeChecker {
                 } else if (ft.parameters.length != 0 && (!ft.hasEllipsis || ft.parameters.length > 1)) {
                     throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), enode.loc);                    
                 }
+                */
                 enode.type = this.makeScoped(ft.returnType, scope, enode.loc);
                 // Construct the call graph
                 let f = scope.envelopingFunction();
@@ -3443,12 +3478,11 @@ export class TypeChecker {
     }
 
     // Checks whether the type of 'from' can be assigned to the type 'to'.
-    public checkIsAssignableNode(to: Type, from: Node, isFunctionParameter: boolean = false) {
+    public checkIsAssignableNode(to: Type, from: Node, isFunctionParameter: boolean = false, doThrow: boolean = true): boolean {
         if (from.isUnifyableLiteral()) {
-            this.unifyLiterals(to, from, from.loc);
-            return;
+            return this.unifyLiterals(to, from, from.loc, doThrow);
         }
-        this.checkIsAssignableType(to, from.type, from.loc, true, true, true, false, false, isFunctionParameter);
+        return this.checkIsAssignableType(to, from.type, from.loc, doThrow, true, true, false, false, isFunctionParameter);
     }
 
     // Checks whether the type 'from' can be assigned to the type 'to'.
@@ -3678,6 +3712,56 @@ export class TypeChecker {
             return false;
         }
         throw new TypeError("Type " + from.toString() + " cannot be assigned to type " + to.toString(), loc);        
+    }
+
+    public checkFunctionArguments(ft: FunctionType, parameters: Array<Node> | null, scope: Scope, loc: Location, doThrow: boolean = true): boolean {
+        // Type check all parameters
+        if (parameters) {
+            if (ft.parameters.length != parameters.length) {
+                if (ft.requiredParameterCount() > parameters.length || (parameters.length > ft.parameters.length && !ft.hasEllipsis())) {
+                    if (doThrow) {
+                        throw new TypeError("Supplied parameter count does not match function signature " + ft.toString(), loc);
+                    }
+                    return false;
+                }
+            }
+            for(let i = 0; i < parameters.length; i++) {
+                let pnode = parameters[i];
+                if (pnode.op == "unary...") {
+                    if (!ft.hasEllipsis()) {
+                        if (doThrow) {
+                            throw new TypeError("Ellipsis not allowed here. Function is not variadic", pnode.loc);
+                        }
+                        return false;
+                    }
+                    if (i != ft.parameters.length - 1 || i != parameters.length - 1) {
+                        if (doThrow) {
+                            throw new TypeError("Ellipsis must only appear with the last parameter", pnode.loc);
+                        }
+                        return false;
+                    }
+                    if (!this.checkIsAssignableNode(ft.lastParameter().type, pnode.rhs, false, doThrow)) {
+                        return false;
+                    }
+                } else {
+                    if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
+                        if (!this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode, false, doThrow)) {
+                            return false;
+                        }
+                    } else {
+                        if (!this.checkIsAssignableNode(ft.parameters[i].type, pnode, false, doThrow)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        } else if (ft.parameters.length != 0 && (!ft.hasEllipsis || ft.parameters.length > 1)) {
+            if (doThrow) {
+                throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), loc);
+            }
+            return false;
+        }
+        return true;
     }
 
     public checkIsEnumerable(node: Node): [Type, Type] {

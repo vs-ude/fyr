@@ -33,7 +33,8 @@ The files `mem.wl` and `map.wl` must always be part of the compilation, since th
     - tuple assignment
     - iteration
 - Coroutines and interfaces
-- Builtin Math functions
+- Builtin Math functions: min, max, sqrt, abs, ceil, floor, trunc, nearest
+- Float/Int conversion
 
 # Wish List
 - Generics
@@ -45,6 +46,7 @@ The files `mem.wl` and `map.wl` must always be part of the compilation, since th
 - A new parser that handles comments and spaces in a sane way
 - Iteration over custom types
 - Custom types as keys in a map
+- Use f.copysign for < 0
 
 ## Pending Fixes
 

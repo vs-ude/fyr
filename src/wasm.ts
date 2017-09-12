@@ -873,6 +873,23 @@ export class GrowMemory extends Node {
     }
 }
 
+export class Abs extends Node {
+    constructor(type: "f32" | "f64") {
+        super();
+        this.type = type;
+    }
+
+    public get op(): string {
+        return "abs";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + (this.type == "f32" ? "f32." : "f64.") + "abs";
+    }
+
+    public type: "f32" | "f64";
+}
+
 function align64(x: number): number {
     return (x + 7) & -8;
 }

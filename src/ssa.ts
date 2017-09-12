@@ -2884,10 +2884,14 @@ export class Wasm32Backend {
                     code.push(new wasm.Call(this.setNumericMapFunctionIndex));
                 } else if (n.args[0] == SystemCalls.lookupNumericMap) {
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.lookupNumericMapFunctionIndex));                    
+                    code.push(new wasm.Call(this.lookupNumericMapFunctionIndex));
                 } else if (n.args[0] == SystemCalls.removeNumericMapKey) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.removeNumericMapKeyFunctionIndex));                    
+                } else if (n.args[0] == SystemCalls.abs32) {
+                    code.push(new wasm.Abs("f32"));
+                } else if (n.args[0] == SystemCalls.abs64) {
+                    code.push(new wasm.Abs("f64"));
                 } else {
                     throw "Implementation error. Unknown system function " + n.args[0];
                 }

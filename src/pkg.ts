@@ -1,5 +1,5 @@
 import {Location} from "./ast"
-import {Variable, Function, FunctionParameter, FunctionType, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
+import {Variable, Function, FunctionParameter, FunctionType, PolymorphFunctionType, GenericParameter, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
 
 export enum SystemCalls {
     heap = -1,
@@ -25,7 +25,9 @@ export enum SystemCalls {
     removeMapKey = -19,
     setNumericMap = -20,
     lookupNumericMap = -21,
-    removeNumericMapKey = -22
+    removeNumericMapKey = -22,
+    abs32 = -23,
+    abs64 = -24
 }
 
 export class Package {
@@ -62,6 +64,7 @@ export class ImportError {
 }
 
 var systemPkg: Package;
+var mathPkg: Package;
 
 export function initPackages(tc: TypeChecker) {
     systemPkg = new Package("fyr/system");
@@ -133,4 +136,43 @@ export function initPackages(tc: TypeChecker) {
     stackPointer.type.systemCallType = SystemCalls.stackPointer;
     stackPointer.type.returnType = new UnsafePointerType(tc.t_void);
     systemPkg.scope.registerElement(stackPointer.name, stackPointer);
+
+    mathPkg = new Package("fyr/math");
+    var abs: Function = new Function();
+    abs.name = "abs";
+    let gt = new PolymorphFunctionType();
+    gt.name = "abs";
+    gt.callingConvention = "system";
+    let gp = new GenericParameter();
+    gp.name = "V";
+    gt.genericParameters.push(gp);
+    p = new FunctionParameter();
+    p.name = "value";
+    p.type = gp;
+    gt.parameters.push(p);
+    gt.returnType = gp;
+    // abs float
+    let t = new FunctionType();
+    t.callingConvention = "system";
+    t.name = "abs";
+    t.returnType = tc.t_float;
+    t.systemCallType = SystemCalls.abs32;
+    p = new FunctionParameter();
+    p.name = "value";
+    p.type = tc.t_float;
+    t.parameters.push(p);
+    gt.instances.push(t);
+    // abs double
+    t = new FunctionType();
+    t.callingConvention = "system";
+    t.name = "abs";
+    t.returnType = tc.t_double;
+    t.systemCallType = SystemCalls.abs64;
+    p = new FunctionParameter();
+    p.name = "value";
+    p.type = tc.t_double;
+    t.parameters.push(p);
+    gt.instances.push(t);
+    abs.type = gt;
+    mathPkg.scope.registerElement(abs.name, abs);
 }

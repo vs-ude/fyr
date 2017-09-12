@@ -351,3 +351,13 @@ func uiui() {
     var arr [32]byte
     var slice &[]byte = arr[:]
 }
+
+func sqrt<F>(f F) F;
+
+func sqrt(f float) float {
+
+}
+
+func sqrt(f double) double {
+
+}

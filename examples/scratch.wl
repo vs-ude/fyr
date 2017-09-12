@@ -3,6 +3,8 @@ import . {
     func logNumber(uint)
 } from "imports"
 
+import "fyr/math"
+
 type IFoo interface {
     func Hudel()
     func Dudel()
@@ -104,16 +106,10 @@ func mapDemo2() int {
     return m[&s2]
 }
 
-type T1 struct {
-}
-
-type T2 struct {
-    extends T1
-}
-
-func typeTest() {
-    var t1 T1
-    var t2 T2
-    var p = &t1
-    p = &t2
+func someMath() bool {
+    var f float = -42.1
+    f = math.abs(f)
+    var d double = -84.3
+    d = math.abs(d)
+    return f == 42.1 && d == 84.3
 }
