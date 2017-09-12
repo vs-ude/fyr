@@ -111,5 +111,5 @@ func someMath() bool {
     f = math.abs(f)
     var d double = -84.3
     d = math.abs(d)
-    return f == 42.1 && d == 84.3
+    return f == 42.1 && d == 84.3 && math.sqrt(25) == 5
 }

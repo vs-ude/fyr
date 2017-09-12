@@ -341,7 +341,7 @@ export class Drop extends Node {
     }   
 }
 
-export type BinaryOp = "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max";
+export type BinaryOp = "copysign" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max";
 
 export class BinaryInstruction extends Node {
     constructor(type: StackType, op: BinaryOp) {
@@ -362,7 +362,7 @@ export class BinaryInstruction extends Node {
     public binaryOp: BinaryOp;
 }
 
-export type UnaryOp = "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
+export type UnaryOp = "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt";
 
 export class UnaryInstruction extends Node {
     constructor(type: StackType, op: UnaryOp) {
@@ -383,7 +383,7 @@ export class UnaryInstruction extends Node {
     public unaryOp: UnaryOp;
 }
 
-
+/*
 export type BinaryIntOp = "add" | "sub" | "mul" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "neq" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u";
 
 export class BinaryIntInstruction extends Node {
@@ -467,6 +467,7 @@ export class UnaryFloatInstruction extends Node {
     public type: "f32" | "f64";
     public intOp: UnaryFloatOp;
 }
+*/
 
 export class Return extends Node {
     public get op(): string {
@@ -871,23 +872,6 @@ export class GrowMemory extends Node {
     public toWast(indent: string): string {
         return indent + "grow_memory";
     }
-}
-
-export class Abs extends Node {
-    constructor(type: "f32" | "f64") {
-        super();
-        this.type = type;
-    }
-
-    public get op(): string {
-        return "abs";
-    }    
-
-    public toWast(indent: string): string {
-        return indent + (this.type == "f32" ? "f32." : "f64.") + "abs";
-    }
-
-    public type: "f32" | "f64";
 }
 
 function align64(x: number): number {

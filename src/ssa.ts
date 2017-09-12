@@ -1408,7 +1408,7 @@ export class Wasm32Backend {
             // Put the varsFrame on the heap_stack and set BP
             code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.Constant("i32", this.varsFrame.size));
-            code.push(new wasm.BinaryIntInstruction("i32", "sub"));
+            code.push(new wasm.BinaryInstruction("i32", "sub"));
             code.push(new wasm.TeeLocal(this.spLocal));
             code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the varsFrame
             // Put the typemap on the stack
@@ -1497,7 +1497,7 @@ export class Wasm32Backend {
         // Put the varsFrame on the heap_stack and set BP
         code.push(new wasm.GetLocal(this.spLocal));
         code.push(new wasm.Constant("i32", this.varsFrame.size));
-        code.push(new wasm.BinaryIntInstruction("i32", "sub"));
+        code.push(new wasm.BinaryInstruction("i32", "sub"));
         code.push(new wasm.TeeLocal(this.spLocal));
         code.push(new wasm.TeeLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
         // Put the typemap on the stack
@@ -2887,11 +2887,43 @@ export class Wasm32Backend {
                     code.push(new wasm.Call(this.lookupNumericMapFunctionIndex));
                 } else if (n.args[0] == SystemCalls.removeNumericMapKey) {
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.removeNumericMapKeyFunctionIndex));                    
+                    code.push(new wasm.Call(this.removeNumericMapKeyFunctionIndex));
                 } else if (n.args[0] == SystemCalls.abs32) {
-                    code.push(new wasm.Abs("f32"));
+                    code.push(new wasm.UnaryInstruction("f32", "abs"));
                 } else if (n.args[0] == SystemCalls.abs64) {
-                    code.push(new wasm.Abs("f64"));
+                    code.push(new wasm.UnaryInstruction("f64", "abs"));
+                } else if (n.args[0] == SystemCalls.sqrt32) {
+                    code.push(new wasm.UnaryInstruction("f32", "sqrt"));
+                } else if (n.args[0] == SystemCalls.sqrt64) {
+                    code.push(new wasm.UnaryInstruction("f64", "sqrt"));
+                } else if (n.args[0] == SystemCalls.trunc32) {
+                    code.push(new wasm.UnaryInstruction("f32", "trunc"));
+                } else if (n.args[0] == SystemCalls.trunc64) {
+                    code.push(new wasm.UnaryInstruction("f64", "trunc"));
+                } else if (n.args[0] == SystemCalls.nearest32) {
+                    code.push(new wasm.UnaryInstruction("f32", "nearest"));
+                } else if (n.args[0] == SystemCalls.nearest64) {
+                    code.push(new wasm.UnaryInstruction("f64", "nearest"));
+                } else if (n.args[0] == SystemCalls.floor32) {
+                    code.push(new wasm.UnaryInstruction("f32", "floor"));
+                } else if (n.args[0] == SystemCalls.floor64) {
+                    code.push(new wasm.UnaryInstruction("f64", "floor"));
+                } else if (n.args[0] == SystemCalls.ceil32) {
+                    code.push(new wasm.UnaryInstruction("f32", "ceil"));
+                } else if (n.args[0] == SystemCalls.ceil64) {
+                    code.push(new wasm.UnaryInstruction("f64", "ceil"));
+                } else if (n.args[0] == SystemCalls.min32) {
+                    code.push(new wasm.BinaryInstruction("f32", "min"));
+                } else if (n.args[0] == SystemCalls.min64) {
+                    code.push(new wasm.BinaryInstruction("f64", "min"));
+                } else if (n.args[0] == SystemCalls.max32) {
+                    code.push(new wasm.BinaryInstruction("f32", "max"));
+                } else if (n.args[0] == SystemCalls.max64) {
+                    code.push(new wasm.BinaryInstruction("f64", "max"));
+                } else if (n.args[0] == SystemCalls.copysign32) {
+                    code.push(new wasm.BinaryInstruction("f32", "copysign"));
+                } else if (n.args[0] == SystemCalls.copysign64) {
+                    code.push(new wasm.BinaryInstruction("f64", "copysign"));
                 } else {
                     throw "Implementation error. Unknown system function " + n.args[0];
                 }
