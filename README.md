@@ -33,8 +33,7 @@ The files `mem.wl` and `map.wl` must always be part of the compilation, since th
     - tuple assignment
     - iteration
 - Coroutines and interfaces
-- Builtin Math functions: min, max, sqrt, abs, ceil, floor, trunc, nearest
-- Float/Int conversion
+- Builtin integer math functions
 
 # Wish List
 - Generics
