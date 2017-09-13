@@ -785,6 +785,68 @@ export class Extend extends Node {
     private signed: boolean;
 }
 
+export class Promote extends Node {
+    public get op(): string {
+        return "promote";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "f64.promote/f32";
+    }
+}
+
+export class Demote extends Node {
+    public get op(): string {
+        return "demote";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + "f32.demote/f64";
+    }
+}
+
+export class Convert extends Node {
+    constructor(to: "f32" | "f64", from: "i32" | "i64", signed: boolean) {
+        super();
+        this.from = from;
+        this.to = to;
+        this.signed = signed;
+    }
+
+    public get op(): string {
+        return "convert";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + this.to + ".convert" + (this.signed ? "_s/" : "_u/") + this.from;
+    }
+
+    public to: "f32" | "f64";
+    public from: "i32" | "i64";
+    public signed: boolean;
+}
+
+export class Trunc extends Node {
+    constructor(to: "i32" | "i64", from: "f32" | "f64", signed: boolean) {
+        super();
+        this.from = from;
+        this.to = to;
+        this.signed = signed;
+    }
+
+    public get op(): string {
+        return "trunc";
+    }    
+
+    public toWast(indent: string): string {
+        return indent + this.to + ".trunc" + (this.signed ? "_s/" : "_u/") + this.from;
+    }
+
+    public to: "i32" | "i64";
+    public from: "f32" | "f64";
+    public signed: boolean;
+}
+
 export class Unreachable extends Node {
     public get op(): string {
         return "unreachable";

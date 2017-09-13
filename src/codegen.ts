@@ -1978,7 +1978,35 @@ export class CodeGenerator {
                 let expr = this.processExpression(f, scope, enode.rhs, b, vars, t2);
                 let s = this.getSSAType(t);
                 let s2 = this.getSSAType(enode.rhs.type);
-                if (this.tc.isIntNumber(t) && t2 instanceof UnsafePointerType) {
+                if ((t == this.tc.t_float || t == this.tc.t_double) && this.tc.isIntNumber(t2)) {
+                    // Ints can be converted to floats
+                    let to = this.getSSAType(t);
+                    let op: "convert64_s" | "convert64_u" | "convert32_u" | "convert32_s";
+                    if (t2 == this.tc.t_uint64) {
+                        op = "convert64_u";
+                    } else if (t2 == this.tc.t_int64) {
+                        op = "convert64_s";
+                    } else {
+                        op = this.isSigned(t2) ? "convert32_s" : "convert32_u";
+                    }
+                    return b.assign(b.tmp(), op, to, [expr]);
+                } else if (this.tc.isIntNumber(t) && (t2 == this.tc.t_float || t2 == this.tc.t_double)) {
+                    // Floats can be converted to ints
+                    let to = this.getSSAType(t);
+                    let op: "trunc64" | "trunc32";
+                    if (t2 == this.tc.t_double) {
+                        op = "trunc64";
+                    } else {
+                        op = "trunc32";
+                    }
+                    return b.assign(b.tmp(), op, to, [expr]);                    
+                } else if (t == this.tc.t_float && t2 == this.tc.t_double) {
+                    // Doubles can be converted to floats
+                    return b.assign(b.tmp(), "demote", "f32", [expr]);
+                } else if (t == this.tc.t_double && t2 == this.tc.t_float) {
+                    // Floats can be converted to doubles
+                    return b.assign(b.tmp(), "promote", "f64", [expr]);                    
+                } else if (this.tc.isIntNumber(t) && t2 instanceof UnsafePointerType) {
                     // Convert pointer to integer
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;

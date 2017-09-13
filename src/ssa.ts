@@ -2,7 +2,7 @@ import * as wasm from "./wasm"
 import {TypeMapper, TypeMap} from "./gc"
 import {SystemCalls} from "./pkg"
 
-export type NodeKind = "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
+export type NodeKind = "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr";
 
 export class StructType {
@@ -2112,7 +2112,13 @@ export class Wasm32Backend {
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
-            } else if (n.kind == "wrap" || n.kind == "extend") {
+            } else if (n.kind == "wrap" || n.kind == "extend" || n.kind == "convert32_s" || n.kind == "convert32_u" || n.kind == "convert64_s" || n.kind == "convert64_u") {
+                if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
+                    throw "Implementation error"
+                }
+                this.emitAssign(n.type, n, null, 0, code);
+                n = n.next[0];
+            } else if (n.kind == "promote" || n.kind == "demote" || n.kind == "trunc32" || n.kind == "trunc64") {
                 if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
                     throw "Implementation error"
                 }
@@ -2772,6 +2778,61 @@ export class Wasm32Backend {
             }
             this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
             code.push(new wasm.Wrap());
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "demote" || n.kind == "promote") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
+            if (n.kind == "demote") {
+                code.push(new wasm.Demote());
+            } else {
+                code.push(new wasm.Promote());
+            }            
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "trunc64" || n.kind == "trunc32") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
+            if (n.kind == "trunc32") {
+                code.push(new wasm.Trunc(this.stackTypeOf(n.type) as "i32" | "i64", "f32", n.type == "s32" || n.type == "s64"));
+            } else {
+                code.push(new wasm.Trunc(this.stackTypeOf(n.type) as "i32" | "i64", "f64", n.type == "s32" || n.type == "s64"));
+            }            
+            if (n.assign) {
+                this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
+            }
+            n = n.next[0];
+        } else if (n.kind == "convert64_s" || n.kind == "convert64_u" || n.kind == "convert32_s" || n.kind == "convert32_u") {
+            if (n.type instanceof StructType || n.type instanceof FunctionType) {
+                throw "Implementation error " + n.toString("");
+            }
+            if (n.assign) {
+                this.storeVariableFromWasmStack1(n.type, n.assign, code);
+            }
+            this.emitWordAssign(n.type, n.args[0], "wasmStack", code);
+            if (n.kind == "convert64_s") {
+                code.push(new wasm.Convert(this.stackTypeOf(n.type) as "f32" | "f64", "i64", true));
+            } else if (n.kind == "convert64_u") {
+                code.push(new wasm.Convert(this.stackTypeOf(n.type) as "f32" | "f64", "i64", false));
+            } else if (n.kind == "convert32_s") {
+                code.push(new wasm.Convert(this.stackTypeOf(n.type) as "f32" | "f64", "i32", true));
+            } else if (n.kind == "convert32_u") {
+                code.push(new wasm.Convert(this.stackTypeOf(n.type) as "f32" | "f64", "i32", false));
+            }            
             if (n.assign) {
                 this.storeVariableFromWasmStack2(n.type, n.assign, stack == "wasmStack", code);
             }

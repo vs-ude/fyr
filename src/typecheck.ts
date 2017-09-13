@@ -3189,13 +3189,25 @@ export class TypeChecker {
                 let t = this.createType(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
-                if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
+                if ((t == this.t_float || t == this.t_double) && this.isIntNumber(right)) {
+                    // Ints can be converted to floats
+                    enode.type = t;
+                } else if (this.isIntNumber(t) && (right == this.t_float || right == this.t_double)) {
+                    // Floats can be converted to ints
+                    enode.type = t;
+                } else if (t == this.t_float && right == this.t_double) {
+                    // Doubles can be converted to floats
+                    enode.type = t;
+                } else if (t == this.t_double && right == this.t_float) {
+                    // Floats can be converted to doubles
+                    enode.type = t;
+                } else if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
                     // Unsafe pointers can be converted to 32-bit integers
                     enode.type = t;
                 } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || right == this.t_string || this.isInt32Number(right))) {
                     // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
                     enode.type = t;
-                } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.isIntNumber(right))) {
+                } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.isIntNumber(right)) && t != right) {
                     // bool and all integers can be converted into each other
                     enode.type = t;
                 } else if (t == this.t_string && right instanceof UnsafePointerType) {
