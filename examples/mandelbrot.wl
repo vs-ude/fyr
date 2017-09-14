@@ -43,7 +43,7 @@ func calc() {
                var r = pixel_Group_r[x_Minor]
                var i = pixel_Group_i[x_Minor]
 
-               pixel_Group_r[x_Minor] = (r*r - i*i) + initial_r[x_Major+x_Minor]
+               pixel_Group_r[x_Minor] = r*r - i*i + initial_r[x_Major+x_Minor]
                pixel_Group_i[x_Minor] = 2.0 * r * i + prefetched_Initial_i
 
                // Clear the bit for the pixel if it escapes from the

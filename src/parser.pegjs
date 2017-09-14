@@ -700,19 +700,23 @@ comparison2
   / "<" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "<", rhs:right}); }
 
 additive
-  = left:multiplicative right: additive2? {
-      if (right) {
-          right.lhs = left;
-          return right;
+  = left:multiplicative right: additive2* {
+      if (right && right[0]) {
+          var result = left;
+          for(var i = 0; i < right.length; i++) {
+              right[i].lhs = result
+              result = right[i];
+          }
+          return result;
       }
       return left;
     }
   
 additive2
-  = "+" ![=+] [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "+", rhs:right}); }
-  / "-" ![=-] [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "-", rhs:right}); }
-  / "|" ![|=] [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "|", rhs:right}); }
-  / "^" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "^", rhs:right}); }
+  = "+" ![=+] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "+", rhs:right}); }
+  / "-" ![=-] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "-", rhs:right}); }
+  / "|" ![|=] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "|", rhs:right}); }
+  / "^" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "^", rhs:right}); }
 
 multiplicative
   = left:unary right:multiplicative2? {
