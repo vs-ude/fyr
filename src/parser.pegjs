@@ -719,22 +719,26 @@ additive2
   / "^" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "^", rhs:right}); }
 
 multiplicative
-  = left:unary right:multiplicative2? {
-      if (right) {
-          right.lhs = left;
-          return right;
+  = left:unary right:multiplicative2* {
+      if (right && right[0]) {
+          var result = left;
+          for(var i = 0; i < right.length; i++) {
+              right[i].lhs = result
+              result = right[i];
+          }
+          return result;
       }
       return left;
     }
 
 multiplicative2
-  = "*" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "*", rhs:right}); }
-  / "/" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "/", rhs:right}); }
-  / "%" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "%", rhs:right}); }
-  / "&^" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "&^", rhs:right}); }
-  / "<<" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "<<", rhs:right}); }
-  / ">>" !"=" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: ">>", rhs:right}); }
-  / "&" ![=&] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "&", rhs:right}); }
+  = "*" !"=" [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "*", rhs:right}); }
+  / "/" !"=" [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "/", rhs:right}); }
+  / "%" !"=" [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "%", rhs:right}); }
+  / "&^" !"=" [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "&^", rhs:right}); }
+  / "<<" !"=" [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "<<", rhs:right}); }
+  / ">>" !"=" [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: ">>", rhs:right}); }
+  / "&" ![=&] [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "&", rhs:right}); }
 
 unary
   = t: typedLiteral { return t; }
