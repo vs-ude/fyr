@@ -1273,6 +1273,12 @@ export class Wasm32Backend {
         return wf;
     }
 
+    public declareInitFunction(name: string): wasm.Function {
+        let wf = new wasm.Function(name);
+        this.module.setInitFunction(wf);
+        return wf;
+    }
+
     public defineFunction(n: Node, f: wasm.Function) {
         this.funcs.push({node: n, wf: f});
     }
@@ -1376,8 +1382,21 @@ export class Wasm32Backend {
             typemap.declare(this.module);
             typemap.define();
         }
-        this.spLocal = this.wf.parameters.length;
-        this.wf.parameters.push("i32"); // sp
+
+        let code: Array<wasm.Node> = [];
+        
+        if (wf.isInitFunction) {
+            this.spLocal = this.wf.parameters.length;
+            this.wf.locals.push("i32"); // sp
+            code.push(new wasm.CurrentMemory());
+            code.push(new wasm.Constant("i32", 16));
+            code.push(new wasm.BinaryInstruction("i32", "shl"));
+            code.push(new wasm.SetLocal(this.spLocal));
+        } else {
+            this.spLocal = this.wf.parameters.length;
+            this.wf.parameters.push("i32"); // sp
+        }
+
         if (this.wfHasHeapFrame()) {
             this.bpLocal = this.wf.parameters.length;
             this.wf.locals.push("i32"); // bp
@@ -1403,7 +1422,6 @@ export class Wasm32Backend {
         }
 
         // Generate function body
-        let code: Array<wasm.Node> = [];
         if (this.varsFrame.size > 0) {
             // Put the varsFrame on the heap_stack and set BP
             code.push(new wasm.GetLocal(this.spLocal));

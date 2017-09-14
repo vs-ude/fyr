@@ -119,6 +119,16 @@ export class Module extends Node {
         this.funcs.push(f);
     }
 
+    public setInitFunction(f: Function) {
+        if (this.initFunction) {
+            throw "Duplicate init function";
+        }
+        f.index = this.funcIndex++;
+        f.isInitFunction = true;
+        this.initFunction = f;
+        this.funcs.push(f);
+    }
+
     public addFunctionImport(f: FunctionImport) {
         f.index = this.funcIndex++;
         this.funcImports.push(f);
@@ -172,6 +182,7 @@ export class Module extends Node {
     public funcTypes: Array<FunctionType> = [];
     public funcImports: Array<FunctionImport> = [];
     public exports: Map<string, Node> = new Map<string, Node>();
+    public initFunction: Function | null;
 
     private dataSize: number = 0;
     private data: Array<Data> = [];
@@ -278,7 +289,12 @@ export class Function extends Node {
     }
 
     public toWast(indent: string): string {
-        let s = indent + "(func $" + this.name;
+        let s: string;
+        if (this.isInitFunction) {
+            s = indent + "(func ";
+        } else {
+            s = indent + "(func $" + this.name;
+        }
         for(let p of this.parameters) {
             s += " (param " + p + ")";
         } 
@@ -301,7 +317,13 @@ export class Function extends Node {
                 i += "    ";
             }
         }
-        return s + indent + ")";
+        s += indent + ")";
+
+        if (this.isInitFunction) {
+            s += "\n" + indent + "(start " + this.index.toString() + ")"
+        }
+
+        return s;
     }
 
     public name: string;
@@ -309,7 +331,8 @@ export class Function extends Node {
     public parameters: Array<StackType> = [];
     public locals: Array<StackType> = [];
     public results: Array<StackType> = [];
-    public statements: Array<Node> = [];
+    public statements: Array<Node> = [];    
+    public isInitFunction: boolean = false;
 }
 
 export class Constant extends Node {

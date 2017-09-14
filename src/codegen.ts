@@ -110,7 +110,7 @@ export class CodeGenerator {
         
         // Generate IR code for the initialization of global variables
         if (globals.length > 0) {
-            let wf = this.wasm.declareFunction("init");
+            let wf = this.wasm.declareInitFunction("init");
             let b = new ssa.Builder();
             let t = new FunctionType();
             t.returnType = this.tc.t_void;

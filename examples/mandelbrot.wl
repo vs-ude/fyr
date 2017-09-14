@@ -8,10 +8,10 @@ import "fyr/math"
 
 // This is the square of the limit that pixels will need to exceed in order to
 // escape from the Mandelbrot set.
-var LIMIT_SQUARED double // = 4.0
+const LIMIT_SQUARED double = 4.0
 
 // This controls the maximum amount of iterations that are done for each pixel.
-var MAXIMUM_ITERATIONS int // = 50
+const MAXIMUM_ITERATIONS int = 50
 
 var image_Width_And_Height int
 var initial_r [640]double
@@ -63,9 +63,6 @@ func calc() {
 }
 
 func main() *byte {
-    LIMIT_SQUARED = 4.0
-    MAXIMUM_ITERATIONS = 50
-
    // Ensure image_Width_And_Height are multiples of 8.
    image_Width_And_Height = 640
    // The image will be black and white with one bit for each pixel. Bits with
