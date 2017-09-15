@@ -4,3 +4,4 @@ old
 out
 examples/*.wasm
 examples/*.wast
+tmp/*
