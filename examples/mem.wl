@@ -84,6 +84,10 @@ type Stack struct {
     sp #void
 }
 
+func getStackPointer() #void {
+    return coroutine.stack.sp
+}
+
 // Returns the stack pointer
 func initializeMemory() #void {
     gcEpoch = 1
@@ -118,6 +122,7 @@ func initializeMemory() #void {
     // followed by a pointer to the end of the stack, followed by a location for storing the SP
     // of the coroutine owning the stack
     coroutine.stack.stackEnd = heapEndBlockNr << 16
+    coroutine.stack.sp = coroutine.stack.stackEnd
     root.blocks[stack_block_nr >> 1] |= <byte>(8 | 4 | gcEpoch) << ((stack_block_nr & 1) << 2)
     return coroutine.stack.stackEnd
 }

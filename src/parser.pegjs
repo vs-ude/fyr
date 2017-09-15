@@ -29,7 +29,7 @@ file
             if (x.op == "var" && x.lhs.op != "id") {
                 error("Illegal variable definition for global variables", x.loc);
             }
-            if (x.op == "func" || x.op == "typedef" || x.op == "var" || x.op == "const") {
+            if (x.op == "func" || x.op == "export_func" || x.op == "typedef" || x.op == "var" || x.op == "const") {
                 if (i > 0 && (m[i-1] instanceof Array)) {
                     x.comments = m[i-1];
                 }
@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = ex:("export" [ \t]+)? "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -105,7 +105,8 @@ func
       } else if (c || v) {
           error("'const' is only allowed for member functions");
       }      
-      return new ast.Node({loc: fl(location()), op: "func", name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
+      let op = ex ? "export_func" : "func";
+      return new ast.Node({loc: fl(location()), op: op, name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
     }
 
 parameters

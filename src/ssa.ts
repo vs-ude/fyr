@@ -1269,7 +1269,7 @@ export class Wasm32Backend {
 
     public declareFunction(name: string): wasm.Function {
         let wf = new wasm.Function(name);
-        this.module.addFunction(wf);
+        this.module.addFunction(wf);        
         return wf;
     }
 
@@ -1279,8 +1279,8 @@ export class Wasm32Backend {
         return wf;
     }
 
-    public defineFunction(n: Node, f: wasm.Function) {
-        this.funcs.push({node: n, wf: f});
+    public defineFunction(n: Node, f: wasm.Function, isExported: boolean) {
+        this.funcs.push({node: n, wf: f, isExported: isExported});
     }
 
     public generateModule() {
@@ -1317,6 +1317,32 @@ export class Wasm32Backend {
             }
 
             this.generateFunction(f.node, f.wf);
+            if (f.isExported) {
+                let wfExport = new wasm.Function();
+                wfExport.isExported = true;
+                wfExport.parameters = f.wf.parameters;
+                wfExport.results = f.wf.results;
+                let code: Array<wasm.Node> = [];
+                let i = 0;
+                if (wfExport.parameters && wfExport.parameters.length != 0) {
+                    for(let t of wfExport.parameters) {
+                        code.push(new wasm.GetLocal(i));
+                        i++;
+                    }
+                }
+                code.push(new wasm.Constant("i32", 0));
+                code.push(new wasm.Call("$getStackPointer"));
+                code.push(new wasm.Call(f.wf.index));
+                if (wfExport.results && wfExport.results.length != 0) {
+                    if (wfExport.results.length != 1) {
+                        throw "Implementation error in export";
+                    }
+                    code.push(new wasm.Return());
+                }
+                wfExport.statements = code;
+                this.module.addFunction(wfExport);
+                this.module.exports.set(f.wf.name, wfExport);                
+            }
         }
 
         // Add type maps to the module
@@ -1388,9 +1414,14 @@ export class Wasm32Backend {
         if (wf.isInitFunction) {
             this.spLocal = this.wf.parameters.length;
             this.wf.locals.push("i32"); // sp
+            // Start with the stack at the very end of the memory
             code.push(new wasm.CurrentMemory());
             code.push(new wasm.Constant("i32", 16));
             code.push(new wasm.BinaryInstruction("i32", "shl"));
+            code.push(new wasm.TeeLocal(this.spLocal));
+            // Initialize the memory
+            code.push(new wasm.Call("$initializeMemory"));
+            // Set the final stack pointer
             code.push(new wasm.SetLocal(this.spLocal));
         } else {
             this.spLocal = this.wf.parameters.length;
@@ -3270,7 +3301,7 @@ export class Wasm32Backend {
     
     private tr: SMTransformer;
     private optimizer: Optimizer;
-    private funcs: Array<{node: Node, wf: wasm.Function}>;
+    private funcs: Array<{node: Node, wf: wasm.Function, isExported: boolean}>;
     private globalVariables: Array<Variable>;
     private globalVarStorage: Map<Variable, Wasm32Storage>;
     private copyFunctionIndex: string = "$copy";

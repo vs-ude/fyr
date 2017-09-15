@@ -40,10 +40,10 @@
             ).then(bytes =>
                 WebAssembly.instantiate(bytes, importObject)
             ).then(results => {
-                console.log("Init root ...")
-                let stack = results.instance.exports.initializeMemory();
-                console.log("mandelbrot, stack=", stack);
-                let pixels = results.instance.exports.main(stack);
+//                console.log("Init root ...")
+//                let stack = results.instance.exports.initializeMemory();
+                console.log("mandelbrot...");
+                let pixels = results.instance.exports.main();
                 console.log("Done, pixels=", pixels);
 
                 let canvas = document.getElementById("canvas");

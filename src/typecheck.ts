@@ -68,6 +68,7 @@ export class Function implements ScopeElement {
     public node: Node;
     public loc: Location;
     public importFromModule: string;
+    public isExported: boolean;
 }
 
 export class FunctionParameter implements ScopeElement {
@@ -1427,6 +1428,7 @@ export class TypeChecker {
         f.scope.parent = pseudoScope;
         f.node = fnode;
         f.loc = fnode.loc;
+        f.isExported = (fnode.op == "export_func");
         if (fnode.genericParameters) {
             let gt = new GenericFunctionType();
             gt.node = fnode;
@@ -1770,8 +1772,8 @@ export class TypeChecker {
         // and handle all imports
         for(let fnode of mnode.statements) {
             for (let snode of fnode.statements) {
-                if (snode.op == "func") {
-                    let f = this.createFunction(snode, fnode.scope, scope);
+                if (snode.op == "func" || snode.op == "export_func") {
+                    let f = this.createFunction(snode, fnode.scope, scope);                    
                     functions.push(f);
                 } else if (snode.op == "var") {
                     let v = this.createVar(snode.lhs, scope, false, false, true);

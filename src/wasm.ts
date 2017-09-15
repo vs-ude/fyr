@@ -59,6 +59,9 @@ export class Module extends Node {
         for(let k of this.exports.keys()) {
             let v = this.exports.get(k);
             if (v instanceof Function) {
+                if (!v.isExported) {
+                    continue;
+                }
                 s += indent + "    (export \"" + k + "\" (func " + v.index.toString() + "))\n";
                 index++;
             } else {
@@ -276,12 +279,12 @@ export class StringData extends Data {
 export class Function extends Node {
     constructor(name?: string) {
         super();
-        if (!name) {
-            this.name = "f" + nameCounter.toString();
-            nameCounter++;
-        } else {
+//        if (!name) {
+//            this.name = "f" + nameCounter.toString();
+//            nameCounter++;
+//        } else {
             this.name = name;
-        }
+//        }
     }
 
     public get op(): string {
@@ -290,7 +293,7 @@ export class Function extends Node {
 
     public toWast(indent: string): string {
         let s: string;
-        if (this.isInitFunction) {
+        if (this.isInitFunction || !this.name) {
             s = indent + "(func ";
         } else {
             s = indent + "(func $" + this.name;
@@ -333,6 +336,7 @@ export class Function extends Node {
     public results: Array<StackType> = [];
     public statements: Array<Node> = [];    
     public isInitFunction: boolean = false;
+    public isExported: boolean = false;
 }
 
 export class Constant extends Node {

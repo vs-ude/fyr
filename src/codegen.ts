@@ -121,7 +121,7 @@ export class CodeGenerator {
                 let expr = this.processExpression(null, scope, v.node.rhs, b, new Map<ScopeElement, ssa.Variable>(), v.type);
                 b.assign(g, "copy", this.getSSAType(v.type), [expr]);
             }
-            this.wasm.defineFunction(b.node, wf);
+            this.wasm.defineFunction(b.node, wf, false);
         }
 
         // Generate IR code for all functions and initialization of global variables
@@ -132,7 +132,7 @@ export class CodeGenerator {
                     throw "Implementation error";
                 }
                 let wf = this.funcs.get(e) as wasm.Function;
-                let n = this.processFunction(e, true, wf);
+                let n = this.processFunction(e, wf);
             } else if (e instanceof Variable) {
                 // Do nothing by intention
             } else {
@@ -255,7 +255,7 @@ export class CodeGenerator {
         return ftype;
     }
 
-    public processFunction(f: Function, exportFunc: boolean, wf: wasm.Function): ssa.Node {
+    public processFunction(f: Function, wf: wasm.Function): ssa.Node {
         let vars = new Map<ScopeElement, ssa.Variable>();
         // Add global variables
         for(let e of this.globalVars.keys()) {
@@ -312,10 +312,10 @@ export class CodeGenerator {
         }
         */
 
-        this.wasm.defineFunction(b.node, wf);
-        if (exportFunc) {
-            this.wasm.module.exports.set(f.name, wf);
-        } 
+        this.wasm.defineFunction(b.node, wf, f.isExported);
+//        if (exportFunc) {
+//            this.wasm.module.exports.set(f.name, wf);
+//        } 
         return b.node;
     }
 

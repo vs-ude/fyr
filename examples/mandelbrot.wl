@@ -62,7 +62,7 @@ func calc() {
    }
 }
 
-func main() *byte {
+export func main() *byte {
    // Ensure image_Width_And_Height are multiples of 8.
    image_Width_And_Height = 640
    // The image will be black and white with one bit for each pixel. Bits with
