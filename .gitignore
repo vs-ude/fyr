@@ -5,3 +5,5 @@ out
 examples/*.wasm
 examples/*.wast
 tmp/*
+measurements/mandel_go/mandelbrot
+
