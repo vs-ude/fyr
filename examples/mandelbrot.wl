@@ -14,9 +14,9 @@ const LIMIT_SQUARED double = 4.0
 const MAXIMUM_ITERATIONS int = 50
 
 var image_Width_And_Height int
-var initial_r [16000]double
-var initial_i [16000]double
-var pixels [16000 * 16000 / 8]byte
+var initial_r [640]double
+var initial_i [640]double
+var pixels [640 * 640 / 8]byte
 
 func calc() {
    for (var y = 0; y < image_Width_And_Height; y++) {
@@ -64,7 +64,7 @@ func calc() {
 
 export func main() *byte {
    // Ensure image_Width_And_Height are multiples of 8.
-   image_Width_And_Height = 16000
+   image_Width_And_Height = 640
    // The image will be black and white with one bit for each pixel. Bits with
    // a value of zero are white pixels which are the ones that "escape" from
    // the Mandelbrot set. We'll be working on one line at a time and each line
