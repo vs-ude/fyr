@@ -1320,7 +1320,7 @@ export class Wasm32Backend {
             if (f.isExported) {
                 let wfExport = new wasm.Function();
                 wfExport.isExported = true;
-                wfExport.parameters = f.wf.parameters;
+                wfExport.parameters = f.wf.parameters.slice(0, f.wf.parameters.length - 1); // Strip the sp parameter
                 wfExport.results = f.wf.results;
                 let code: Array<wasm.Node> = [];
                 let i = 0;
