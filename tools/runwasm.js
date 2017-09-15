@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-// Copyright Joel Martin
+// runwasm runs a Fyr/WebAssembly module in NodeJS
+
+// Copyright Joel Martin and Torben Weis
 // License MIT
 
 const fs = require('fs'),
