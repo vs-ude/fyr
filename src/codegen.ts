@@ -109,20 +109,18 @@ export class CodeGenerator {
         }
         
         // Generate IR code for the initialization of global variables
-        if (globals.length > 0) {
-            let wf = this.wasm.declareInitFunction("init");
-            let b = new ssa.Builder();
-            let t = new FunctionType();
-            t.returnType = this.tc.t_void;
-            t.callingConvention = "fyr";
-            b.define("init", this.getSSAFunctionType(t));
-            for(let v of globals) {
-                let g = this.globalVars.get(v);
-                let expr = this.processExpression(null, scope, v.node.rhs, b, new Map<ScopeElement, ssa.Variable>(), v.type);
-                b.assign(g, "copy", this.getSSAType(v.type), [expr]);
-            }
-            this.wasm.defineFunction(b.node, wf, false);
+        let wf = this.wasm.declareInitFunction("init");
+        let b = new ssa.Builder();
+        let t = new FunctionType();
+        t.returnType = this.tc.t_void;
+        t.callingConvention = "fyr";
+        b.define("init", this.getSSAFunctionType(t));
+        for(let v of globals) {
+            let g = this.globalVars.get(v);
+            let expr = this.processExpression(null, scope, v.node.rhs, b, new Map<ScopeElement, ssa.Variable>(), v.type);
+            b.assign(g, "copy", this.getSSAType(v.type), [expr]);
         }
+        this.wasm.defineFunction(b.node, wf, false);
 
         // Generate IR code for all functions and initialization of global variables
         for(let name of scope.elements.keys()) {

@@ -5,5 +5,8 @@ out
 examples/*.wasm
 examples/*.wast
 tmp/*
+measurements/**/*.wasm
+measurements/**/*.wast
 measurements/mandel_go/mandelbrot
+measurements/rect_go/rect
 
