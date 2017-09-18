@@ -9,6 +9,8 @@ import typecheck = require("./typecheck");
 import codegen = require("./codegen");
 import ast = require("./ast");
 import pkg = require("./pkg");
+import child_process = require("child_process")
+import process = require("process")
 
 // Make TSC not throw out the colors lib
 colors.red;
@@ -17,12 +19,27 @@ var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename)
 
 function compileModules() {
     var args = Array.prototype.slice.call(arguments, 0);
+    var files = [];
+    let fyrPath = process.env["FYRPATH"];
+    if (!fyrPath) {
+        console.log(("No FYRPATH environment variable has been set").red);
+        return;
+    }
+    files.push(path.join(fyrPath, "runtime/mem.fyr"));
+    files.push(path.join(fyrPath, "runtime/map.fyr"));
+    // Determine all source files to compile
+    for(var i = 0; i < args.length - 1; i++) {
+        let file = args[i];
+        files.push(file);
+    }
+
     // Parse all files into a single AST
     let mnode = new ast.Node({loc: null, op: "module", statements: []});
-	for(var i = 0; i < args.length - 1; i++) {
-        ast.setCurrentFile(args[i]);
-		var arg = path.resolve(args[i]);
-        let code = fs.readFileSync(arg, 'utf8') + "\n";
+	for(var file of files) {
+        ast.setCurrentFile(file);
+        var fileResolved = path.resolve(file);
+        console.log("Compiling " + fileResolved + " ...");
+        let code = fs.readFileSync(fileResolved, 'utf8') + "\n";
         try {
             let f = parser.parse(code);
             mnode.statements.push(f);
@@ -45,6 +62,13 @@ function compileModules() {
         // Generate IR and WASM code
         let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck);
         cg.processModule(mnode);
+        if (!program.disableWasm) {
+            let wastcode = cg.getWastCode();
+            var input = path.resolve(args[args.length - 2]);
+            let f = path.parse(input);
+            let wastfile = f.dir + path.sep + f.name + ".wast";
+            fs.writeFileSync(wastfile, wastcode, "utf8");
+        }
     } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
@@ -60,6 +84,15 @@ function compileModules() {
             throw ex;
         }
     }
+
+    // Compile Wast to Wasm
+    if (!program.disableWasm) {
+        var input = path.resolve(args[args.length - 2]);
+        let f = path.parse(input);
+        let wastfile = f.dir + path.sep + f.name + ".wast";
+        let wasmfile = f.dir + path.sep + f.name + ".wasm";
+        child_process.execFileSync("wast2wasm", [wastfile, "-r", "-o", wasmfile]);
+    }
 }
 
 program
@@ -72,7 +105,7 @@ program
 
 program
 	.command('compile')
-	.description('compiles weblang modules')
+	.description('The fyr compiler')
 	.action( compileModules );
 
 program.parse(process.argv);

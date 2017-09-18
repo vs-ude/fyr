@@ -138,13 +138,21 @@ export class CodeGenerator {
             }
         }
 
-        // Generate WASM code for the module
-        this.wasm.generateModule();
-        
-//        console.log('============ WASM ===============');
         if (!this.emitNoWasm) {
-            console.log(this.wasm.module.toWast(""));
+            // Generate WASM code for the module
+            this.wasm.generateModule();
         }
+        
+//        if (!this.emitNoWasm) {
+//            console.log(this.wasm.module.toWast(""));
+//        }
+    }
+
+    public getWastCode(): string {
+        if (this.emitNoWasm) {
+            return null;
+        }
+        return this.wasm.module.toWast("");
     }
 
     public getSSAType(t: Type): ssa.Type | ssa.StructType {

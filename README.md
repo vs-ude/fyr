@@ -16,13 +16,44 @@ npm run build
 
 Running `npm build:parser` will only generate fresh JavaScript from the `parser.pegjs` parser definition.
 
+## Setup
+
+Install the `wabt` tools and make sure that `wast2wasm` is in your `PATH`.
+Now set the path to the fyr directory like this:
+
+```
+export FYRPATH=/your/path/to/fyr
+```
+
 ## Running the compiler
 
 ```
-node ./lib/index.js compile runtime/mem.fyr runtime/map.fyr examples/mandelbrot.fyr > examples/mandelbrot.wast
+fyrc examples/mandelbrot.fyr
 ```
 
-The files `runtime/mem.fyr` and `runtime/map.fyr` must always be part of the compilation, since this is currently the fyr runtime.
+The output of the above command is `mandelbrot.wasm` in the same directory.
+
+## Running the generated code
+
+Some examples come with an HTML page.
+Make it available with `python -m SimpleHTTPServer 8000` and open the HTML page.
+It will load the WASM code and execute it.
+
+Other examples are made to run in NodeJS.
+Use the `runwasm.js` tool to execute WASM in NodeJS as follows:
+
+```
+runwasm.js mandelbrot.wasm
+```
+
+For benchmarking execute 
+
+```
+time runwasm.js mandelbrot.wasm
+```
+
+The performance overhead of launching node is around 100ms on a modern machine.
+Hence, benchmarks must run significantly longer to produce meaningful results.
 
 ## Todos
 
