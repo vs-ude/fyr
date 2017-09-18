@@ -19,10 +19,10 @@ Running `npm build:parser` will only generate fresh JavaScript from the `parser.
 ## Running the compiler
 
 ```
-node ./lib/index.js compile examples/mem.wl examples/map.wl examples/example3.wl
+node ./lib/index.js compile runtime/mem.fyr runtime/map.fyr examples/mandelbrot.fyr > examples/mandelbrot.wast
 ```
 
-The files `mem.wl` and `map.wl` must always be part of the compilation, since this is currently the fyr runtime.
+The files `runtime/mem.fyr` and `runtime/map.fyr` must always be part of the compilation, since this is currently the fyr runtime.
 
 ## Todos
 

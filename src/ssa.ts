@@ -170,14 +170,14 @@ export class FunctionType {
         this._stackFrame = new StructType();
         for(let i = 0; i < this.params.length; i++) {
             // Pointers as arguments must be passed on the stack
-            if (this.params[i] instanceof StructType || this.params[i] == "ptr") {
+            if (this.params[i] instanceof StructType) {
                 this._stackFrame.addField("$p" + i.toString(), this.params[i]);
             }
         }
         if (this.result instanceof StructType) {
             this._stackFrame.addField("$result", this.result);
         }
-        // Add a field for the typemap
+        // Add a field for the typemap if the stack is non-empty
         if (this._stackFrame.fields.length != 0) {
             this._stackFrame.addField("$typemapCall", "i32");
         }
@@ -475,6 +475,9 @@ export class Builder {
         if (assign && !assign.type) {
             assign.type = type;
         }
+        if (assign) {
+            n.assignType = assign.type;
+        }
         if (this._current) {
             this._current.next.push(n);
             n.prev.push(this._current);
@@ -491,9 +494,13 @@ export class Builder {
         if (assign && assign.type) {
             if (!compareTypes(assign.type, type.result)) {
                 throw "Variable " + assign.name + " used with wrong type";
-            }
+            }        
+            n.assignType = assign.type;
         } else if (assign) {
             assign.type = type.result;
+            n.assignType = assign.type;
+        } else {
+            n.assignType = type.result;
         }
 
         if (this._current) {
@@ -940,17 +947,29 @@ export class Optimizer {
                 n = n.blockPartner;
             } else if (n.kind == "end" && (n.blockPartner.kind == "block" || n.blockPartner.kind == "loop")) {
                 let blockDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
-                n = n.blockPartner;
-            } else if (n.kind == "call" || n.kind == "call_indirect" || n.kind == "alloc" || n.kind == "call_end" || n.kind == "call_begin" || n.kind == "call_indirect_begin") {
-                for(let v of varsRead) {
-                    v.gcDiscoverable = true;
+                if (n.blockPartner.kind == "loop") {
+                    // Run once again to see what happens in this case
+                    this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
                 }
-                doesGC = true;
-                n = n.prev[0];
+                doesGC = doesGC || blockDoesGC
+                n = n.blockPartner;
             } else if (n.kind == "decl_var" || n.kind == "decl_result" || n.kind == "decl_param") {
                 n = n.prev[0];
-            } else {
-                let lastArgDoesGC = false;
+            } else {                
+                if (n.kind == "alloc" || n.kind == "call" || n.kind == "call_indirect" || n.kind == "call_end" || n.kind == "call_begin" || n.kind == "call_indirect_begin") {
+                    if (n.assign && n.assign.type == "ptr") {
+                        // The varible is written.
+                        // If a GC happens before, there is no need to need to inspect this variable.
+                        varsRead.delete(n.assign)
+                    }
+                    // Call might trigger the GC. All variables read AFTER the call must necessarily be assigned BEFORE the call.
+                    // Hence, the objects these variables are pointing to need to survive this GC.
+                    for(let v of varsRead) {
+                        v.gcDiscoverable = true;
+                    }
+                    doesGC = true;
+                }
+                let argDoesGC = false;
                 let doesGCBefore = doesGC;
                 for(let i = n.args.length - 1; i >= 0; i--) {
                     let a = n.args[i];
@@ -961,7 +980,7 @@ export class Optimizer {
                         } else if (a instanceof Node && a.assignType == "ptr") {
                             if (a.assign) {
                                 a.assign.gcDiscoverable = true;
-                            } else {
+                            } else {                                
                                 a.assign = new Variable();
                                 a.assign.type = "ptr";
                                 a.assign.gcDiscoverable = true;
@@ -969,16 +988,36 @@ export class Optimizer {
                         }
                     }
                     if (a instanceof Node) {
-                        lastArgDoesGC = this._analyzeGCDiscoverability(a, null, varsRead);
-                        doesGC = doesGC || lastArgDoesGC;
+                        let gc = this._analyzeGCDiscoverability(a, null, varsRead);
+                        doesGC = doesGC || gc;
+                        if (argDoesGC && a.assignType == "ptr") {
+                            if (a.assign) {
+                                a.assign.gcDiscoverable = true;
+                            } else {
+                                a.assign = new Variable();
+                                a.assign.type = "ptr";
+                                a.assign.gcDiscoverable = true;
+                            }
+                        }
+                        argDoesGC = argDoesGC || gc;
+                    } else if (a instanceof Variable && a.type == "ptr") {
+                        if (argDoesGC) {
+                            // If the value of the variable is a pointer and put on the WASM stack and GC happens before the value of the var is consumed,
+                            // then the variable must be GC discoverable, since the value on the WASM stack is not discoverable.
+                            a.gcDiscoverable = true;
+                        } else {
+                            varsRead.add(a);                                                    
+                        }
                     }
                 }
                 // If the assigned variable has not yet been read, then it must be inside a loop,
                 // otherwise the variable would be useless and would have been removed.
                 // If GC happens after this assignment, GC discoverability is required.
-                if (n.assign && n.assign.type == "ptr" && !varsRead.has(n.assign) && doesGC) {
-                    n.assign.gcDiscoverable = true;
-                } else if (n.assign && n.assign.type == "ptr") {
+                // if (n.assign && n.assign.type == "ptr" && !varsRead.has(n.assign) && doesGC) {
+//                    n.assign.gcDiscoverable = true;
+                if (n.assign && n.assign.type == "ptr") {
+                    // The varible is written.
+                    // If a GC happens before, there is no need to need to inspect this variable.
                     varsRead.delete(n.assign)
                 }
                 n = n.prev[0];
@@ -1256,7 +1295,7 @@ export class Wasm32Backend {
         let wt = new wasm.FunctionType(name, [], []);
         let hasHeapFrame = false;
         for(let p of type.params) {
-            if (!(p instanceof StructType) && p != "ptr") {
+            if (!(p instanceof StructType)) {
                 wt.params.push(this.stackTypeOf(p))
             }
         }
@@ -1381,6 +1420,7 @@ export class Wasm32Backend {
         this.varsFrame = new StructType();
         this.varsFrameHeader = new StructType();
         this.varStorage = new Map<Variable, Wasm32Storage>();
+        this.varGCStorage = new Map<Variable, Wasm32Storage>();
         this.parameterVariables = [];
         this.returnVariables = [];
         this.tmpI32Local = -1;
@@ -1424,6 +1464,7 @@ export class Wasm32Backend {
 
         let code: Array<wasm.Node> = [];
         
+        // Is this the module initialization function? Then initialize stack and memory first
         if (wf.isInitFunction) {
             this.spLocal = this.wf.parameters.length;
             this.wf.locals.push("i32"); // sp
@@ -1441,10 +1482,11 @@ export class Wasm32Backend {
             this.wf.parameters.push("i32"); // sp
         }
 
-        if (this.wfHasHeapFrame()) {
+        if (this.varsFrame.size > 0 || this.paramsFrame.size > 0 || this.resultFrame.size > 0) {
             this.bpLocal = this.wf.parameters.length;
             this.wf.locals.push("i32"); // bp
         }
+        // Shift the index of local variables, since other WASM parameters and locals (sp, bp) have been inserted.
         for(let v of this.varStorage.keys()) {
             let s = this.varStorage.get(v);
             if (s.storageType == "local_var") {
@@ -1452,6 +1494,7 @@ export class Wasm32Backend {
                 s.storageType = "local";
             }
         }
+        // Add the local variables to WASM
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
         if (this.emitIR || this.emitIRFunction == wf.name) {
@@ -1482,6 +1525,30 @@ export class Wasm32Backend {
             code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the varsFrame
         }
 
+        // Save variables which are parameters stored in WASM local variables but need to be GC discoverable.
+        for(var v of this.parameterVariables) {
+            if (!this.varGCStorage.has(v)) {
+                continue;
+            }            
+            let s = this.varStorage.get(v);
+            let sAlternative = this.varGCStorage.get(v);
+            let t = this.stackTypeOf(v.type as Type);
+            let asType: null | "8"| "16" | "32" = null;
+            switch (v.type) {
+                case "i8":
+                case "s8":
+                    asType = "8";
+                    break;
+                case "i16":
+                case "s16":
+                    asType = "16";
+                    break;
+            }
+            code.push(new wasm.GetLocal(this.bpLocal));
+            code.push(new wasm.GetLocal(s.offset));
+            code.push(new wasm.Store(t, asType, sAlternative.offset));            
+        }
+        
         this.emitCode(0, n.next[0], null, code, 0, 0);
 
         this.wf.statements = code;
@@ -1624,8 +1691,8 @@ export class Wasm32Backend {
                     break;
             }
             code.push(new wasm.GetLocal(this.bpLocal));
-            code.push(new wasm.GetLocal(s.offset));
-            code.push(new wasm.Store(t, asType, this.varsFrame.fieldOffset("$param" + i.toString())));
+            code.push(new wasm.GetLocal(s.offset));            
+            code.push(new wasm.Store(t, asType, this.varGCStorage.get(v).offset));
         }
         code.push(new wasm.GetLocal(this.bpLocal));
         code.push(new wasm.Constant("i32", this.module.funcTable.length));
@@ -1672,7 +1739,7 @@ export class Wasm32Backend {
                         break;
                 }        
                 code.push(new wasm.GetLocal(2));
-                code.push(new wasm.Load(t, asType, this.varsFrame.fieldOffset("$param" + i.toString())));
+                code.push(new wasm.Load(t, asType, this.varGCStorage.get(v).offset));
             }
             code.push(new wasm.GetLocal(0));
             code.push(new wasm.GetLocal(1));
@@ -1781,6 +1848,8 @@ export class Wasm32Backend {
                 n = n.next[0];
             }
         }
+        // If end of function has been reached, traverse the code in reverse order
+        // to mark variables that need to be visible to the GC
         if (end === null) {
             this.optimizer.analyzeGCDiscoverability(last);
         }
@@ -1865,6 +1934,8 @@ export class Wasm32Backend {
         }
         let n = start;
         for(; n; ) {
+            // Ignore decl_var here. These variables get storage when they are assigned.
+            // Parameters and result variables, however, need storage even if they are not being assigned.
             if (n.kind == "decl_result" && (this.wfIsAsync || n.type instanceof StructType)) {
                 // Structs are returned via the heap stack.
                 // If async, everything is returned via the heap stack.
@@ -1881,7 +1952,7 @@ export class Wasm32Backend {
                 this.returnVariables.push(n.assign);
                 n = n.next[0];                
                 continue;
-            } else if (n.kind == "decl_param" && (n.type instanceof StructType || n.type == "ptr")) {
+            } else if (n.kind == "decl_param" && n.type instanceof StructType) {
                 // Pointers as arguments must be passed on the stack as well
                 let index = this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "params", offset: index};
@@ -1894,10 +1965,12 @@ export class Wasm32Backend {
                 let t = this.stackTypeOf(n.type as Type);
                 this.wf.parameters.push(t);
                 this.varStorage.set(n.assign, s);
-                if (this.wfIsAsync) {
+                if (this.wfIsAsync || n.assign.gcDiscoverable) {
                     // If the function yields, the heapstack must store the value of the parameter
-                    let n = "$param" + s.offset.toString();
-                    this.varsFrame.addField(n, t);
+                    let index = this.varsFrame.addField("$param" + s.offset.toString(), t);
+                    let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
+                    this.varGCStorage.set(n.assign, sAlternative);
+                    this.typeMapper.mapStack(typemap, t, index);
                 }             
                 this.parameterVariables.push(n.assign);                
                 n = n.next[0];                
@@ -1931,10 +2004,19 @@ export class Wasm32Backend {
             return;
         }
         if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && !v.gcDiscoverable && !v.addressable) {
-            // Pointer variables must be put on the stack
+            // Non-pointer variables are stored in local variables.
             let index = locals.allocate(v.type);
             let s: Wasm32Storage = {storageType: "local_var", offset: index};
             this.varStorage.set(v, s);
+        } else if (!(v.type instanceof StructType) && !v.addressable) {
+            // Non-pointer variables are stored in local variables and in addition on the heap stack where GC can find them.
+            let index = locals.allocate(v.type);
+            let s: Wasm32Storage = {storageType: "local_var", offset: index};
+            this.varStorage.set(v, s);
+            let indexAlternative = this.varsFrame.addField(v.name, v.type);
+            let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
+            this.varGCStorage.set(v, s);
+            this.typeMapper.mapStack(typemap, v.type, indexAlternative);
         } else {
             let index = this.varsFrame.addField(v.name, v.type);
             let s: Wasm32Storage = {storageType: "vars", offset: index};
@@ -2331,7 +2413,7 @@ export class Wasm32Backend {
                 for(let i = 0; i < n.type.params.length; i++) {
                     code.push(new wasm.Comment("parameter " + i.toString()));
                     // Pointers must be passed on the stack, too
-                    if (n.type.params[i] instanceof StructType || n.type.params[i] == "ptr") {
+                    if (n.type.params[i] instanceof StructType) {
 //                    code.push(new wasm.Comment(">>parameter " + i.toString()));
 //                        code.push(new wasm.GetLocal(this.spLocal));
 //                    code.push(new wasm.Comment("<<parameter " + i.toString()));
@@ -2341,6 +2423,9 @@ export class Wasm32Backend {
                             paramTypes.push(this.stackTypeOf(n.type.params[i] as Type));
                         }
                         this.emitAssign(n.type.params[i], n.args[i+1], "wasmStack", 0, code);                    
+                        if (n.type.params[i] == "ptr" && i + 1 < n.type.params.length) {
+                            // TODO: If GC can happen before the call, store the ptr where GC can find it
+                        }
                     }
                 }
                 // Call the function
@@ -2941,7 +3026,7 @@ export class Wasm32Backend {
             for(let i = 0; i < n.type.params.length; i++) {
                 code.push(new wasm.Comment("parameter " + i.toString()));
                 // Pointers must be pased on the stack
-                if (n.type.params[i] instanceof StructType || n.type.params[i] == "ptr") {
+                if (n.type.params[i] instanceof StructType) {
                     this.emitAssign(n.type.params[i], n.args[i+1], "heapStack", n.type.stackFrame.fieldOffset("$p" + i.toString()), code);
                 } else {
                     if (n.kind == "call_indirect") {
@@ -3095,6 +3180,12 @@ export class Wasm32Backend {
                 let s = this.globalVarStorage.get(v);
                 code.push(new wasm.Constant("i32", s.offset));
                 break;
+            case "local":
+                if (this.varGCStorage.has(v)) {
+                    // Some variables are stored in local variables AND on the heap stack where GC can find them
+                    code.push(new wasm.GetLocal(this.bpLocal));
+                }
+                break;
         }
     }
 
@@ -3114,10 +3205,23 @@ export class Wasm32Backend {
         let s = this.storageOf(v);
         switch(s.storageType) {
             case "local":
-                if (tee) {
-                    code.push(new wasm.TeeLocal(s.offset));
+                if (this.varGCStorage.has(v)) {
+                    // Some variables are stored in local variables AND on the heap stack where GC can find them
+                    let sAlternative = this.varGCStorage.get(v);
+                    if (tee) {
+                        code.push(new wasm.TeeLocal(s.offset));
+                        code.push(new wasm.Store(width, asWidth, sAlternative.offset));                        
+                        code.push(new wasm.GetLocal(s.offset));                        
+                    } else {
+                        code.push(new wasm.TeeLocal(s.offset));
+                        code.push(new wasm.Store(width, asWidth, sAlternative.offset));                        
+                    }
                 } else {
-                    code.push(new wasm.SetLocal(s.offset));
+                    if (tee) {
+                        code.push(new wasm.TeeLocal(s.offset));
+                    } else {
+                        code.push(new wasm.SetLocal(s.offset));
+                    }
                 }
                 break;
             case "global":
@@ -3345,7 +3449,15 @@ export class Wasm32Backend {
     private paramsFrame: StructType;
     private varsFrame: StructType;
     private varsFrameHeader: StructType;
+    /**
+     * Stores for each variable in the current function where it is located.
+     */
     private varStorage: Map<Variable, Wasm32Storage>;
+    /**
+     * Some variables have to storage locations. A fast one (local variable) and one on the stack frame
+     * where the GC can find it.
+     */
+    private varGCStorage: Map<Variable, Wasm32Storage>;
     private parameterVariables: Array<Variable>;
     private returnVariables: Array<Variable>;
     private tmpI32Local: number;

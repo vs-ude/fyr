@@ -12,15 +12,33 @@ type Point struct {
     b int
 }
 
+func create() *Point {
+    return &{}
+}
+
+func consume(p1 *Point, p2 *Point) {
+    p1 = p2
+    saveMyPointers()
+    p2 = p1
+}
+
+func savePointerArgs() {
+    consume(create(), create())
+}
+
+func saveMyPointers() {
+}
+
 func doit(ptr &Point) int {
+//    saveMyPointers()
     return ptr.a + ptr.b
 }
 
 export func main() int {
-    var p Point = {a:1, b:2}
+    var p = &Point{a:1, b:2}
     var r = 0
     for(var i = 0; i < 320000000; i++) {
-        r += doit(&p)
+        r += doit(p)
     }
     return r
 }

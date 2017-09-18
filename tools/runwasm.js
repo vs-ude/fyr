@@ -35,8 +35,7 @@ function loadWebAssembly(filename, imports) {
         let memory = new WebAssembly.Memory({initial: 600});
         let importObject = {
             imports: {
-                logString: function(sp) {
-                    var offset = memory_u32[sp >> 2];
+                logString: function(offset, sp) {
                     var bytes = new Uint8Array(memory.buffer, offset + 4, memory_u32[offset >> 2]);
                     var string = new TextDecoder('utf8').decode(bytes);
                     console.log(string);
