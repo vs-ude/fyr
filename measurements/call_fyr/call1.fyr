@@ -12,15 +12,15 @@ type Point struct {
     b int
 }
 
-func doit(ptr *Point) int {
+func doit(ptr &Point) int {
     return ptr.a + ptr.b
 }
 
 export func main() int {
-    var p = &Point{a:1, b:2}
+    var p Point = {a:1, b:2}
     var r = 0
     for(var i = 0; i < 320000000; i++) {
-        r += doit(p)
+        r += doit(&p)
     }
     return r
 }

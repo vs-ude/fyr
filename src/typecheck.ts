@@ -3482,7 +3482,7 @@ export class TypeChecker {
             }
             return false;
         }
-        if (toScope && toScope.isPseudoScope && fromScope && fromScope.isPseudoScope) {
+        if (!!toScope && toScope.isPseudoScope && !!fromScope && fromScope.isPseudoScope) {
             if (doThrow) {            
                 throw new TypeError("Mismatch of variable scope", loc);
             }
@@ -3754,16 +3754,16 @@ export class TypeChecker {
                         }
                         return false;
                     }
-                    if (!this.checkIsAssignableNode(ft.lastParameter().type, pnode.rhs, false, doThrow)) {
+                    if (!this.checkIsAssignableNode(ft.lastParameter().type, pnode.rhs, true, doThrow)) {
                         return false;
                     }
                 } else {
                     if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
-                        if (!this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode, false, doThrow)) {
+                        if (!this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode, true, doThrow)) {
                             return false;
                         }
                     } else {
-                        if (!this.checkIsAssignableNode(ft.parameters[i].type, pnode, false, doThrow)) {
+                        if (!this.checkIsAssignableNode(ft.parameters[i].type, pnode, true, doThrow)) {
                             return false;
                         }
                     }
