@@ -220,11 +220,6 @@ export class Variable {
      */
     public writeCount: number = 0;
     /**
-     * isTemporary is true if the variable has been introduced by the compiler
-     * to hold a temporary value.
-     */
-    // public isTemporary: boolean = false;
-    /**
      * usedInMultupleSteps is true, if the variable is used in different 'steps'.
      * This is only meaningful when used after SMTransformation.transform().
      */
@@ -235,13 +230,27 @@ export class Variable {
      * The value is set by Optimizer.optimizeConstants().
      */
     public isConstant: boolean = false;
+    /**
+     * The value of the variable if it is assigned a constant number.
+     * TODO: Cannot hold 64bit integers
+     */
     public constantValue: number;
+    /**
+     * True if the variable is just a copy of another and hence just an artefact
+     * created by the code generation layer.
+     */
     public isCopy: boolean = false;
+    /**
+     * The variable from which this variable is a copy.
+     */
     public copiedValue: Variable;
     /**
      * addressable is true if 'addr_of' has been used on this variable.
      */
     public addressable: boolean;
+    /**
+     * True, if the variable holds GC-relevant pointers and thus the GC must be able to find the variable.
+     */
     public gcDiscoverable: boolean;
     /**
      * Internal
@@ -907,6 +916,10 @@ export class Optimizer {
         this._analyzeGCDiscoverability(n, null, varsRead);
     }
 
+    /**
+     * The function traverses the code in reverse order and collects all variables of type "ptr" that are assigned before and read
+     * after a GC happens. Thus, the object being pointed to is still in use and must be detectable by the GC.
+     */
     private _analyzeGCDiscoverability(n: Node, stop: Node, varsRead: Set<Variable>): boolean {
         let doesGC = false;
         for(; n != stop;) {
@@ -928,7 +941,7 @@ export class Optimizer {
             } else if (n.kind == "end" && (n.blockPartner.kind == "block" || n.blockPartner.kind == "loop")) {
                 let blockDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
                 n = n.blockPartner;
-            } else if (n.kind == "call" || n.kind == "call_indirect" || n.kind == "alloc" || n.kind == "call_end" || n.kind == "call_begin") {
+            } else if (n.kind == "call" || n.kind == "call_indirect" || n.kind == "alloc" || n.kind == "call_end" || n.kind == "call_begin" || n.kind == "call_indirect_begin") {
                 for(let v of varsRead) {
                     v.gcDiscoverable = true;
                 }
