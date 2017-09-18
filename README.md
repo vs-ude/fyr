@@ -47,6 +47,25 @@ The files `mem.wl` and `map.wl` must always be part of the compilation, since th
 - Custom types as keys in a map
 - Use f.copysign for < 0
 
+## Compiler optimizations
+
+- No zero check on this
+- Copying structs with multiple i64.load/i64.store has sub-optimal stack handling
+- Put "this" is a local variable
+- Invert comparison in condition expression, e.g. i32.ge instead of i32.lt followed by i32.eqz
+    - However, measurements show no significant improvement here
+- Use less locals to improve register allocation
+
+### Optimization hints extracted from measurements
+
+- Zero checks are expensive. if, br_if, divide by zero ... little difference
+    - Try to avoid these checks where possible
+- Global variables for SP are a bad idea, since it is significantly slower
+- Passing variables via the heap stack is even much slower
+- Calling functions is expensive
+    - Try to inline where possible
+- Startup time in node is 80ms
+
 ## Pending Fixes
 
 ### Pruning if-clauses
