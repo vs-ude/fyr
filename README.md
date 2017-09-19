@@ -43,13 +43,13 @@ Other examples are made to run in NodeJS.
 Use the `runwasm.js` tool to execute WASM in NodeJS as follows:
 
 ```
-runwasm.js mandelbrot.wasm
+runwasm mandelbrot.wasm
 ```
 
 For benchmarking execute 
 
 ```
-time runwasm.js mandelbrot.wasm
+time runwasm mandelbrot.wasm main
 ```
 
 The performance overhead of launching node is around 100ms on a modern machine.

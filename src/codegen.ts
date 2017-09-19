@@ -786,7 +786,7 @@ export class CodeGenerator {
             {
                 let t = this.tc.stripType(enode.rhs.type);
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars, t);
-                if (!this.disableNullCheck) {
+                if (!this.disableNullCheck && !this.isThis(tmp)) {
                     let check = b.assign(b.tmp("i32"), "eqz", "addr", [tmp]);
                     b.ifBlock(check);
                     b.assign(null, "trap", null, []);
@@ -957,7 +957,7 @@ export class CodeGenerator {
                 // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
-                    if (t instanceof PointerType && !this.disableNullCheck) {
+                    if (t instanceof PointerType && !this.disableNullCheck && !this.isThis(ptr)) {
                         let check = b.assign(b.tmp("i32"), "eqz", "addr", [ptr]);
                         b.ifBlock(check);
                         b.assign(null, "trap", null, []);
@@ -1624,6 +1624,12 @@ export class CodeGenerator {
                     if (ltype instanceof PointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
                         objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
+                        if (!this.disableNullCheck && !this.isThis(objPtr)) {
+                            let check = b.assign(b.tmp("i32"), "eqz", "addr", [objPtr]);
+                            b.ifBlock(check);
+                            b.assign(null, "trap", null, []);
+                            b.end();
+                        }        
                     } else if (ltype instanceof UnsafePointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
                         objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
@@ -1960,9 +1966,11 @@ export class CodeGenerator {
                         result = b.call(b.tmp(), this.lookupNumericMapFunctionType, [SystemCalls.lookupNumericMap, m, key64]);
                     }
                     let check = b.assign(b.tmp("i32"), "eqz", "addr", [result]);
-                    b.ifBlock(check);
-                    b.assign(null, "trap", null, []);
-                    b.end();
+                    if (!this.disableNullCheck && !this.isThis(check)) {
+                        b.ifBlock(check);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
                     return b.assign(b.tmp(), "load", this.getSSAType(this.tc.stripType(t.valueType)), [result, 0]);
                 }
                 // Note: processLeftHandExpression implements the non-left-hand cases as well.
@@ -2144,6 +2152,10 @@ export class CodeGenerator {
     private typecode(t: Type): number {
         // TODO
         return 0;
+    }
+
+    private isThis(v: ssa.Variable | number): boolean {
+        return v instanceof ssa.Variable && v.name == "this";
     }
 
     private optimizer: ssa.Optimizer;
