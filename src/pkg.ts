@@ -44,6 +44,7 @@ export enum SystemCalls {
     min64 = -38,
     copysign32 = -39,
     copysign64 = -49,
+    trap = -50,
 }
 
 export class Package {
@@ -198,6 +199,14 @@ export function initPackages(tc: TypeChecker) {
     stackPointer.type.systemCallType = SystemCalls.stackPointer;
     stackPointer.type.returnType = new UnsafePointerType(tc.t_void);
     systemPkg.scope.registerElement(stackPointer.name, stackPointer);
+    var trap: Function = new Function();
+    trap.name = "trap";
+    trap.type = new FunctionType();
+    trap.type.callingConvention = "system";
+    trap.type.name = "trap";
+    trap.type.systemCallType = SystemCalls.trap;
+    trap.type.returnType = tc.t_void;
+    systemPkg.scope.registerElement(trap.name, trap);
 
     mathPkg = new Package("fyr/math");
     let abs = makeMathFunction("abs", 1, SystemCalls.abs32, SystemCalls.abs64, tc);

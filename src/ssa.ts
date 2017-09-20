@@ -3060,6 +3060,8 @@ export class Wasm32Backend {
                     code.push(new wasm.Call(this.garbageCollectFunctionIndex));
                 } else if (n.args[0] == SystemCalls.stackPointer) {
                     code.push(new wasm.GetLocal(this.spLocal));
+                } else if (n.args[0] == SystemCalls.trap) {
+                    code.push(new wasm.Unreachable());
                 } else if (n.args[0] == SystemCalls.copy) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.copyFunctionIndex));                    

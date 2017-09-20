@@ -197,11 +197,10 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uin
             break
         }
     }
-    // TODO: panic if index == 15 -> out of memory
+    // index == 15 -> out of memory
     if (index == 15) {
         if (has_gc) {
-            // TODO: Throw out-of-memory exception
-            return 0
+            system.trap()
         }
         garbageCollect()
         return allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, epoch, true)
