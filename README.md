@@ -63,8 +63,9 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - map
     - tuple assignment
     - iteration
-- Coroutines and interfaces
+- Coroutines
 - Builtin integer math functions
+- Blocks in area-allocation-mode are not added to the block-free-list if all areas could be cleaned
 
 # Wish List
 - Generics
@@ -80,12 +81,11 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 
 ## Compiler optimizations
 
-- No zero check on this
 - Copying structs with multiple i64.load/i64.store has sub-optimal stack handling
-- Put "this" is a local variable
 - Invert comparison in condition expression, e.g. i32.ge instead of i32.lt followed by i32.eqz
     - However, measurements show no significant improvement here
 - Use less locals to improve register allocation
+- Assigning to a non-initialized variable. Do not zero it. Part for dead code removal
 
 ### Optimization hints extracted from measurements
 

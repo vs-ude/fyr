@@ -203,7 +203,9 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uin
             // TODO: Throw out-of-memory exception
             return 0
         }
+        logString("-----------------------------> GC);
         garbageCollect()
+        logString("<----------------------------- GC);
         return allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, epoch, true)
     }
 

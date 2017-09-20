@@ -7,6 +7,7 @@
 
 const fs = require('fs'),
 assert = require('assert')
+const { StringDecoder } = require('string_decoder');
 
 assert('WebAssembly' in global,
   'WebAssembly global object not detected')
@@ -32,12 +33,14 @@ function loadWebAssembly(filename, imports) {
     const buffer = toUint8Array(fs.readFileSync(filename))
     return WebAssembly.compile(buffer)
     .then(module => {
-        let memory = new WebAssembly.Memory({initial: 600});
-        let importObject = {
+        const memory = new WebAssembly.Memory({initial: 18});
+        const memory_u32 = new Uint32Array(memory.buffer);   
+        const decoder = new StringDecoder('utf8');        
+        const importObject = {
             imports: {
                 logString: function(offset, sp) {
-                    var bytes = new Uint8Array(memory.buffer, offset + 4, memory_u32[offset >> 2]);
-                    var string = new TextDecoder('utf8').decode(bytes);
+                    let bytes = new Uint8Array(memory.buffer, offset + 4, memory_u32[offset >> 2]);
+                    let string = decoder.write(Buffer.from(bytes));
                     console.log(string);
                 },
                 logNumber: function(n) {
@@ -58,7 +61,7 @@ function loadWebAssembly(filename, imports) {
 if (module.parent) {
     module.exports.loadWebAssembly = loadWebAssembly
 } else {
-    assert(process.argv.length >= 4, 'Usage: ./runwasm.js prog.wasm func INT_ARG...')
+    assert(process.argv.length >= 4, 'Usage: ./runwasm prog.wasm func INT_ARG...')
 
     const wasm = process.argv[2],
     func = process.argv[3],

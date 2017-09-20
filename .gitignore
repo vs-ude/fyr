@@ -9,5 +9,5 @@ measurements/**/*.wasm
 measurements/**/*.wast
 measurements/mandel_go/mandelbrot
 measurements/rect_go/rect
-measurements/call_fyr/call
+measurements/call_go/call
 

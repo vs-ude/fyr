@@ -128,6 +128,8 @@ func initializeMemory() #void {
 }
 
 func initializeBlock(b #Block) {
+//    logString("----------> initializeBlock")
+//    logNumber(<uint>b)
     // Initialize the array 'area' with zero 
     var ptr #uint64 = <#uint64>(&b.area)
     for(var i = 0; i < 1024/8; i++) {
@@ -167,7 +169,7 @@ func split(f #FreeArea, index uint) {
     block.area[area_nr >> 1] |= <byte>(4 << ((area_nr & 1) << 2))
 }
 
-func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uint, headTypeMap #int, epoch uint, has_gc bool) #void {
+func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uint, headTypeMap #int, epoch uint) #void {
     var size = elementCount * elementSize + headSize
     var flags uint = epoch | 4
     if (typeMap != null) {
@@ -191,19 +193,20 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uin
             break
         }
     }
+//    logString("-----------------------------> ideal size")
+//    logNumber(count)
+//    logNumber(index)
     // Find a sequence of blocks that is large enough
     for(; index < 15; index++) {
         if (root.freeBlocks[index] != 0) {
             break
         }
     }
+//    logString("-----------------------------> alloc blocks")
+//    logNumber(index)
     // index == 15 -> out of memory
     if (index == 15) {
-        if (has_gc) {
-            system.trap()
-        }
-        garbageCollect()
-        return allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, epoch, true)
+        return 0
     }
 
     var f #FreeBlock = root.freeBlocks[index]
@@ -249,7 +252,10 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uin
         }
     }
     // Mark start of allocated sequence
-    var block_nr = (<uint>f - <uint>root) >> 16 - 1
+    // var block_nr = (<uint>f - <uint>root) >> 16 - 1
+    var block_nr = <uint>f >> 16
+//    logString("Using block")
+//    logNumber(block_nr)
     // root.blocks[block_nr >> 1] &^= <byte>(0xf << ((block_nr & 1) << 2))
     // Entries of unused blocks are zero. Hence, no need to clear bits before setting them
     root.blocks[block_nr >> 1] |= <byte>(flags << ((block_nr & 1) << 2))
@@ -298,7 +304,16 @@ func alloc(elementCount uint, elementSize uint, typeMap #int, headSize uint, hea
     // Needs entire blocks?
     if (size > 1<<15) {
         // Allocate a sequence of blocks
-        return allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, gcEpoch, false)
+        var p = allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, gcEpoch)
+        if (p != null) {
+            return p
+        }
+        garbageCollect()
+        p = allocBlocks(elementCount, elementSize, typeMap, headSize, headTypeMap, gcEpoch)
+        if (p == null) {
+            system.trap()
+        }        
+        return p
     }
 
     // Determine the granularity
@@ -327,69 +342,92 @@ func alloc(elementCount uint, elementSize uint, typeMap #int, headSize uint, hea
         index = 0
     }
 
-    // Find a free space in existing blocks
-    var targetIndex = index
-    for(; index < 11; index++) {
-        // Get a free area of the requested or larger size
-        var f = root.freeAreas[index]
-        if (f == 0) {
-            continue
-        }
-        root.freeAreas[index] = f.next
-        if (f.next != 0) {
-            f.next.prev = 0
-        }
-        // Split the area if it is too large
-        for (; index > targetIndex; index--) {
-            split(f, index)
-        }
+    // Try at most three times. Perhaps a garbage collection is required if there is no free memory in the first iteration.
+    // Perhaps an additional block must be used in area-allocation-mode. If nothing works -> trap
+    var originalIndex = index
+    for(var iterations = 0; iterations < 3; iterations++) {
 
-        // Mark the area as allocated in a certain epoch
-        var block #Block = <uint>f &^ 0xffff
-        var area_nr = (<uint>f & 0xffff) >> 5
-        block.area[area_nr >> 1] |= <byte>(flags << ((area_nr & 1) << 2))
-
-        // Fill with zeros
-        var ptr #uint64 = <#uint64>f
-        var iterations = (size + 7)/8
-        for(var i uint = 0; i < iterations; i++) {
-            *ptr = 0
-            ptr++
-        }
-
-        // Store the TypeMap for the GC
-        if (typeMap != 0) {
-            var start #int = <#int>f
-            if (elementCount == 1 && headTypeMap == null) {
-                *start = <int>typeMap
-                f = <uint>f + 4
-            } else if (headTypeMap == null) {
-                *start = -<int>elementCount
-                start++
-                *start = <int>typeMap            
-                f = <uint>f + 8
-            } else {
-                *start = -<int>elementCount
-                start++
-                *start = -<int>typeMap
-                start++
-                *start = -<int>headTypeMap
-                f = <uint>f + 12
+        // Find a free space in existing blocks
+        var targetIndex = index
+        for(; index < 11; index++) {
+            // Get a free area of the requested or larger size
+            var f = root.freeAreas[index]
+            if (f == 0) {
+                continue
             }
-        } else if (headTypeMap != null) {
-            var start #int = <#int>f
-            *start = <int>headTypeMap
-            f = <uint>f + 4
+            root.freeAreas[index] = f.next
+            if (f.next != 0) {
+                f.next.prev = 0
+            }
+            // Split the area if it is too large
+            for (; index > targetIndex; index--) {
+                split(f, index)
+            }
+
+            // Mark the area as allocated in a certain epoch
+            var block #Block = <uint>f &^ 0xffff
+            var area_nr = (<uint>f & 0xffff) >> 5
+            block.area[area_nr >> 1] |= <byte>(flags << ((area_nr & 1) << 2))
+
+            // Fill with zeros
+    //        var ptr #uint64 = <#uint64>f
+    //        var iterations = (size + 7)/8
+    //        for(var i uint = 0; i < iterations; i++) {
+    //            *ptr = 0
+    //            ptr++
+    //        }
+
+            // Store the TypeMap for the GC
+            if (typeMap != 0) {
+                var start #int = <#int>f
+                if (elementCount == 1 && headTypeMap == null) {
+                    *start = <int>typeMap
+                    f = <uint>f + 4
+                } else if (headTypeMap == null) {
+                    *start = -<int>elementCount
+                    start++
+                    *start = <int>typeMap            
+                    f = <uint>f + 8
+                } else {
+                    *start = -<int>elementCount
+                    start++
+                    *start = -<int>typeMap
+                    start++
+                    *start = -<int>headTypeMap
+                    f = <uint>f + 12
+                }
+            } else if (headTypeMap != null) {
+                var start #int = <#int>f
+                *start = <int>headTypeMap
+                f = <uint>f + 4
+            }
+
+            // Increase the count of allocated areas
+            (<#BlockWithMetaData>block).allocatedAreas++
+            return <#void>f
         }
 
-        // Increase the count of allocated areas
-        (<#BlockWithMetaData>block).allocatedAreas++
-        return <#void>f
+        if (iterations == 0) {
+            // Run the garbage collector and try again
+            garbageCollect();
+            index = originalIndex
+//            logString("------------------> IT 2")
+        } else if (iterations == 1) {
+            // Try to allocate one more block in area-allocation-mode
+            var newBlock = <#Block>allocBlocks(1, 65536, 0, 0, null, 1 | 2)
+            if (newBlock == null) {
+//                logString("No free blocks, no free area")
+                // No free areas, no free blocks, despite GC -> out of memory
+                system.trap()
+            }
+            initializeBlock(newBlock)        
+            index = originalIndex    
+//            logString("------------------> IT 3")
+        }
     }
-
-    // Nothing free. Add one more block and allocate again
-    initializeBlock(<#Block>allocBlocks(1, 65536, 0, 0, null, 1 | 2, false))
-    return alloc(elementCount, elementSize, typeMap, headSize, headTypeMap)
+    // Should never happen
+    system.trap()
+    return 0
 }
 
 func free(ptr #void) {
@@ -462,7 +500,39 @@ func free_intern(block #Block, area_nr uint) {
 
         return
     }
-    // TODO: throw
+    system.trap()
+}
+
+func memZero(ptr #void, size uint) {
+    var endPtr #uint64 = <#uint64>(ptr + size);
+    if (ptr & 1 == 1) {
+        *<#uint8>ptr = 0
+        ptr++
+    }
+    if (ptr & 2 == 2) {
+        *<#uint16>ptr = 0
+        ptr += 2
+    }
+    if (ptr & 4 == 4) {
+        *<#uint32>ptr = 0
+        ptr += 4
+    }
+    var count = (<uint>endPtr - <uint>ptr) / 8
+    for(var i uint = 0; i < count; i++) {
+        *<#uint64>ptr = 0
+        ptr += 8
+    }
+    if (endPtr & 4 == 4) {
+        *<#uint32>ptr = 0
+        ptr += 4
+    }
+    if (endPtr & 2 == 2) {
+        *<#uint16>ptr = 0
+        ptr += 2
+    }
+    if (endPtr & 1 == 1) {
+        *<#uint8>ptr = 0
+    }
 }
 
 func blockCountToIndex(count uint) uint {
@@ -535,7 +605,8 @@ func garbageCollect() {
     // Therefore, traverse the all global variables, which point to the stack, which points to more heap data.
     //
 
-    coroutine.stack.sp = system.stackPointer()
+    var sp = system.stackPointer()
+    coroutine.stack.sp = sp
     var typemap #int = <#int>system.heapTypemap()
     traverseType(0, typemap)
 
@@ -545,26 +616,27 @@ func garbageCollect() {
 
     var latestFreeBlock_nr uint
 
-    logString("... gc running")
+//    logString("... gc running")
+//    logNumber(heapEndBlockNr)
     // Iterate over all blocks and free everything that is not marked with the current gc epoch
     for(var block_nr = heapStartBlockNr; block_nr < heapEndBlockNr; block_nr++) {
         var flags = (root.blocks[block_nr >> 1] >> ((block_nr & 1) << 2)) & 15 
         // The block is subject to area allocation ?
         if (flags & 3 == 3) {
-            logString("Area block")
-            logNumber(block_nr)
+//            logString("Area block")
+//            logNumber(block_nr)
             latestFreeBlock_nr = 0
             var block #Block = block_nr << 16
-            logNumber((<#BlockWithMetaData>block).allocatedAreas)
-            logNumber((<#BlockWithMetaData>block).markedAreas)
+//            logNumber((<#BlockWithMetaData>block).allocatedAreas)
+//            logNumber((<#BlockWithMetaData>block).markedAreas)
             // All allocated areas have been marked? Nothing to free here
             if ((<#BlockWithMetaData>block).allocatedAreas == (<#BlockWithMetaData>block).markedAreas) {
-                logString("All areas marked")
+//                logString("All areas marked")
                 (<#BlockWithMetaData>block).markedAreas = 0
                 continue
             }
-            logString("Block needs gc")
-            logNumber(block_nr)
+//            logString("Block needs gc")
+//            logNumber(block_nr)
             // Test all areas, except for the first 32 ones which contain meta data
             for (var area_nr uint = 32; area_nr < 2048; area_nr++) {
                 var area_flags = (block.area[area_nr >> 1] >> ((area_nr & 1) << 2)) & 15 
@@ -573,46 +645,53 @@ func garbageCollect() {
                     // Not start of an area
                     continue
                 }
-                logNumber(block_nr << 16 + area_nr << 5)
-                logNumber(<uint>area_flags)
+//                logNumber(block_nr << 16 + area_nr << 5)
+//                logNumber(<uint>area_flags)
                 if (area_flags & 3 == 0) {
                     // A free area
                     // TODO: optimization: Jump across all free indices
                     continue
                 }
                 if (area_flags & 3 != <byte>gcEpoch) {
-                    logString("   freeing area")
-                    logNumber(block_nr << 16 + area_nr << 5)
+//                    logString("   freeing area")
+//                    logNumber(block_nr << 16 + area_nr << 5)
                     free_intern(block, area_nr)
-                    logString("   free")
+//                    logString("   free")
                 }
             }
         } else if (flags & 3 == 0) {
+//            logString("Unused block")
+//            logNumber(block_nr)
             if (latestFreeBlock_nr == 0) {
                 latestFreeBlock_nr = block_nr
             }
         } else if (flags & 3 != <byte>gcEpoch) {
-            logString("Free sequence of blocks")
-            logNumber(block_nr)
+//            logString("Freeing sequence of blocks")
+//            logNumber(block_nr)
             // The block has not been marked. In every case, mark it as being free
             root.blocks[block_nr >> 1] &^= <byte>(3 << ((block_nr & 1) << 2))
             // The block is the beginning of an allocated sequence of blocks?
             if (flags & 4 == 4) {
                 if (latestFreeBlock_nr == 0) {
-                    logString("Free single block sequence")
+//                    logString("Free single block sequence")
                     latestFreeBlock_nr = block_nr
                     freeBlocks(latestFreeBlock_nr)
                 } else {
-                    logString("Merge block sequence")
-                    logNumber(latestFreeBlock_nr)
+//                    logString("Merge block sequence")
+//                    logNumber(latestFreeBlock_nr)
                     mergeAndFreeBlocks(latestFreeBlock_nr, block_nr)
                 }
             }
+//        } else {
+//            logString("Marked block")
+//            logNumber(block_nr)
         }
     }
 }
 
 func mark(ptr #void) {
+//    logString("---> mark")
+//    logNumber(<uint>ptr)
     var block_nr = <uint>ptr >> 16
     // Pointing to the text segment? -> Do nothing
     if (block_nr < heapStartBlockNr) {
@@ -712,33 +791,37 @@ func traverseHeapArea(ptr #void) {
 }
 
 func traverseStack(stack #Stack) {
-    logString("traversingStack")
-    logNumber(<uint>stack)
+//    logString("traversingStack")
+//    logNumber(<uint>stack)
     // Top of stack, i.e. the lowest address currently used by the stack
     var tos #int = <#int>stack.sp
-    logNumber(<uint>tos)
+//    logNumber(<uint>tos)
     var ptr #int = <#int>stack.stackEnd
     for(ptr > tos) {
-        logString("stack frame")
-        logNumber(<uint>ptr)
+//        logString("stack frame at")
+//        logNumber(<uint>ptr)
         var typemapOrSize int = *(ptr - 1)
         if (typemapOrSize < 0) {
+//            logString("skip frame of size")
+//            logNumber(<uint>-typemapOrSize);
             ptr += typemapOrSize
         } else {
-            var typemap #int = *(ptr - 1)
+            var typemap #int = typemapOrSize
+//            logString("frame typemap")
+//            logNumber(<uint>typemap)
+//            logString("analyze frame of size")
+//            logNumber(<uint>*typemap * 4);
             ptr -= *typemap
-            logNumber(<uint>ptr)
-            logNumber(<uint>typemap)
-            logNumber(<uint>*typemap)
+//            logNumber(<uint>ptr)
             traverseType(<#uint>ptr, typemap)
         }
-        logString("-----------------")
+//        logString("-----------------")
     }
 }
 
 func traverseType(ptr #uint, typemap #int) {
-    logString("traverseType")
-    logNumber(<uint>typemap[1])
+//    logString("traverseType")
+//    logNumber(<uint>typemap[1])
     // The second entry in typemap tells how many entries the typemap has
     var entries_end = typemap[1] + 2
     // Iterate over all entries in the typemap
@@ -765,7 +848,7 @@ func traverseType(ptr #uint, typemap #int) {
                 }
             }
         } else {
-            logNumber(<uint>ptr + <uint>a)
+//            logNumber(<uint>ptr + <uint>a)
             var p ##void = <uint>ptr + <uint>a
             mark(*p)
         }

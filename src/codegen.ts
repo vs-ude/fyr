@@ -376,6 +376,7 @@ export class CodeGenerator {
             {
                 if (snode.rhs) { // Assignment of an expression value?
                     if (snode.lhs.op == "id") {
+                        // A single variabe is defined and assigned
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let v = vars.get(element);
                         let tmp = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
@@ -389,6 +390,26 @@ export class CodeGenerator {
                     } else {
                         throw "Impl error"
                     }
+                } else {
+                    if (snode.lhs.op == "id") {
+                        // A single variabe is defined and assigned
+                        let element = scope.resolveElement(snode.lhs.value) as Variable;
+                        let v = vars.get(element);
+                        let t = this.getSSAType(element.type);
+                        if (t instanceof ssa.StructType) {
+                            b.assign(v, "struct", t, this.generateZeroStruct(t));
+                        } else {
+                            b.assign(v, "const", v.type, [0]);                            
+                        }
+                    } else if (snode.lhs.op == "tuple") {
+                        throw "TODO"
+                    } else if (snode.lhs.op == "array") {
+                        throw "TODO"                        
+                    } else if (snode.lhs.op == "object") {
+                        throw "TODO"                        
+                    } else {
+                        throw "Impl error"
+                    }                    
                 }
                 return;
             }
@@ -500,7 +521,8 @@ export class CodeGenerator {
             case "|=":
             case "<<=":
             {
-                let storage = this.getSSAType(snode.lhs.type);
+                let t = this.tc.stripType(snode.lhs.type);
+                let storage = this.getSSAType(t);
                 let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                 let p1: ssa.Variable;
                 let dest: ssa.Variable;
@@ -524,8 +546,8 @@ export class CodeGenerator {
                     } else if (snode.op == "/=") {
                         b.assign(dest, "div", storage, [p1, p2]);
                     }
-                } else if (snode.lhs.type instanceof UnsafePointerType) {
-                    let estorage = this.getSSAType(snode.lhs.type.elementType);
+                } else if (t instanceof UnsafePointerType) {
+                    let estorage = this.getSSAType(t.elementType);
                     let size = ssa.sizeOf(estorage);
                     if (size > 1) {
                         p2 = b.assign(b.tmp(), "mul", "i32", [p2, size]);
@@ -535,7 +557,7 @@ export class CodeGenerator {
                     } else if (snode.op == "-=") {
                         b.assign(dest, "sub", storage, [p1, p2]);
                     }
-                } else if (snode.lhs.type instanceof GuardedPointerType) {
+                } else if (t instanceof GuardedPointerType) {
                     throw "TODO"
                 } else {
                     if (snode.op == "+=") {
@@ -1146,12 +1168,12 @@ export class CodeGenerator {
                     }
                     for(let i = 0; i < st.fields.length; i++) {
                         if (!fieldValues.has(st.fields[i][0])) {
-                            if (st.fields[i][1] instanceof ssa.StructType) {
+//                            if (st.fields[i][1] instanceof ssa.StructType) {
                                 // Generate a zero struct
-                                args.push(this.generateZeroStruct(b, st.fields[i][1] as ssa.StructType));
-                            } else {
+                            //    args.push(this.generateZeroStruct(b, st.fields[i][1] as ssa.StructType));
+//                            } else {
                                 args.push(0);
-                            }
+//                            }
                         } else {
                             let p = fieldValues.get(st.fields[i][0]);
                             let v = this.processExpression(f, scope, p, b, vars, t.fields[i].type);
@@ -2137,16 +2159,14 @@ export class CodeGenerator {
         throw "CodeGen: Implementation error: signed check on non number type " + t.toString();       
     }
 
-    private generateZeroStruct(b: ssa.Builder, st: ssa.StructType): ssa.Variable {
+    private generateZeroStruct(st: ssa.StructType): Array<ssa.Variable | number> {
         let args = [];
         for(let f of st.fields) {
-            if (f[1] instanceof ssa.StructType) {
-                args.push(this.generateZeroStruct(b, f[1] as ssa.StructType));
-            } else {
+            for(let i = 0; i < f[2]; i++) {
                 args.push(0);
             }
         }
-        return b.assign(b.tmp(), "struct", st, args);
+        return args;
     }
 
     private typecode(t: Type): number {

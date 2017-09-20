@@ -2014,8 +2014,8 @@ export class Wasm32Backend {
             let s: Wasm32Storage = {storageType: "local_var", offset: index};
             this.varStorage.set(v, s);
             let indexAlternative = this.varsFrame.addField(v.name, v.type);
-            let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
-            this.varGCStorage.set(v, s);
+            let sAlternative: Wasm32Storage = {storageType: "vars", offset: indexAlternative};
+            this.varGCStorage.set(v, sAlternative);
             this.typeMapper.mapStack(typemap, v.type, indexAlternative);
         } else {
             let index = this.varsFrame.addField(v.name, v.type);
@@ -2491,37 +2491,96 @@ export class Wasm32Backend {
                     destOffset = this.emitAddrOfVariable(n.assign, true, code);
                 }
 
+                // An optimization:
+                // If the struct consists of zeros only, and has more than 8 elements, we can generate sligtly better code.
+                if (this.allMemZero(type, n.args) > 8 && (dest === null || !n.assign)) {
+                    if (dest == "heapStack") {
+                        code.push(new wasm.GetLocal(this.spLocal));
+                    }
+                    if (destOffset != 0) {
+                        code.push(new wasm.Constant("i32", 0));
+                        code.push(new wasm.BinaryInstruction("i32", "add"));
+                    }
+                    code.push(new wasm.Constant("i32", sizeOf(type)));
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call("$memZero"));
+                    return;
+                }
+
+                let addrLocal: number;
+                if (dest != "heapStack") {
+                    // Copy the destination address to a local variable
+                    addrLocal = this.allocLocal("i32");
+                    code.push(new wasm.SetLocal(addrLocal));
+                }
+
+                // Check whether there are large structs/arrays which are not explicitly initialized and must therefore be zero'd.
+                // If more than 8 fields must be zero'd we assume that nulling the entire struct is cheaper.
+                // TODO: Measure what is best here
+                let hasMemZero = false;
+                if (this.needsMemZero(type, n.args) > 8) {
+                    hasMemZero = true;
+                    if (dest == "heapStack") {
+                        code.push(new wasm.GetLocal(this.spLocal));
+                    } else {
+                        code.push(new wasm.GetLocal(addrLocal));
+                    }
+                    if (destOffset != 0) {
+                        code.push(new wasm.Constant("i32", 0));
+                        code.push(new wasm.BinaryInstruction("i32", "add"));
+                    }
+                    code.push(new wasm.Constant("i32", sizeOf(type)));
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call("$memZero"));
+                }                
                 // Compute the field values and store them
                 let args = 0;
                 for(let i = 0; i < type.fields.length; i++) {
+                    if (args >= n.args.length) {
+                        throw "Implementation errro";
+                    }
                     let f = type.fields[i];
                     let name: string = f[0];
                     let t: Type | StructType = f[1];
+                    let count = f[2];
                     let size = sizeOf(t);
                     let arrOffset = 0;
-                    for(let j = 0; j < f[2]; j++, arrOffset += size) {
+                    for(let j = 0; j < count; j++, arrOffset += size) {
                         if (dest == "heapStack") {
-                            this.emitAssign(t, n.args[args], "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code);
+                            if (n.args[args] === 0 && !hasMemZero && t instanceof StructType) {
+                                this.emitAssignZeroStruct(t, "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code)
+                            } else if (n.args[args] !== 0 || !hasMemZero) {
+                                this.emitAssign(t, n.args[args], "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code);
+                            }
                         } else {
-                            // Double the destination address (unless it is SP)
-                            let tmp = this.getTmpLocal("i32");
-                            code.push(new wasm.TeeLocal(tmp));
-                            code.push(new wasm.GetLocal(tmp));
-                            this.emitAssign(t, n.args[args], "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
+                            if (n.args[args] === 0 && !hasMemZero && t instanceof StructType) {
+                                this.emitAssignZeroStruct(t, "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
+                            } else if (n.args[args] !== 0 || !hasMemZero) {
+                                // TODO: Just pass along in which local variable the address is stored
+                                code.push(new wasm.GetLocal(addrLocal));
+                                this.emitAssign(t, n.args[args], "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
+                            }
                         }
                         args++;
                     }
                 }
 
                 if (n.assign && dest !== null) {
-                    // Put the source address on the stack (unless it is already there)
+                    // Put the source address on the stack
                     if (dest == "heapStack") {
                         code.push(new wasm.GetLocal(this.spLocal));
+                    } else {
+                        code.push(new wasm.GetLocal(addrLocal));
                     }
                     let assignOffset = this.emitAddrOfVariable(n.assign, true, code);
                     this.emitCopy(type, destOffset, assignOffset, code);
-                } else if (dest == "heap" || n.assign) {
-                    code.push(new wasm.Drop());
+//                } else if (dest == "heap" || n.assign) {
+//                    code.push(new wasm.Drop());
+                }
+
+                if (dest != "heapStack") {
+                    // Copy the destination address to a local variable
+                    this.freeLocal(addrLocal);
                 }
                 return;
             }
@@ -2595,6 +2654,28 @@ export class Wasm32Backend {
                     break;
             }
             code.push(new wasm.Store(width, asWidth, destOffset));
+        }
+    }
+
+    private emitAssignZeroStruct(type: StructType, dest: "heap" | "heapStack", destOffset: number, code: Array<wasm.Node>) {
+        for(let i = 0; i < type.fields.length; i++) {
+            let f = type.fields[i];
+            let name: string = f[0];
+            let t: Type | StructType = f[1];
+            let count = f[2];
+            let size = sizeOf(t);
+            let arrOffset = 0;
+            for(let j = 0; j < count; j++, arrOffset += size) {
+                if (dest == "heapStack") {
+                    this.emitAssign(t, 0, "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code);
+                } else {
+                    // Double the destination address (unless it is SP)
+                    let tmp = this.getTmpLocal("i32");
+                    code.push(new wasm.TeeLocal(tmp));
+                    code.push(new wasm.GetLocal(tmp));
+                    this.emitAssign(t, 0, "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
+                }
+            }
         }
     }
 
@@ -3170,6 +3251,67 @@ export class Wasm32Backend {
         }
     }
 
+    /**
+     * @return the number of struct fields that must be zero-assigned.
+     */
+    private needsMemZero(type: StructType, args: Array<number | Variable | Node> | null): number {
+        let zeroCount = 0;
+        let argNumber = 0;
+        for(let i = 0; i < type.fields.length; i++) {
+            if (args != null && argNumber >= args.length) {
+                throw "Implementation errro";
+            }
+            let f = type.fields[i];
+            let name: string = f[0];
+            let t: Type | StructType = f[1];
+            let count = f[2];
+            let size = sizeOf(t);
+            let arrOffset = 0;
+            for(let j = 0; j < count; j++, arrOffset += size) {
+                if (t instanceof StructType) {
+                    let a: Array<number | Variable | Node> | null = (args == null || args[argNumber] === 0 ? null : (args[argNumber] as Node).args);
+                    zeroCount += this.needsMemZero(t, a);
+                } else if (args == null || args[argNumber] === 0) {
+                    zeroCount++;
+                }
+                argNumber++;
+            }
+        }
+        return zeroCount;
+    }
+
+    /**
+     * @return the number of struct fields that must be zero-assigned, but just if ALL fields are zero assigned.
+     *         The function returns -1 if at least one field is not zero'd.
+     */
+    private allMemZero(type: StructType, args: Array<number | Variable | Node> | null): number {
+        let zeroCount = 0;
+        let argNumber = 0;
+        for(let i = 0; i < type.fields.length; i++) {
+            if (args != null && argNumber >= args.length) {
+                throw "Implementation errro";
+            }
+            let f = type.fields[i];
+            let name: string = f[0];
+            let t: Type | StructType = f[1];
+            let count = f[2];
+            let size = sizeOf(t);
+            let arrOffset = 0;
+            for(let j = 0; j < count; j++, arrOffset += size) {
+                if (t instanceof StructType) {
+                    let a: Array<number | Variable | Node> | null = (args == null || args[argNumber] === 0 ? null : (args[argNumber] as Node).args);
+                    zeroCount += this.allMemZero(t, a);
+                } else if (args == null || args[argNumber] === 0) {
+                    zeroCount++;
+                } else {
+                    return -1;
+                }
+                argNumber++;
+            }
+        }
+        return zeroCount;
+    }
+
     private storeVariableFromWasmStack1(type: Type, v: Variable, code: Array<wasm.Node>) {
         let s = this.storageOf(v);
         switch(s.storageType) {
@@ -3357,6 +3499,28 @@ export class Wasm32Backend {
         return "i32";
     }
 
+    private allocLocal(type: Type): number {
+        let wtype = this.stackTypeOf(type);
+        for(var entry of this.tmpLocalVariables.entries()) {
+            let n = entry[0];
+            let alloc = entry[1][0];
+            let t = entry[1][1];
+            if (!alloc && t == wtype) {
+                this.tmpLocalVariables.set(n, [true, t]);
+                return n;
+            }
+        }
+        let n = this.wf.parameters.length + this.wf.locals.length;
+        this.wf.locals.push(wtype);
+        this.tmpLocalVariables.set(n, [true, wtype]);
+        return n;
+    }
+
+    private freeLocal(n: number) {
+        let t = this.tmpLocalVariables.get(n)[1];
+        this.tmpLocalVariables.set(n, [false, t]);
+    }
+
     private getTmpLocal(type: Type | "src" | "dest"): number {
         switch(type) {
             case "src":
@@ -3462,6 +3626,7 @@ export class Wasm32Backend {
     private varGCStorage: Map<Variable, Wasm32Storage>;
     private parameterVariables: Array<Variable>;
     private returnVariables: Array<Variable>;
+    private tmpLocalVariables: Map<number, [boolean, wasm.StackType]> = new Map<number, [boolean, wasm.StackType]>();
     private tmpI32Local: number;
     private tmpI64Local: number;
     private tmpF32Local: number;
