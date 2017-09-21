@@ -662,7 +662,13 @@ export class CodeGenerator {
                             }
                         } else {
                             if (snode.condition.lhs.op == "tuple") {
-                                throw "TODO: Initialize counter";
+                                let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[0], b, vars);
+                                // If the left-hand expression returns an address, the resulting value must be stored in memory
+                                if (dest instanceof ssa.Pointer) {
+                                    b.assign(b.mem, "store", "s32", [dest.variable, dest.offset, 0]);
+                                } else {
+                                    b.assign(dest, "const", "s32", [0]);
+                                }
                             }    
                         }
                     } else if (t instanceof ArrayType) {
@@ -690,7 +696,7 @@ export class CodeGenerator {
                             if (snode.condition.op == "var_in") {
                                 b.assign(val, "load", storage, [ptr, 0]);
                             } else {
-                                let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
+                                let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.op == "tuple" ? snode.condition.lhs.parameters[1] : snode.condition.lhs, b, vars);
                                 // If the left-hand expression returns an address, the resulting value must be stored in memory
                                 if (dest instanceof ssa.Pointer) {
                                     let v = b.assign(b.tmp(), "load", storage, [ptr, 0]);
@@ -705,6 +711,7 @@ export class CodeGenerator {
                             throw "TODO array map and string"
                         }
                     } else {
+                        // A for loop of the form: "for( condition )"
                         let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars, this.tc.t_bool);
                         let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                         b.br_if(tmp2, outer);
@@ -730,7 +737,15 @@ export class CodeGenerator {
                     let t = RestrictedType.strip(snode.condition.rhs.type);
                     if (t instanceof SliceType) {
                         if (snode.condition.lhs.op == "tuple") {
-                            throw "TODO: Increment counter";
+                            let dest = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[0], b, vars);
+                            // If the left-hand expression returns an address, the resulting value must be stored in memory
+                            if (dest instanceof ssa.Pointer) {
+                                let v = b.assign(b.tmp(), "load", "s32", [dest.variable, dest.offset]);
+                                b.assign(v, "add", 's32', [v, 1]);
+                                b.assign(b.mem, "store", "s32", [dest.variable, dest.offset, v]);
+                            } else {
+                                b.assign(dest, "add", 's32', [dest, 1]);
+                            }
                         }
                     } else {
                         throw "TODO array map and string"

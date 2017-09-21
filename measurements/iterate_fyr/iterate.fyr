@@ -16,12 +16,25 @@ export func main() {
     for(var i in array[:]) {
         logNumber(<uint>i)
     }
+    for(var c, i in array[:]) {
+        logNumber(<uint>c)
+        logNumber(<uint>i)
+    }
     var j int
     for(j in array[:]) {
         logNumber(<uint>j)
     }
+    var count int
+    for(count, j in array[:]) {
+        logNumber(<uint>count)
+        logNumber(<uint>j)
+    }
     var t T
     for(t.i in array[:]) {
+        logNumber(<uint>t.i)
+    }
+    for(count, t.i in array[:]) {
+        logNumber(<uint>count)
         logNumber(<uint>t.i)
     }
 //    for(var i in array) {
