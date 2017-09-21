@@ -1,0 +1,30 @@
+import . {
+    func logString(string)
+    func logNumber(uint)
+} from "imports"
+
+type T struct {
+    i int
+}
+
+export func main() {
+    var array [8]int
+//    for(var i = 0; array.len(); i++) {
+    for(var i = 0; i < 8; i++) {
+        array[i] = 100 + i
+    }
+    for(var i in array[:]) {
+        logNumber(<uint>i)
+    }
+    var j int
+    for(j in array[:]) {
+        logNumber(<uint>j)
+    }
+    var t T
+    for(t.i in array[:]) {
+        logNumber(<uint>t.i)
+    }
+//    for(var i in array) {
+//        logNumber(<uint>i)
+//    }
+}
