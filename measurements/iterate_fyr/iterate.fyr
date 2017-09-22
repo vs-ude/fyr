@@ -10,8 +10,7 @@ type T struct {
 
 export func main() {
     var array [8]uint
-//    for(var i = 0; array.len(); i++) {
-    for(var i = 0; i < 8; i++) {
+    for(var i = 0; i < array.len(); i++) {
         array[i] = 100 + <uint>i
     }
     logString("Just index")
