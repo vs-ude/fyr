@@ -2479,32 +2479,39 @@ export class TypeChecker {
                         this.checkIsAssignable(snode.lhs.parameters[0], scope);
                         this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc);
                     } 
-                    this.checkExpression(snode.lhs.parameters[1], scope);
-                    this.checkIsAssignable(snode.lhs.parameters[1], scope);
-                    this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc);
+                    if (snode.lhs.parameters[1].value != "_") {
+                        this.checkExpression(snode.lhs.parameters[1], scope);
+                        this.checkIsAssignable(snode.lhs.parameters[1], scope);
+                        this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc);
+                    }
                 } else {
-                    this.checkExpression(snode.lhs, scope);
-                    this.checkIsAssignable(snode.lhs, scope);
-                    this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc);
+                    if (snode.lhs.value != "_") {
+                        this.checkExpression(snode.lhs, scope);
+                        this.checkIsAssignable(snode.lhs, scope);
+                        this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc);
+                    }
                 }
                 break;
             case "var_in":
             {
-                // TODO: underscore as in "for(var _, x in foo)"
                 this.checkExpression(snode.rhs, scope);
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
                 if (snode.lhs.op == "tuple") {
-                    let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
-                    if (v1.type) {
-                        this.checkIsAssignableType(v1.type, tindex1, snode.loc);
-                    } else {
-                        v1.type = tindex1
+                    if (snode.lhs.parameters[0].value != "_") {
+                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
+                        if (v1.type) {
+                            this.checkIsAssignableType(v1.type, tindex1, snode.loc);
+                        } else {
+                            v1.type = tindex1
+                        }
                     }
-                    let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
-                    if (v2.type) {
-                        this.checkIsAssignableType(v2.type, tindex2, snode.loc);
-                    } else {
-                        v2.type = tindex2;
+                    if (snode.lhs.parameters[1].value != "_") {
+                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
+                        if (v2.type) {
+                            this.checkIsAssignableType(v2.type, tindex2, snode.loc);
+                        } else {
+                            v2.type = tindex2;
+                        }
                     }
                 } else {
                     let v = this.createVar(snode.lhs, scope, false);
