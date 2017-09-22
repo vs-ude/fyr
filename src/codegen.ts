@@ -626,7 +626,7 @@ export class CodeGenerator {
                 let counter: ssa.Variable | ssa.Pointer;
                 let end: ssa.Variable;
                 let ptr: ssa.Variable;
-                let len: ssa.Variable;
+                let len: ssa.Variable | number;
                 this.processScopeVariables(b, vars, snode.scope);
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     // A c-style for loop
@@ -634,22 +634,41 @@ export class CodeGenerator {
                 } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "in")) {
                     // A for loop of the form "for(var i in list) or for(var i, j in list)" or the same without "var"
                     let t = RestrictedType.strip(snode.condition.rhs.type);
-                    if (t instanceof SliceType) {
-                        // Get the address of the slice header
-                        let sliceHeaderAddr: ssa.Pointer;
-                        if (this.isLeftHandSide(snode.condition.rhs)) {
-                            let sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
-                            if (sliceHeader instanceof ssa.Variable) {
-                                sliceHeaderAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [sliceHeader]), 0);                                
+                    if (t instanceof SliceType || t instanceof ArrayType) {
+                        if (t instanceof SliceType) {
+                            // Get the address of the slice header
+                            let sliceHeaderAddr: ssa.Pointer;
+                            if (this.isLeftHandSide(snode.condition.rhs)) {
+                                let sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                                if (sliceHeader instanceof ssa.Variable) {
+                                    sliceHeaderAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [sliceHeader]), 0);                                
+                                } else {
+                                    sliceHeaderAddr = sliceHeader;
+                                }
                             } else {
-                                sliceHeaderAddr = sliceHeader;
+                                let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
+                                sliceHeaderAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [sliceHeader]), 0);
                             }
+                            ptr = b.assign(b.tmp(), "load", "ptr", [sliceHeaderAddr.variable, sliceHeaderAddr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
+                            len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr.variable, sliceHeaderAddr.offset + this.sliceHeader.fieldOffset("length")]);
                         } else {
-                            let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
-                            sliceHeaderAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [sliceHeader]), 0);
+                            // Get the address of the array
+                            len = t.size;
+                            if (this.isLeftHandSide(snode.condition.rhs)) {
+                                let arr = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                                if (arr instanceof ssa.Variable) {
+                                    ptr = b.assign(b.tmp(), "addr_of", "ptr", [arr]);
+                                } else {
+                                    ptr = b.assign(b.tmp(), "copy", "ptr", [arr.variable]);
+                                    if (arr.offset != 0) {
+                                        b.assign(ptr, "add", "addr", [ptr, arr.offset]);
+                                    }
+                                }
+                            } else {
+                                let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
+                                ptr = b.assign(b.tmp(), "addr_of", "ptr", [arr]);
+                            }
                         }
-                        ptr = b.assign(b.tmp(), "load", "ptr", [sliceHeaderAddr.variable, sliceHeaderAddr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
-                        len = b.assign(b.tmp(), "load", "i32", [sliceHeaderAddr.variable, sliceHeaderAddr.offset + this.sliceHeader.fieldOffset("length")]);
                         // Compute the end of the slice
                         let storage = this.getSSAType(t.elementType);
                         let size = ssa.sizeOf(storage);
@@ -699,8 +718,6 @@ export class CodeGenerator {
                                 }                            
                             }
                         }
-                    } else if (t instanceof ArrayType) {
-                        throw "TODO"
                     } else {
                         throw "Implementation error"
                     }
@@ -717,7 +734,7 @@ export class CodeGenerator {
                         }
                     } else if (snode.condition.op == "var_in" || snode.condition.op == "in") {
                         let t = RestrictedType.strip(snode.condition.rhs.type);
-                        if (t instanceof SliceType) {
+                        if (t instanceof SliceType || t instanceof ArrayType) {
                             // End of iteration?
                             let endcond = b.assign(b.tmp(), "eq", "s32", [ptr, end]);
                             b.br_if(endcond, outer);
@@ -733,7 +750,7 @@ export class CodeGenerator {
                             let size = ssa.sizeOf(storage)
                             b.assign(ptr, "add", "ptr", [ptr, size]);
                         } else {
-                            throw "TODO array map and string"
+                            throw "TODO map and string"
                         }
                     } else {
                         // A for loop of the form: "for( condition )"
@@ -751,7 +768,7 @@ export class CodeGenerator {
                     this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
                 } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "in")) {
                     let t = RestrictedType.strip(snode.condition.rhs.type);
-                    if (t instanceof SliceType) {
+                    if (t instanceof SliceType || t instanceof ArrayType) {
                         // Increase the counter
                         if (counter instanceof ssa.Variable) {                            
                             b.assign(counter, "add", "s32", [counter, 1]);
@@ -761,7 +778,7 @@ export class CodeGenerator {
                             b.assign(b.mem, "store", "s32", [counter.variable, counter.offset, v]);
                         }
                     } else {
-                        throw "TODO array map and string"
+                        throw "TODO map and string"
                     }
                 }
                 b.br(loop);

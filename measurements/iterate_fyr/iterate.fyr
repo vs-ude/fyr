@@ -63,8 +63,52 @@ export func main() {
     for(_ in array[:]) {
         logString(" ... peep")
     }
-
-//    for(var i in array) {
-//        logNumber(<uint>i)
-//    }
+    logString("------------------------------")
+    logString("Just index")
+    for(var i in array) {
+        logNumber(<uint>i)
+    }
+    logString("Mixed")
+    for(var c, i in array) {
+        logNumber(<uint>c)
+        logNumber(i)
+    }
+    logString("Just value")
+    for(var _, i in array) {
+        logNumber(i)
+    }
+    logString("Just index")
+    for(var i, _ in array) {
+        logNumber(<uint>i)
+    }
+    logString("Just index")
+    for(j in array) {
+        logNumber(<uint>j)
+    }
+    logString("Mixed")
+    for(j, val in array) {
+        logNumber(<uint>j)
+        logNumber(val)
+    }
+    logString("Just index")
+    for(t.i in array) {
+        logNumber(<uint>t.i)
+    }
+    logString("Mixed")
+    for(t.i, t.val in array) {
+        logNumber(<uint>t.i)
+        logNumber(t.val)
+    }
+    logString("Just value")
+    for(_, t.val in array) {
+        logNumber(t.val)
+    }
+    logString("Nothing")
+    for(_, _ in array) {
+        logString(" ... peep")
+    }
+    logString("Nothing")
+    for(_ in array) {
+        logString(" ... peep")
+    }
 }
