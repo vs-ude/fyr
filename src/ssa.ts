@@ -1421,6 +1421,7 @@ export class Wasm32Backend {
         this.varsFrameHeader = new StructType();
         this.varStorage = new Map<Variable, Wasm32Storage>();
         this.varGCStorage = new Map<Variable, Wasm32Storage>();
+        this.tmpLocalVariables = new Map<number, [boolean, wasm.StackType]>();
         this.parameterVariables = [];
         this.returnVariables = [];
         this.tmpI32Local = -1;
@@ -1820,11 +1821,12 @@ export class Wasm32Backend {
                     this.stackifyStep(n.next[1], n.blockPartner);
                 }
                 let doNotInline: Array<Variable> = [];
+                let assigned = new Map<Variable, boolean>();
                 for(let i = 0; i < n.args.length; i++) {
                     let a = n.args[i];
                     if (a instanceof Variable && a.readCount == 1) {
                         // Try to inline the computation
-                        let inline = this.findInline(n.prev[0], a, doNotInline);
+                        let inline = this.findInline(n.prev[0], a, doNotInline, assigned);
                         if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
                             inline.assign = null;
                             n.args[i] = inline;
@@ -1832,7 +1834,7 @@ export class Wasm32Backend {
                         }
                     } else if (a instanceof Variable && a.writeCount == 1) {
                         // Try to inline the computation
-                        let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline);
+                        let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline, assigned);
                         if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
                             n.args[i] = inline;
                             Node.removeNode(inline);
@@ -1840,6 +1842,8 @@ export class Wasm32Backend {
                     }
                     if (a instanceof Variable) {
                         doNotInline.push(a);
+                    } else if (a instanceof Node) {
+                        this.collectAssignments(a, null, assigned);
                     }
                 }
                 if (n.kind == "step" || n.kind == "goto_step") {
@@ -1855,7 +1859,7 @@ export class Wasm32Backend {
         }
     }
 
-    private findInline(n: Node, v: Variable, doNotInline: Array<Variable>): Node {
+    private findInline(n: Node, v: Variable, doNotInline: Array<Variable>, assigned: Map<Variable, boolean>): Node {
         for( ;n; ) {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
@@ -1867,7 +1871,14 @@ export class Wasm32Backend {
                 if (this.assignsToVariable(n, doNotInline)) {
                     return null;
                 }
+                if (this.readsFromVariables(n, assigned)) {
+                    return null;
+                }
                 return n;
+            } else if (n.assign) {
+                if (this.collectAssignments(n, v, assigned)) {
+                    return null;
+                }
             }
             n = n.prev[0];
         }
@@ -1879,7 +1890,7 @@ export class Wasm32Backend {
      * read between 'n' and its assignment.
      * The variable assignment can then be inlined with a tee.
      */
-    private findInlineForMultipleReads(n: Node, v: Variable, doNotInline: Array<Variable>): Node {
+    private findInlineForMultipleReads(n: Node, v: Variable, doNotInline: Array<Variable>, assigned: Map<Variable, boolean>): Node {
         for( ;n; ) {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
@@ -1894,11 +1905,37 @@ export class Wasm32Backend {
                 if (this.assignsToVariable(n, doNotInline)) {
                     return null;
                 }
+                if (this.readsFromVariables(n, assigned)) {
+                    return null;
+                }                
                 return n;
+            } else if (n.assign) {
+                if (this.collectAssignments(n, v, assigned)) {
+                    return null;
+                }
             }
             n = n.prev[0];
         }
         return null;
+    }
+
+    private collectAssignments(n: Node, v: Variable, assigned: Map<Variable, boolean>): boolean {
+        if (n.assign) {
+            if (n.assign == v) {
+                return true;
+            }
+            if (!assigned.has(n.assign)) {
+                assigned.set(n.assign, true);
+            }
+            for(let a of n.args) {
+                if (a instanceof Node) {
+                    if (this.collectAssignments(a, v, assigned)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private assignsToVariable(n: Node, vars: Array<Variable>): boolean {
@@ -1921,6 +1958,19 @@ export class Wasm32Backend {
                 return true;
             } else if (a instanceof Node) {
                 if (this.readsFromVariable(a, v)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private readsFromVariables(n: Node, vars: Map<Variable, boolean>): boolean {
+        for(let a of n.args) {
+            if (a instanceof Variable && vars.has(a)) {
+                return true;
+            } else if (a instanceof Node) {
+                if (this.readsFromVariables(a, vars)) {
                     return true;
                 }
             }
@@ -2492,7 +2542,7 @@ export class Wasm32Backend {
                 }
 
                 // An optimization:
-                // If the struct consists of zeros only, and has more than 8 elements, we can generate sligtly better code.
+                // If the struct consists of zeros only, and has more than 8 elements, we can generate slightly better code.
                 if (this.allMemZero(type, n.args) > 8 && (dest === null || !n.assign)) {
                     if (dest == "heapStack") {
                         code.push(new wasm.GetLocal(this.spLocal));
@@ -2548,13 +2598,13 @@ export class Wasm32Backend {
                     for(let j = 0; j < count; j++, arrOffset += size) {
                         if (dest == "heapStack") {
                             if (n.args[args] === 0 && !hasMemZero && t instanceof StructType) {
-                                this.emitAssignZeroStruct(t, "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code)
+                                this.emitAssignZeroStruct(this.spLocal, t, destOffset + type.fieldOffset(name) + arrOffset, code)
                             } else if (n.args[args] !== 0 || !hasMemZero) {
                                 this.emitAssign(t, n.args[args], "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code);
                             }
                         } else {
                             if (n.args[args] === 0 && !hasMemZero && t instanceof StructType) {
-                                this.emitAssignZeroStruct(t, "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
+                                this.emitAssignZeroStruct(addrLocal, t, destOffset + type.fieldOffset(name) + arrOffset, code);
                             } else if (n.args[args] !== 0 || !hasMemZero) {
                                 // TODO: Just pass along in which local variable the address is stored
                                 code.push(new wasm.GetLocal(addrLocal));
@@ -2657,7 +2707,7 @@ export class Wasm32Backend {
         }
     }
 
-    private emitAssignZeroStruct(type: StructType, dest: "heap" | "heapStack", destOffset: number, code: Array<wasm.Node>) {
+    private emitAssignZeroStruct(local: number, type: StructType, destOffset: number, code: Array<wasm.Node>) {
         for(let i = 0; i < type.fields.length; i++) {
             let f = type.fields[i];
             let name: string = f[0];
@@ -2666,15 +2716,13 @@ export class Wasm32Backend {
             let size = sizeOf(t);
             let arrOffset = 0;
             for(let j = 0; j < count; j++, arrOffset += size) {
-                if (dest == "heapStack") {
-                    this.emitAssign(t, 0, "heapStack", destOffset + type.fieldOffset(name) + arrOffset, code);
+                if (t instanceof StructType) {
+                    this.emitAssignZeroStruct(local, t, destOffset + type.fieldOffset(name) + arrOffset, code);
                 } else {
-                    // Double the destination address (unless it is SP)
-                    let tmp = this.getTmpLocal("i32");
-                    code.push(new wasm.TeeLocal(tmp));
-                    code.push(new wasm.GetLocal(tmp));
+                    code.push(new wasm.GetLocal(local));
                     this.emitAssign(t, 0, "heap", destOffset + type.fieldOffset(name) + arrOffset, code);
                 }
+                arrOffset += size;
             }
         }
     }
@@ -3179,6 +3227,9 @@ export class Wasm32Backend {
                 } else if (n.args[0] == SystemCalls.removeNumericMapKey) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.removeNumericMapKeyFunctionIndex));
+                } else if (n.args[0] == SystemCalls.decodeUtf8) {
+                    code.push(new wasm.GetLocal(this.spLocal));
+                    code.push(new wasm.Call(this.decodeUtf8FunctionIndex));
                 } else if (n.args[0] == SystemCalls.abs32) {
                     code.push(new wasm.UnaryInstruction("f32", "abs"));
                 } else if (n.args[0] == SystemCalls.abs64) {
@@ -3603,6 +3654,7 @@ export class Wasm32Backend {
     private setNumericMapFunctionIndex: string = "$setNumericMap";
     private lookupNumericMapFunctionIndex: string = "$lookupNumericMap";
     private removeNumericMapKeyFunctionIndex: string = "$removeNumericMapKey";
+    private decodeUtf8FunctionIndex: string = "$decodeUtf8";
     private stepLocal: number;
     private bpLocal: number;
     private spLocal: number;
@@ -3626,7 +3678,7 @@ export class Wasm32Backend {
     private varGCStorage: Map<Variable, Wasm32Storage>;
     private parameterVariables: Array<Variable>;
     private returnVariables: Array<Variable>;
-    private tmpLocalVariables: Map<number, [boolean, wasm.StackType]> = new Map<number, [boolean, wasm.StackType]>();
+    private tmpLocalVariables: Map<number, [boolean, wasm.StackType]>;
     private tmpI32Local: number;
     private tmpI64Local: number;
     private tmpF32Local: number;

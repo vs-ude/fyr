@@ -17,6 +17,7 @@ export type NodeConfig = {
     readonly condition?: Node;
     readonly rhs?: Node;
     readonly value?: string;
+    readonly numValue?: number;
     readonly name?: Node;
     readonly comments?: Array<Node>;
     readonly statements?: Array<Node>;
@@ -37,7 +38,7 @@ export type Location = {
     file: string;
 }
 
-export type NodeOp = "export_func" | "module" | "file" | "typeCast" | "typedef" | "structField" | "structType" | "interfaceType" | "yield" | "guardedPointerType" | "unsafePointerType" | "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "ellipsisParam" | "strType" | "genericType" | "genericInstance" | "unary..." | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "var" | "const" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | ":" | "(" | "import" | "importWasm" | "identifierList" | "constType" | "referenceType" | "implements" | "extends";
+export type NodeOp = "rune" | "export_func" | "module" | "file" | "typeCast" | "typedef" | "structField" | "structType" | "interfaceType" | "yield" | "guardedPointerType" | "unsafePointerType" | "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "ellipsisParam" | "strType" | "genericType" | "genericInstance" | "unary..." | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "var" | "const" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | ":" | "(" | "import" | "importWasm" | "identifierList" | "constType" | "referenceType" | "implements" | "extends";
 
 export class Node {
     constructor(config?: NodeConfig) {
@@ -53,6 +54,9 @@ export class Node {
             }
             if (config.value !== undefined) {
                 this.value = config.value;
+            }
+            if (config.numValue !== undefined) {
+                this.numValue = config.numValue;
             }
             if (config.name !== undefined) {
                 this.name = config.name;
@@ -146,6 +150,7 @@ export class Node {
     public lhs: Node;
     public rhs: Node;
     public value: string;
+    public numValue: number;
     public name: Node;
     public loc: Location;
     public comments: Array<Node>;

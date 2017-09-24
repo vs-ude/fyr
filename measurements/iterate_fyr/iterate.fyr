@@ -111,4 +111,13 @@ export func main() {
     for(_ in array) {
         logString(" ... peep")
     }
+
+    var rliteral rune = '\u0033'
+    logNumber(<uint>rliteral)
+    var str = "ABCDEFGÖO"
+    logString("Mixed")
+    for (var i, r in str) {
+        logNumber(<uint>i)
+        logNumber(<uint>r)
+    }
 }

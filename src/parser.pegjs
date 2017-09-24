@@ -827,9 +827,10 @@ primary2
     }
   / o:object { return o; }
   / a:array { return a; }
+  / r:rune { return r; }
 
 array
-  = "[" [ \t\n]* e:expressionList? [ \t]* "]" {
+  = "[" [ \t\n]* e:expressionList? [ \t\n]* "]" {
       return new ast.Node({loc: fl(location()), op: "array", parameters: e});
     }
 
@@ -921,3 +922,55 @@ string "string"
 stringchars
   = $("\\" .)
   / $(chars:[^"\\]+)
+
+rune
+  = "'" c:runechar "'" {
+    return c;
+  }
+
+runechar
+  = s:"\\a" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 7});
+    }
+  / s:"\\b" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 8});
+    }
+  / s:"\\f" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 12});
+    }
+  / s:"\\n" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 10});
+    }
+  / s:"\\r" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 13});
+    }
+  / s:"\\t" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 9});
+    }
+  / s:"\\v" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 11});
+    }
+  / s:"\\\\" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 0x5c});
+    }
+  / s:"\\'" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 0x27});
+    }
+  / s:"\\\"" {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 0x22});
+    }
+  / s:$("\\x" [0-9a-f] [0-9a-f]) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 16)});
+    }
+  / s:$("\\u" [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f]) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 16)});
+    }
+  / s:$("\\U" [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f]) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 16)});
+    }  
+  / s:$("\\" [0-7] [0-7] [0-7]) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 8)});
+    }    
+  / s:$(.) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: s.charCodeAt(0)});
+    }

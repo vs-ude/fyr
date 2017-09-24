@@ -66,6 +66,10 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Coroutines
 - Builtin integer math functions
 - Blocks in area-allocation-mode are not added to the block-free-list if all areas could be cleaned
+- Iterate over runes of a string
+- Iterate over null slice
+- Codegen for or-types
+- Array literals such as [...]byte[1,2,3,4]
 
 # Wish List
 - Generics

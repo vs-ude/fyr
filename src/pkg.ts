@@ -45,6 +45,7 @@ export enum SystemCalls {
     copysign32 = -39,
     copysign64 = -49,
     trap = -50,
+    decodeUtf8 = -51,
 }
 
 export class Package {

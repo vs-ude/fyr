@@ -61,6 +61,7 @@ export class CodeGenerator {
         this.setNumericMapFunctionType = new ssa.FunctionType(["ptr", "i64"], "ptr", "system");
         this.lookupNumericMapFunctionType = new ssa.FunctionType(["addr", "i64"], "ptr", "system");
         this.removeNumericMapKeyFunctionType = new ssa.FunctionType(["addr", "i64"], "i32", "system");
+        this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i32", "i32"], "i32", "system");
     }
 
     public processModule(mnode: Node) {
@@ -115,9 +116,14 @@ export class CodeGenerator {
         t.returnType = this.tc.t_void;
         t.callingConvention = "fyr";
         b.define("init", this.getSSAFunctionType(t));
+        let vars = new Map<ScopeElement, ssa.Variable>();
+        // Add global variables
+        for(let e of this.globalVars.keys()) {
+            vars.set(e, this.globalVars.get(e));
+        }
         for(let v of globals) {
             let g = this.globalVars.get(v);
-            let expr = this.processExpression(null, scope, v.node.rhs, b, new Map<ScopeElement, ssa.Variable>(), v.type);
+            let expr = this.processExpression(null, scope, v.node.rhs, b, vars, v.type);
             b.assign(g, "copy", this.getSSAType(v.type), [expr]);
         }
         this.wasm.defineFunction(b.node, wf, false);
@@ -185,6 +191,9 @@ export class CodeGenerator {
         }
         if (t == this.tc.t_double) {
             return "f64";
+        }
+        if (t == this.tc.t_rune) {
+            return "i32";
         }
         if (t instanceof PointerType) {
             return "ptr";
@@ -624,6 +633,7 @@ export class CodeGenerator {
                 let valElement: Variable;
                 let val: ssa.Variable | ssa.Pointer;
                 let counter: ssa.Variable | ssa.Pointer;
+                let offset: ssa.Variable;
                 let end: ssa.Variable;
                 let ptr: ssa.Variable;
                 let len: ssa.Variable | number;
@@ -718,10 +728,66 @@ export class CodeGenerator {
                                 }                            
                             }
                         }
+                    } else if (snode.condition.rhs.type == this.tc.t_string) {
+                        // Compute pointer to the character data
+                        let s = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, this.tc.t_string);
+                        if (s instanceof ssa.Variable) {
+                            ptr = s;
+                        } else {                            
+                            ptr = b.assign(b.tmp(), "const", "addr", [s]);                            
+                        }
+                        // Get the length of the string
+                        len = b.assign(b.tmp(), "load", "i32", [ptr, 0]);
+                        // b.assign(ptr, "add", "addr", [ptr, 4]);
+                        end = b.assign(b.tmp(), "add", "i32", [len, 4]);
+                        // Initialize the iterator variables
+                        if (snode.condition.op == "var_in") {
+                            if (snode.condition.lhs.op == "tuple") {
+                                if (snode.condition.lhs.parameters[0].value != "_") {
+                                    // Initialize the counter with 0                            
+                                    let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
+                                    counter = vars.get(element);
+                                    b.assign(counter, "const", "s32", [0]);
+                                }
+                                if (snode.condition.lhs.parameters[1].value != "_") {
+                                    valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
+                                    val = vars.get(valElement);
+                                }
+                            } else if (snode.condition.lhs.value != "_") {                            
+                                // Initialize the counter with 0                            
+                                let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
+                                counter = vars.get(element);
+                                b.assign(counter, "const", "s32", [0]);
+                            }
+                        } else {
+                            if (snode.condition.lhs.op == "tuple") {
+                                if (snode.condition.lhs.parameters[0].value != "_") {
+                                    counter = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[0], b, vars);
+                                    // If the left-hand expression returns an address, the resulting value must be stored in memory
+                                    if (counter instanceof ssa.Pointer) {
+                                        b.assign(b.mem, "store", "s32", [counter.variable, counter.offset, 0]);
+                                    } else {
+                                        b.assign(counter, "const", "s32", [0]);
+                                    }
+                                }
+                                if (snode.condition.lhs.parameters[1].value != "_") {
+                                    val = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[1], b, vars);
+                                }
+                            } else if (snode.condition.lhs.value != "_") {                            
+                                counter = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
+                                // If the left-hand expression returns an address, the resulting value must be stored in memory
+                                if (counter instanceof ssa.Pointer) {
+                                    b.assign(b.mem, "store", "s32", [counter.variable, counter.offset, 0]);
+                                } else {
+                                    b.assign(counter, "const", "s32", [0]);
+                                }                            
+                            }
+                        }
+                        offset = b.assign(b.tmp(), "const", "s32", [4])
                     } else {
-                        throw "Implementation error"
+                        throw "Implementation error";
                     }
-                    // TODO map and string
+                    // TODO map
                 }
                 let outer = b.block();
                 let loop = b.loop();
@@ -736,7 +802,7 @@ export class CodeGenerator {
                         let t = RestrictedType.strip(snode.condition.rhs.type);
                         if (t instanceof SliceType || t instanceof ArrayType) {
                             // End of iteration?
-                            let endcond = b.assign(b.tmp(), "eq", "s32", [ptr, end]);
+                            let endcond = b.assign(b.tmp(), "eq", "addr", [ptr, end]);
                             b.br_if(endcond, outer);
                             // Store the current value in a variable
                             let storage = this.getSSAType(t.elementType);
@@ -749,6 +815,52 @@ export class CodeGenerator {
                             // Increase the pointer towards the last element
                             let size = ssa.sizeOf(storage)
                             b.assign(ptr, "add", "ptr", [ptr, size]);
+                        } else if (t == this.tc.t_string) {
+                            // End of iteration?
+                            let endcond = b.assign(b.tmp(), "eq", "s32", [offset, end]);
+                            b.br_if(endcond, outer);
+                            // Get address of value
+                            let valAddr: ssa.Variable;
+                            if (val instanceof ssa.Pointer) {
+                                valAddr = val.variable;
+                                if (val.offset != 0) {
+                                    b.assign(valAddr, "add", "addr", [valAddr, val.offset]);
+                                }
+                            } else if (val instanceof ssa.Variable) {
+                                valAddr = b.assign(b.tmp(), "addr_of", "addr", [val]);
+                            } else {
+                                let tmp = b.declareVar("i32", "$dummyVar");
+                                valAddr = b.assign(b.tmp(), "addr_of", "addr", [tmp]);
+                            }
+                            // Start computing the next rune with 0, ion state 0
+                            b.assign(b.mem, "store", "i32", [valAddr, 0, 0]);
+                            let state = b.assign(b.tmp(), "const", "i32", [0]);
+                            // Decode loop
+                            let decodeLoop = b.loop();
+                            // Load a character
+                            let chPtr = b.assign(b.tmp("addr"), "add", "addr", [ptr, offset])
+                            let ch = b.assign(b.tmp(), "load", "i8", [chPtr, 0]);
+                            b.assign(offset, "add", "s32", [offset, 1]);                            
+                            b.call(state, this.decodeUtf8FunctionType, [SystemCalls.decodeUtf8, valAddr, ch, state]);
+                            // Not a complete or illegal unicode char?
+                            b.ifBlock(state);
+                            // If illegal or end of string -> return 0xfffd      
+                            let illegal = b.assign(b.tmp(), "eq", "i32", [state, 1]);
+                            endcond = b.assign(b.tmp(), "eq", "s32", [offset, end]);
+                            b.assign(illegal, "or", "i32", [illegal, endcond]);                            
+                            b.ifBlock(illegal);
+                            // Handle illegal characters
+                            if (val instanceof ssa.Variable) {
+                                b.assign(val, "const", "i32", [0xfffd]);
+                            } else if (val instanceof ssa.Pointer) {
+                                b.assign(b.mem, "store", "i32", [val.variable, val.offset, 0xfffd]);
+                            }
+                            b.elseBlock();
+                            // In the middle of a character. Repeat the loop
+                            b.br(decodeLoop);
+                            b.end();
+                            b.end();                            
+                            b.end();                            
                         } else {
                             throw "TODO map and string"
                         }
@@ -775,6 +887,14 @@ export class CodeGenerator {
                         } else if (counter instanceof ssa.Pointer) {
                             let v = b.assign(b.tmp(), "load", "s32", [counter.variable, counter.offset]);
                             b.assign(v, "add", 's32', [v, 1]);
+                            b.assign(b.mem, "store", "s32", [counter.variable, counter.offset, v]);
+                        }
+                    } else if (t == this.tc.t_string) {
+                        // Increase the counter
+                        if (counter instanceof ssa.Variable) {                            
+                            b.assign(counter, "sub", "s32", [offset, 4]);
+                        } else if (counter instanceof ssa.Pointer) {
+                            let v = b.assign(b.tmp(), "sub", 's32', [offset, 4]);
                             b.assign(b.mem, "store", "s32", [counter.variable, counter.offset, v]);
                         }
                     } else {
@@ -1177,6 +1297,8 @@ export class CodeGenerator {
                 return parseInt(enode.value);
             case "float":
                 return parseFloat(enode.value);
+            case "rune":
+                return enode.numValue;
             case "bool":
                 return enode.value == "true" ? 1 : 0;
             case "str":
@@ -1474,7 +1596,7 @@ export class CodeGenerator {
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 // TODO: Use if-expressions in IR
                 b.ifBlock(p1);
-                b.assign(result, "copy", "i8", [1]);
+                b.assign(result, "const", "i8", [1]);
                 b.elseBlock();
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 b.assign(result, "copy", "i8", [p2]);
@@ -1491,7 +1613,7 @@ export class CodeGenerator {
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 b.assign(result, "copy", "i8", [p2]);
                 b.elseBlock();
-                b.assign(result, "copy", "i8", [0]);
+                b.assign(result, "const", "i8", [0]);
                 b.end();
                 return result;
             }
@@ -2076,12 +2198,12 @@ export class CodeGenerator {
                         return expr;
                     } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
                         if (ssa.sizeOf(s2) == 8) {
-                            return b.assign(b.tmp(), "wrap", s2, [expr]);
+                            return b.assign(b.tmp(s), "wrap", s2, [expr]);
                         }
                         return expr;
                     }
                     if (ssa.sizeOf(s) == 8) {
-                        return b.assign(b.tmp(), "extend", s2, [expr]);
+                        return b.assign(b.tmp(s), "extend", s2, [expr]);
                     }
                     return expr;
                 } else if (this.tc.checkIsIntNumber(enode.rhs, false) && t instanceof UnsafePointerType) {
@@ -2090,12 +2212,12 @@ export class CodeGenerator {
                         return expr;
                     } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
                         if (ssa.sizeOf(s2) == 8) {
-                            return b.assign(b.tmp(), "wrap", s2, [expr]);
+                            return b.assign(b.tmp(s), "wrap", s2, [expr]);
                         }
                         return expr;
                     }
                     if (ssa.sizeOf(s) == 8) {
-                        return b.assign(b.tmp(), "extend", s2, [expr]);
+                        return b.assign(b.tmp(s), "extend", s2, [expr]);
                     }
                     return expr;
                 } else if (t instanceof UnsafePointerType && (t2 instanceof UnsafePointerType || t2 instanceof PointerType || t2 == this.tc.t_string)) {
@@ -2109,18 +2231,18 @@ export class CodeGenerator {
                     let ptr = b.assign(b.tmp(), "load", "addr", [head, this.sliceHeader.fieldOffset("data_ptr")]);
                     let l = b.assign(b.tmp(), "load", "i32", [head, this.sliceHeader.fieldOffset("length")]);
                     return b.call(b.tmp(), this.makeStringFunctionType, [SystemCalls.makeString, ptr, l]);
-                } else if ((t == this.tc.t_bool || this.tc.isIntNumber(t)) && (t2 == this.tc.t_bool || this.tc.checkIsIntNumber(enode.rhs, false))) {
+                } else if ((t == this.tc.t_bool || t == this.tc.t_rune || this.tc.isIntNumber(t)) && (t2 == this.tc.t_bool || t2 == this.tc.t_rune || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
                     } else if (ssa.sizeOf(s) < ssa.sizeOf(s2)) {
                         if (ssa.sizeOf(s2) == 8) {
-                            return b.assign(b.tmp(), "wrap", s2, [expr]);
+                            return b.assign(b.tmp(s), "wrap", s2, [expr]);
                         }
                         return expr;
                     }
                     if (ssa.sizeOf(s) == 8) {
-                        return b.assign(b.tmp(), "extend", s2, [expr]);
+                        return b.assign(b.tmp(s), "extend", s2, [expr]);
                     }
                     return expr;
                 } else if (t instanceof PointerType && t2 instanceof UnsafePointerType) {
@@ -2234,6 +2356,7 @@ export class CodeGenerator {
     private setNumericMapFunctionType: ssa.FunctionType;
     private lookupNumericMapFunctionType: ssa.FunctionType;
     private removeNumericMapKeyFunctionType: ssa.FunctionType;
+    private decodeUtf8FunctionType: ssa.FunctionType;
     private copyFunctionType: ssa.FunctionType;
     private interfaceTableNames: Array<string> = [];
     private interfaceTableIndex: Map<string, number> = new Map<string, number>();
