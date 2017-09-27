@@ -337,7 +337,7 @@ block
 
 statementOrComment
   = c:comment [ \n\t]* { return c; }
-  / s:statement c:semicolon { if (c) { s.comments = [c]; } return s; } 
+  / s:statement [ \t]* c:semicolon { if (c) { s.comments = [c]; } return s; } 
 
 comments
   = c:([ \t]* comment)+ {
@@ -396,7 +396,7 @@ statement
 
 simpleStatement
   = v: varStatement { return v; }
-  / [ \t]* i:assignIdentifierList p:("++" / "--" / (assignOp [ \t\n]* expression))? {
+  / i:assignIdentifierList [ \t]* p:("++" / "--" / (assignOp [ \t\n]* expression))? {
         if (!p) {
             if (i.length > 1) {
                 expected("assignment operator", v.loc);
@@ -627,16 +627,16 @@ assignOp
   / "in"
 
 forCondition
-  = left: simpleStatement r:(";" [ \t]* expression? ";" [ \t]* simpleStatement?)? {
+  = left: simpleStatement r:([ \t]* ";" [ \t]* expression? [ \t]* ";" [ \t]* simpleStatement?)? {
       if (r) {
-          return new ast.Node({loc: fl(location()), op: ";;", lhs: left, condition: r[2], rhs: r[5]});
+          return new ast.Node({loc: fl(location()), op: ";;", lhs: left, condition: r[3], rhs: r[7]});
       }
       if (isAssignment(left) && left.op != "in" && left.op != "var_in") {
         error("assignment is not allowed in the condition branch of a 'for' loop", left.loc);
       }
       return left;
     }
-  / ";" e:expression? ";" s:simpleStatement? {
+  / ";" [ \t]* e:expression? [ \t]* ";" [ \t]* s:simpleStatement? {
         return new ast.Node({loc: fl(location()), op: ";;", condition: e, rhs: s});
     }
 
@@ -668,45 +668,53 @@ expressionList
     }
 
 logicOr
-  = left: logicAnd r:("||" [ \t\n]* logicOr)? {
+  = left: logicAnd r:([ \t]* "||" [ \t\n]* logicOr)? {
       if (r) {
-         return new ast.Node({loc: fl(location()), op: "||", lhs: left, rhs: r[2]});
+         return new ast.Node({loc: fl(location()), op: "||", lhs: left, rhs: r[3]});
       }
       return left;
   }
 
 logicAnd
-  = left: comparison r:("&&" [ \t\n]* logicAnd)? {
+  = left: comparison r:([ \t]* "&&" [ \t\n]* logicAnd)? {
       if (r) {
-         return new ast.Node({loc: fl(location()), op: "&&", lhs: left, rhs: r[2]});
+         return new ast.Node({loc: fl(location()), op: "&&", lhs: left, rhs: r[3]});
       }
       return left;
   }
 
 comparison
-  = left: additive right: comparison2? {
+  = left:dynamicTypeCast right:([ \t]* comparison2)? {
       if (right) {
-          right.lhs = left;
-          return right;
+          right[1].lhs = left;
+          return right[1];
       }
       return left;
     }
 
 comparison2
-  = "==" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "==", rhs:right}); }
-  / "!=" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "!=", rhs:right}); }
-  / "<=" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "<=", rhs:right}); }
-  / ">=" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: ">=", rhs:right}); }
-  / ">" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: ">", rhs:right}); }
-  / "<" [ \t\n]* right:additive { return new ast.Node({loc: fl(location()), op: "<", rhs:right}); }
+  = "==" [ \t\n]* right:dynamicTypeCast { return new ast.Node({loc: fl(location()), op: "==", rhs:right}); }
+  / "!=" [ \t\n]* right:dynamicTypeCast { return new ast.Node({loc: fl(location()), op: "!=", rhs:right}); }
+  / "<=" [ \t\n]* right:dynamicTypeCast { return new ast.Node({loc: fl(location()), op: "<=", rhs:right}); }
+  / ">=" [ \t\n]* right:dynamicTypeCast { return new ast.Node({loc: fl(location()), op: ">=", rhs:right}); }
+  / ">" [ \t\n]* right:dynamicTypeCast { return new ast.Node({loc: fl(location()), op: ">", rhs:right}); }
+  / "<" [ \t\n]* right:dynamicTypeCast { return new ast.Node({loc: fl(location()), op: "<", rhs:right}); }
+
+dynamicTypeCast
+  = a:additive c:([ \t]+ "is" [ \t]+ type)? {
+      if (!c) {
+          return a
+      }
+      return new ast.Node({loc: fl(location()), op: "is", lhs: a, rhs: c[3]});
+  }
 
 additive
-  = left:multiplicative right: additive2* {
-      if (right && right[0]) {
+  = left:multiplicative right:([ \t]* additive2)* {
+      if (right) {
           var result = left;
           for(var i = 0; i < right.length; i++) {
-              right[i].lhs = result
-              result = right[i];
+              right[i][1].lhs = result
+              result = right[i][1];
           }
           return result;
       }
@@ -720,12 +728,12 @@ additive2
   / "^" [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "^", rhs:right}); }
 
 multiplicative
-  = left:unary right:multiplicative2* {
-      if (right && right[0]) {
+  = left:unary right:([ \t]* multiplicative2)* {
+      if (right) {
           var result = left;
           for(var i = 0; i < right.length; i++) {
-              right[i].lhs = result
-              result = right[i];
+              right[i][1].lhs = result
+              result = right[i][1];
           }
           return result;
       }
@@ -787,14 +795,14 @@ typeCast
     }
 
 primary
-  = [ \t\n]* p:primary2 [ \t]* m:member* {
+  = [ \t\n]* p:primary2 m:([ \t]* member)* {
         if (!m) {
             return p;
         }
         let left = p;
         for(let x of m) {
-            x.lhs = left;
-            left = x;
+            x[1].lhs = left;
+            left = x[1];
         }
         return left;
     }
@@ -872,8 +880,8 @@ number "number"
   / digits:$([0-9]+) { return new ast.Node({loc: fl(location()), op: "int", value: digits}); }
 
 member
-  = "." [ \t\n]* i:identifier [ \t]* { return new ast.Node({loc: fl(location()), op: ".", name:i}); }
-  / "[" [ \t\n]* e:expression? r:(":" expression?)? "]" [ \t]* {
+  = "." [ \t\n]* i:identifier { return new ast.Node({loc: fl(location()), op: ".", name:i}); }
+  / "[" [ \t\n]* e:expression? r:(":" expression?)? "]" {
       if (!e && !r) {
           expected("an index or range expression between brackets", fl(location()));
       }
@@ -882,7 +890,7 @@ member
       }
       return new ast.Node({loc: fl(location()), op: "[", rhs: e});
     }
-  / "(" [ \t\n]* a:arguments? ")" [ \t]* { return new ast.Node({loc: fl(location()), op: "(", parameters: a}); }
+  / "(" [ \t\n]* a:arguments? ")" { return new ast.Node({loc: fl(location()), op: "(", parameters: a}); }
   / "<" [ \t]* t:typeList [ \t]* ">" { return new ast.Node({loc: fl(location()), op: "genericInstance", genericParameters: t}); }
 
 arguments

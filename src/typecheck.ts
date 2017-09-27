@@ -207,12 +207,18 @@ export abstract class Type {
     public toString(): string {
         return this.name
     }
+
+    public abstract toTypeCodeString(): string;
 }
 
 export class BasicType extends Type {
     constructor(name: "void" | "string" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "any" | "rune") {
         super();
         this.name = name;
+    }
+
+    public toTypeCodeString(): string {
+        return this.name;
     }
 }
 
@@ -259,6 +265,15 @@ export class InterfaceType extends Type {
             return "interface{...}";
         }
         return "interface{}";
+    }
+
+    // TODO: Scoping
+    // TODO: Unnamned interfaces
+    public toTypeCodeString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        throw "TODO"
     }
 
     public isPointerType(): boolean {
@@ -334,6 +349,16 @@ export class StructType extends Type {
     }
 
     public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        let str = "struct{";
+        str += this.fields.join(",");
+        str += "}";
+        return str;
+    }
+
+    public toTypeCodeString(): string {
         if (this.name) {
             return this.name;
         }
@@ -434,6 +459,10 @@ export class FunctionType extends Type {
         return name;
     }
 
+    public toTypeCodeString(): string {
+        return this.toString();
+    }
+
     public hasEllipsis(): boolean {
         return (this.parameters.length > 0 && this.parameters[this.parameters.length - 1].ellipsis)
     }
@@ -471,6 +500,9 @@ export class PolymorphFunctionType extends FunctionType {
 }
 
 export class GenericParameter extends Type {
+    public toTypeCodeString(): string {
+        throw "Implementation error";
+    }
 }
 
 export class GenericFunctionType extends FunctionType implements GenericType {
@@ -609,6 +641,10 @@ export class PointerType extends Type {
         return "*" + this.elementType.toString();
     }
 
+    public toTypeCodeString(): string {
+        return "*" + this.elementType.toString();
+    }
+
     public elementType: Type;
 }
 
@@ -622,6 +658,10 @@ export class UnsafePointerType extends Type {
         if (this.name) {
             return this.name;
         }
+        return "#" + this.elementType.toString();
+    }
+
+    public toTypeCodeString(): string {
         return "#" + this.elementType.toString();
     }
 
@@ -641,6 +681,10 @@ export class GuardedPointerType extends Type {
         return "@" + this.elementType.toString();
     }
 
+    public toTypeCodeString(): string {
+        return "@" + this.elementType.toString();
+    }
+
     public elementType: Type;
 }
 
@@ -652,6 +696,13 @@ export class MapType extends Type {
     }
 
     public toString(): string {
+        if (this.name) {
+            return this.name;
+        }
+        return "map<" + this.keyType.toString() + "," + this.valueType.toString() + ">";
+    }
+
+    public toTypeCodeString(): string {
         if (this.name) {
             return this.name;
         }
@@ -731,6 +782,17 @@ export class RestrictedType extends Type {
         return str + this.elementType.toString();
     }
 
+    public toTypeCodeString(): string {
+        let str = "";
+        if (this.isConst) {
+            str += "const ";
+        }
+        if (this.scope) {
+            str += "&";
+        }
+        return str + this.elementType.toString();
+    }
+    
     public elementType: Type;
     public isConst: boolean;
     public scope: Scope;
@@ -747,6 +809,10 @@ export class ArrayType extends Type {
         if (this.name) {
             return this.name;
         }
+        return "[" + this.size.toString() + "]" + this.elementType.toString();
+    }
+
+    public toTypeCodeString(): string {
         return "[" + this.size.toString() + "]" + this.elementType.toString();
     }
 
@@ -770,6 +836,10 @@ export class SliceType extends Type {
         return "[]" + this.elementType.toString();
     }
 
+    public toTypeCodeString(): string {
+        return "[]" + this.elementType.toString();
+    }
+    
     public elementType: Type;
     public arrayScope: Scope | null = null;
 }
@@ -795,6 +865,10 @@ export class ArrayLiteralType extends Type {
         return name;
     }
 
+    public toTypeCodeString(): string {
+        throw "Implemention error";
+    }
+
     public types: Array<Type>;
 }
 
@@ -804,6 +878,10 @@ export class ObjectLiteralType extends Type {
     constructor(types: Map<string, Type>) {
         super();
         this.types = types;        
+    }
+
+    public toTypeCodeString(): string {
+        throw "Implemention error";
     }
 
     public toString() : string {
@@ -844,6 +922,19 @@ export class TupleType extends Type {
         return name;
     }
 
+    public toTypeCodeString(): string {
+        let name = "(";
+        for(let t of this.types) {
+            if (name == "(") {
+                name += t.toString();
+            } else {
+                name += "," + t.toString();
+            }
+        }
+        name += ")";
+        return name;
+    }
+
     public types: Array<Type>;
 }
 
@@ -868,6 +959,10 @@ export class TupleLiteralType extends Type {
         return name;
     }
 
+    public toTypeCodeString(): string {
+        throw "Implemention error";
+    }
+
     public types: Array<Type>;
 }
 
@@ -888,6 +983,11 @@ export class OrType extends Type {
         }
         return name;
     }
+
+    // TODO: Scoping
+    public toTypeCodeString(): string {
+        return this.toString();
+    }
 }
 
 export class StringEnumType extends Type {
@@ -907,6 +1007,11 @@ export class StringEnumType extends Type {
         }
         return name;
     }
+
+    // TODO: Scoping
+    public toTypeCodeString(): string {
+        return this.toString();
+    }
 }
 
 export class PackageType extends Type {
@@ -920,6 +1025,10 @@ export class PackageType extends Type {
         return "package " + this.name;
     }
 
+    public toTypeCodeString(): string {
+        throw "Implementation error";
+    }
+    
     public elements: Map<string, Type> = new Map<string, Type>();
     public types: Map<string, Type> = new Map<string, Type>();
 }
@@ -3198,6 +3307,18 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "is":
+            {
+                this.checkExpression(enode.lhs, scope);
+                this.checkIsInterface(enode.lhs);
+                let t = this.createType(enode.rhs, scope);
+                if (this.isInterface(t)) {
+                    throw new TypeError("Interface cannot be contained by another interface", enode.loc);
+                }
+                enode.rhs.type = t
+                enode.type = this.t_bool;
+                break;
+            }
             case "typeCast":
             {
                 let t = this.createType(enode.lhs, scope);
@@ -3241,7 +3362,10 @@ export class TypeChecker {
                     // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
                 } else if (this.checkIsAssignableType(t, right, enode.loc, false)) {
-                    throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);                    
+                    if (right != this.t_null) {
+                        throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
+                    }
+                    enode.type = t;
                 } else {
                     throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
 //                    throw "TODO: conversion not possible or not implemented";
@@ -3982,6 +4106,16 @@ export class TypeChecker {
             throw new TypeError("Expected a numeric or pointer type, but got " + node.type.toString(), node.loc);
         }
         return false;
+    }
+
+    public checkIsInterface(node: Node, doThrow: boolean = true): boolean {
+        if (this.isInterface(node.type)) {
+            return true;
+        }
+        if (!doThrow) {
+            return false;
+        }
+        throw new TypeError("Expected an interface type", node.loc);
     }
 
     public checkFunctionEquality(a: FunctionType, b: FunctionType, loc: Location, allowMoreRestrictions: boolean, doThrow: boolean = true): boolean {

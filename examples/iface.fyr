@@ -1,0 +1,31 @@
+import . {
+    func logString(string)
+    func logNumber(int)
+} from "imports"
+
+type S1 struct {
+}
+
+type S2 struct {
+}
+
+export func main() {
+    var iface interface{} = &S1{}
+    if (iface is *S1) {
+        logString("Is S1");
+    }
+    if (iface is *S2) {
+        logString("Is S2")
+    }
+    iface = <*S1>null
+    if (iface is *S1) {
+        logString("Is S1")
+    }
+    if (iface is *S2) {
+        logString("Is S2")
+    }
+    iface = 501
+    if (iface is int) {
+        logString("Is int")
+    }
+}

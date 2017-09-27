@@ -204,6 +204,9 @@ export class CodeGenerator {
         if (t == this.tc.t_string) {
             return "ptr";
         }
+        if (t == this.tc.t_null) {
+            return "addr";
+        }
         if (t instanceof SliceType) {
             return this.sliceHeader;
         }
@@ -2157,6 +2160,22 @@ export class CodeGenerator {
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "load", storage, [expr.variable, expr.offset]);
             }
+            case "is":
+            {
+                let rtypecode = this.typecode(enode.rhs.type);
+                let ifaceAddr: ssa.Variable | ssa.Pointer;
+                if (this.isLeftHandSide(enode.lhs)) {
+                    ifaceAddr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                } else {
+                    ifaceAddr = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type) as ssa.Variable;
+                }
+                if (ifaceAddr instanceof ssa.Variable) {
+                    ifaceAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ifaceAddr]), 0);
+                }
+                let ltypecode = b.assign(b.tmp(), "load", "i32", [ifaceAddr.variable, ifaceAddr.offset + this.ifaceHeader.fieldOffset("typecode")]);
+                let cmp = b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
+                return cmp;
+            }
             case "typeCast":
             {
                 let t = enode.type;
@@ -2253,6 +2272,8 @@ export class CodeGenerator {
                     let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);
                     b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, src, l]);
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
+                } else if (t2 == this.tc.t_null) {
+                    return expr;
                 } else {
                     throw "TODO: conversion not implemented";
                 }
@@ -2320,8 +2341,13 @@ export class CodeGenerator {
     }
 
     private typecode(t: Type): number {
-        // TODO
-        return 0;
+        let tc = t.toTypeCodeString();
+        if (this.typeCodeMap.has(tc)) {
+            return this.typeCodeMap.get(tc);
+        }
+        let n = this.typeCodeMap.size + 1;
+        this.typeCodeMap.set(tc, n);
+        return n;
     }
 
     private isThis(v: ssa.Variable | number): boolean {
@@ -2361,6 +2387,7 @@ export class CodeGenerator {
     private interfaceTableNames: Array<string> = [];
     private interfaceTableIndex: Map<string, number> = new Map<string, number>();
     private interfaceTableLength: number = 0;
+    private typeCodeMap: Map<string,number> = new Map<string, number>();
 }
 
 export class LinkError {
