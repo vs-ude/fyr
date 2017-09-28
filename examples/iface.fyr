@@ -28,4 +28,19 @@ export func main() {
     if (iface is int) {
         logString("Is int")
     }
+
+    var o *S1 | int = 32
+    if (o is int) {
+        logString("OrType is int")
+    }
+    if (o is *S1) {
+        logString("OrType is S1")
+    }
+    o = &S1{}
+    if (o is int) {
+        logString("OrType is now int")
+    }
+    if (o is *S1) {
+        logString("OrType is now S1")
+    }
 }

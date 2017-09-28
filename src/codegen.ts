@@ -1232,7 +1232,7 @@ export class CodeGenerator {
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         let v = this.processExpressionIntern(f, scope, enode, b, vars);
-        if (this.tc.isInterface(targetType) && !this.tc.isInterface(enode.type)) {
+        if ((this.tc.isInterface(targetType) || this.tc.isOrType(targetType)) && !this.tc.isInterface(enode.type)) {
             if (this.tc.isUnsafePointer(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
             } else if (enode.type instanceof PointerType && enode.type.elementType instanceof StructType) {

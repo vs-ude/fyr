@@ -3310,12 +3310,26 @@ export class TypeChecker {
             case "is":
             {
                 this.checkExpression(enode.lhs, scope);
-                this.checkIsInterface(enode.lhs);
                 let t = this.createType(enode.rhs, scope);
-                if (this.isInterface(t)) {
-                    throw new TypeError("Interface cannot be contained by another interface", enode.loc);
-                }
                 enode.rhs.type = t
+                if (this.isOrType(enode.lhs.type)) {
+                    let ot = this.stripType(enode.lhs.type) as OrType;
+                    let found = false;
+                    for(var option of ot.types) {
+                        if (this.checkTypeEquality(option, t, enode.loc, false)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        throw new TypeError("Type " + t.toString() + " is not part of " + ot.toString(), enode.rhs.loc);
+                    }
+                } else {
+                    this.checkIsInterface(enode.lhs);                
+                    if (this.isInterface(t)) {
+                        throw new TypeError("Interface cannot be contained by another interface", enode.loc);
+                    }
+                }
                 enode.type = this.t_bool;
                 break;
             }
@@ -4367,6 +4381,13 @@ export class TypeChecker {
     public isString(t: Type): boolean {
         t = this.stripType(t);
         return t == this.t_string;
+    }
+
+    public isOrType(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType instanceof OrType;
+        }
+        return t instanceof OrType;
     }
 
     public isInterface(t: Type): boolean {
