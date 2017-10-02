@@ -80,6 +80,8 @@ export func main() {
     if (read is int) {
         logString("read 1 is int")
     }
+    logNumber(<int>read)
+    
     read = "EOF"
     if (read is "EOF") {
         logString("read 2 is EOF")

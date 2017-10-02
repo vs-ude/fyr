@@ -71,6 +71,7 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Array literals assigned to const variables are stored in the text segment if they contain primitives only
 - Bit-literals such as 0b11001
 - Not all types are properly wrapped in interfaces upon assignment
+- Type casts can remove const or scope, which is not ok
 
 # Wish List
 - Generics

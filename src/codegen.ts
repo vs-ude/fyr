@@ -1271,35 +1271,39 @@ export class CodeGenerator {
                 throw "Implementation error " + enode.type.toString();
             }
         } else if (!this.tc.isInterface(targetType) && !this.tc.isComplexOrType(targetType) && (this.tc.isInterface(enode.type) || this.tc.isComplexOrType(enode.type))) {
-            let addr = b.assign(b.tmp("addr"), "addr_of", "addr", [v]);
-            if (this.tc.isUnsafePointer(targetType)) {
-                return b.assign(b.tmp(), "load", "addr", [addr, this.ifaceHeader32.fieldOffset("value")]);
-            } else if (this.tc.isSafePointer(targetType) || this.tc.isString(targetType)) {
-                return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
-            } else if (this.tc.isSlice(targetType)) {
-                return b.assign(b.tmp(), "load", this.sliceHeader, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
-            } else if (this.tc.isGuardedPointer(targetType)) {
-                throw "TODO";
-            } else if (this.tc.isArray(targetType)) {
-                // TODO: Copy to allocated area
-                throw "TODO";
-            } else if (this.tc.isStruct(targetType)) {
-                throw "TODO";
-            } else if (targetType == this.tc.t_int64 || targetType == this.tc.t_uint64) {
-                return b.assign(b.tmp(), "load", "i64", [addr, this.ifaceHeader.fieldOffset("value")]);
-            } else if (targetType == this.tc.t_double) {
-                return b.assign(b.tmp(), "load", "f64", [addr, this.ifaceHeaderDouble.fieldOffset("value")]);
-            } else if (targetType == this.tc.t_float) {
-                return b.assign(b.tmp(), "load", "f32", [addr, this.ifaceHeaderFloat.fieldOffset("value")]);
-            } else if (this.tc.isNumber(targetType) || targetType == this.tc.t_bool) {
-                return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("value")]);
-            } else if (this.tc.isOrType(targetType)) {
-                return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("typecode")]);
-            } else {
-                throw "Implementation error";
-            }                
+            return this.processUnboxInterface(targetType, v, b);
         }
         return v;
+    }
+
+    private processUnboxInterface(targetType: Type, v: number | ssa.Variable, b: ssa.Builder): ssa.Variable | number {        
+        let addr = b.assign(b.tmp("addr"), "addr_of", "addr", [v]);
+        if (this.tc.isUnsafePointer(targetType)) {
+            return b.assign(b.tmp(), "load", "addr", [addr, this.ifaceHeader32.fieldOffset("value")]);
+        } else if (this.tc.isSafePointer(targetType) || this.tc.isString(targetType)) {
+            return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
+        } else if (this.tc.isSlice(targetType)) {
+            return b.assign(b.tmp(), "load", this.sliceHeader, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
+        } else if (this.tc.isGuardedPointer(targetType)) {
+            throw "TODO";
+        } else if (this.tc.isArray(targetType)) {
+            // TODO: Copy to allocated area
+            throw "TODO";
+        } else if (this.tc.isStruct(targetType)) {
+            throw "TODO";
+        } else if (targetType == this.tc.t_int64 || targetType == this.tc.t_uint64) {
+            return b.assign(b.tmp(), "load", "i64", [addr, this.ifaceHeader.fieldOffset("value")]);
+        } else if (targetType == this.tc.t_double) {
+            return b.assign(b.tmp(), "load", "f64", [addr, this.ifaceHeaderDouble.fieldOffset("value")]);
+        } else if (targetType == this.tc.t_float) {
+            return b.assign(b.tmp(), "load", "f32", [addr, this.ifaceHeaderFloat.fieldOffset("value")]);
+        } else if (this.tc.isNumber(targetType) || targetType == this.tc.t_bool) {
+            return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("value")]);
+        } else if (this.tc.isOrType(targetType)) {
+            return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("typecode")]);
+        } else {
+            throw "Implementation error";
+        }                
     }
 
     private processExpressionIntern(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
@@ -2290,6 +2294,8 @@ export class CodeGenerator {
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [mem, l, l]);
                 } else if (t2 == this.tc.t_null) {
                     return expr;
+                } else if (this.tc.isComplexOrType(t2)) {
+                    return this.processUnboxInterface(t, expr, b);
                 } else {
                     throw "TODO: conversion not implemented";
                 }

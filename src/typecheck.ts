@@ -3325,6 +3325,7 @@ export class TypeChecker {
                 let t = this.createType(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
+                // TODO: Casts remove restrictions
                 if ((t == this.t_float || t == this.t_double) && this.isIntNumber(right)) {
                     // Ints can be converted to floats
                     enode.type = t;
@@ -3362,6 +3363,18 @@ export class TypeChecker {
                 } else if (t instanceof SliceType && t.elementType == this.t_byte && right == this.t_string) {
                     // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
+                } else if (this.isComplexOrType(right)) {
+                    let ok = false;
+                    for(let ot of (right as OrType).types) {
+                        if (this.checkIsAssignableType(t, ot, enode.loc, false)) {
+                            enode.type = t;
+                            ok = true;
+                            break;
+                        }
+                    }
+                    if (!ok) {
+                        throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
+                    }
                 } else if (this.checkIsAssignableType(t, right, enode.loc, false)) {
                     if (right != this.t_null) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
