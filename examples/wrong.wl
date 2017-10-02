@@ -359,5 +359,10 @@ func sqrt(f float) float {
 }
 
 func sqrt(f double) double {
+}
 
+func isas(a interface{}) {
+    if (var p = some.struct.x; p is *Point && p.x < 10) {
+
+    }
 }
