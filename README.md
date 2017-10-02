@@ -58,7 +58,6 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 ## Todos
 
 - Type switch statement
-- 'is' expression on interfaces
 - Automatically include the runtime souces
 - map
     - tuple assignment
@@ -71,6 +70,7 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Array literals such as [...]byte[1,2,3,4]
 - Array literals assigned to const variables are stored in the text segment if they contain primitives only
 - Bit-literals such as 0b11001
+- Not all types are properly wrapped in interfaces upon assignment
 
 # Wish List
 - Generics

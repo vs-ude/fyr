@@ -166,17 +166,11 @@ genericTypeList
 
 type
   = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* {
-      if (t.op == "str") {
-          t.op = "strType";
-      }
       if (!r || r.length == 0) {
           return t;
       }
       let result = [t];
       for(let x of r) {
-          if (x[3].op == "str") {
-              x[3].op = "strType";
-          }
           result.push(x[3]);
       }
       return new ast.Node({loc: fl(location()), op: "orType", parameters: result})

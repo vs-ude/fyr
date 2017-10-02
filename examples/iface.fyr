@@ -9,6 +9,9 @@ type S1 struct {
 type S2 struct {
 }
 
+type Color "black" | "red" | "white"
+type MoreColors Color | "yellow"
+
 export func main() {
     var iface interface{} = &S1{}
     if (iface is *S1) {
@@ -42,5 +45,52 @@ export func main() {
     }
     if (o is *S1) {
         logString("OrType is now S1")
+    }
+
+    var color Color = "black"
+    if (color == "black") {
+        logString("It is black")
+    }
+    color = "white"
+    if (color == "black") {
+        logString("It is now black")
+    } else if (color == "white") {
+        logString("It is now white")
+    }
+
+    var color2 MoreColors = "yellow"
+    if (color2 == "black") {
+        logString("It is now 2 black")
+    } else if (color2 == "yellow") {
+        logString("It is now 2 yellow")
+    }
+    color2 = color
+    if (color2 == "black") {
+        logString("It is now 3 black")
+    } else if (color2 == "white") {
+        logString("It is now 3 white")
+    }
+    if (color2 is "black") {
+        logString("It is now 4 black")
+    } else if (color2 is "white") {
+        logString("It is now 4 white")
+    }
+
+    var read int | "EOF" = 5
+    if (read is int) {
+        logString("read 1 is int")
+    }
+    read = "EOF"
+    if (read is "EOF") {
+        logString("read 2 is EOF")
+    }
+
+    var colorOrName Color | string = "Green"
+    if (colorOrName is string) {
+        logString("colorOrName 1 is string")
+    }
+    colorOrName = color
+    if (colorOrName is "white") {
+        logString("colorOrName 2 is white")
     }
 }

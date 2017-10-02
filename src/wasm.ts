@@ -108,12 +108,16 @@ export class Module extends Node {
     }
 
     public addString(value: string): [number, number] {
+        if (this.strings.has(value)) {
+            return this.strings.get(value);
+        }
         // TODO: Align the start offset, not the size
         let uint8array: Uint8Array = new textEncoding.TextEncoder("utf-8").encode(value);
         let offset = this.dataSize;
         let d = new StringData(offset, uint8array);
         this.data.push(d);
         this.dataSize += align64(d.size());
+        this.strings.set(value, [offset, uint8array.length]);
         return [offset, uint8array.length];
     }
 
@@ -192,6 +196,7 @@ export class Module extends Node {
     private memoryImport: {ns: string, obj: string};
     private globals: Array<Global> = [];
     private funcTypeByCode: Map<string, FunctionType> = new Map<string, FunctionType>();
+    private strings: Map<string, [number, number]> = new Map<string, [number, number]>();
 }
 
 export class FunctionImport {

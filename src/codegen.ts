@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, Type, PackageType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
 import * as wasm from "./wasm"
 import {SystemCalls} from "./pkg"
@@ -248,6 +248,9 @@ export class CodeGenerator {
             return this.ifaceHeader;
         }
         if (t instanceof OrType) {
+            if (t.stringsOnly()) {
+                return "addr";
+            }
             return this.ifaceHeader;
         }
         if (t instanceof RestrictedType) {
@@ -1232,7 +1235,8 @@ export class CodeGenerator {
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         let v = this.processExpressionIntern(f, scope, enode, b, vars);
-        if ((this.tc.isInterface(targetType) || this.tc.isOrType(targetType)) && !this.tc.isInterface(enode.type)) {
+        if ((this.tc.isInterface(targetType) || this.tc.isComplexOrType(targetType)) && !this.tc.isInterface(enode.type) && !this.tc.isComplexOrType(enode.type)) {
+            // TODO: Do not use instanceof here
             if (this.tc.isUnsafePointer(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
             } else if (enode.type instanceof PointerType && enode.type.elementType instanceof StructType) {
@@ -1257,34 +1261,40 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderDouble, [this.typecode(enode.type), 0, v]);
             } else if (this.tc.isNumber(enode.type) || enode.type == this.tc.t_bool) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
-            } else if (enode.type = this.tc.t_null) {
+            } else if (enode.type == this.tc.t_null) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, 0]);
+            } else if (enode.type instanceof StringLiteralType) {
+                return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, 0]);
+            } else if (this.tc.isOrType(enode.type)) {
+                return b.assign(b.tmp(), "struct", this.ifaceHeader, [v, 0, 0]);
             } else {
                 throw "Implementation error " + enode.type.toString();
             }
-        } else if (!this.tc.isInterface(targetType) && this.tc.isInterface(enode.type)) {
+        } else if (!this.tc.isInterface(targetType) && !this.tc.isComplexOrType(targetType) && (this.tc.isInterface(enode.type) || this.tc.isComplexOrType(enode.type))) {
             let addr = b.assign(b.tmp("addr"), "addr_of", "addr", [v]);
-            if (this.tc.isUnsafePointer(enode.type)) {
+            if (this.tc.isUnsafePointer(targetType)) {
                 return b.assign(b.tmp(), "load", "addr", [addr, this.ifaceHeader32.fieldOffset("value")]);
-            } else if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
+            } else if (this.tc.isSafePointer(targetType) || this.tc.isString(targetType)) {
                 return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
-            } else if (this.tc.isSlice(enode.type)) {
+            } else if (this.tc.isSlice(targetType)) {
                 return b.assign(b.tmp(), "load", this.sliceHeader, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
-            } else if (this.tc.isGuardedPointer(enode.type)) {
+            } else if (this.tc.isGuardedPointer(targetType)) {
                 throw "TODO";
-            } else if (this.tc.isArray(enode.type)) {
+            } else if (this.tc.isArray(targetType)) {
                 // TODO: Copy to allocated area
                 throw "TODO";
-            } else if (this.tc.isStruct(enode.type)) {
+            } else if (this.tc.isStruct(targetType)) {
                 throw "TODO";
-            } else if (enode.type == this.tc.t_int64 || enode.type == this.tc.t_uint64) {
+            } else if (targetType == this.tc.t_int64 || targetType == this.tc.t_uint64) {
                 return b.assign(b.tmp(), "load", "i64", [addr, this.ifaceHeader.fieldOffset("value")]);
-            } else if (enode.type == this.tc.t_double) {
+            } else if (targetType == this.tc.t_double) {
                 return b.assign(b.tmp(), "load", "f64", [addr, this.ifaceHeaderDouble.fieldOffset("value")]);
-            } else if (enode.type == this.tc.t_float) {
+            } else if (targetType == this.tc.t_float) {
                 return b.assign(b.tmp(), "load", "f32", [addr, this.ifaceHeaderFloat.fieldOffset("value")]);
-            } else if (this.tc.isNumber(enode.type) || enode.type == this.tc.t_bool) {
+            } else if (this.tc.isNumber(targetType) || targetType == this.tc.t_bool) {
                 return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("value")]);
+            } else if (this.tc.isOrType(targetType)) {
+                return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("typecode")]);
             } else {
                 throw "Implementation error";
             }                
@@ -1305,8 +1315,10 @@ export class CodeGenerator {
             case "bool":
                 return enode.value == "true" ? 1 : 0;
             case "str":
+            {
                 let [off, len] = this.wasm.module.addString(enode.value);
                 return off;
+            }
             case "object":
             {
                 let t = this.tc.stripType(enode.type);
@@ -2163,6 +2175,10 @@ export class CodeGenerator {
             case "is":
             {
                 let rtypecode = this.typecode(enode.rhs.type);
+                if (this.tc.isStringOrType(enode.lhs.type)) {
+                    let ltypecode = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);                    
+                    return b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
+                }
                 let ifaceAddr: ssa.Variable | ssa.Pointer;
                 if (this.isLeftHandSide(enode.lhs)) {
                     ifaceAddr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
@@ -2341,6 +2357,10 @@ export class CodeGenerator {
     }
 
     private typecode(t: Type): number {
+        if (t instanceof StringLiteralType) {
+            let [off, len] = this.wasm.module.addString(t.name);
+            return off
+        }
         let tc = t.toTypeCodeString();
         if (this.typeCodeMap.has(tc)) {
             return this.typeCodeMap.get(tc);

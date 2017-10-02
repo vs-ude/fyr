@@ -988,27 +988,27 @@ export class OrType extends Type {
     public toTypeCodeString(): string {
         return this.toString();
     }
-}
 
-export class StringEnumType extends Type {
-    public values: Map<string, number> = new Map<string, number>();
-
-    public toString(): string {
-        if (this.name) {
-            return this.name;
-        }
-        let name = "";
-        for(let v of this.values.keys()) {
-            if (name == "") {
-                name += "\"" + v + "\"";
-            } else {
-                name += " | \"" + v + "\"";
+    public stringsOnly(): boolean {
+        for(let t of this.types) {
+            if (!(t instanceof StringLiteralType)) {
+                return false;
             }
         }
-        return name;
+        return true;
+    }
+}
+
+export class StringLiteralType extends Type {
+    constructor(name: string) {
+        super();
+        this.name = name;
     }
 
-    // TODO: Scoping
+    public toString(): string {
+        return "\"" + this.name + "\"";
+    }
+
     public toTypeCodeString(): string {
         return this.toString();
     }
@@ -1108,6 +1108,8 @@ export class TypeChecker {
                 throw new TypeError("Unknown type " + tnode.value, tnode.loc);
             }
             return t;
+        } else if (tnode.op == "str") {
+            return this.stringLiteralType(tnode.value);
         } else if (tnode.op == "constType") {
             let c = this.createType(tnode.rhs, scope);
             return this.makeConst(c, tnode.loc);
@@ -1246,81 +1248,32 @@ export class TypeChecker {
             }
             throw new TypeError("Type " + baset.toString() + " is not a generic type", tnode.loc);
         } else if (tnode.op == "orType") {
-            let stringCount = 0;
-            let stringEnumCount = 0;
-            for(let pnode of tnode.parameters) {
-                if (pnode.op == "strType") {
-                    stringCount++;
-                } else if (pnode.op == "id") {
-                    let t = scope.resolveType(pnode.value);
-                    if (t instanceof StringEnumType) {
-                        stringEnumCount++;
-                    }
-                }
-            }
-            if (stringCount + stringEnumCount == tnode.parameters.length) {
-                let t = new StringEnumType();
-                let j = 0;
-                for(let i = 0; i < tnode.parameters.length; i++) {
-                    let pnode = tnode.parameters[i];
-                    if (pnode.op == "strType") {
-                        t.values.set(pnode.value, j++);
-                    } else {
-                        let se = scope.resolveType(pnode.value) as StringEnumType;
-                        for(let key of se.values.keys()) {
-                            t.values.set(key, j++);
-                        } 
-                    }
-                }
-                return t;
-            }
-            let stype: StringEnumType;
-            if (stringCount > 0) {
-                stype = new StringEnumType();
-                for(let i = 0; i < tnode.parameters.length; i++) {
-                    let pnode = tnode.parameters[i];
-                    if (pnode.op == "strType") {
-                        stype.values.set(pnode.value, i);
-//                        tnode.parameters.splice(i, 1);
-//                    } else {
-//                        i++;
-                    }
-                }
-            }
-            let t = new OrType();
-            if (stype) {
-                t.types.push(stype);
-            }
-            for(let i = 0; i < tnode.parameters.length; i++) {
-                let pnode = tnode.parameters[i];
-                if (pnode.op == "strType") {
-                    continue;
-                }
-                let pt = this.createType(pnode, scope);
-                if (pt instanceof OrType) {
-                    t.types = t.types.concat(pt.types);
-                }
-                t.types.push(pt);
-            }
-            return t;
+            return this.createOrType(tnode, scope);
         } else if (tnode.op == "andType") {
-            let t = new InterfaceType();
-            for(let i = 0; i < tnode.parameters.length; i++) {
-                let pnode = tnode.parameters[i];
-                let pt = this.createType(pnode, scope);
-                if (!(pt instanceof InterfaceType)) {
-                    throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
-                }
-                t.extendsInterfaces.push(pt);
-            }
-            this.ifaces.push(t);
-            return t;
+            return this.createInterfaceType(tnode, scope);
         } else if (tnode.op == "structType") {
             return this.createStructType(tnode, scope);
         } else if (tnode.op == "interfaceType") {
             return this.createInterfaceType(tnode, scope);
         }
         throw "Implementation error for type " + tnode.op
+    }
+
+    private createOrType(tnode: Node, scope: Scope, t?: OrType): Type {
+        // TODO: Avoid double entries
+        if (!t) {
+            t = new OrType();
+        }
+        for(let i = 0; i < tnode.parameters.length; i++) {
+            let pnode = tnode.parameters[i];
+            let pt = this.createType(pnode, scope);
+            if (pt instanceof OrType) {
+                t.types = t.types.concat(pt.types);
+            } else {
+                t.types.push(pt);
+            }
+        }
+        return t;
     }
 
     private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType): Type {
@@ -1330,6 +1283,18 @@ export class TypeChecker {
             this.ifaces.push(iface);
         }
         iface.loc = tnode.loc;
+
+        if (tnode.op == "andType") {
+            for(let i = 0; i < tnode.parameters.length; i++) {
+                let pnode = tnode.parameters[i];
+                let pt = this.createType(pnode, scope);
+                if (!(pt instanceof InterfaceType)) {
+                    throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
+                }
+                iface.extendsInterfaces.push(pt);
+            }
+            return iface;
+        }
 
         if (tnode.parameters.length == 1 && tnode.parameters[0].op == "extends") {
             let t = this.createType(tnode.parameters[0].rhs, scope);
@@ -1692,15 +1657,21 @@ export class TypeChecker {
             this.structs.push(s);
             t.type = s;
             scope.registerType(t.name, s, tnode.loc);
-        } else if (t.node.rhs.op == "interfaceType") {
+        } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
             let iface = new InterfaceType();
             iface.loc = t.node.loc;
             iface.name = t.name;
             this.ifaces.push(iface);
             t.type = iface;
             scope.registerType(t.name, iface, tnode.loc);
+        } else if (t.node.rhs.op == "orType") {
+            let newt = new OrType();
+            newt.loc = t.node.loc;
+            newt.name = t.name;
+            t.type = newt;
+            scope.registerType(t.name, newt, tnode.loc);
         } else {
-            throw new TypeError("A type must be a struct or an interface", tnode.loc);
+            throw new TypeError("A type must be a struct, interface, union type or an enum", tnode.loc);
         }
         return t;
     }
@@ -1876,6 +1847,8 @@ export class TypeChecker {
                 this.createStructType(t.node.rhs, t.scope, t.type);
             } else if (t.type instanceof InterfaceType) {
                 this.createInterfaceType(t.node.rhs, t.scope, t.type);
+            } else if (t.type instanceof OrType) {
+                this.createOrType(t.node.rhs, t.scope, t.type);
             }
         }
 
@@ -2919,6 +2892,20 @@ export class TypeChecker {
             case "!=":
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
+                let tl = this.stripType(enode.lhs.type);
+                if (tl instanceof OrType && !tl.stringsOnly()) {
+                    throw new TypeError("Or'ed types cannot be compared", enode.lhs.loc);
+                }
+                if (tl instanceof InterfaceType && (tl.isBoxedType() || tl.isEmptyInterface())) {
+                    throw new TypeError("Empty interfaces and boxed types cannot be compared", enode.lhs.loc);
+                }
+                let tr = this.stripType(enode.rhs.type);
+                if (tr instanceof OrType && !tr.stringsOnly()) {
+                    throw new TypeError("Or'ed types cannot be compared", enode.rhs.loc);
+                }
+                if (tr instanceof InterfaceType && (tr.isBoxedType() || tr.isEmptyInterface())) {
+                    throw new TypeError("Empty interfaces and boxed types cannot be compared", enode.rhs.loc);
+                }
                 if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
                     // TODO: parse in a BigNumber representation
                     let l: number = parseFloat(enode.lhs.value);
@@ -3469,6 +3456,9 @@ export class TypeChecker {
                 return true;
             }
             if (doThrow) {
+                if (count == 0) {
+                    throw new TypeError("Literal of type " + node.type.toString() + " is not an opton of " + t.toString(), node.loc);                    
+                }
                 throw new TypeError("Ambiguous type inference", node.loc);
             }
             return false;
@@ -3517,21 +3507,9 @@ export class TypeChecker {
                 if (t == this.t_string) {
                     node.type = t;
                     return true;
-                } else if (t instanceof StringEnumType) {
-                    if (t.values.has(node.value)) {
+                } else if (t instanceof StringLiteralType) {
+                    if (t.name == node.value) {
                         node.type = t;
-                        return true;
-                    }
-                } else if (t instanceof OrType) {
-                    let ok = false;
-                    for(let ot of t.types) {
-                        if (this.unifyLiterals(ot, node, loc, false)) {
-                            node.type = ot;
-                            ok = true;
-                            break;
-                        }
-                    }
-                    if (ok) {
                         return true;
                     }
                 }
@@ -3699,7 +3677,7 @@ export class TypeChecker {
             }
         }
 
-        if (to == from && (this.isPrimitive(to) || to == this.t_string || to instanceof StructType)) {
+        if (to == from && (this.isPrimitive(to) || to == this.t_string || to instanceof StructType || to instanceof StringLiteralType)) {
             return true;
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
@@ -3714,12 +3692,12 @@ export class TypeChecker {
             }
         } else if (to instanceof OrType) {
             if (from instanceof OrType) {
-                if (from.types.length == to.types.length) {
+                if (from.types.length <= to.types.length) {
                     let ok = true;
                     for(let f of from.types) {
                         let ok2 = false;
                         for(let t of to.types) {
-                            if (this.checkIsAssignableType(t, f, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+                            if (this.checkTypeEquality(t, f, loc, false)) {
                                 ok2 = true;
                                 break;
                             }
@@ -3735,7 +3713,7 @@ export class TypeChecker {
                 }
             } else {
                 for(let o of to.types) {
-                    if (this.checkIsAssignableType(o, from, loc, false, false, isCopied, toIsConst, fromIsConst, isFunctionParameter)) {
+                    if (this.checkTypeEquality(o, from, loc, false)) {
                         return true;
                     }
                 }
@@ -4212,19 +4190,6 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (a instanceof StringEnumType && b instanceof StringEnumType) {
-            if (a.values.size == b.values.size) {
-                let ok = true;
-                for(let s of a.values.keys()) {
-                    if (!b.values.has(s)) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    return true;
-                }
-            }
         } else if (a instanceof OrType && b instanceof OrType) {
             if (a.types.length == b.types.length) {
                 let ok = true;
@@ -4388,6 +4353,22 @@ export class TypeChecker {
             return t.elementType instanceof OrType;
         }
         return t instanceof OrType;
+    }
+
+    public isComplexOrType(t: Type): boolean {
+        t = this.stripType(t);
+        if (!(t instanceof OrType)) {
+            return false;
+        }
+        return !t.stringsOnly();
+    }
+
+    public isStringOrType(t: Type): boolean {
+        t = this.stripType(t);
+        if (!(t instanceof OrType)) {
+            return false;
+        }
+        return t.stringsOnly();
     }
 
     public isInterface(t: Type): boolean {
@@ -4686,6 +4667,15 @@ export class TypeChecker {
         return null;
     }
 
+    private stringLiteralType(name: string): StringLiteralType {
+        if (this.stringLiteralTypes.has(name)) {
+            return this.stringLiteralTypes.get(name);
+        }
+        let t = new StringLiteralType(name);
+        this.stringLiteralTypes.set(name, t);
+        return t;
+    }
+
     private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
         let type = this.stripType(t);
         if (type == this.t_string) {
@@ -4774,6 +4764,7 @@ export class TypeChecker {
     public structs: Array<StructType> = [];
 
     private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
+    private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
 }
 
 export class TypeError {
