@@ -4,6 +4,7 @@ old
 out
 examples/*.wasm
 examples/*.wast
+examples/*.c
 tmp/*
 measurements/**/*.wasm
 measurements/**/*.wast
