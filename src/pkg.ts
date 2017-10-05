@@ -46,6 +46,9 @@ export enum SystemCalls {
     copysign64 = -49,
     trap = -50,
     decodeUtf8 = -51,
+    continueCoroutine = -52,
+    scheduleCoroutine = -53,
+    coroutine = -54,
 }
 
 export class Package {
@@ -208,6 +211,46 @@ export function initPackages(tc: TypeChecker) {
     trap.type.systemCallType = SystemCalls.trap;
     trap.type.returnType = tc.t_void;
     systemPkg.scope.registerElement(trap.name, trap);
+    var continueCoroutine: Function = new Function();
+    continueCoroutine.name = "continueCoroutine";
+    continueCoroutine.type = new FunctionType();
+    continueCoroutine.type.callingConvention = "system";
+    continueCoroutine.type.name = "continueCoroutine";
+    continueCoroutine.type.systemCallType = SystemCalls.continueCoroutine;
+    continueCoroutine.type.returnType = tc.t_uint32;
+    p = new FunctionParameter();
+    p.name = "step";
+    p.type = tc.t_uint32;
+    continueCoroutine.type.parameters.push(p);
+    p = new FunctionParameter();
+    p.name = "frame";
+    p.type = new UnsafePointerType(tc.t_void);
+    continueCoroutine.type.parameters.push(p);
+    p = new FunctionParameter();
+    p.name = "step";
+    p.type = tc.t_uint32;
+    continueCoroutine.type.parameters.push(p);
+    systemPkg.scope.registerElement(continueCoroutine.name, continueCoroutine);
+    var scheduleCoroutine: Function = new Function();
+    scheduleCoroutine.name = "scheduleCoroutine";
+    scheduleCoroutine.type = new FunctionType();
+    scheduleCoroutine.type.callingConvention = "system";
+    scheduleCoroutine.type.name = "scheduleCoroutine";
+    scheduleCoroutine.type.systemCallType = SystemCalls.scheduleCoroutine;
+    scheduleCoroutine.type.returnType = tc.t_void;
+    p = new FunctionParameter();
+    p.name = "c";
+    p.type = new UnsafePointerType(tc.t_void);
+    scheduleCoroutine.type.parameters.push(p);
+    systemPkg.scope.registerElement(scheduleCoroutine.name, scheduleCoroutine);
+    var coroutine: Function = new Function();
+    coroutine.name = "coroutine";
+    coroutine.type = new FunctionType();
+    coroutine.type.callingConvention = "system";
+    coroutine.type.name = "coroutine";
+    coroutine.type.systemCallType = SystemCalls.coroutine;
+    coroutine.type.returnType = new UnsafePointerType(tc.t_void);
+    systemPkg.scope.registerElement(coroutine.name, coroutine);
 
     mathPkg = new Package("fyr/math");
     let abs = makeMathFunction("abs", 1, SystemCalls.abs32, SystemCalls.abs64, tc);

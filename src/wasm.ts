@@ -46,7 +46,7 @@ export class Module extends Node {
             s += g.toWast(indent + "    ") + "\n";
         }
         
-        for(let f of this.funcs) {
+        for(let f of this.funcs.sort(function(a: Function, b: Function) { if (a.index == b.index) return 0; if (a.index < b.index) return -1; return 1;})) {
             s += f.toWast(indent + "    ") + "\n";
         }
 
@@ -70,7 +70,7 @@ export class Module extends Node {
         }
 
         // Table section
-        if (this.funcTable.length > 0) {
+//        if (this.funcTable.length > 0) {
             s += indent + "    (table " + this.funcTable.length + " anyfunc)\n";
             for(let i = 0; i < this.funcTable.length; i++) {
                 if (!this.funcTable[i]) {
@@ -82,7 +82,7 @@ export class Module extends Node {
                 }
                 s += ")\n";
             }
-        }
+//        }
 
         // Function types
         for(let f of this.funcTypes) {
@@ -370,6 +370,16 @@ export class Drop extends Node {
 
     public toWast(indent: string): string {
         return indent + "drop";
+    }   
+}
+
+export class Select extends Node {
+    public get op(): string {
+        return "select";
+    }
+
+    public toWast(indent: string): string {
+        return indent + "select";
     }   
 }
 

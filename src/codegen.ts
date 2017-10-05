@@ -946,6 +946,11 @@ export class CodeGenerator {
             case "yield":
                 b.assign(null, "yield", null, []);
                 break;
+            case "spawn":
+            {
+                this.processExpression(f, scope, snode, b, vars, snode.type);
+                break;
+            }
             default:
                 this.processExpression(f, scope, snode, b, vars, snode.type);
         }
@@ -1658,7 +1663,13 @@ export class CodeGenerator {
                 return vars.get(element);
             }
             case "(":
+            case "spawn":
             {
+                let isSpawn = false;
+                if (enode.op == "spawn") {
+                    isSpawn = true;
+                    enode = enode.rhs;
+                }
                 let f: Function;
                 let t: FunctionType;
                 let findex: ssa.Variable;
@@ -1922,9 +1933,16 @@ export class CodeGenerator {
                 
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
+                    if (isSpawn) {
+                        b.spawn(ft, args);
+                        return 0;
+                    }
                     return b.call(b.tmp(), ft, args);
                 } else if (findex) {
                     let ft = this.getSSAFunctionType(t);
+                    if (isSpawn) {
+                        return b.spawnIndirect(b.tmp(), ft, args);
+                    }
                     return b.callIndirect(b.tmp(), ft, args);
                 } else if (t.callingConvention == "system") {
                     let ft = this.getSSAFunctionType(t);

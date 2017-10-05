@@ -481,6 +481,10 @@ export class FunctionType extends Type {
         return i;
     }
 
+    public isAsync(): boolean {
+        return this.callingConvention == "fyrCoroutine";
+    }
+
     public returnType: Type;
     public parameters: Array<FunctionParameter>;
     public callingConvention: CallingConvention = "fyr";
@@ -1150,8 +1154,11 @@ export class TypeChecker {
             // TODO: Check range before parseInt
             let t = new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
             return t;
-        } else if (tnode.op == "funcType") {
+        } else if (tnode.op == "funcType" || tnode.op == "asyncFuncType") {
             let t = new FunctionType();
+            if (tnode.op == "asyncFuncType") {
+                t.callingConvention = "fyrCoroutine";
+            }
             t.loc = tnode.loc;
             if (tnode.parameters) {
                 for(let pnode of tnode.parameters) {
@@ -1312,7 +1319,7 @@ export class TypeChecker {
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
                 // Do nothing by intention
-            } else if (mnode.op == "funcType") {
+            } else if (mnode.op == "funcType" || mnode.op == "asyncFuncType") {
                 if (iface.isBoxedType()) {
                     throw new TypeError("Boxed types cannot have functions", mnode.loc);
                 }
@@ -1346,25 +1353,6 @@ export class TypeChecker {
         }
         return iface;
     }
-
-    /*
-    private createBoxedType(t: Type, loc: Location): InterfaceType {
-        // Interfaces cannot be boxed, because a boxed type is itself just an interface.
-        // Hence, boxing interfaces makes little sense.
-        if (t instanceof InterfaceType) {
-            return t;
-        }
-        if (t instanceof RestrictedType && t.isReference) {
-            throw new TypeError("Reference type " + t.toString() + " cannot be boxed", loc);
-        }
-        let iface = new InterfaceType();
-        this.ifaces.push(iface);
-        iface.loc = t.loc;
-        iface._markChecked = true;
-        iface.extendsInterfaces.push(t);
-        return iface;
-    }
-    */
 
     private checkInterfaceType(iface: InterfaceType) {
         if (iface._markChecked) {
@@ -1524,6 +1512,9 @@ export class TypeChecker {
             f.type = new FunctionType();
         }
         f.type.loc = fnode.loc;
+        if (fnode.op == "asyncFunc") {
+            f.type.callingConvention = "fyrCoroutine";
+        }
         // A member function?
         if (fnode.lhs) {
             let obj = fnode.lhs;
@@ -1856,7 +1847,7 @@ export class TypeChecker {
         // and handle all imports
         for(let fnode of mnode.statements) {
             for (let snode of fnode.statements) {
-                if (snode.op == "func" || snode.op == "export_func") {
+                if (snode.op == "func" || snode.op == "export_func" || snode.op == "asyncFunc") {
                     let f = this.createFunction(snode, fnode.scope, scope);                    
                     functions.push(f);
                 } else if (snode.op == "var") {
@@ -1900,6 +1891,7 @@ export class TypeChecker {
         }
 
         // Determine which functions could block and hence needs special coroutine treatment.
+        /*
         let changes = false;
         do {
             for(let f of this.callGraph.keys()) {
@@ -1919,7 +1911,7 @@ export class TypeChecker {
                 }
             }
         } while(changes);
-
+        */
         return scope;
     }
 
@@ -2610,7 +2602,23 @@ export class TypeChecker {
             case "yield":
             {
                 let f = scope.envelopingFunction();
-                f.type.callingConvention = "fyrCoroutine";
+                if (f.type.callingConvention != "fyrCoroutine") {
+                    throw new TypeError("yield is only allowed in async function", snode.loc);
+                }
+                break;
+            }
+            case "spawn":
+            {
+                this.checkExpression(snode.rhs, scope);
+                if (snode.rhs.op != "(") {
+                    throw "Implementation error";
+                }
+                if (!(snode.rhs.lhs.type instanceof FunctionType)) {
+                    throw "Implementation error";
+                }
+                if ((snode.rhs.lhs.type as FunctionType).returnType != this.t_void) {
+                    throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
+                }
                 break;
             }
             default:
@@ -3165,6 +3173,7 @@ export class TypeChecker {
                 }
                 */
                 enode.type = this.makeScoped(ft.returnType, scope, enode.loc);
+                /*
                 // Construct the call graph
                 let f = scope.envelopingFunction();
                 if (f) {
@@ -3178,6 +3187,7 @@ export class TypeChecker {
                         this.callGraph.set(f, calls);
                     }
                 }
+                */
                 break;
             }
             case "genericInstance":
@@ -4145,6 +4155,9 @@ export class TypeChecker {
                         ok = false;
                     }
                 }
+                if (a.callingConvention != b.callingConvention) {
+                    ok = false;
+                }
                 if (ok) {
                     return true;
                 }
@@ -4776,7 +4789,7 @@ export class TypeChecker {
     public ifaces: Array<InterfaceType> = [];
     public structs: Array<StructType> = [];
 
-    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
+//    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
 }
 

@@ -59,7 +59,6 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 
 - Type switch statement
 - Normal switch statement
-- Automatically include the runtime souces
 - map
     - tuple assignment
     - iteration
@@ -72,6 +71,10 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Bit-literals such as 0b11001
 - Not all types are properly wrapped in interfaces upon assignment
 - Type casts can remove const or scope, which is not ok
+- No yield in the init function or in functions called from there
+- spawn
+- Do not pass scoped variables when invoking a function via spawn
+- Handle async in interfaces
 
 # Wish List
 - Generics

@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
             return true;
         }
         return false;
@@ -29,7 +29,7 @@ file
             if (x.op == "var" && x.lhs.op != "id") {
                 error("Illegal variable definition for global variables", x.loc);
             }
-            if (x.op == "func" || x.op == "export_func" || x.op == "typedef" || x.op == "var" || x.op == "const") {
+            if (x.op == "func" || x.op == "export_func" || x.op == "asyncFunc" || x.op == "typedef" || x.op == "var" || x.op == "const") {
                 if (i > 0 && (m[i-1] instanceof Array)) {
                     x.comments = m[i-1];
                 }
@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = ex:("export" [ \t]+)? "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -106,6 +106,12 @@ func
           error("'const' is only allowed for member functions");
       }      
       let op = ex ? "export_func" : "func";
+      if (async) {
+          if (op == "export_func") {
+              error("Async functions cannot be exported");
+          }
+          op = "asyncFunc";
+      }
       return new ast.Node({loc: fl(location()), op: op, name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
     }
 
@@ -198,11 +204,11 @@ primitiveType
   / "(" [ \t]* t:typeList [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
     }
-  / "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:type? {
+  / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:type? {
       if (e) {
         t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
       }
-      return new ast.Node({loc: fl(location()), op: "funcType", parameters: t, rhs: f});      
+      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t, rhs: f});      
     }
   / "*" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
@@ -250,7 +256,7 @@ interfaceMembers
   } 
 
 interfaceMember
-  = "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
+  = async:("async" [ \t+])? "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -265,7 +271,7 @@ interfaceMember
       if (v) {
           scope = new ast.Node({loc: fl(location()), op: "referenceType", rhs: scope});
       }
-      return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
+      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }
   / "extends" [ \t]+ t:type [ \t]* semicolon {
         return new ast.Node({loc: fl(location()), op: "extends", rhs: t});
@@ -380,6 +386,12 @@ statement
   / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block { return new ast.Node({loc: fl(location()), op: "for", condition: f ? f[2] : undefined, statements:b}); }
   / "yield" {
       return new ast.Node({loc: fl(location()), op: "yield"});
+    }
+  / "spawn" [ \t]+ e:expression {
+      if (e.op != "(") {
+          expected("A function invocation following 'spawn'");
+      }
+      return new ast.Node({loc: fl(location()), op: "spawn", rhs: e});
     }
   / s: simpleStatement { 
       if (s.op == "in" || s.op == "var_in") {

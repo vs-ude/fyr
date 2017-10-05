@@ -15,13 +15,11 @@ var heapEndBlockNr uint
 // The value is either binary 01 or 10
 var gcEpoch uint
 
-var coroutine Coroutine
-
-type Coroutine struct {
-    // This is a pointer to ensure that the stack is garbage collected
-    stack *Stack
-    stackSize uint
-}
+// Pointer to the current coroutine
+var coroutine *Coroutine
+// The coroutine used by the host to call exported Fyr functions.
+var hostCoroutine *Coroutine
+var readyCoroutines *Coroutine
 
 type RootBlock struct {
     // Pointers to free areas of size 1 << (5 + i).
@@ -77,6 +75,8 @@ type FreeArea struct {
     size uint
 }
 
+// The beginning of a block (or block sequence) representing a state contains this data structure.
+// It allows the GC to handle the stack properly.
 type Stack struct {
     zeroTypemap #void
     // This pointer is used by the GC to detect the end of the stack
@@ -84,8 +84,88 @@ type Stack struct {
     sp #void
 }
 
-func getStackPointer() #void {
+type Coroutine struct {
+    stack Stack
+//    stackSize uint
+    // Pointer to the next Coroutine in the list
+    next *Coroutine
+    // If the coroutine is suspended, this pointer is passed as sp upon continuation
+    frame #StackFrame
+    // True, if a suspended coroutine is ready to continue.
+    ready bool
+}
+
+// The beginning of a stack frame as used by an async function
+type StackFrame struct {
+    funcTableIndex uint32
+    sp #void
+    step uint32
+    prevFrame #StackFrame
+}
+
+func currentCoroutine() *Coroutine {
+    return coroutine
+}
+
+// Called when the host calls a Fyr function.
+// Returns the stack to be used in this call.
+func startHostCoroutine() #void {
+    if (hostCoroutine.ready) {
+        hostCoroutine.ready = false
+        coroutine = hostCoroutine
+    }
     return coroutine.stack.sp
+}
+
+// Called when the hostCoroutine returned.
+// The functions executes all other coroutines which are ready.
+func finishHostCoroutine() {
+    // Run all other ready coroutines
+    for(coroutine = readyCoroutines; readyCoroutines != null; coroutine = readyCoroutines) {        
+        readyCoroutines = coroutine.next
+        coroutine.next = null
+        coroutine.ready = false
+        for(; coroutine.frame != null; coroutine.frame = coroutine.frame.prevFrame) {
+            var f = system.continueCoroutine(coroutine.frame.step, coroutine.frame, coroutine.frame.funcTableIndex)
+            if (f != 0) {
+                coroutine.frame = f
+                break
+            }
+        }
+        // TODO: Free the stack of this coroutine immediately
+    }
+    hostCoroutine.ready = true
+}
+
+// Enqueues the coroutine for further execution.
+// Enqueued coroutines are executed when the hostCoroutine returns, i.e. its entire stack has been unwinded.
+func scheduleCoroutine(coroutine *Coroutine) {
+    if (coroutine.ready) {
+        return
+    }
+    coroutine.ready = true
+    if (readyCoroutines == null) {
+        readyCoroutines = coroutine
+    } else {
+        var c = readyCoroutines
+        for(; c.next != null; c = c.next) {                        
+        }
+        c.next = coroutine;
+    }
+}
+
+func createCoroutine() *Coroutine {
+    var coroutine = <#Coroutine>allocBlocks(1, 0x10000, 0, 0, 0, gcEpoch | 8)
+    coroutine.stack.zeroTypemap = null
+    coroutine.next = null
+    coroutine.ready = false
+    // The stack has a 0-typemap which indicates that this is a stack,
+    // followed by a pointer to the end of the stack, followed by a location for storing the SP
+    // of the coroutine owning the stack
+    coroutine.stack.stackEnd = <uint>coroutine + 0x10000
+    coroutine.stack.sp = coroutine.stack.stackEnd
+    coroutine.frame = null
+    return coroutine
 }
 
 // Returns the stack pointer
@@ -114,17 +194,18 @@ func initializeMemory() #void {
     f.count = heapEndBlockNr - heapStartBlockNr - 1 - stackBlockCount
     root.freeBlocks[blockCountToIndex(f.count)] = f
 
-    // Allocate the stack and hold a pointer to it so that GC can find it
+    // Allocate the stack for the host-coroutine and hold a pointer to it so that GC can find it
     var stack_block_nr = heapEndBlockNr - stackBlockCount
-    coroutine.stack = <#Stack>(stack_block_nr << 16)
-    coroutine.stackSize = stackBlockCount << 16
+    hostCoroutine = <#Coroutine>(stack_block_nr << 16)
+    hostCoroutine.ready = true
+//    hostCoroutine.stackSize = stackBlockCount << 16
     // The stack has a 0-typemap which indicates that this is a stack,
     // followed by a pointer to the end of the stack, followed by a location for storing the SP
     // of the coroutine owning the stack
-    coroutine.stack.stackEnd = heapEndBlockNr << 16
-    coroutine.stack.sp = coroutine.stack.stackEnd
+    hostCoroutine.stack.stackEnd = heapEndBlockNr << 16
+    hostCoroutine.stack.sp = hostCoroutine.stack.stackEnd
     root.blocks[stack_block_nr >> 1] |= <byte>(8 | 4 | gcEpoch) << ((stack_block_nr & 1) << 2)
-    return coroutine.stack.stackEnd
+    return hostCoroutine.stack.stackEnd
 }
 
 func initializeBlock(b #Block) {
@@ -182,6 +263,7 @@ func allocBlocks(elementCount uint, elementSize uint, typeMap #int, headSize uin
     }
     if (headTypeMap != null) {
         size += 4 // Additional 4 bytes for the typeMap pointer
+        flags |= 8
     }
 
     // Round the size up to the next block size and compute the block count
@@ -299,6 +381,7 @@ func alloc(elementCount uint, elementSize uint, typeMap #int, headSize uint, hea
     }
     if (headTypeMap != null) {
         size += 4 // Additional 4 bytes for the typeMap pointer        
+        flags |= 8
     }
 
     // Needs entire blocks?

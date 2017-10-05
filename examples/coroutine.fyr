@@ -1,0 +1,52 @@
+import . {
+    func logString(string)
+    func logNumber(int)
+} from "imports"
+
+import "fyr/system"
+
+async func runAsync() {
+    var i = 123
+    logString("Hello")
+    logNumber(i)
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("Continued")
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("Final run")
+    logNumber(i)
+}
+
+async func async3(i int) {
+    logString("3. Hello")
+    logNumber(i)
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("3. Continued")
+    logNumber(2 * i)
+}
+
+async func runAsync2(i int) {
+    logString("2. Hello")
+    logNumber(i)
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("2. Continued")
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("2. Call")
+    logNumber(i)
+    async3(i - 1)
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("2. Final run")
+    logNumber(2 * i)
+}
+
+export func main() {
+    logString("main ...")
+    spawn runAsync()
+    spawn runAsync2(256)
+    logString("... main")
+}
