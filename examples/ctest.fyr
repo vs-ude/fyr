@@ -1,0 +1,9 @@
+var n int
+
+func doSomething(s string) int {
+    return 0
+}
+
+export func main() {
+
+}

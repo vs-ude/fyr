@@ -1,19 +1,25 @@
 import {Location, Node, NodeOp} from "./ast"
 import {Function, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
-import * as wasm from "./wasm"
 import {SystemCalls} from "./pkg"
+import {Wasm32Backend} from "./backend_wasm"
+import {CBackend} from "./backend_c"
+import * as backend from "./backend"
 
 export class CodeGenerator {
-    constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean) {
+    constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean, emitC: boolean) {
         this.tc = tc;
         this.emitIR = emitIR;
         this.emitNoWasm = emitNoWasm;
         this.emitFunction = emitFunction;
+        this.emitC = emitC;
         this.disableNullCheck = disableNullCheck;
-        this.imports = new Map<string, wasm.FunctionImport>();
-        this.wasm = new ssa.Wasm32Backend(emitIR, emitFunction);
-        this.wasm.module.importMemory("imports", "mem");
+        this.imports = new Map<string, backend.FunctionImport>();
+        if (emitC) {
+            this.backend = new CBackend(emitIR, emitFunction);
+        } else {
+            this.backend = new Wasm32Backend(emitIR, emitFunction);
+        }
         this.sliceHeader = new ssa.StructType();
         this.sliceHeader.name = "slice";
         this.sliceHeader.addField("data_ptr", "ptr");
@@ -74,7 +80,7 @@ export class CodeGenerator {
                     if (this.imports.has(name)) {
                         this.funcs.set(e, this.imports.get(name));
                     } else {
-                        let wf = this.wasm.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
+                        let wf = this.backend.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
                         this.funcs.set(e, wf);
                         this.imports.set(name, wf);
                     }
@@ -96,10 +102,10 @@ export class CodeGenerator {
                 if (e.type.objectType) {
                     name = RestrictedType.strip(e.type.objectType).name + "." + name;
                 }
-                let wf = this.wasm.declareFunction(name);
+                let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
             } else if (e instanceof Variable) {
-                let g = this.wasm.declareGlobalVar(e.name, this.getSSAType(e.type));
+                let g = this.backend.declareGlobalVar(e.name, this.getSSAType(e.type));
                 this.globalVars.set(e, g);
                 if (e.node.rhs) {
                     globals.push(e);
@@ -110,7 +116,7 @@ export class CodeGenerator {
         }
         
         // Generate IR code for the initialization of global variables
-        let wf = this.wasm.declareInitFunction("init");
+        let wf = this.backend.declareInitFunction("init");
         let b = new ssa.Builder();
         let t = new FunctionType();
         t.returnType = this.tc.t_void;
@@ -126,7 +132,7 @@ export class CodeGenerator {
             let expr = this.processExpression(null, scope, v.node.rhs, b, vars, v.type);
             b.assign(g, "copy", this.getSSAType(v.type), [expr]);
         }
-        this.wasm.defineFunction(b.node, wf, false);
+        this.backend.defineFunction(b.node, wf, false);
 
         // Generate IR code for all functions and initialization of global variables
         for(let name of scope.elements.keys()) {
@@ -135,7 +141,7 @@ export class CodeGenerator {
                 if (e.isImported) {
                     throw "Implementation error";
                 }
-                let wf = this.funcs.get(e) as wasm.Function;
+                let wf = this.funcs.get(e) as backend.Function;
                 let n = this.processFunction(e, wf);
             } else if (e instanceof Variable) {
                 // Do nothing by intention
@@ -144,21 +150,14 @@ export class CodeGenerator {
             }
         }
 
-        if (!this.emitNoWasm) {
+        if (!this.emitNoWasm || this.emitC) {
             // Generate WASM code for the module
-            this.wasm.generateModule();
+            this.backend.generateModule();
         }
-        
-//        if (!this.emitNoWasm) {
-//            console.log(this.wasm.module.toWast(""));
-//        }
     }
 
-    public getWastCode(): string {
-        if (this.emitNoWasm) {
-            return null;
-        }
-        return this.wasm.module.toWast("");
+    public getCode(): string {
+        return this.backend.getCode();
     }
 
     public getSSAType(t: Type): ssa.Type | ssa.StructType {
@@ -276,7 +275,7 @@ export class CodeGenerator {
         return ftype;
     }
 
-    public processFunction(f: Function, wf: wasm.Function): ssa.Node {
+    public processFunction(f: Function, wf: backend.Function): ssa.Node {
         let vars = new Map<ScopeElement, ssa.Variable>();
         // Add global variables
         for(let e of this.globalVars.keys()) {
@@ -319,24 +318,8 @@ export class CodeGenerator {
             console.log(ssa.Node.strainToString("", b.node));                
         }
 
-        /*
-        this.optimizer.optimizeConstants(b.node);
-        if (this.emitIR || f.name == this.emitFunction) {
-            console.log('============ OPTIMIZED Constants ===============');
-            console.log(ssa.Node.strainToString("", b.node));
-        }
+        this.backend.defineFunction(b.node, wf, f.isExported);
 
-        this.optimizer.removeDeadCode(b.node);
-        if (this.emitIR || f.name == this.emitFunction) {
-            console.log('============ OPTIMIZED Dead code ===============');
-            console.log(ssa.Node.strainToString("", b.node));
-        }
-        */
-
-        this.wasm.defineFunction(b.node, wf, f.isExported);
-//        if (exportFunc) {
-//            this.wasm.module.exports.set(f.name, wf);
-//        } 
         return b.node;
     }
 
@@ -1227,10 +1210,10 @@ export class CodeGenerator {
                     throw "Implementation error";
                 }
                 let wf = this.funcs.get(f);
-                if (wf instanceof wasm.FunctionImport) {
+                if (wf.isImported()) {
                     throw "Implementation error";
                 }
-                this.wasm.module.addFunctionToTable(wf, tableStart + index);
+                this.backend.addFunctionToTable(wf, tableStart + index);
             }
             this.interfaceTableLength = Math.max(this.interfaceTableLength, maxOffset - minOffset + 1);
             return tableStart;
@@ -1325,8 +1308,7 @@ export class CodeGenerator {
                 return enode.value == "true" ? 1 : 0;
             case "str":
             {
-                let [off, len] = this.wasm.module.addString(enode.value);
-                return off;
+                return this.backend.addString(enode.value);
             }
             case "object":
             {
@@ -1356,7 +1338,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", st, args);                
                 } else if (t instanceof MapType) {
-                    let mapHeadTypeMap = this.wasm.typeMapper.mapType(this.mapHead);
+                    let mapHeadTypeMap = this.backend.getTypeMapper().mapType(this.mapHead);
                     // TODO: Reuse this type where possible
                     let entry = new ssa.StructType()
                     entry.name = "map";
@@ -1365,14 +1347,14 @@ export class CodeGenerator {
                     entry.addField("hash", "i64")
                     entry.addField("key", "ptr")
                     entry.addField("value", this.getSSAType(t.valueType));                        
-                    let entryTypeMap = this.wasm.typeMapper.mapType(entry);
+                    let entryTypeMap = this.backend.getTypeMapper().mapType(entry);
                     let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
                     if (enode.parameters) {
                         for(let p of enode.parameters) {
                             if (t.keyType != this.tc.t_string) {
                                 throw "Implementation error";
                             }
-                            let [off, len] = this.wasm.module.addString(p.name.value);
+                            let off = this.backend.addString(p.name.value);
                             let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
                             let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, off]);
                             b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
@@ -1895,7 +1877,7 @@ export class CodeGenerator {
                 }
                 
                 if (f) {
-                    args.push(this.funcs.get(f).index);
+                    args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {
                     args.push(findex);
                 } else if (t.callingConvention == "system") {
@@ -2381,9 +2363,12 @@ export class CodeGenerator {
     }
 
     private typecode(t: Type): number {
+        // TODO: String addresses and type code numbers must not overlap
         if (t instanceof StringLiteralType) {
-            let [off, len] = this.wasm.module.addString(t.name);
-            return off
+            let off = this.backend.addString(t.name);
+            if (typeof(off) == "number") {
+                return off;
+            }
         }
         let tc = t.toTypeCodeString();
         if (this.typeCodeMap.has(tc)) {
@@ -2399,10 +2384,10 @@ export class CodeGenerator {
     }
 
     private optimizer: ssa.Optimizer;
-    private wasm: ssa.Wasm32Backend;
+    private backend: backend.Backend;
     private tc: TypeChecker;
-    private imports: Map<string, wasm.FunctionImport>;
-    private funcs: Map<Function, wasm.Function | wasm.FunctionImport> = new Map<Function, wasm.Function | wasm.FunctionImport>();
+    private imports: Map<string, backend.FunctionImport>;
+    private funcs: Map<Function, backend.Function | backend.FunctionImport> = new Map<Function, backend.Function | backend.FunctionImport>();
     private globalVars = new Map<ScopeElement, ssa.Variable>();
     private sliceHeader: ssa.StructType;
     private ifaceHeader: ssa.StructType;
@@ -2414,6 +2399,7 @@ export class CodeGenerator {
     private emitIR: boolean;
     private emitNoWasm: boolean;
     private emitFunction: string | null;
+    private emitC: boolean;
     private disableNullCheck: boolean;
     private concatStringFunctionType: ssa.FunctionType;
     private compareStringFunctionType: ssa.FunctionType;
@@ -2434,12 +2420,3 @@ export class CodeGenerator {
     private typeCodeMap: Map<string,number> = new Map<string, number>();
 }
 
-export class LinkError {
-    constructor(message: string, loc: Location) {
-        this.message = message;
-        this.location = loc;
-    }
-
-    public message: string;
-    public location: Location;
-}

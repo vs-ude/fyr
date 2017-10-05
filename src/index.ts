@@ -18,6 +18,10 @@ colors.red;
 var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
 function compileModules() {
+    if (program.emitC) {
+        program.disableWasm = true;
+    }
+
     var args = Array.prototype.slice.call(arguments, 0);
     var files = [];
     let fyrPath = process.env["FYRPATH"];
@@ -25,8 +29,10 @@ function compileModules() {
         console.log(("No FYRPATH environment variable has been set").red);
         return;
     }
-    files.push(path.join(fyrPath, "runtime/mem.fyr"));
-    files.push(path.join(fyrPath, "runtime/map.fyr"));
+    if (!program.disableRuntime) {
+        files.push(path.join(fyrPath, "runtime/mem.fyr"));
+        files.push(path.join(fyrPath, "runtime/map.fyr"));
+    }
     // Determine all source files to compile
     for(var i = 0; i < args.length - 1; i++) {
         let file = args[i];
@@ -54,28 +60,32 @@ function compileModules() {
         }
     }
 
-    try {
+//    try {
         // Run the type checker
         let tc = new typecheck.TypeChecker();
         pkg.initPackages(tc);
         let scope = tc.checkModule(mnode);
         // Generate IR and WASM code
-        let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck);
+        let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck, program.emitC);
         cg.processModule(mnode);
         if (!program.disableWasm) {
-            let wastcode = cg.getWastCode();
+            let wastcode = cg.getCode();
             var input = path.resolve(args[args.length - 2]);
             let f = path.parse(input);
             let wastfile = f.dir + path.sep + f.name + ".wast";
             fs.writeFileSync(wastfile, wastcode, "utf8");
         }
-    } catch(ex) {
+        if (program.emitC) {
+            let code = cg.getCode();
+            var input = path.resolve(args[args.length - 2]);
+            let f = path.parse(input);
+            let cfile = f.dir + path.sep + f.name + ".c";
+            fs.writeFileSync(cfile, code, "utf8");
+        }
+/*    } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;                
-        } else if (ex instanceof codegen.LinkError) {
-            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;           
+            return;
         } else if (ex instanceof pkg.ImportError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return
@@ -83,7 +93,7 @@ function compileModules() {
             console.log(ex);
             throw ex;
         }
-    }
+    } */
 
     // Compile Wast to Wasm
     if (!program.disableWasm) {
@@ -102,6 +112,8 @@ program
     .option('-f, --emit-ir-function <name>', "Emit IR code only for one function", null)
     .option('-W, --disable-wasm', "Do not emit WASM code")
     .option('-N, --disable-null-check', "Do not check for null pointers")
+    .option('-c, --emit-c', "Emit C code")
+    .option('-T, --disable-runtime', "Do not include the standard runtime")
 
 program
 	.command('compile')

@@ -1,4 +1,5 @@
 import * as textEncoding from "text-encoding";
+import * as backend from "./backend";
 
 export abstract class Node {
     public abstract get op(): string;
@@ -199,11 +200,19 @@ export class Module extends Node {
     private strings: Map<string, [number, number]> = new Map<string, [number, number]>();
 }
 
-export class FunctionImport {
+export class FunctionImport implements backend.FunctionImport {
     constructor(name: string, from: string, type: FunctionType) {
         this.name = name;
         this.from = from;
         this.type = type;
+    }
+
+    public getIndex(): number {
+        return this.index;
+    }
+
+    public isImported(): boolean {
+        return true;
     }
 
     public name: string;
@@ -281,7 +290,7 @@ export class StringData extends Data {
     }
 }
 
-export class Function extends Node {
+export class Function extends Node implements backend.Function {
     constructor(name?: string) {
         super();
 //        if (!name) {
@@ -290,6 +299,14 @@ export class Function extends Node {
 //        } else {
             this.name = name;
 //        }
+    }
+
+    public getIndex(): number {
+        return this.index;
+    }
+
+    public isImported(): boolean {
+        return false;
     }
 
     public get op(): string {
