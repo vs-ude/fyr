@@ -174,7 +174,7 @@ export class FunctionType {
                 this._stackFrame.addField("$p" + i.toString(), this.params[i]);
             }
         }
-        if (this.result instanceof StructType) {
+        if (this.result instanceof StructType || this.isAsync()) {
             this._stackFrame.addField("$result", this.result);
         }
         // Add a field for the typemap if the stack is non-empty
@@ -182,6 +182,10 @@ export class FunctionType {
             this._stackFrame.addField("$typemapCall", "i32");
         }
         return this._stackFrame;
+    }
+
+    public isAsync(): boolean {
+        return this.callingConvention == "fyrCoroutine";
     }
 
     public params: Array<Type | StructType>;
@@ -2347,7 +2351,7 @@ export class Wasm32Backend {
                     let typemap = this.typeMapper.mapType(n.type.stackFrame);
                     code.push(new wasm.Comment("Store typemap"));
                     code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Constant("i32", typemap.addr));
+                    code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
                     code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
                 }
                 code.push(new wasm.Constant("i32", 0xffffffff)); // Initialization step
@@ -2394,10 +2398,34 @@ export class Wasm32Backend {
                     throw "Implementation error"
                 }
                 if (n.assign) {
-                    // Put destination addr on wasm stack
-                    let destOffset = this.emitAddrOfVariable(n.assign, true, code);
-                    // Copy from the stack into the destination
-                    this.emitCopy(n.type.result, n.type.stackFrame.fieldOffset("$result"), destOffset, code);
+                    if (n.type.result instanceof StructType) {
+                        // Put destination addr on wasm stack
+                        let destOffset = this.emitAddrOfVariable(n.assign, true, code);
+                        // Copy from the stack into the destination
+                        code.push(new wasm.GetLocal(this.spLocal));
+                        this.emitCopy(n.type.result, n.type.stackFrame.fieldOffset("$result"), destOffset, code);
+                    } else {
+                        this.storeVariableFromWasmStack1(n.type.result, n.assign, code);
+                        let width: wasm.StackType = this.stackTypeOf(n.type.result);
+                        let asWidth: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null;
+                        switch (n.type.result) {
+                            case "i8":
+                                asWidth = "8_u";
+                                break;
+                            case "s8":
+                                asWidth = "8_s";
+                                break;
+                            case "i16":
+                                asWidth = "16_u";
+                                break;
+                            case "s16":
+                                asWidth = "16_s";
+                                break;
+                        }
+                        code.push(new wasm.GetLocal(this.spLocal));
+                        code.push(new wasm.Load(width, asWidth, n.type.stackFrame.fieldOffset("$result")));            
+                        this.storeVariableFromWasmStack2(n.type.result, n.assign, false, code);
+                    }
                 }
                 // Remove the entire stack frame
                 if (n.type.stackFrame.size > 0) {

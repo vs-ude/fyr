@@ -5,6 +5,11 @@ import . {
 
 import "fyr/system"
 
+type Point struct {
+    x int
+    y int
+}
+
 async func runAsync() {
     var i = 123
     logString("Hello")
@@ -18,13 +23,22 @@ async func runAsync() {
     logNumber(i)
 }
 
-async func async3(i int) {
+async func async4() Point {
+    logString("4. Hello")
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("4. Continued")
+    return {x:31, y:13}
+}
+
+async func async3(i int) int {
     logString("3. Hello")
     logNumber(i)
     system.scheduleCoroutine(system.coroutine())
     yield
     logString("3. Continued")
     logNumber(2 * i)
+    return 42
 }
 
 async func runAsync2(i int) {
@@ -37,7 +51,17 @@ async func runAsync2(i int) {
     yield
     logString("2. Call")
     logNumber(i)
-    async3(i - 1)
+    var r = async3(i - 1)
+    logString("2. Call returned")
+    logNumber(r)
+    system.scheduleCoroutine(system.coroutine())
+    yield
+    logString("2. Call Point")
+    logNumber(i)
+    var p = async4()
+    logString("2. Call Point returned")
+    logNumber(p.x)
+    logNumber(p.y)
     system.scheduleCoroutine(system.coroutine())
     yield
     logString("2. Final run")
