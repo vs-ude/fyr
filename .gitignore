@@ -8,6 +8,7 @@ examples/*.c
 tmp/*
 measurements/**/*.wasm
 measurements/**/*.wast
+measurements/**/*.c
 measurements/mandel_go/mandelbrot
 measurements/rect_go/rect
 measurements/call_go/call

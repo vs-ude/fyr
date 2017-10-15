@@ -129,8 +129,18 @@ export class CodeGenerator {
         }
         for(let v of globals) {
             let g = this.globalVars.get(v);
-            let expr = this.processExpression(null, scope, v.node.rhs, b, vars, v.type);
-            b.assign(g, "copy", this.getSSAType(v.type), [expr]);
+            if ((this.tc.isStruct(v.type) || this.tc.isArray(v.type)) && this.isPureLiteral(v.type, v.node.rhs)) {
+                let expr = this.processPureLiteral(v.node.rhs);
+                if (v.isConst && this.tc.isConst(v.type)) {
+                    g.isConstant = true;
+                    g.constantValue = (expr as ssa.Variable).constantValue;
+                } else {
+                    b.assign(g, "copy", this.getSSAType(v.type), [expr]);
+                }
+            } else {
+                let expr = this.processExpression(null, scope, v.node.rhs, b, vars, v.type);
+                b.assign(g, "copy", this.getSSAType(v.type), [expr]);
+            }
         }
         this.backend.defineFunction(b.node, wf, false);
 
@@ -377,8 +387,18 @@ export class CodeGenerator {
                         // A single variabe is defined and assigned
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let v = vars.get(element);
-                        let tmp = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
-                        b.assign(v, "copy", v.type, [tmp]);
+                        if ((this.tc.isArray(element.type) || this.tc.isStruct(element.type)) && this.isPureLiteral(element.type, snode.rhs)) {
+                            let data = this.processPureLiteral(snode.rhs);
+                            if (element.isConst && this.tc.isConst(element.type)) {
+                                v.isConstant = true;
+                                v.constantValue = (data as ssa.Variable).constantValue;
+                            } else {                                
+                                b.assign(v, "copy", v.type, [data]);
+                            }
+                        } else {    
+                            let data = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
+                            b.assign(v, "copy", v.type, [data]);
+                        }
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
                     } else if (snode.lhs.op == "array") {
@@ -497,12 +517,17 @@ export class CodeGenerator {
                     }
                 } else {
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
-                    let tmp = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
+                    let data: ssa.Variable | number;
+                    if ((this.tc.isArray(snode.lhs.type) || this.tc.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
+                        data = this.processPureLiteral(snode.rhs);
+                    } else {
+                        data = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
+                    }
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                     if (dest instanceof ssa.Pointer) {
-                        b.assign(b.mem, "store", this.getSSAType(snode.lhs.type), [dest.variable, dest.offset, tmp]);
+                        b.assign(b.mem, "store", this.getSSAType(snode.lhs.type), [dest.variable, dest.offset, data]);
                     } else {
-                        b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [tmp]);
+                        b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [data]);
                     }
                 }
                 break;
@@ -1168,6 +1193,116 @@ export class CodeGenerator {
         }
     }
 
+    private processPureLiteral(n: Node): ssa.Variable | number {
+        let buf: ssa.BinaryData = [];
+        this.processPureLiteralInternal(n, buf);
+        let v = new ssa.Variable();
+        v.type = this.getSSAType(n.type);
+        v.constantValue = buf;
+        v.isConstant = true;
+        return v;
+    }
+
+    private processPureLiteralInternal(n: Node, buf: ssa.BinaryData): void {        
+        if (n.type == this.tc.t_bool) {
+            buf.push(n.value == "true" ? 1 : 0);
+        } else if (n.type == this.tc.t_uint8) {
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_uint16) {
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_uint32 || n.type == this.tc.t_rune) {
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_uint64) {
+            // TODO large numbers
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_int8) {
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_int16) {
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_int32) {
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_int64) {
+            // TODO large numbers
+            buf.push(parseInt(n.value));
+        } else if (n.type == this.tc.t_float) {
+            buf.push(parseFloat(n.value));
+        } else if (n.type == this.tc.t_double) {
+            buf.push(parseFloat(n.value));
+        } else if (n.type == this.tc.t_string) {
+            buf.push(n.value);
+        } else if (this.tc.isSafePointer(n.type) || this.tc.isUnsafePointer(n.type)) {
+            if (n.op != "null" && (n.op != "int" || n.numValue != 0)) {
+                throw "Implementation error"
+            }
+            buf.push(0);
+        } else if (this.tc.isArray(n.type)) {
+            for(let p of n.parameters) {
+                this.processPureLiteralInternal(p, buf);
+            }
+        } else if (this.tc.isTuple(n.type)) {
+            for(let p of n.parameters) {
+                this.processPureLiteralInternal(p, buf);
+            }
+        } else if (this.tc.isStruct(n.type)) {
+            for(let f of (this.tc.stripType(n.type) as StructType).fields) {
+                let found = false;
+                for(let p of n.parameters) {
+                    if (p.name.value == f.name) {
+                        this.processPureLiteralInternal(p.lhs, buf);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    buf.push(0);
+                }
+            }
+        } else {
+            throw "Implementation error";
+        }
+    }
+
+    /*
+    private processPureLiteralInternal(n: Node, buf: BinaryBuffer): void {        
+        if (n.type == this.tc.t_bool) {
+            buf.appendUint8(n.value == "true" ? 1 : 0);
+        } else if (n.type == this.tc.t_uint8) {
+            buf.appendUint8(parseInt(n.value));
+        } else if (n.type == this.tc.t_uint16) {
+            buf.appendUint16(parseInt(n.value));
+        } else if (n.type == this.tc.t_uint32 || n.type == this.tc.t_rune) {
+            buf.appendUint32(parseInt(n.value));
+        } else if (n.type == this.tc.t_uint64) {
+            // TODO large numbers
+            buf.appendUint64(parseInt(n.value));
+        } else if (n.type == this.tc.t_int8) {
+            buf.appendInt8(parseInt(n.value));
+        } else if (n.type == this.tc.t_int16) {
+            buf.appendInt16(parseInt(n.value));
+        } else if (n.type == this.tc.t_int32) {
+            buf.appendInt32(parseInt(n.value));
+        } else if (n.type == this.tc.t_int64) {
+            // TODO large numbers
+            buf.appendInt64(parseInt(n.value));
+        } else if (n.type == this.tc.t_float) {
+            buf.appendFloat32(parseFloat(n.value));
+        } else if (n.type == this.tc.t_double) {
+            buf.appendFloat64(parseFloat(n.value));
+        } else if (n.type instanceof PointerType) {
+            if (n.op != "null" && (n.op != "int" || n.numValue != 0)) {
+                throw "Implementation error"
+            }
+            buf.appendPointer(0);
+        } else if (n.type instanceof ArrayType) {
+
+        } else if (n.type instanceof TupleType || n.type instanceof StructType) {
+            
+        } else {
+            throw "Implementation error";
+        }
+    }
+    */
+
     public isLeftHandSide(node: Node): boolean {
         return !this.tc.checkIsIntermediate(node);
     }
@@ -1308,7 +1443,12 @@ export class CodeGenerator {
                 return enode.value == "true" ? 1 : 0;
             case "str":
             {
-                return this.backend.addString(enode.value);
+                let v = new ssa.Variable();
+                v.isConstant = true;
+                v.constantValue = enode.value;
+                v.type = "addr";
+                return v;
+                // return this.backend.addString(enode.value);
             }
             case "object":
             {
@@ -1354,9 +1494,13 @@ export class CodeGenerator {
                             if (t.keyType != this.tc.t_string) {
                                 throw "Implementation error";
                             }
-                            let off = this.backend.addString(p.name.value);
+                            // let off = this.backend.addString(p.name.value);
+                            let str = new ssa.Variable;
+                            str.isConstant = true;
+                            str.constantValue = p.name.value;
+                            str.type = "addr";
                             let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
-                            let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, off]);
+                            let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, str]);
                             b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
                         }
                     }
@@ -2381,6 +2525,58 @@ export class CodeGenerator {
 
     private isThis(v: ssa.Variable | number): boolean {
         return v instanceof ssa.Variable && v.name == "this";
+    }
+
+    private isPureLiteral(t: Type, n: Node): boolean {        
+        t = RestrictedType.strip(t);
+        if (t instanceof InterfaceType || t instanceof GuardedPointerType) {
+            return false;
+        }
+        switch (n.op) {
+            case "int":
+            case "bool":
+            case "float":
+            case "null":
+            case "rune":
+            case "str":
+                return true;
+            case "array":                
+            {
+                if (this.tc.isArray(t)) {
+                    for(let p of n.parameters) {
+                        if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                break;
+            }
+            case "tuple":
+            {
+                let i = 0
+                for(let p of n.parameters) {
+                    if (!this.isPureLiteral((t as TupleType).types[i], p)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            case "object":
+            {
+                if (this.tc.isStruct(t)) {
+                    for(let p of n.parameters) {
+                        let f = (t as StructType).field(p.name.value);
+                        if (!this.isPureLiteral(f.type, p.lhs)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                break;
+            }
+        }
+        return false;
     }
 
     private optimizer: ssa.Optimizer;

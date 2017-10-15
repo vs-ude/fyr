@@ -4434,6 +4434,11 @@ export class TypeChecker {
         return t instanceof StructType;
     }
 
+    public isTuple(t: Type): boolean {
+        t = this.stripType(t);
+        return t instanceof TupleType;
+    }
+
     public isMutableValue(t: Type): boolean {
         t = this.stripType(t);
         return t instanceof StructType || t instanceof TupleType || t instanceof ArrayType;

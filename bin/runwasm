@@ -33,7 +33,7 @@ function loadWebAssembly(filename, imports) {
     const buffer = toUint8Array(fs.readFileSync(filename))
     return WebAssembly.compile(buffer)
     .then(module => {
-        const memory = new WebAssembly.Memory({initial: 18});
+        const memory = new WebAssembly.Memory({initial: 510});
         const memory_u32 = new Uint32Array(memory.buffer);   
         const decoder = new StringDecoder('utf8');        
         const importObject = {

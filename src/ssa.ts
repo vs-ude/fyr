@@ -1,3 +1,5 @@
+import {BinaryBuffer} from "./binarybuffer"
+
 export type NodeKind = "spawn" | "spawn_indirect" | "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr";
 
@@ -192,6 +194,8 @@ export class FunctionType {
     private _stackFrame: StructType;
 }
 
+export type BinaryData = Array<number | string>;
+
 export class Variable {
     constructor(name?: string) {
         if (name) {
@@ -227,15 +231,14 @@ export class Variable {
     /**
      * isConstant is true if the variable is assigned exactly once
      * and this value is a constant.
-     * The value is set by Optimizer.optimizeConstants().
+     * The value is set by Optimizer.optimizeConstants() or by the code generation.
      */
     public isConstant: boolean = false;
     /**
      * The value of the variable if it is assigned a constant number.
      * TODO: Cannot hold 64bit integers
      */
-    public constantValue: number;
-    public constantStringValue: string;
+    public constantValue: number | string | BinaryData;
     /**
      * True if the variable is just a copy of another and hence just an artefact
      * created by the code generation layer.
@@ -744,7 +747,7 @@ export class Builder {
     }
 
     private countReadsAndWrites(n: Node) {
-        if (n.assign) {
+        if (n.assign && n.kind != "decl_var") {
             n.assign.writeCount++;
 //            if (n.assign.isTemporary && n.assign.writeCount > 1) {
 //                throw "Variable " + n.assign.name + " is temporary but assigned more than once";
@@ -784,7 +787,7 @@ export class Optimizer {
                     this._optimizeConstants(n.next[1], n.blockPartner);
                 }
             }
-            if (n.kind == "const" && n.assign.writeCount == 1) {
+            if (n.kind == "const" && n.assign.writeCount == 1 && !n.assign.addressable) {
                 n.assign.isConstant = true;
                 n.assign.constantValue = n.args[0] as number;
                 let n2 = n.next[0];
@@ -793,7 +796,7 @@ export class Optimizer {
             } else {
                 for(let i = 0; i < n.args.length; i++) {
                     let a = n.args[i];
-                    if (a instanceof Variable && a.isConstant) {
+                    if (a instanceof Variable && a.isConstant && typeof(a.constantValue) == "number") {
                         n.args[i] = a.constantValue;
                     }
                 }
@@ -1262,6 +1265,8 @@ export class Stackifier {
                         // Try to inline the computation
                         let inline = this.findInline(n.prev[0], a, doNotInline, assigned);
                         if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
+                            inline.assign.readCount--;
+                            inline.assign.writeCount--;
                             inline.assign = null;
                             n.args[i] = inline;
                             Node.removeNode(inline);
@@ -1270,6 +1275,7 @@ export class Stackifier {
                         // Try to inline the computation
                         let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline, assigned);
                         if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
+                            inline.assign.readCount--;
                             n.args[i] = inline;
                             Node.removeNode(inline);
                         }

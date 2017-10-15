@@ -108,6 +108,9 @@ export class Module extends Node {
         return s + indent + ")";
     }
 
+    /**
+     * Returns the memory offset and the size of the UTF-8 encoding in bytes.
+     */
     public addString(value: string): [number, number] {
         if (this.strings.has(value)) {
             return this.strings.get(value);
@@ -120,6 +123,14 @@ export class Module extends Node {
         this.dataSize += align64(d.size());
         this.strings.set(value, [offset, uint8array.length]);
         return [offset, uint8array.length];
+    }
+
+    public addBinary(value: Uint8Array): number {
+        let offset = this.dataSize;
+        let d = new Data(offset, value);
+        this.data.push(d);
+        this.dataSize += align64(d.size());        
+        return offset;
     }
 
     public addFunction(f: Function) {
@@ -192,7 +203,8 @@ export class Module extends Node {
     public exports: Map<string, Node> = new Map<string, Node>();
     public initFunction: Function | null;
 
-    private dataSize: number = 0;
+    // The first 8 bytes are always zero so that dereferencing a null string pointer yields a string of length zero.
+    private dataSize: number = 8;
     private data: Array<Data> = [];
     private memoryImport: {ns: string, obj: string};
     private globals: Array<Global> = [];

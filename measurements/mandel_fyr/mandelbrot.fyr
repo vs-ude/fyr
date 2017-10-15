@@ -1,8 +1,8 @@
-import . {
-    func logString(string)
-    func logFloat(double)
-    func logNumber(uint)
-} from "imports"
+//import . {
+//    func logString(string)
+//    func logFloat(double)
+//    func logNumber(uint)
+//} from "imports"
 
 import "fyr/math"
 

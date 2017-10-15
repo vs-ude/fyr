@@ -62,7 +62,6 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - map
     - tuple assignment
     - iteration
-- Coroutines
 - Builtin integer math functions
 - Blocks in area-allocation-mode are not added to the block-free-list if all areas could be cleaned
 - Iterate over null slice
@@ -72,9 +71,9 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Not all types are properly wrapped in interfaces upon assignment
 - Type casts can remove const or scope, which is not ok
 - No yield in the init function or in functions called from there
-- spawn
 - Do not pass scoped variables when invoking a function via spawn
 - Handle async in interfaces
+- Complete C-Backend
 
 # Wish List
 - Generics
@@ -87,6 +86,7 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Iteration over custom types
 - Custom types as keys in a map
 - Use f.copysign for < 0
+- Arduino support
 
 ## Compiler optimizations
 
@@ -95,6 +95,7 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
     - However, measurements show no significant improvement here
 - Use less locals to improve register allocation
 - Assigning to a non-initialized variable. Do not zero it. Part for dead code removal
+- If a variable is assigned multiple times in sequence, keep the last assignment only
 
 ### Optimization hints extracted from measurements
 

@@ -1,10 +1,11 @@
 import * as wasm from "./wasm"
 import {TypeMapper, TypeMap} from "./gc"
 import {SystemCalls} from "./pkg"
-import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind} from "./ssa"
+import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "./ssa"
 import * as backend from "./backend"
+import {BinaryBuffer} from "./binarybuffer"
 
-export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap";
+export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap" | "global_strings";
 
 export class Wasm32Storage {
     public storageType: Wasm32StorageType;
@@ -72,7 +73,7 @@ export class Wasm32Backend implements backend.Backend {
         this.module.importMemory("imports", "mem");
         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
         // Null pointers point to a string that has length zero.
-        this.module.addString("");
+        // this.module.addString("");
         this.heapGlobalVariableIndex = 0;
         this.heapGlobalVariable = new wasm.Global("i32", null, false);
         this.module.addGlobal(this.heapGlobalVariable);
@@ -156,7 +157,16 @@ export class Wasm32Backend implements backend.Backend {
         // Generate WASM code for all globals
         let index = this.customglobalVariablesIndex;
         for(let v of this.globalVariables) {
-            if (v.addressable || v.type instanceof StructType || v.type == "ptr") {
+            if (v.isConstant && typeof(v.constantValue) == "string") {
+                let [offset, len] = this.module.addString(v.constantValue);
+                let s: Wasm32Storage = {storageType: "global_strings", offset: offset};
+                this.globalVarStorage.set(v, s);                    
+            } else if (v.isConstant && v.constantValue instanceof Array) {
+                let data = this.encodeLiteral(v.type, v.constantValue as BinaryData);
+                let offset = this.module.addBinary(data)
+                let s: Wasm32Storage = {storageType: "global_heap", offset: offset};
+                this.globalVarStorage.set(v, s);
+            } else if (v.addressable || v.type instanceof StructType || v.type == "ptr") {
                 let offset = this.module.addGlobalStruct(sizeOf(v.type));
                 let s: Wasm32Storage = {storageType: "global_heap", offset: offset};
                 this.globalVarStorage.set(v, s);
@@ -240,6 +250,7 @@ export class Wasm32Backend implements backend.Backend {
         this.varStorage = new Map<Variable, Wasm32Storage>();
         this.varGCStorage = new Map<Variable, Wasm32Storage>();
         this.varAsyncStorage = new Map<Variable, Wasm32Storage>();
+        this.varBinaryConstants = new Map<Variable, number>();
         this.tmpLocalVariables = new Map<number, [boolean, wasm.StackType]>();
         this.parameterVariables = [];
         this.returnVariables = [];
@@ -793,6 +804,24 @@ export class Wasm32Backend implements backend.Backend {
         if (this.varStorage.has(v) || this.globalVarStorage.has(v)) {
             return;
         }
+        
+        if (v.isConstant) {
+            if (typeof(v.constantValue) == "string") {
+                let [offset, len] = this.module.addString(v.constantValue);
+                let s: Wasm32Storage = {storageType: "global_strings", offset: offset};
+                this.varStorage.set(v, s);                    
+                return;
+            } else if (v.constantValue instanceof Array) {
+                let data = this.encodeLiteral(v.type, v.constantValue as BinaryData);
+                let offset = this.module.addBinary(data)
+                let s: Wasm32Storage = {storageType: "global_heap", offset: offset};
+                this.varStorage.set(v, s);
+                return;
+            } else {
+                throw "Implementation error";
+            }
+        }
+
         if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && !v.gcDiscoverable && !v.addressable) {
             // Non-struct variables (which are not GC-relevant) are stored in local variables.
             let index = locals.allocate(v.type);
@@ -1583,14 +1612,6 @@ export class Wasm32Backend implements backend.Backend {
             }
             default:
             {
-                let tmp = this.getTmpLocal("i32");
-                code.push(new wasm.SetLocal(tmp));
-                code.push(new wasm.GetLocal(this.spLocal));
-                code.push(new wasm.GetLocal(tmp));
-                if (srcOffset != 0) {
-                    code.push(new wasm.Constant("i32", srcOffset));
-                    code.push(new wasm.BinaryInstruction("i32", "add"));                    
-                }
                 if (destOffset != 0) {
                     let tmp = this.getTmpLocal("i32");
                     code.push(new wasm.SetLocal(tmp));
@@ -1598,7 +1619,12 @@ export class Wasm32Backend implements backend.Backend {
                     code.push(new wasm.BinaryInstruction("i32", "add"));
                     code.push(new wasm.GetLocal(tmp));
                 }
+                if (srcOffset != 0) {
+                    code.push(new wasm.Constant("i32", srcOffset));
+                    code.push(new wasm.BinaryInstruction("i32", "add"));                    
+                }
                 code.push(new wasm.Constant("i32", sizeOf(type)));
+                code.push(new wasm.GetLocal(this.spLocal));
                 code.push(new wasm.Call(this.copyFunctionIndex));
                 break;
             }
@@ -1647,7 +1673,6 @@ export class Wasm32Backend implements backend.Backend {
             }      
             case "global_heap":
             {
-                let s = this.globalVarStorage.get(v);
                 code.push(new wasm.Constant("i32", s.offset));
                 break;
             }
@@ -1711,9 +1736,13 @@ export class Wasm32Backend implements backend.Backend {
                 code.push(new wasm.GetGlobal(s.offset));
                 break;
             case "global_heap":
-                let st = this.globalVarStorage.get(v);
-                code.push(new wasm.Constant("i32", st.offset));
+                // let st = this.globalVarStorage.get(v);
+                code.push(new wasm.Constant("i32", s.offset));
                 code.push(new wasm.Load(width, asWidth, 0));
+                break;
+            case "global_strings":
+                // let st = this.globalVarStorage.get(v);
+                code.push(new wasm.Constant("i32", s.offset));
                 break;
         }
     }
@@ -2197,6 +2226,8 @@ export class Wasm32Backend implements backend.Backend {
                     code.push(new wasm.GetLocal(this.bpLocal));
                 }
                 break;
+            case "global_strings":
+                throw "Implementation error";
         }
     }
 
@@ -2279,7 +2310,10 @@ export class Wasm32Backend implements backend.Backend {
                 if (tee) {
                     code.push(new wasm.GetLocal(this.getTmpLocal(width)));
                 }
-                break;                
+                break;        
+            case "global_strings":
+                throw "Implementation error";
+        
         }
     }
 
@@ -2446,6 +2480,76 @@ export class Wasm32Backend implements backend.Backend {
         return false;
     }
 
+    private encodeLiteral(type: Type | StructType, data: BinaryData): Uint8Array {
+        let buf = new BinaryBuffer();
+        this.encodeLiteralIntern(type, data, 0, buf);
+        return buf.data;
+    }
+    
+    private encodeLiteralIntern(type: Type | StructType, data: BinaryData, dataOffset: number, buf: BinaryBuffer): number {
+        if (type instanceof StructType) {
+            let pos = 0;
+            for(let f of type.fields) {
+                for(let i = 0; i < f[2]; i++) {
+                    let fpos = type.fieldOffset(f[0]);
+                    if (fpos > pos) {
+                        buf.fill(fpos - pos);
+                        pos = fpos;
+                    }
+                    dataOffset = this.encodeLiteralIntern(f[1], data, dataOffset, buf);
+                    pos += sizeOf(f[1]);                    
+                }
+            }
+        } else {
+            switch (type) {
+                case "i8":
+                    buf.appendUint8(data[dataOffset++] as number);
+                    break;
+                case "s8":
+                    buf.appendInt8(data[dataOffset++] as number);
+                    break;
+                case "i16":
+                    buf.appendUint16(data[dataOffset++] as number);
+                    break;
+                case "s16":
+                    buf.appendInt16(data[dataOffset++] as number);
+                    break;
+                case "i32":
+                    buf.appendUint32(data[dataOffset++] as number);
+                    break;
+                case "s32":
+                    buf.appendInt32(data[dataOffset++] as number);
+                    break;         
+                case "i64":
+                    // TODO: 64 bit
+                    buf.appendUint64(data[dataOffset++] as number);
+                    break;
+                case "s64":
+                    // TODO: 64 bit
+                    buf.appendInt64(data[dataOffset++] as number);
+                    break;
+                case "f32":
+                    buf.appendFloat32(data[dataOffset++] as number);
+                    break;
+                case "f64":
+                    buf.appendFloat32(data[dataOffset++] as number);
+                    break;
+                case "addr":
+                case "ptr":
+                    if (typeof(data[dataOffset]) == "string") {
+                        let [offset, len] = this.module.addString(data[dataOffset++] as string);
+                        buf.appendPointer(offset);
+                    } else {
+                        buf.appendPointer(data[dataOffset++] as number);
+                    }
+                    break;
+                default:
+                    throw "Implementation error";
+            }
+        }
+        return dataOffset;
+    }
+
     public module: wasm.Module;
     public typeMapper: TypeMapper;
     
@@ -2507,6 +2611,7 @@ export class Wasm32Backend implements backend.Backend {
      * Variables listed here are saved to the stack frame before the function returns.
      */
     private varAsyncStorage: Map<Variable, Wasm32Storage>;
+    private varBinaryConstants: Map<Variable, number>;
     private parameterVariables: Array<Variable>;
     private localVariables: Array<Variable>;
     private returnVariables: Array<Variable>;
@@ -2527,5 +2632,5 @@ export class Wasm32Backend implements backend.Backend {
     private typemapGlobalVariableIndex: number;
     private customglobalVariablesIndex: number;
     private heapSize: number = 16 << 16; // 1 MB heap
-    private stackSize: number = 1 << 16; // 64kb Stack
+    private stackSize: number = 1 << 16; // 64kb Stack    
 }
