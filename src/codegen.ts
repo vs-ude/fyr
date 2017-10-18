@@ -406,11 +406,11 @@ export class CodeGenerator {
                     } else if (snode.lhs.op == "object") {
                         throw "TODO"                        
                     } else {
-                        throw "Impl error"
+                        throw "Implementation error"
                     }
                 } else {
                     if (snode.lhs.op == "id") {
-                        // A single variabe is defined and assigned
+                        // A single variable is defined and assigned
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let v = vars.get(element);
                         let t = this.getSSAType(element.type);
@@ -426,7 +426,7 @@ export class CodeGenerator {
                     } else if (snode.lhs.op == "object") {
                         throw "TODO"                        
                     } else {
-                        throw "Impl error"
+                        throw "Implementation error"
                     }                    
                 }
                 return;

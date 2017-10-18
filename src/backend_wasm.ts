@@ -776,6 +776,10 @@ export class Wasm32Backend implements backend.Backend {
                 this.parameterVariables.push(n.assign);                
                 n = n.next[0];                
                 continue;
+            } else if (n.kind == "decl_var") {
+                // Do nothing by intention. Variables are allocated when they are used
+                n = n.next[0];                
+                continue;
             }
             if (n.assign) {
                 this.assignVariableStorage(n.assign, locals, typemap);

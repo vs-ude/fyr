@@ -19,7 +19,10 @@ func hashString(ptr #byte) uint64 {
     return result
 }
 
+// A map contains of one or more linked hash tables.
+// Each such table starts if a header of type MapHead.
 type MapHead struct {
+    // Pointer to the next hash table
     nextHead *MapHead
     size int
     free int

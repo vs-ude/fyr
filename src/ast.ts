@@ -160,5 +160,6 @@ export class Node {
     public parameters: Array<Node>;
     public genericParameters: Array<Node>;
     public type: Type;
+    public nspace: string;
     public scope: Scope;
 }

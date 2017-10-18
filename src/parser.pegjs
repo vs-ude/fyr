@@ -42,8 +42,8 @@ file
     }
 
 typedef
-  = "type" [ \t]+ i:identifier [ \t]+ t:type {
-      return new ast.Node({loc: fl(location()), op: "typedef", name: i, rhs: t});
+  = "type" [ \t]+ i:identifier g:(genericParameters / [ \t]+) t:type {
+      return new ast.Node({loc: fl(location()), op: "typedef", name: i, rhs: t, genericParameters: g instanceof Array ? g : null});
     }
 
 import
@@ -153,7 +153,7 @@ genericParameters
   = "<" [ \t]* t:genericTypeList ">" [ \t]* { return t; }
 
 genericTypeList
-  = t:type w:([ \t*] "is" [ \t*] type)? r:([ \t]* "," [ \t]* type ([ \t*] "is" [ \t*] type)?)* [ \t]* {
+  = t:identifier w:([ \t*] "is" [ \t*] type)? r:([ \t]* "," [ \t]* identifier ([ \t*] "is" [ \t*] type)?)* [ \t]* {
       if (w) {
           t.condition = w[3];
       }
@@ -219,8 +219,8 @@ primitiveType
   / "^" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
-  / "struct" [ \t]* g:genericParameters? "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
-        return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : [], genericParameters: g});
+  / "struct" [ \t]* "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
+        return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : []});
     }
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
@@ -231,9 +231,14 @@ primitiveType
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
     }
-  / i: identifier g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
+  / i: identifier s:([ \t]* "." [ \t]* identifier)? g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
+      let nspace = null;
+      if (s) {
+          nspace = i.value;
+          i = s[3];
+      }
       if (g) {
-          return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i});
+          return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i, nspace: nspace});
       } 
       i.op = "basicType";
       return i;
