@@ -65,6 +65,7 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Builtin integer math functions
 - Blocks in area-allocation-mode are not added to the block-free-list if all areas could be cleaned
 - Iterate over null slice
+- Allocation of slices with variable sice
 - Array literals such as [...]byte[1,2,3,4]
 - Array literals assigned to const variables are stored in the text segment if they contain primitives only
 - Bit-literals such as 0b11001
@@ -74,9 +75,14 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Do not pass scoped variables when invoking a function via spawn
 - Handle async in interfaces
 - Complete C-Backend
+- Generics
+    - Generic parameters of OrType
+    - Check that parameter types match upon generic instantiation
+    - Generic instantiation has some TODOs
+- Detect recursive types, i.e. types that contain themselves
 
 # Wish List
-- Generics
+- Templates
 - Components
 - Models
 - Services
@@ -87,6 +93,7 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Custom types as keys in a map
 - Use f.copysign for < 0
 - Arduino support
+- Make map a template type
 
 ## Compiler optimizations
 
