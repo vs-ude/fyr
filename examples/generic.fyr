@@ -3,8 +3,17 @@ type LinkedList<T is interface{}> struct {
     value T
 }
 
+func LinkedList.setValue(x T) {
+    this.value = x
+}
+
+func LinkedList.getValue() T {
+    return this.value
+}
+
 export func main() int {
     var list *LinkedList<int> = &{value: 5}
     list.next = &{value: 42}
+    list.next.setValue(44)
     return list.value + list.next.value
 }

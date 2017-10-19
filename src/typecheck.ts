@@ -1624,6 +1624,15 @@ export class TypeChecker {
             if (!this.isStruct(f.type.objectType)) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);                
             }
+            if (f.type.objectType instanceof GenericStructType) {
+                if (f.type.objectType.base) {
+                    throw new TypeError("Functions cannot be attached to instantiated generic types", fnode.lhs.loc);
+                }
+                for(let i = 0; i < f.type.objectType.genericParameterNames.length; i++) {
+                    f.scope.registerType(f.type.objectType.genericParameterNames[i], f.type.objectType.genericParameterTypes[i]);
+                    pseudoScope.registerType(f.type.objectType.genericParameterNames[i], f.type.objectType.genericParameterTypes[i]);
+                }
+            }
             let p = new FunctionParameter();
             p.name = "this";            
             p.loc = fnode.lhs.loc;
