@@ -261,6 +261,9 @@ export class InterfaceType extends Type {
         if (this.name) {
             return this.name;
         }
+        if (this.isBoxedType()) {
+            return "interface{" + this.unbox().toString() + "}";
+        }
         if (this.extendsInterfaces.length > 0 || this.methods.size > 0) {
             return "interface{...}";
         }
@@ -1252,7 +1255,7 @@ export class TypeChecker {
                 }
                 let types: Array<Type> = [];
                 for(let i = 0; i < tnode.genericParameters.length; i++) {
-                    types.push(this.createType(tnode.genericParameters[i], scope));
+                    types.push(this.makeBox(this.createType(tnode.genericParameters[i], scope), tnode.loc));
                 }
                 return this.instantiateGenericStructType(baset, types, tnode.loc);
 /*                let ct = new GenericStructInstanceType();
