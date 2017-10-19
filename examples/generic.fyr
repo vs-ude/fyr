@@ -15,5 +15,5 @@ export func main() int {
     var list *LinkedList<int> = &{value: 5}
     list.next = &{value: 42}
     list.next.setValue(44)
-    return list.value + list.next.value
+    return list.value + list.next.getValue()
 }

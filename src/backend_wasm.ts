@@ -1199,8 +1199,10 @@ export class Wasm32Backend implements backend.Backend {
                         let t = this.returnVariables[i].type;
                         // Destination addr
 //                        let destOffset = this.emitAddrOfVariable(this.returnVariables[i], true, code);
+                        code.push(new wasm.GetLocal(this.bpLocal));
                         let returnOffset = this.varStorage.get(this.returnVariables[i]).offset;
                         let destOffset = this.paramsFrame.size + this.varsFrame.size + returnOffset;
+//                        this.emitAssign(t, n.args[i], "heapStack", destOffset, code);
                         this.emitAssign(t, n.args[i], "heapStack", destOffset, code);
                     }
                 }
