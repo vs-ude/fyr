@@ -1485,17 +1485,19 @@ export class Wasm32Backend implements backend.Backend {
                 this.emitCopy(type, srcOffset, destOffset, code);
             } else if (n instanceof Node) {
                 if (n.kind == "copy" || n.kind == "load") {
+                    let tmp: number;
                     let assignDest: "heap" | "heapStack" = "heap"
                     // Put the destination addr on the stack (if it is not already there)
                     if (dest === null) {
                         destOffset = this.emitAddrOfVariable(n.assign, true, code);
                     } else if (dest === "heapStack") {
                         assignDest = "heapStack";
+                        code.push(new wasm.GetLocal(this.spLocal));
                     } else if (dest === "heap" && n.assign) {
                         // Duplicate the heap addr in case we need to copy the value to the assigned variable
                         let tmp = this.getTmpLocal("i32");
                         code.push(new wasm.TeeLocal(tmp));
-                        code.push(new wasm.GetLocal(tmp));
+//                        code.push(new wasm.GetLocal(tmp));
                     }
                     // Copy the value
                     if (n.kind == "load") {
@@ -1504,13 +1506,15 @@ export class Wasm32Backend implements backend.Backend {
                     } else {
                         this.emitAssign(type, n.args[0], assignDest, destOffset, code);
                     }
-                    // Assign and stack?
+                    // Assign and dest?
                     if (n.assign && dest !== null) {
                         // Put the destination address on the stack
                         let assignOffset = this.emitAddrOfVariable(n.assign, true, code);
                         // Put the source address on the stack (unless it is already there)
                         if (dest == "heapStack") {
                             code.push(new wasm.GetLocal(this.spLocal));
+                        } else if (dest == "heap") {
+                            code.push(new wasm.GetLocal(tmp));
                         }
                         this.emitCopy(type, destOffset, assignOffset, code);
                     }
