@@ -1002,7 +1002,16 @@ export class TupleLiteralType extends Type {
 }
 
 export class OrType extends Type {
-    public types: Array<Type> = [];
+    constructor(types?: Array<Type>) {
+        super();
+        if (types) {
+            this.types = types;
+        } else {
+            this.types = [];
+        }
+    }
+
+    public types: Array<Type>;
 
     public toString(): string {
         if (this.name) {
@@ -4842,6 +4851,9 @@ export class TypeChecker {
         return t;
     }
 
+    /**
+     * This function is used during instantiation of generics.
+     */
     private translateType(t: Type, tr: Map<Type, Type>, newT?: Type): Type {
         // Stop at named types
         if (t.name && !newT && !(t instanceof GenericStructType)) {
@@ -4927,15 +4939,52 @@ export class TypeChecker {
             }
             return new RestrictedType(e, t);
         } else if (t instanceof OrType) {
-            throw "TODO";            
+            let modified = false;
+            let types: Array<Type> = [];
+            for(let p of t.types) {
+                let ptrans = this.translateType(p, tr);
+                if (ptrans != p) {
+                    modified = true;
+                }
+                types.push(p);
+            }
+            if (!modified) {
+                return t;
+            }
+            return new OrType(types);
         } else if (t instanceof SliceType) {
-            throw "TODO";            
+            let e = this.translateType(t.elementType, tr);
+            if (e == t.elementType) {
+                return t;
+            }
+            return new SliceType(e);
         } else if (t instanceof ArrayType) {
-            throw "TODO";            
+            let e = this.translateType(t.elementType, tr);
+            if (e == t.elementType) {
+                return t;
+            }
+            return new ArrayType(e, t.size);
         } else if (t instanceof MapType) {
-            throw "TODO";            
+            let k = this.translateType(t.keyType, tr);
+            let v = this.translateType(t.valueType, tr);
+            if (k == t.keyType && v == t.valueType) {
+                return t;
+            }
+            return new MapType(k, v);
         } else if (t instanceof TupleType) {
-            throw "TODO";            
+            let modified = false;
+            let types: Array<Type> = [];
+            for(let p of t.types) {
+                let ptrans = this.translateType(p, tr);
+                if (ptrans != p) {
+                    modified = true;
+                }
+                types.push(p);
+            }
+            if (!modified) {
+                return t;
+            }
+            return new TupleType(types);
         } else if (t instanceof FunctionType) {
             let modified = false;
             let newF = new FunctionType();

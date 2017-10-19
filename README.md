@@ -79,6 +79,8 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
     - Generic parameters of OrType
     - Check that parameter types match upon generic instantiation
     - Generic instantiation has some TODOs
+    - Generic functions
+    - Generic interfaces
 - Detect recursive types, i.e. types that contain themselves
 
 # Wish List
