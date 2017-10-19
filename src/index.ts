@@ -60,7 +60,7 @@ function compileModules() {
         }
     }
 
-    try {
+//    try {
         // Run the type checker
         let tc = new typecheck.TypeChecker();
         pkg.initPackages(tc);
@@ -82,7 +82,7 @@ function compileModules() {
             let cfile = f.dir + path.sep + f.name + ".c";
             fs.writeFileSync(cfile, code, "utf8");
         }
-    } catch(ex) {
+/*    } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
@@ -93,7 +93,7 @@ function compileModules() {
             console.log(ex);
             throw ex;
         }
-    }
+    } */
 
     // Compile Wast to Wasm
     if (!program.disableWasm) {

@@ -1,10 +1,10 @@
 type LinkedList<T is interface{}> struct {
-    next LinkedList<T>
+    next *LinkedList<T>
     value T
 }
 
 export func main() int {
     var list *LinkedList<int> = &{value: 5}
     list.next = &{value: 42}
-    return list.value
+    return list.value + list.next.value
 }
