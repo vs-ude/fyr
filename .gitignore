@@ -4,10 +4,12 @@ old
 out
 examples/*.wasm
 examples/*.wast
+examples/*.wat
 examples/*.c
 tmp/*
 measurements/**/*.wasm
 measurements/**/*.wast
+measurements/**/*.wat
 measurements/**/*.c
 measurements/mandel_go/mandelbrot
 measurements/rect_go/rect

@@ -72,7 +72,7 @@ function compileModules() {
             let wastcode = cg.getCode();
             var input = path.resolve(args[args.length - 2]);
             let f = path.parse(input);
-            let wastfile = f.dir + path.sep + f.name + ".wast";
+            let wastfile = f.dir + path.sep + f.name + ".wat";
             fs.writeFileSync(wastfile, wastcode, 'utf8');
         }
         if (program.emitC) {
@@ -99,7 +99,7 @@ function compileModules() {
     if (!program.disableWasm) {
         var input = path.resolve(args[args.length - 2]);
         let f = path.parse(input);
-        let wastfile = f.dir + path.sep + f.name + ".wast";
+        let wastfile = f.dir + path.sep + f.name + ".wat";
         let wasmfile = f.dir + path.sep + f.name + ".wasm";
         child_process.execFileSync("wat2wasm", [wastfile, "-r", "-o", wasmfile]);
     }
