@@ -101,7 +101,7 @@ function compileModules() {
         let f = path.parse(input);
         let wastfile = f.dir + path.sep + f.name + ".wast";
         let wasmfile = f.dir + path.sep + f.name + ".wasm";
-        child_process.execFileSync("wast2wasm", [wastfile, "-r", "-o", wasmfile]);
+        child_process.execFileSync("wat2wasm", [wastfile, "-r", "-o", wasmfile]);
     }
 }
 
