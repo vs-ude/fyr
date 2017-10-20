@@ -73,14 +73,14 @@ function compileModules() {
             var input = path.resolve(args[args.length - 2]);
             let f = path.parse(input);
             let wastfile = f.dir + path.sep + f.name + ".wast";
-            fs.writeFileSync(wastfile, wastcode, "utf8");
+            fs.writeFileSync(wastfile, wastcode, 'utf8');
         }
         if (program.emitC) {
             let code = cg.getCode();
             var input = path.resolve(args[args.length - 2]);
             let f = path.parse(input);
             let cfile = f.dir + path.sep + f.name + ".c";
-            fs.writeFileSync(cfile, code, "utf8");
+            fs.writeFileSync(cfile, code, 'utf8');
         }
     } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
