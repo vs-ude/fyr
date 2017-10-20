@@ -14,21 +14,23 @@ To build the software (output is written to `/lib`), execute:
 npm run build
 ```
 
-Running `npm build:parser` will only generate fresh JavaScript from the `parser.pegjs` parser definition.
+Running `npm run build:parser` will only generate fresh JavaScript from the `parser.pegjs` parser definition.
 
 ## Setup
 
-Install the `wabt` tools and make sure that `wast2wasm` is in your `PATH`.
+Install the `wabt` tools frim GitHub, build them, and make sure that `wat2wasm` is in your `PATH`.
 Now set the path to the fyr directory like this:
 
 ```
 export FYRPATH=/your/path/to/fyr
 ```
 
+Add the directory `FYRPATH/bin` to your path.
+
 ## Running the compiler
 
 ```
-fyrc examples/mandelbrot.fyr
+fyrc measurements/mandel_fyr/mandelbrot.fyr
 ```
 
 The output of the above command is `mandelbrot.wasm` in the same directory.
@@ -40,11 +42,22 @@ Make it available with `python -m SimpleHTTPServer 8000` and open the HTML page.
 It will load the WASM code and execute it.
 
 Other examples are made to run in NodeJS.
-Use the `runwasm.js` tool to execute WASM in NodeJS as follows:
+Use the `runwasm` tool to execute WASM in NodeJS as follows:
 
 ```
-runwasm mandelbrot.wasm
+runwasm mandelbrot.wasm main
 ```
+
+Here `main` is the function to execute.
+Make sure that this function is exported like this:
+
+```
+export func main() {
+    ...
+}
+```
+
+If the function returns a value, it is displayed on the console.
 
 For benchmarking execute 
 
