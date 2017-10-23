@@ -146,6 +146,42 @@ export class Node {
         return false;
     }
 
+    public clone(): Node {
+        let n = new Node();
+        n.op = this.op;
+        n.value = this.value;
+        n.numValue = this.numValue;
+        n.loc = this.loc;
+        n.comments = this.comments;
+        n.type = this.type;
+        n.nspace = this.nspace;
+        n.scope = this.scope;
+        n.lhs = this.lhs ? this.lhs.clone() : null;
+        n.rhs = this.rhs ? this.rhs.clone() : null;
+        n.name = this.name ? this.name.clone() : null;
+        n.condition = this.condition ? this.condition.clone() : null;
+        n.elseBranch = this.elseBranch ? this.elseBranch.clone() : null;
+        if (this.statements) {
+            n.statements = [];
+            for(let s of this.statements) {
+                n.statements.push(s.clone());
+            }
+        }
+        if (this.parameters) {
+            n.parameters = [];
+            for(let s of this.parameters) {
+                n.parameters.push(s.clone());
+            }
+        }
+        if (this.genericParameters) {
+            n.genericParameters = [];
+            for(let s of this.genericParameters) {
+                n.genericParameters.push(s.clone());
+            }
+        }
+        return n;
+    }
+
     public op: NodeOp;
     public lhs: Node;
     public rhs: Node;
