@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, Type, PackageType, GenericStructType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import {Wasm32Backend} from "./backend_wasm"
@@ -221,9 +221,6 @@ export class CodeGenerator {
         }
         if (t instanceof MapType) {
             return "ptr";
-        }
-        if (t instanceof GenericStructType && t.base) {
-            return this.getSSAType(t.base);
         }
         if (t instanceof StructType) {
             let s = new ssa.StructType();

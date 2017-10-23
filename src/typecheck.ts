@@ -80,6 +80,16 @@ export class FunctionParameter implements ScopeElement {
     public isConst: boolean;
 }
 
+export class TemplateFunction implements ScopeElement {
+    public name: string;
+    public type: Type;
+    public loc: Location;
+    public templateParameterTypes: Array<Type>;
+    public templateParameterNames: Array<string>;
+    public node: Node;
+    public owner?: TemplateType;
+}
+
 // Typedef represents the result of a 'type' statement, i.e.
 // a named type which is of course subject to a scope.
 export class Typedef {
@@ -189,15 +199,6 @@ export class Scope {
     public types: Map<string, Type>;
     public parent: Scope | null = null;
     public isPseudoScope: boolean; 
-}
-
-export interface GenericType {
-    genericParameterNames: Array<string>;
-    genericParameterTypes: Array<Type>;
-}
-
-export interface GenericInstanceType {
-    genericParameterTypes: Array<Type>;
 }
 
 export abstract class Type {
@@ -506,118 +507,105 @@ export class PolymorphFunctionType extends FunctionType {
     public node: Node;
 }
 
+// TODO: Rename generic
 export class GenericParameter extends Type {
     public toTypeCodeString(): string {
         throw "Implementation error";
     }
 }
 
-export class GenericFunctionType extends FunctionType implements GenericType {
+export class TemplateType extends Type {
     constructor() {
         super();
-        this.genericParameterNames = [];
-        this.genericParameterTypes = [];
+        this.templateParameterTypes = [];
+        this.templateParameterNames = [];
     }
 
-    public toString(): string {
-        if (this.name) {
-            if (this.objectType) {
-                return this.objectType.toString() + "." + this.name;
-            }
-            return this.name;
-        }
-        let name = "<";
-        for(let i = 0; i < this.genericParameterNames.length; i++) {
-            if (i != 0) {
-                name += ",";
-            }
-            name += this.genericParameterNames[i];
-            if (this.genericParameterTypes[i]) {
-                name += " is " + this.genericParameterTypes[i].toString();
-            }
-        }
-        name += ">(";
-        let j = 0;
-        for(let p of this.parameters) {
-            if (j != 0) {
-                name += ",";
-            }
-            if (p.ellipsis) {
-                name += "...";
-            }
-            name += p.type.toString();
-            j++
-        }
-        name += ") => " + this.returnType.toString();
-        return name;
-    }
-
-    public genericParameterNames: Array<string>;
-    public genericParameterTypes: Array<Type>;
-    public node: Node;
-}
-
-export class GenericFunctionInstanceType extends FunctionType implements GenericInstanceType {
-    constructor() {
-        super();
-        this.genericParameterTypes = [];
-    }
-
-    public toString(): string {
-        if (this.name) {
-            if (this.objectType) {
-                return this.objectType.toString() + "." + this.name;
-            }
-            return this.name;
-        }
-        let name = "<";
-        for(let i = 0; i < this.base.genericParameterNames.length; i++) {
-            if (i != 0) {
-                name += ",";
-            }
-            name += this.base.genericParameterNames[i];
-            name += "=" + this.genericParameterTypes[i].toString();
-        }
-        name += ">(";
-        let j = 0;
-        for(let p of this.parameters) {
-            if (j != 0) {
-                name += ",";
-            }
-            if (p.ellipsis) {
-                name += "...";
-            }
-            name += p.type.toString();
-            j++
-        }
-        name += ") => " + this.returnType.toString();
-        return name;
-    }
-
-    public base: GenericFunctionType;
-    public genericParameterTypes: Array<Type>;    
-}
-
-export class GenericStructType extends StructType implements GenericType {
-    constructor() {
-        super();
-        this.genericParameterTypes = [];
-        this.genericParameterNames = [];
+    public toTypeCodeString(): string {
+        throw "Implementation error: Typecode of template type is not allowed";
     }
 
     public toString(): string {
         let g = "<";
         let lst = [];
-        for(let i = 0; i < this.genericParameterNames.length; i++) {
-            let s = this.genericParameterNames[i];            
-            if (this.genericParameterTypes[i]) {
-                if (this.base) {
-                    s = this.genericParameterTypes[i].toString();
-                } else {
-                    s += " is " + this.genericParameterTypes[i].toString();
-                }
+        for(let i = 0; i < this.templateParameterNames.length; i++) {
+            let s = this.templateParameterNames[i];            
+            if (this.templateParameterTypes[i]) {
+                s += " is " + this.templateParameterTypes[i].toString();
             }
             lst.push(s);
+        }
+        g += lst.join(",");
+        g += ">";
+        if (this.name) {
+            return this.name + g;
+        }
+        let str = "struct" + g + "{...}";
+        return str;
+    }
+
+    public templateParameterTypes: Array<Type>;
+    public templateParameterNames: Array<string>;
+    public node: Node;
+    public methods: Array<TemplateFunction> = [];
+}
+
+export class TemplateFunctionType extends FunctionType {
+    constructor() {
+        super();
+        this.templateParameterNames = [];
+        this.templateParameterTypes = [];
+    }
+
+    public toString(): string {
+        if (this.name) {
+            if (this.objectType) {
+                return this.objectType.toString() + "." + this.name;
+            }
+            return this.name;
+        }
+        let name = "<";
+        for(let i = 0; i < this.templateParameterNames.length; i++) {
+            if (i != 0) {
+                name += ",";
+            }
+            name += this.templateParameterNames[i];
+            if (this.templateParameterTypes[i]) {
+                name += " is " + this.templateParameterTypes[i].toString();
+            }
+        }
+        name += ">(";
+        let j = 0;
+        for(let p of this.parameters) {
+            if (j != 0) {
+                name += ",";
+            }
+            if (p.ellipsis) {
+                name += "...";
+            }
+            name += p.type.toString();
+            j++
+        }
+        name += ") => " + this.returnType.toString();
+        return name;
+    }
+
+    public templateParameterNames: Array<string>;
+    public templateParameterTypes: Array<Type>;
+    public base: TemplateType;
+}
+
+export class TemplateStructType extends StructType {
+    constructor() {
+        super();
+        this.templateParameterTypes = [];
+    }
+
+    public toString(): string {
+        let g = "<";
+        let lst = [];
+        for(let s of this.templateParameterTypes) {
+            lst.push(s.toString());
         }
         g += lst.join(",");
         g += ">";
@@ -630,31 +618,21 @@ export class GenericStructType extends StructType implements GenericType {
         return str;
     }
 
-    public genericParameterTypes: Array<Type>;
-    public genericParameterNames: Array<string>;
-    public base: GenericStructType;
+    public templateParameterTypes: Array<Type>;
+    public base: TemplateType;
 }
 
-export class GenericInterfaceType extends InterfaceType implements GenericType {
+export class TemplateInterfaceType extends InterfaceType {
     constructor() {
         super();
-        this.genericParameterTypes = [];
-        this.genericParameterNames = [];
+        this.templateParameterTypes = [];
     }
 
     public toString(): string {
         let g = "<";
         let lst = [];
-        for(let i = 0; i < this.genericParameterNames.length; i++) {
-            let s = this.genericParameterNames[i];            
-            if (this.genericParameterTypes[i]) {
-                if (this.base) {
-                    s = this.genericParameterTypes[i].toString();
-                } else {
-                    s += " is " + this.genericParameterTypes[i].toString();
-                }
-            }
-            lst.push(s);
+        for(let s of this.templateParameterTypes) {
+            lst.push(s.toString());
         }
         g += lst.join(",");
         g += ">";
@@ -671,9 +649,8 @@ export class GenericInterfaceType extends InterfaceType implements GenericType {
         return str;
     }
 
-    public genericParameterTypes: Array<Type>;
-    public genericParameterNames: Array<string>;
-    public base: GenericInterfaceType;
+    public templateParameterTypes: Array<Type>;
+    public base: TemplateType;
 }
 
 export class PointerType extends Type {
@@ -1264,43 +1241,27 @@ export class TypeChecker {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
             return new MapType(k, v);
-        } else if (tnode.op == "genericType" || tnode.op == "genericInstance") {
-            let baset: Type;
-            if (tnode.op == "genericType") {
-                baset = scope.resolveType(tnode.lhs.value);
-                if (!baset) {
-                    throw new TypeError("Unknown type " + tnode.lhs.value, tnode.loc);
-                }
-            } else {
-                baset = tnode.lhs.type;
+        } else if (tnode.op == "genericType") {
+            let baset = scope.resolveType(tnode.lhs.value);
+            if (!baset) {
+                throw new TypeError("Unknown type " + tnode.lhs.value, tnode.loc);
             }
-            if (baset instanceof GenericStructType) {
-                if (baset.base) {
-                    throw new TypeError("Cannot instantiate an instantion of a generic struct", tnode.loc);
-                }
-                let types: Array<Type> = [];
-                for(let i = 0; i < tnode.genericParameters.length; i++) {
-                    types.push(this.makeBox(this.createType(tnode.genericParameters[i], scope), tnode.loc));
-                }
-                return this.instantiateGenericStructType(baset, types, tnode.loc);
-/*                let ct = new GenericStructInstanceType();
-                if (baset.genericParameterTypes.length != tnode.genericParameters.length) {
-                    throw new TypeError("Supplied type arguments do not match signature of " + baset.toString(), tnode.loc);
-                }
-//                let mapping = new Map<Type, Type>();
-                ct.loc = tnode.loc;
-                ct.base = baset;
-                for(let i = 0; i < tnode.genericParameters.length; i++) {
-                    let pnode = tnode.genericParameters[i];
-                    let pt = this.createType(pnode, scope);
-                    ct.genericParameterTypes.push(pt);
-                    // TODO: Check that pt extends baset.genericParameterTypes[i]
-//                    mapping.set(pt, baset.genericParameterTypes[i]);
-                }
-                // TODO: Instantiate the type of ct, e.g. all function signatures and properties.
-                return ct; */
-            } else if (baset instanceof GenericFunctionType) {
-                let ft = new GenericFunctionInstanceType();
+            if (!(baset instanceof TemplateType)) {
+                throw new TypeError("Type " + baset.toString() + " is not a template type", tnode.loc);
+            }
+            let types: Array<Type> = [];
+            for(let i = 0; i < tnode.genericParameters.length; i++) {
+                types.push(this.createType(tnode.genericParameters[i], scope));
+            }
+            return this.instantiateTemplateType(baset, types, tnode.loc);
+        } else if (tnode.op == "genericInstance") {
+            let baset = tnode.lhs.type;
+            if (!(baset instanceof TemplateType)) {
+                throw new TypeError("Type " + baset.toString() + " is not a template type", tnode.loc);
+            }
+            throw "TODO"
+            /*
+            let ft = new GenericFunctionInstanceType();
                 let s = new Scope(scope);
                 ft.base = baset;
                 ft.loc = tnode.loc;
@@ -1332,7 +1293,7 @@ export class TypeChecker {
                 }
                 return ft;
             }
-            throw new TypeError("Type " + baset.toString() + " is not a generic type", tnode.loc);
+            */
         } else if (tnode.op == "orType") {
             return this.createOrType(tnode, scope);
         } else if (tnode.op == "andType") {
@@ -1481,45 +1442,6 @@ export class TypeChecker {
         }
     }
 
-    private instantiateGenericInterfaceType(s: GenericInterfaceType, types: Array<Type>, loc: Location): GenericInterfaceType {
-        let a = this.genericInterfaces.get(s);
-        if (a) {
-            for(let g of a) {
-                let ok = true;
-                for(let k = 0; k < types.length; k++) {
-                    let type = types[k];
-                    let hasType = g.genericParameterTypes[k];
-                    if (!this.checkTypeEquality(type, hasType, loc, false)) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-//                    console.log("GENERIC found", types)
-                    return g;
-                }
-            }
-        }
-
-        let g = new GenericInterfaceType();
-        g.base = s;
-        g.genericParameterTypes = types;
-        g.genericParameterNames = s.genericParameterNames;
-        if (a) {
-            a.push(g);
-        } else {
-            this.genericInterfaces.set(s, [g]);
-        }
-        let tr = new Map<Type, Type>();
-        for(let i = 0; i < types.length; i++) {
-            tr.set(s.genericParameterTypes[i], types[i]);
-        }
-//        console.log("===============>", types)
-        this.translateType(s, tr, g);
-//        console.log("<===============")
-        return g;
-    }
-
     private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
         if (!s) {
             s = new StructType();
@@ -1600,43 +1522,46 @@ export class TypeChecker {
         }
     }
 
-    private instantiateGenericStructType(s: GenericStructType, types: Array<Type>, loc: Location): GenericStructType {
-        let a = this.genericStructs.get(s);
+    private instantiateTemplateType(t: TemplateType, types: Array<Type>, loc: Location): TemplateStructType | TemplateInterfaceType {
+        let a = this.templateStructs.get(t);
         if (a) {
-            for(let g of a) {
+            for(let s of a) {
                 let ok = true;
                 for(let k = 0; k < types.length; k++) {
                     let type = types[k];
-                    let hasType = g.genericParameterTypes[k];
+                    let hasType = s.templateParameterTypes[k];
                     if (!this.checkTypeEquality(type, hasType, loc, false)) {
                         ok = false;
                         break;
                     }
                 }
                 if (ok) {
-//                    console.log("GENERIC found", types)
-                    return g;
+                    return s;
                 }
             }
         }
 
-        let g = new GenericStructType();
-        g.base = s;
-        g.genericParameterTypes = types;
-        g.genericParameterNames = s.genericParameterNames;
-        if (a) {
-            a.push(g);
-        } else {
-            this.genericStructs.set(s, [g]);
+        let b = this.templateInterfaces.get(t);
+        if (b) {
+            for(let i of b) {
+                let ok = true;
+                for(let k = 0; k < types.length; k++) {
+                    let type = types[k];
+                    let hasType = i.templateParameterTypes[k];
+                    if (!this.checkTypeEquality(type, hasType, loc, false)) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) {
+                    return i;
+                }
+            }
         }
-        let tr = new Map<Type, Type>();
-        for(let i = 0; i < types.length; i++) {
-            tr.set(s.genericParameterTypes[i], types[i]);
-        }
-//        console.log("===============>", types)
-        this.translateType(s, tr, g);
-//        console.log("<===============")
-        return g;
+
+        // TODO: TemplateFunctionType
+
+        throw "TODO instantiate the template and return the type"
     }
 
     public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope): Function {
@@ -1651,6 +1576,7 @@ export class TypeChecker {
         f.node = fnode;
         f.loc = fnode.loc;
         f.isExported = (fnode.op == "export_func");
+        /*
         if (fnode.genericParameters) {
             let gt = new GenericFunctionType();
             gt.node = fnode;
@@ -1666,9 +1592,9 @@ export class TypeChecker {
                 gt.genericParameterTypes.push(t);
             }            
             f.type = gt;
-        } else {
-            f.type = new FunctionType();
-        }
+        } else { */
+        f.type = new FunctionType();
+//        }
         f.type.loc = fnode.loc;
         if (fnode.op == "asyncFunc") {
             f.type.callingConvention = "fyrCoroutine";
@@ -1688,7 +1614,8 @@ export class TypeChecker {
             if (!this.isStruct(f.type.objectType)) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);                
             }
-            if (f.type.objectType instanceof GenericStructType) {
+            /*
+            if (f.type.objectType instanceof TemplateStructType) {
                 if (f.type.objectType.base) {
                     throw new TypeError("Functions cannot be attached to instantiated generic types", fnode.lhs.loc);
                 }
@@ -1697,6 +1624,7 @@ export class TypeChecker {
                     pseudoScope.registerType(f.type.objectType.genericParameterNames[i], f.type.objectType.genericParameterTypes[i]);
                 }
             }
+            */
             let p = new FunctionParameter();
             p.name = "this";            
             p.loc = fnode.lhs.loc;
@@ -1808,67 +1736,32 @@ export class TypeChecker {
         t.name = tnode.name.value;
         t.node = tnode;
         t.scope = scope;
-        if (t.node.rhs.op == "structType") {
-            let s: StructType;
-            if (t.node.genericParameters) {
-                s = new GenericStructType();
-                let isInterfaceGeneric = true;
-                let i = 0;
-                for(let g of tnode.genericParameters) {
-                    (s as GenericStructType).genericParameterNames.push(g.value);
-                    if (g.condition) {
-                        let c = this.createType(g.condition, scope);
-                        (s as GenericStructType).genericParameterTypes.push(c);
-                        isInterfaceGeneric = isInterfaceGeneric && (this.isInterface(c));
-                    } else {
-                        (s as GenericStructType).genericParameterTypes.push(null);
-                        isInterfaceGeneric = false;
-                    }
-                    i++;
+
+        if (t.node.genericParameters) {
+            let tmpl = new TemplateType();
+            tmpl.node = tnode;
+            tmpl.name = t.name;
+            tmpl.loc = tnode.loc;
+            for(let g of tnode.genericParameters) {
+                tmpl.templateParameterNames.push(g.value);
+                if (g.condition) {
+                    let c = this.createType(g.condition, scope);
+                    tmpl.templateParameterTypes.push(c);
+                } else {
+                    tmpl.templateParameterTypes.push(null);
                 }
-                if (isInterfaceGeneric) {
-                    t.scope = new Scope(t.scope);
-                    for(let i = 0; i < (s as GenericStructType).genericParameterNames.length; i++) {
-                        t.scope.registerType((s as GenericStructType).genericParameterNames[i], (s as GenericStructType).genericParameterTypes[i]);
-                    }
-                    this.genericStructs.set(s as GenericStructType, [s as GenericStructType]);
-                }
-            } else {
-                s = new StructType();
             }
+            t.type = tmpl;
+            scope.registerType(t.name, tmpl, tnode.loc);
+        } else if (t.node.rhs.op == "structType") {
+            let s = new StructType();
             s.loc = t.node.loc;
             s.name = t.name;
             this.structs.push(s);
             t.type = s;
             scope.registerType(t.name, s, tnode.loc);
         } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
-            let iface: InterfaceType;
-            if (t.node.genericParameters) {
-                iface = new GenericInterfaceType();
-                let isInterfaceGeneric = true;
-                let i = 0;
-                for(let g of tnode.genericParameters) {
-                    (iface as GenericInterfaceType).genericParameterNames.push(g.value);
-                    if (g.condition) {
-                        let c = this.createType(g.condition, scope);
-                        (iface as GenericInterfaceType).genericParameterTypes.push(c);
-                        isInterfaceGeneric = isInterfaceGeneric && (this.isInterface(c));
-                    } else {
-                        (iface as GenericInterfaceType).genericParameterTypes.push(null);
-                        isInterfaceGeneric = false;
-                    }
-                    i++;
-                }
-                if (isInterfaceGeneric) {
-                    t.scope = new Scope(t.scope);
-                    for(let i = 0; i < (iface as GenericInterfaceType).genericParameterNames.length; i++) {
-                        t.scope.registerType((iface as GenericInterfaceType).genericParameterNames[i], (iface as GenericInterfaceType).genericParameterTypes[i]);
-                    }
-                    this.genericInterfaces.set(iface as GenericInterfaceType, [iface as GenericInterfaceType]);
-                }
-            } else {
-                iface = new InterfaceType();
-            }
+            let iface = new InterfaceType();
             iface.loc = t.node.loc;
             iface.name = t.name;
             this.ifaces.push(iface);
@@ -2364,7 +2257,7 @@ export class TypeChecker {
                             }
                             v.type = new MapType(this.t_string, valueType);
                             throw "TODO";
-                        } else if (rtype instanceof GenericStructType) {
+                        } else if (rtype instanceof TemplateStructType) {
                             v.type = rtype;
                         }
                     } else {
@@ -2402,8 +2295,8 @@ export class TypeChecker {
                         rt = rtype.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtype instanceof GenericStructType) {
-                        rt = rtype.genericParameterTypes[1];
+                    } else if (rtype instanceof MapType) {
+                        rt = rtype.valueType;
                     }
                     this.checkVarAssignment(isConst, scope, p, rt, r);
                 }
@@ -2568,7 +2461,7 @@ export class TypeChecker {
                         for(let j = i; j < rnode.parameters.length; j++) {
                             this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                         }
-                    } else if (rtype instanceof GenericStructType) {
+                    } else if (rtype instanceof TemplateStructType) {
                         if (!(kv.lhs.type instanceof MapType) || kv.lhs.type.keyType != this.t_string) {
                             throw new TypeError("Ellipsis identifier must be of type map<string,...>", vnode.loc);
                         }
@@ -2587,8 +2480,8 @@ export class TypeChecker {
                         rt = rtype.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtype instanceof GenericStructType) {
-                        rt = rtype.genericParameterTypes[1];
+                    } else if (rtype instanceof MapType) {
+                        rt = rtype.valueType;
                     }
                     this.checkAssignment(scope, p, rt, r);
                 }
@@ -3344,8 +3237,8 @@ export class TypeChecker {
                     throw new TypeError("Expression is not a function", enode.loc);
                 }
                 let ft: FunctionType = t;
-                if (ft instanceof GenericFunctionType) {
-                    throw "TODO: Generics";
+                if (ft instanceof TemplateFunctionType) {
+                    throw "TODO: Template function call";
                 } else if (ft instanceof PolymorphFunctionType) {
                     var ok = false;
                     for(let it of ft.instances) {
@@ -3362,54 +3255,7 @@ export class TypeChecker {
                 } else {
                     this.checkFunctionArguments(ft, enode.parameters, scope, enode.loc);
                 }
-                /*
-                // Type check all parameters
-                if (enode.parameters) {
-                    if (ft.parameters.length != enode.parameters.length) {
-                        if (ft.requiredParameterCount() > enode.parameters.length || (enode.parameters.length > ft.parameters.length && !ft.hasEllipsis())) {
-                            throw new TypeError("Supplied parameter count does not match function signature " + ft.toString(), enode.loc);
-                        }
-                    }
-                    for(let i = 0; i < enode.parameters.length; i++) {
-                        let pnode = enode.parameters[i];
-                        if (pnode.op == "unary...") {
-                            if (!ft.hasEllipsis()) {
-                                throw new TypeError("Ellipsis not allowed here. Function is not variadic", pnode.loc);
-                            }
-                            if (i != ft.parameters.length - 1 || i != enode.parameters.length - 1) {
-                                throw new TypeError("Ellipsis must only appear with the last parameter", pnode.loc);
-                            }
-                            this.checkExpression(pnode.rhs, scope);
-                            this.checkIsAssignableNode(ft.lastParameter().type, pnode.rhs, true);
-                        } else {
-                            this.checkExpression(pnode, scope);
-                            if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
-                                this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode);
-                            } else {
-                                this.checkIsAssignableNode(ft.parameters[i].type, pnode, true);
-                            }
-                        }
-                    }
-                } else if (ft.parameters.length != 0 && (!ft.hasEllipsis || ft.parameters.length > 1)) {
-                    throw new TypeError("Supplied parameters do not match function signature " + ft.toString(), enode.loc);                    
-                }
-                */
                 enode.type = this.makeScoped(ft.returnType, scope, enode.loc);
-                /*
-                // Construct the call graph
-                let f = scope.envelopingFunction();
-                if (f) {
-                    // Function call happens inside a function body and not during the evaluation of a global function
-                    let calls: Array<FunctionType>;
-                    if (this.callGraph.has(f)) {
-                        calls = this.callGraph.get(f);
-                        calls.push(ft);
-                    } else {
-                        calls = [ft];
-                        this.callGraph.set(f, calls);
-                    }
-                }
-                */
                 break;
             }
             case "genericInstance":
@@ -4428,11 +4274,11 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (a instanceof GenericStructType && b instanceof GenericStructType) {
+        } else if (a instanceof TemplateStructType && b instanceof TemplateStructType) {
             if (a.base == b.base) {
                 let ok = true;
-                for(let i = 0; ok && i < a.genericParameterTypes.length; i++) {
-                    ok = ok && this.checkTypeEquality(a.genericParameterTypes[i], b.genericParameterTypes[i], loc, false);
+                for(let i = 0; ok && i < a.templateParameterTypes.length; i++) {
+                    ok = ok && this.checkTypeEquality(a.templateParameterTypes[i], b.templateParameterTypes[i], loc, false);
                 }
                 if (ok) {
                     return true;
@@ -4929,204 +4775,6 @@ export class TypeChecker {
         return t;
     }
 
-    /**
-     * This function is used during instantiation of generics.
-     */
-    private translateType(t: Type, tr: Map<Type, Type>, newT?: Type): Type {
-        // Stop at named types
-        if (t.name && !newT && !(t instanceof GenericStructType)) {
-            return t;
-        }
-        let translated = tr.get(t);
-        if (translated) {
-            return translated;
-        }
-        if (t instanceof InterfaceType) {
-            //            console.log("Translating", t.name, t.toString());
-            let modified = false;
-            let newIface: InterfaceType;
-            if (newT) {
-                newIface = newT as InterfaceType;
-                modified = true;
-            } else {
-                if (t instanceof GenericInterfaceType) {
-                    let types: Array<Type> = [];
-                    for(let p of t.genericParameterTypes) {
-                        types.push(this.translateType(p, tr));
-                    }
-                    return this.instantiateGenericInterfaceType(t, types, t.loc);
-                }  else {
-                    newIface = new InterfaceType();
-                }
-            }
-            newIface.loc = t.loc;
-            newIface.name = t.name;
-            for(let impl of t.extendsInterfaces) {
-                let newImpl = this.translateType(impl, tr);
-                modified = modified || newImpl != impl;
-                newIface.extendsInterfaces.push(newImpl as InterfaceType);
-            }
-            tr.set(t, newIface);
-            for(let m of t.methods.entries()) {
-                let newMethod = this.translateType(m[1], tr) as FunctionType;
-                newIface.methods.set(m[0], newMethod);
-                modified = modified || (newMethod != m[1]);
-            }
-            //            console.log(".........<")
-            if (modified) {
-                return newIface;
-            }
-            return t;
-        } else if (t instanceof StructType) {
-//            console.log("Translating", t.name, t.toString());
-            let modified = false;
-            let newStruct: StructType;
-            if (newT) {
-                newStruct = newT as StructType;
-                modified = true;
-            } else {
-                if (t instanceof GenericStructType) {
-                    let types: Array<Type> = [];
-                    for(let p of t.genericParameterTypes) {
-                        types.push(this.translateType(p, tr));
-                    }
-                    return this.instantiateGenericStructType(t, types, t.loc);
-                }  else {
-                    newStruct = new StructType();
-                }
-            }
-            newStruct.loc = t.loc;
-            newStruct.name = t.name;
-            for(let f of t.fields) {
-                let newField = new StructField();
-                newField.name = f.name;
-                newField.type = this.translateType(f.type, tr);
-  //              console.log("FIELD", newField.name, newField.type);
-//                console.log(".... from", f.type);
-                modified = modified || (newField.type != f.type);
-                newStruct.fields.push(newField);
-            }
-            if (t.extends) {
-                newStruct.extends = this.translateType(t.extends, tr) as StructType;
-                modified = modified || (newStruct.extends != t.extends);
-            }
-            for(let impl of t.implements) {
-                let newImpl = this.translateType(impl, tr);
-                modified = modified || newImpl != impl;
-                newStruct.implements.push(newImpl as InterfaceType);
-            }
-            tr.set(t, newStruct);
-            for(let m of t.methods.entries()) {
-                let newMethod = this.translateType(m[1], tr) as FunctionType;
-                newStruct.methods.set(m[0], newMethod);
-                modified = modified || (newMethod != m[1]);
-            }
-//            console.log(".........<")
-            if (modified) {
-                return newStruct;
-            }
-            return t;
-        } else if (t instanceof PointerType) {
-            let e = this.translateType(t.elementType, tr);
-            if (e == t.elementType) {
-                return t;
-            }
-            return new PointerType(e);
-        } else if (t instanceof UnsafePointerType) {
-            let e = this.translateType(t.elementType, tr);
-            if (e == t.elementType) {
-                return t;
-            }
-            return new UnsafePointerType(e);
-        } else if (t instanceof GuardedPointerType) {
-            let e = this.translateType(t.elementType, tr);
-            if (e == t.elementType) {
-                return t;
-            }
-            return new GuardedPointerType(e);
-        } else if (t instanceof RestrictedType) {
-            let e = this.translateType(t.elementType, tr);
-            if (e == t.elementType) {
-                return t;
-            }
-            return new RestrictedType(e, t);
-        } else if (t instanceof OrType) {
-            let modified = false;
-            let types: Array<Type> = [];
-            for(let p of t.types) {
-                let ptrans = this.translateType(p, tr);
-                if (ptrans != p) {
-                    modified = true;
-                }
-                types.push(p);
-            }
-            if (!modified) {
-                return t;
-            }
-            return new OrType(types);
-        } else if (t instanceof SliceType) {
-            let e = this.translateType(t.elementType, tr);
-            if (e == t.elementType) {
-                return t;
-            }
-            return new SliceType(e);
-        } else if (t instanceof ArrayType) {
-            let e = this.translateType(t.elementType, tr);
-            if (e == t.elementType) {
-                return t;
-            }
-            return new ArrayType(e, t.size);
-        } else if (t instanceof MapType) {
-            let k = this.translateType(t.keyType, tr);
-            let v = this.translateType(t.valueType, tr);
-            if (k == t.keyType && v == t.valueType) {
-                return t;
-            }
-            return new MapType(k, v);
-        } else if (t instanceof TupleType) {
-            let modified = false;
-            let types: Array<Type> = [];
-            for(let p of t.types) {
-                let ptrans = this.translateType(p, tr);
-                if (ptrans != p) {
-                    modified = true;
-                }
-                types.push(p);
-            }
-            if (!modified) {
-                return t;
-            }
-            return new TupleType(types);
-        } else if (t instanceof FunctionType) {
-            let modified = false;
-            let newF = new FunctionType();
-            newF.loc = t.loc;
-            for(let p of t.parameters) {
-                let newP = new FunctionParameter();
-                newP.ellipsis = p.ellipsis;
-                newP.isConst = p.isConst;
-                newP.loc = p.loc;
-                newP.name = p.name;
-                newP.type = this.translateType(p.type, tr);
-                modified = modified || (newP.type != p.type);
-                newF.parameters.push(newP);
-            }
-            newF.callingConvention = t.callingConvention;
-            newF.name = t.name;
-            newF.objectTypeIsConst = t.objectTypeIsConst;
-            newF.objectTypeIsScoped = t.objectTypeIsScoped;
-            newF.systemCallType = t.systemCallType;
-            newF.returnType = this.translateType(t.returnType, tr);
-            modified = modified || (newF.returnType != t.returnType);
-            newF.objectType = this.translateType(t.objectType, tr);
-            if (modified) {
-                return newF;
-            }
-            return t;
-        }
-        throw "Implementation error";
-    }
-
     private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
         let type = this.stripType(t);
         if (type == this.t_string) {
@@ -5213,8 +4861,8 @@ export class TypeChecker {
     // List of all interfaces. These are checked for possible errors after they have been defined.
     public ifaces: Array<InterfaceType> = [];
     public structs: Array<StructType> = [];
-    public genericStructs: Map<GenericStructType, Array<GenericStructType>> = new Map<GenericStructType, Array<GenericStructType>>();
-    public genericInterfaces: Map<GenericInterfaceType, Array<GenericInterfaceType>> = new Map<GenericInterfaceType, Array<GenericInterfaceType>>();
+    public templateStructs: Map<TemplateType, Array<TemplateStructType>> = new Map<TemplateType, Array<TemplateStructType>>();
+    public templateInterfaces: Map<TemplateType, Array<TemplateInterfaceType>> = new Map<TemplateType, Array<TemplateInterfaceType>>();
     
 //    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
