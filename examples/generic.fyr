@@ -1,17 +1,17 @@
-type LinkedList<T is interface{}> struct {
+type LinkedList<T> struct {
     next *LinkedList<T>
     value T
 }
 
-func LinkedList.setValue(x T) {
-    this.value = x
-}
+//func LinkedList.setValue(x T) {
+//    this.value = x
+//}
 
-func LinkedList.getValue() T {
-    return this.value
-}
+//func LinkedList.getValue() T {
+//    return this.value
+//}
 
-type Ordinal<T is interface{}> interface {
+type Ordinal<T> interface {
     func isLess(x T) bool
 }
 
@@ -28,13 +28,13 @@ type Person struct {
     familyName string
 }
 
-func Person.isLess(p: interface{Person}) bool {
-
+func Person.isLess(p Person) bool {
+    return this.familyName < p.familyName
 }
 
 export func main() int {
     var list *LinkedList<int> = &{value: 5}
     list.next = &{value: 42}
-    list.next.setValue(44)
-    return list.value + list.next.getValue()
+//    list.next.setValue(44)
+    return list.value + list.next.value // + list.next.getValue()
 }

@@ -43,7 +43,7 @@ file
 
 typedef
   = "type" [ \t]+ i:identifier g:(genericParameters / $([ \t]+)) t:type {
-      return new ast.Node({loc: fl(location()), op: "typedef", name: i, rhs: t, genericParameters: g instanceof Array ? g[0] : null});
+      return new ast.Node({loc: fl(location()), op: "typedef", name: i, rhs: t, genericParameters: g instanceof Array ? g : null});
     }
 
 import

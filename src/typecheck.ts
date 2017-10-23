@@ -547,6 +547,7 @@ export class TemplateType extends Type {
     public templateParameterTypes: Array<Type>;
     public templateParameterNames: Array<string>;
     public node: Node;
+    public scope: Scope;
     public methods: Array<TemplateFunction> = [];
 }
 
@@ -1522,8 +1523,8 @@ export class TypeChecker {
         }
     }
 
-    private instantiateTemplateType(t: TemplateType, types: Array<Type>, loc: Location): TemplateStructType | TemplateInterfaceType {
-        let a = this.templateStructs.get(t);
+    private instantiateTemplateType(t: TemplateType, types: Array<Type>, loc: Location): Type {
+        let a = this.templateTypeInstantiations.get(t);
         if (a) {
             for(let s of a) {
                 let ok = true;
@@ -1541,27 +1542,48 @@ export class TypeChecker {
             }
         }
 
-        let b = this.templateInterfaces.get(t);
-        if (b) {
-            for(let i of b) {
-                let ok = true;
-                for(let k = 0; k < types.length; k++) {
-                    let type = types[k];
-                    let hasType = i.templateParameterTypes[k];
-                    if (!this.checkTypeEquality(type, hasType, loc, false)) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    return i;
-                }
-            }
+        let scope = new Scope(t.scope);
+        for(let i = 0; i < t.templateParameterNames.length; i++) {
+            scope.registerType(t.templateParameterNames[i], types[i]);
         }
+        let node = t.node.rhs.clone();
 
-        // TODO: TemplateFunctionType
+        if (t.node.rhs.op == "structType") {
+            let s = new TemplateStructType();
+            s.base = t;
+            s.name = t.name;
+            s.loc = t.loc;
+            s.templateParameterTypes = types;
 
-        throw "TODO instantiate the template and return the type"
+            if (a) {
+                a.push(s);
+            } else {
+                this.templateTypeInstantiations.set(t, [s]);
+            }
+    
+            this.createStructType(t.node.rhs, scope, s);
+            return s;
+        } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
+            let s = new TemplateInterfaceType();
+            s.base = t;
+            s.name = t.name;
+            s.loc = t.loc;
+            s.templateParameterTypes = types;
+
+            if (a) {
+                a.push(s);
+            } else {
+                this.templateTypeInstantiations.set(t, [s]);
+            }
+    
+            this.createInterfaceType(t.node.rhs, scope, s);
+            return s;
+        } else if (t.node.rhs.op == "funcType") {
+            throw "TODO";
+        } else if (t.node.rhs.op == "orType") {
+            throw "TODO";
+        }
+        throw "Implementation error";
     }
 
     public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope): Function {
@@ -1742,6 +1764,7 @@ export class TypeChecker {
             tmpl.node = tnode;
             tmpl.name = t.name;
             tmpl.loc = tnode.loc;
+            tmpl.scope = scope;
             for(let g of tnode.genericParameters) {
                 tmpl.templateParameterNames.push(g.value);
                 if (g.condition) {
@@ -4861,8 +4884,7 @@ export class TypeChecker {
     // List of all interfaces. These are checked for possible errors after they have been defined.
     public ifaces: Array<InterfaceType> = [];
     public structs: Array<StructType> = [];
-    public templateStructs: Map<TemplateType, Array<TemplateStructType>> = new Map<TemplateType, Array<TemplateStructType>>();
-    public templateInterfaces: Map<TemplateType, Array<TemplateInterfaceType>> = new Map<TemplateType, Array<TemplateInterfaceType>>();
+    public templateTypeInstantiations: Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>> = new Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>>();
     
 //    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
