@@ -635,30 +635,46 @@ export class GenericStructType extends StructType implements GenericType {
     public base: GenericStructType;
 }
 
-/*
-export class GenericStructInstanceType extends StructType {
+export class GenericInterfaceType extends InterfaceType implements GenericType {
     constructor() {
         super();
         this.genericParameterTypes = [];
+        this.genericParameterNames = [];
     }
 
     public toString(): string {
-        let str = this.base.toString() + "<";
-        for(let i = 0; i < this.genericParameterTypes.length; i++) {
-            if (i == 0) {
-                str += this.genericParameterTypes[i].toString();
-            } else {
-                str += "," + this.genericParameterTypes[i].toString();
+        let g = "<";
+        let lst = [];
+        for(let i = 0; i < this.genericParameterNames.length; i++) {
+            let s = this.genericParameterNames[i];            
+            if (this.genericParameterTypes[i]) {
+                if (this.base) {
+                    s = this.genericParameterTypes[i].toString();
+                } else {
+                    s += " is " + this.genericParameterTypes[i].toString();
+                }
             }
+            lst.push(s);
         }
-        str += ">"
+        g += lst.join(",");
+        g += ">";
+        if (this.name) {
+            return this.name + g;
+        }
+        let str = "interface" + g + "{";
+        let m: Array<string> = [];
+        for(let mt of this.methods.values()) {
+            m.push(mt.toString());
+        }
+        str += m.join(";");
+        str += "}";
         return str;
     }
 
-    public base: GenericStructType;
-    public genericParameterTypes: Array<Type>;    
+    public genericParameterTypes: Array<Type>;
+    public genericParameterNames: Array<string>;
+    public base: GenericInterfaceType;
 }
-*/
 
 export class PointerType extends Type {
     constructor(elementType: Type) {
@@ -1465,6 +1481,45 @@ export class TypeChecker {
         }
     }
 
+    private instantiateGenericInterfaceType(s: GenericInterfaceType, types: Array<Type>, loc: Location): GenericInterfaceType {
+        let a = this.genericInterfaces.get(s);
+        if (a) {
+            for(let g of a) {
+                let ok = true;
+                for(let k = 0; k < types.length; k++) {
+                    let type = types[k];
+                    let hasType = g.genericParameterTypes[k];
+                    if (!this.checkTypeEquality(type, hasType, loc, false)) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) {
+//                    console.log("GENERIC found", types)
+                    return g;
+                }
+            }
+        }
+
+        let g = new GenericInterfaceType();
+        g.base = s;
+        g.genericParameterTypes = types;
+        g.genericParameterNames = s.genericParameterNames;
+        if (a) {
+            a.push(g);
+        } else {
+            this.genericInterfaces.set(s, [g]);
+        }
+        let tr = new Map<Type, Type>();
+        for(let i = 0; i < types.length; i++) {
+            tr.set(s.genericParameterTypes[i], types[i]);
+        }
+//        console.log("===============>", types)
+        this.translateType(s, tr, g);
+//        console.log("<===============")
+        return g;
+    }
+
     private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
         if (!s) {
             s = new StructType();
@@ -1787,10 +1842,33 @@ export class TypeChecker {
             t.type = s;
             scope.registerType(t.name, s, tnode.loc);
         } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
+            let iface: InterfaceType;
             if (t.node.genericParameters) {
-                throw "TODO";
+                iface = new GenericInterfaceType();
+                let isInterfaceGeneric = true;
+                let i = 0;
+                for(let g of tnode.genericParameters) {
+                    (iface as GenericInterfaceType).genericParameterNames.push(g.value);
+                    if (g.condition) {
+                        let c = this.createType(g.condition, scope);
+                        (iface as GenericInterfaceType).genericParameterTypes.push(c);
+                        isInterfaceGeneric = isInterfaceGeneric && (this.isInterface(c));
+                    } else {
+                        (iface as GenericInterfaceType).genericParameterTypes.push(null);
+                        isInterfaceGeneric = false;
+                    }
+                    i++;
+                }
+                if (isInterfaceGeneric) {
+                    t.scope = new Scope(t.scope);
+                    for(let i = 0; i < (iface as GenericInterfaceType).genericParameterNames.length; i++) {
+                        t.scope.registerType((iface as GenericInterfaceType).genericParameterNames[i], (iface as GenericInterfaceType).genericParameterTypes[i]);
+                    }
+                    this.genericInterfaces.set(iface as GenericInterfaceType, [iface as GenericInterfaceType]);
+                }
+            } else {
+                iface = new InterfaceType();
             }
-            let iface = new InterfaceType();
             iface.loc = t.node.loc;
             iface.name = t.name;
             this.ifaces.push(iface);
@@ -4864,7 +4942,41 @@ export class TypeChecker {
             return translated;
         }
         if (t instanceof InterfaceType) {
-            throw "TODO";
+            //            console.log("Translating", t.name, t.toString());
+            let modified = false;
+            let newIface: InterfaceType;
+            if (newT) {
+                newIface = newT as InterfaceType;
+                modified = true;
+            } else {
+                if (t instanceof GenericInterfaceType) {
+                    let types: Array<Type> = [];
+                    for(let p of t.genericParameterTypes) {
+                        types.push(this.translateType(p, tr));
+                    }
+                    return this.instantiateGenericInterfaceType(t, types, t.loc);
+                }  else {
+                    newIface = new InterfaceType();
+                }
+            }
+            newIface.loc = t.loc;
+            newIface.name = t.name;
+            for(let impl of t.extendsInterfaces) {
+                let newImpl = this.translateType(impl, tr);
+                modified = modified || newImpl != impl;
+                newIface.extendsInterfaces.push(newImpl as InterfaceType);
+            }
+            tr.set(t, newIface);
+            for(let m of t.methods.entries()) {
+                let newMethod = this.translateType(m[1], tr) as FunctionType;
+                newIface.methods.set(m[0], newMethod);
+                modified = modified || (newMethod != m[1]);
+            }
+            //            console.log(".........<")
+            if (modified) {
+                return newIface;
+            }
+            return t;
         } else if (t instanceof StructType) {
 //            console.log("Translating", t.name, t.toString());
             let modified = false;
@@ -5102,7 +5214,8 @@ export class TypeChecker {
     public ifaces: Array<InterfaceType> = [];
     public structs: Array<StructType> = [];
     public genericStructs: Map<GenericStructType, Array<GenericStructType>> = new Map<GenericStructType, Array<GenericStructType>>();
-
+    public genericInterfaces: Map<GenericInterfaceType, Array<GenericInterfaceType>> = new Map<GenericInterfaceType, Array<GenericInterfaceType>>();
+    
 //    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
 }

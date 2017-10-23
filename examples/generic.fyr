@@ -11,6 +11,27 @@ func LinkedList.getValue() T {
     return this.value
 }
 
+type Ordinal<T is interface{}> interface {
+    func isLess(x T) bool
+}
+
+// func min<T is Ordinal>(x T, y T) T {
+//     if (x.isLess(y)) {
+//         return x
+//     }
+//     return y
+// }
+
+type Person struct {
+    implements Ordinal<Person>
+    firstName string
+    familyName string
+}
+
+func Person.isLess(p: interface{Person}) bool {
+
+}
+
 export func main() int {
     var list *LinkedList<int> = &{value: 5}
     list.next = &{value: 42}

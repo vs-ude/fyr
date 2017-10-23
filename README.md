@@ -89,14 +89,12 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Handle async in interfaces
 - Complete C-Backend
 - Generics
-    - Generic parameters of OrType
     - Check that parameter types match upon generic instantiation
-    - Generic instantiation has some TODOs
     - Generic functions
-    - Generic interfaces
 - Detect recursive types, i.e. types that contain themselves
 
 # Wish List
+- C-like enums
 - Templates
 - Components
 - Models
