@@ -80,10 +80,7 @@ export class FunctionParameter implements ScopeElement {
     public isConst: boolean;
 }
 
-export class TemplateFunction implements ScopeElement {
-    public name: string;
-    public type: Type;
-    public loc: Location;
+export class TemplateFunction extends Function {
     public templateParameterTypes: Array<Type>;
     public templateParameterNames: Array<string>;
     public node: Node;
@@ -1586,67 +1583,74 @@ export class TypeChecker {
         throw "Implementation error";
     }
 
-    public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope): Function {
+    public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope, instantiateTemplate: boolean = false): Function {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
         }
         let pseudoScope = new Scope(parentScope);  
         pseudoScope.isPseudoScope = true;      
-        let f: Function = new Function();
+        let objectType: Type;
+        let objectTypeIsConst = false;
+        let objectTypeIsScoped = false;
+        // A member function?
+        if (fnode.lhs) {
+            let obj = fnode.lhs;
+            if (obj.op == "constType") {
+                objectTypeIsConst = true;
+                obj = obj.rhs;
+            }
+            if (obj.op == "referenceType") {
+                objectTypeIsScoped = true;
+                obj = obj.rhs;
+            }
+            objectType = this.createType(obj, parentScope);
+        }
+        let f: Function;
+        if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
+            f = new TemplateFunction();
+            f.node = fnode;
+        } else {
+            f = new Function();
+        }
         f.name = fnode.name.value;
         f.scope.parent = pseudoScope;
         f.node = fnode;
         f.loc = fnode.loc;
         f.isExported = (fnode.op == "export_func");
-        /*
-        if (fnode.genericParameters) {
-            let gt = new GenericFunctionType();
-            gt.node = fnode;
+        if (fnode.genericParameters && !instantiateTemplate) {
+            let gt = new TemplateFunctionType();
             for(let g of fnode.genericParameters) {
-                let t: Type;
-                if (!g.condition) {
-                    t = this.t_any;
-                } else {
+                let t: Type = null;
+                if (g.condition) {
                     t = this.createType(g.condition, f.scope);
                 }
                 f.scope.registerType(g.value, t, fnode.loc);
-                gt.genericParameterNames.push(g.value);
-                gt.genericParameterTypes.push(t);
+                gt.templateParameterNames.push(g.value);
+                gt.templateParameterTypes.push(t);
             }            
             f.type = gt;
-        } else { */
-        f.type = new FunctionType();
-//        }
+        } else {
+            f.type = new FunctionType();
+        }
         f.type.loc = fnode.loc;
         if (fnode.op == "asyncFunc") {
             f.type.callingConvention = "fyrCoroutine";
         }
         // A member function?
-        if (fnode.lhs) {
-            let obj = fnode.lhs;
-            if (obj.op == "constType") {
-                f.type.objectTypeIsConst = true;
-                obj = obj.rhs;
+        if (objectType) {
+            f.type.objectTypeIsConst = objectTypeIsConst;
+            f.type.objectTypeIsScoped = objectTypeIsScoped;
+            f.type.objectType = objectType;
+            if (this.isTemplateType(f.type.objectType)) {
+                let tt = this.stripType(f.type.objectType) as TemplateType;
+                (f as TemplateFunction).owner = tt;
+                tt.methods.push(f as TemplateFunction);
+                // Do not process any further. This done upon template instantiation
+                return f;
             }
-            if (obj.op == "referenceType") {
-                f.type.objectTypeIsScoped = true;
-                obj = obj.rhs;
-            }
-            f.type.objectType = this.createType(obj, f.scope);
             if (!this.isStruct(f.type.objectType)) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);                
             }
-            /*
-            if (f.type.objectType instanceof TemplateStructType) {
-                if (f.type.objectType.base) {
-                    throw new TypeError("Functions cannot be attached to instantiated generic types", fnode.lhs.loc);
-                }
-                for(let i = 0; i < f.type.objectType.genericParameterNames.length; i++) {
-                    f.scope.registerType(f.type.objectType.genericParameterNames[i], f.type.objectType.genericParameterTypes[i]);
-                    pseudoScope.registerType(f.type.objectType.genericParameterNames[i], f.type.objectType.genericParameterTypes[i]);
-                }
-            }
-            */
             let p = new FunctionParameter();
             p.name = "this";            
             p.loc = fnode.lhs.loc;
@@ -1657,6 +1661,12 @@ export class TypeChecker {
                 p.type = new PointerType(f.type.objectType);
             }
             f.scope.registerElement("this", p);
+        }
+        // A template function?
+        if (f instanceof TemplateFunction) {
+            registerScope.registerElement(f.name, f);            
+            // Do not process any further. This done upon template instantiation
+            return f;
         }
         if (fnode.parameters) {
             for(let pnode of fnode.parameters) {
@@ -1717,10 +1727,12 @@ export class TypeChecker {
                 throw new TypeError("Field " + objType.toString() + "." + f.name + " is already defined", fnode.loc);
             }
             objType.methods.set(f.name, f.type);
+            // TODO: Template name mangling
             registerScope.registerElement(objType.name + "." + f.name, f);
         } else if (objType) {
             throw "Implementation error";
         } else {
+            // TODO: Template name mangling
             registerScope.registerElement(f.name, f);
         }
 
@@ -2025,6 +2037,9 @@ export class TypeChecker {
 
         // Check function bodies
         for(let e of functions) {
+            if (e instanceof TemplateFunction) {
+                continue;
+            }
             this.checkFunctionBody(e);
         }
 
@@ -3261,8 +3276,9 @@ export class TypeChecker {
                 }
                 let ft: FunctionType = t;
                 if (ft instanceof TemplateFunctionType) {
-                    throw "TODO: Template function call";
-                } else if (ft instanceof PolymorphFunctionType) {
+                    throw "TODO: Template function call: infer the template argument types";
+                }
+                if (ft instanceof PolymorphFunctionType) {
                     var ok = false;
                     for(let it of ft.instances) {
                         if (this.checkFunctionArguments(it, enode.parameters, scope, enode.loc, false)) {
@@ -4528,6 +4544,11 @@ export class TypeChecker {
     public isTuple(t: Type): boolean {
         t = this.stripType(t);
         return t instanceof TupleType;
+    }
+
+    public isTemplateType(t: Type): boolean {
+        t = this.stripType(t);
+        return t instanceof TemplateType;
     }
 
     public isMutableValue(t: Type): boolean {

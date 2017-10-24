@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import {Wasm32Backend} from "./backend_wasm"
@@ -150,6 +150,9 @@ export class CodeGenerator {
             if (e instanceof Function) {
                 if (e.isImported) {
                     throw "Implementation error";
+                }
+                if (e instanceof TemplateFunction) {
+                    continue;
                 }
                 let wf = this.funcs.get(e) as backend.Function;
                 let n = this.processFunction(e, wf);
