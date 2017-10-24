@@ -88,9 +88,9 @@ Hence, benchmarks must run significantly longer to produce meaningful results.
 - Do not pass scoped variables when invoking a function via spawn
 - Handle async in interfaces
 - Complete C-Backend
-- Generics
-    - Check that parameter types match upon generic instantiation
-    - Generic functions
+- Template
+    - Check that parameter types match upon template instantiation
+    - Template functions
 - Detect recursive types, i.e. types that contain themselves
 
 # Wish List
