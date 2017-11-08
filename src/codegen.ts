@@ -104,6 +104,8 @@ export class CodeGenerator {
                 }
                 let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
+            } else if (e instanceof TemplateFunction) {
+                // Do nothing by intention
             } else if (e instanceof Variable) {
                 let g = this.backend.declareGlobalVar(e.name, this.getSSAType(e.type));
                 this.globalVars.set(e, g);
@@ -151,11 +153,10 @@ export class CodeGenerator {
                 if (e.isImported) {
                     throw "Implementation error";
                 }
-                if (e instanceof TemplateFunction) {
-                    continue;
-                }
                 let wf = this.funcs.get(e) as backend.Function;
                 let n = this.processFunction(e, wf);
+            } else if (e instanceof TemplateFunction) {
+                // Do nothing by intention                
             } else if (e instanceof Variable) {
                 // Do nothing by intention
             } else {
@@ -1948,6 +1949,18 @@ export class CodeGenerator {
                     }
                     f = e;
                     t = f.type;
+                } else if (enode.lhs.op == "genericInstance") {
+                    let name = enode.lhs.lhs.value + "<";
+                    for(let g of enode.lhs.genericParameters) {
+                        name += g.type.toString() + ",";
+                    }
+                    name += ">";
+                    let e = scope.resolveElement(name);
+                    if (!(e instanceof Function)) {
+                        throw "Implementation error";
+                    }
+                    f = e;
+                    t = f.type;                
                 } else if (enode.lhs.op == ".") {
                     // Calling a method
                     let ltype = this.tc.stripType(enode.lhs.lhs.type);

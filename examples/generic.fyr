@@ -17,7 +17,7 @@ type Ordinal<T> interface {
 
 // func min<T is Ordinal>(x T, y T) T {
 func min<T>(x T, y T) T {
-     if (x.isLess(y)) {
+     if (x < y) {
          return x
      }
      return y
@@ -34,7 +34,8 @@ func Person.isLess(p Person) bool {
 }
 
 export func main() int {
-    var list *LinkedList<int> = &{value: 5}
+    var v = min<int>(42, 94)
+    var list *LinkedList<int> = &{value: v}
     list.next = &{value: 42}
 //    list.next.setValue(44)
     return list.value + list.next.value // + list.next.getValue()
