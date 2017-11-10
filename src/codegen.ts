@@ -100,7 +100,7 @@ export class CodeGenerator {
                 }
                 let name = e.name;
                 if (e.type.objectType) {
-                    name = RestrictedType.strip(e.type.objectType).name + "." + name;
+                    name = this.tc.qualifiedTypeName(RestrictedType.strip(e.type.objectType)) + "." + name;
                 }
                 let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
@@ -2013,7 +2013,7 @@ export class CodeGenerator {
                     if (objType instanceof StructType) {
                         let method = objType.method(enode.lhs.name.value);
                         let methodObjType = RestrictedType.strip(method.objectType);
-                        let methodName = methodObjType.name + "." + enode.lhs.name.value;
+                        let methodName = this.tc.qualifiedTypeName(methodObjType) + "." + enode.lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
                             throw "Implementation error";

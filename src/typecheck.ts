@@ -1825,7 +1825,7 @@ export class TypeChecker {
                 throw new TypeError("Field " + objType.toString() + "." + f.name + " is already defined", fnode.loc);
             }
             objType.methods.set(f.name, f.type);
-            registerScope.registerElement(objType.name + "." + f.name, f);
+            registerScope.registerElement(this.qualifiedTypeName(objType) + "." + f.name, f);
         } else if (objType) {
             throw "Implementation error";
         } else {
@@ -4969,6 +4969,10 @@ export class TypeChecker {
             }
         }
         return null;
+    }
+
+    public qualifiedTypeName(t: Type): string {
+        return t.toString();
     }
 
     public t_bool: Type;
