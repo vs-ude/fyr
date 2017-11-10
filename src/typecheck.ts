@@ -1574,6 +1574,9 @@ export class TypeChecker {
             }
     
             this.createStructType(t.node.rhs, scope, s);
+            for(let m of t.methods) {
+                this.instantiateTemplateMemberFunction(t, s, m);
+            }
             return s;
         } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
             let s = new TemplateInterfaceType();
@@ -1610,6 +1613,21 @@ export class TypeChecker {
         throw "Implementation error";
     }
 
+    private instantiateTemplateMemberFunction(t: TemplateType, s: TemplateStructType, m: TemplateFunction): Function | TemplateFunction {
+        let scope = new Scope(t.parentScope);
+        // TODO: Register the fully qualified name, too
+        scope.registerType(s.name, s);
+        for(let i = 0; i < t.templateParameterNames.length; i++) {
+            scope.registerType(t.templateParameterNames[i], s.templateParameterTypes[i]);
+        }
+        let node = m.node.clone();        
+        let f = this.createFunction(node, scope, t.registerScope);
+        if (f instanceof Function) {
+            this.checkFunctionBody(f);
+        }
+        return f;
+    }
+        
     private instantiateTemplateFunction(t: TemplateType, types: Array<Type>, loc: Location): Function {
         let a = this.templateFunctionInstantiations.get(t);
         if (a) {
@@ -1634,7 +1652,6 @@ export class TypeChecker {
             scope.registerType(t.templateParameterNames[i], types[i]);
         }
         let node = t.node.clone();
-
         let f = this.createFunction(node, scope, t.registerScope, true);
         if (!(f instanceof Function)) {
             throw "Implementation error";
@@ -1644,12 +1661,12 @@ export class TypeChecker {
         }
         f.type.base = t;
         f.type.templateParameterTypes = types;
-        this.checkFunctionBody(f);
         if (a) {
             a.push(f);
         } else {
             this.templateFunctionInstantiations.set(t, [f]);
         }
+        this.checkFunctionBody(f);
         return f;
     }
 
