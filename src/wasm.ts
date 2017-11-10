@@ -10,6 +10,9 @@ export type StackType = "i32" | "i64" | "f32" | "f64";
 
 let nameCounter = 0;
 
+/**
+ * In memory representation of a WASM module.
+ */
 export class Module extends Node {
     public get op(): string {
         return "module";
@@ -19,7 +22,7 @@ export class Module extends Node {
         let s = indent + "(module\n";
 
         for(let f of this.funcImports) {
-            s += indent + "    (func $" + f.name + " (import \"" + f.from + "\" \"" + f.name + "\") ";
+            s += indent + "    (func $" + Module.escapeName(f.name) + " (import \"" + f.from + "\" \"" + f.name + "\") ";
             if (f.type.params.length > 0) {
                 s += "(param";
                 for(let t of f.type.params) {
@@ -87,7 +90,7 @@ export class Module extends Node {
 
         // Function types
         for(let f of this.funcTypes) {
-            s += indent + "    (type " + f.name + " (func ";
+            s += indent + "    (type " + Module.escapeName(f.name) + " (func ";
             if (f.params.length > 0) {
                 s += "(param";
                 for(let t of f.params) {
@@ -192,6 +195,14 @@ export class Module extends Node {
 
     public addFunctionToTable(f: Function, index: number) {
         this.funcTable[index] = f;
+    }
+
+    public static escapeName(name: string): string {
+        name = name.replace("_", "__");
+        name = name.replace("<", "_lt");
+        name = name.replace(">", "_gt");
+        name = name.replace(",", "_.");
+        return name;
     }
 
     public memorySize: number;
@@ -330,7 +341,7 @@ export class Function extends Node implements backend.Function {
         if (this.isInitFunction || !this.name) {
             s = indent + "(func ";
         } else {
-            s = indent + "(func $" + this.name;
+            s = indent + "(func $" + Module.escapeName(this.name);
         }
         for(let p of this.parameters) {
             s += " (param " + p + ")";

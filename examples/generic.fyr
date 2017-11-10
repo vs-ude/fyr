@@ -36,7 +36,7 @@ func Person.isLess(p Person) bool {
 export func main() int {
     var v = min<int>(42, 94)
     var list *LinkedList<int> = &{value: v}
-    list.next = &{value: 42}
+    list.next = &{value: 43}
 //    list.next.setValue(44)
     return list.value + list.next.value // + list.next.getValue()
 }
