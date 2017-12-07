@@ -68,6 +68,28 @@ time runwasm mandelbrot.wasm main
 The performance overhead of launching node is around 100ms on a modern machine.
 Hence, benchmarks must run significantly longer to produce meaningful results.
 
+## Defects
+
+### Reference error
+
+```
+func search(arr []int, val int) int {
+    for(var i, v in arr) {
+        if (v == val) {
+            return i
+        }
+    }
+    return 0
+}
+
+export func main() int {
+    var arr = [4]int[123, 234, 345, 456]
+    return search(arr[:], 234)
+}
+```
+
+The slice can only be a refeence slice, but currently the code compiles without error.
+
 ## Todos
 
 - Type switch statement

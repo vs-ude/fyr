@@ -936,11 +936,7 @@ identifier "identifier"
     }
 
 string "string"
-  = "\"" s:$stringchars* "\"" { return new ast.Node({loc: fl(location()), op: "str", value: s}); }
-
-stringchars
-  = $("\\" .)
-  / $(chars:[^"\\]+)
+  = "\"" s:$runechar* "\"" { return new ast.Node({loc: fl(location()), op: "str", value: s}); }
 
 rune
   = "'" c:runechar "'" {

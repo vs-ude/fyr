@@ -15,8 +15,14 @@ type Ordinal<T> interface {
     func isLess(x T) bool
 }
 
-// func min<T is Ordinal>(x T, y T) T {
-func min<T>(x T, y T) T {
+// func min2<V, T is int | Ordinal<V>, V>(x T, y T) T {
+//     if (x < y) {
+//         return x
+//     }
+//     return y
+//}
+
+func min<T is int8 | uint8 | int16 | uint16 | int32 | uint32 | int64 | uint64 | double | float>(x T, y T) T {
      if (x < y) {
          return x
      }
