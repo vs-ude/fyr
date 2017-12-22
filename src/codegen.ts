@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement} from "./typecheck"
+import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import {Wasm32Backend} from "./backend_wasm"
@@ -1944,9 +1944,20 @@ export class CodeGenerator {
                 } else if (enode.lhs.op == "id") {
                     // Calling a named function
                     let e = scope.resolveElement(enode.lhs.value);
+                    if (e instanceof TemplateFunction) {
+                        if (!(enode.lhs.type instanceof TemplateFunctionType)) {
+                            throw "Implementation error";
+                        }
+                        let name = enode.lhs.value + "<";
+                        for(let g of enode.lhs.type.templateParameterTypes) {
+                            name += g.toString() + ",";
+                        }
+                        name += ">";
+                        e = scope.resolveElement(name);
+                    }
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
-                    }
+                    }    
                     f = e;
                     t = f.type;
                 } else if (enode.lhs.op == "genericInstance") {

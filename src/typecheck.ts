@@ -1535,8 +1535,21 @@ export class TypeChecker {
 
         let scope = new Scope(t.parentScope);
         for(let i = 0; i < t.templateParameterNames.length; i++) {
-            if (t.templateParameterTypes[i] && !this.resolveTemplateType(t.templateParameterTypes[i], types[i], scope)) {
-                throw new TypeError("Type " + types[i] + " is not applicable to template parameter " + t.templateParameterNames[i] + " of template " + t.toString(), loc);
+            if (t.templateParameterTypes[i]) {
+                let tp = this.createType(t.templateParameterTypes[i], scope);
+                if (!(tp instanceof OrType)) {
+                    throw new TypeError("Template parameter type constraints must be an or'ed type", loc);
+                }
+                let ok = false;
+                for(let o of tp.types) {
+                    if (this.checkTypeEquality(o, types[i], loc, false)) {
+                        ok = true;
+                        break;
+                    }
+                }
+                if (!ok) {
+                    throw new TypeError(types[i].toString() + " does not match with template parameter constraint " + tp.toString() + " of template parameter " + t.templateParameterNames[i] + " of template type " + t.name, loc);
+                }
             }
             scope.registerType(t.templateParameterNames[i], types[i]);
         }
@@ -1680,10 +1693,11 @@ export class TypeChecker {
                     }
                 }
                 if (!ok) {
-                    throw new TypeError(types[i].toString() + " does not match with template parameter constraint " + tp.toString() + " of parameter " + t.templateParameterNames[i], loc);
+                    console.log(types[i])
+                    throw new TypeError(types[i].toString() + " does not match with template parameter constraint " + tp.toString() + " of parameter " + t.templateParameterNames[i] + " of template function " + t.name, loc);
                 }
-                scope.registerType(t.templateParameterNames[i], types[i]);
             }
+            scope.registerType(t.templateParameterNames[i], types[i]);
         }
 
         // Create a copy the template AST and parse the template function's type signature.
@@ -1747,7 +1761,8 @@ export class TypeChecker {
         f.isExported = (fnode.op == "export_func");
 
         if (f instanceof TemplateFunction) {
-            let gt = new TemplateType();            
+            let gt = new TemplateType();   
+            gt.name = fnode.name.value;         
             gt.node = fnode;
             gt.parentScope = parentScope;
             gt.registerScope = registerScope;
@@ -3396,32 +3411,13 @@ export class TypeChecker {
                 }
                 let t = this.stripType(enode.lhs.type);
                 if (t instanceof TemplateType) {
-                    if (!enode.parameters || t.templateParameterNames.length != enode.parameters.length) {
-                        throw new TypeError("Mismatch in template parameter types while instantiating " + t.toString(), enode.loc);
-                    }
-                    let result = new Map<string, Type>();
-                    for(let i = 0 ; i < enode.parameters.length; i++) {
-                        let r = this.resolveTemplateType(t.node.parameters[i], enode.parameters[i].type, scope);
-                        if (!r) {
-                            throw new TypeError("Type mismatch in parameter " + enode.parameters[i].name.value + " in call to " + t.toString(), enode.parameters[i].loc);
-                        }
-                        for(let e of r) {
-                            if (result.has(e[0].name)) {
-                                this.checkTypeEquality(e[1], result.get(e[0].name), enode.parameters[i].loc, true);
-                            } else {
-                                result.set(e[0].name, e[1]);
-                            }
-                        }
-                    }
-                    let types: Array<Type>;
+                    let result = this.checkTemplateFunctionArguments(t, enode.parameters, scope, enode.loc);
+                    let types: Array<Type> = [];
                     for(let i = 0; i < t.templateParameterNames.length; i++) {
                         let tt = result.get(t.templateParameterNames[i]);
-                        if (!tt) {
-                            tt = this.t_void;
-                        }
                         types.push(tt);
                     }
-                    let f = this.instantiateTemplateFunction(t, types, t.node.loc);
+                    let f = this.instantiateTemplateFunction(t, types, enode.loc);
                     enode.type = this.makeScoped(f.type.returnType, scope, enode.loc);
                     enode.lhs.type = f.type;
                 } else if (t instanceof PolymorphFunctionType) {
@@ -3723,7 +3719,11 @@ export class TypeChecker {
         return node.type;
     }
 
-    private unifyLiterals(t: Type, node: Node, loc: Location, doThrow: boolean = true): boolean {
+    private unifyLiterals(t: Type, node: Node, loc: Location, doThrow: boolean = true, templateParams: Map<string, Type> = null): boolean {
+        if (templateParams && t instanceof GenericParameter && templateParams.has(t.name)) {
+            t = templateParams.get(t.name);
+        }
+
         if (t instanceof OrType) {
             let count = 0;
             for(let o of t.types) {
@@ -3754,6 +3754,12 @@ export class TypeChecker {
 
         if (t instanceof InterfaceType && t.isBoxedType()) {
             return this.unifyLiterals(t.extendsInterfaces[0], node, loc, doThrow);
+        }
+
+        if (templateParams && t instanceof GenericParameter) {
+            node.type = this.defaultLiteralType(node);
+            templateParams.set(t.name, node.type);
+            return true;
         }
 
         switch (node.op) {
@@ -3905,15 +3911,24 @@ export class TypeChecker {
     }
 
     // Checks whether the type of 'from' can be assigned to the type 'to'.
-    public checkIsAssignableNode(to: Type, from: Node, isFunctionParameter: boolean = false, doThrow: boolean = true): boolean {
+    public checkIsAssignableNode(to: Type, from: Node, isFunctionParameter: boolean = false, doThrow: boolean = true, templateParams: Map<string, Type> = null): boolean {
         if (from.isUnifyableLiteral()) {
-            return this.unifyLiterals(to, from, from.loc, doThrow);
+            return this.unifyLiterals(to, from, from.loc, doThrow, templateParams);
         }
-        return this.checkIsAssignableType(to, from.type, from.loc, doThrow, true, true, false, false, isFunctionParameter);
+        return this.checkIsAssignableType(to, from.type, from.loc, doThrow, true, true, false, false, isFunctionParameter, templateParams);
     }
 
     // Checks whether the type 'from' can be assigned to the type 'to'.
-    public checkIsAssignableType(to: Type, from: Type, loc: Location, doThrow: boolean = true, unbox: boolean = true, isCopied: boolean = true, toIsConst: boolean = false, fromIsConst: boolean = false, isFunctionParameter: boolean = false): boolean {
+    public checkIsAssignableType(to: Type, from: Type, loc: Location, doThrow: boolean = true, unbox: boolean = true, isCopied: boolean = true, toIsConst: boolean = false, fromIsConst: boolean = false, isFunctionParameter: boolean = false, templateParams: Map<string, Type> = null): boolean {
+        if (templateParams && to instanceof GenericParameter) {
+            if (templateParams.has(to.name)) {
+                to = templateParams.get(to.name);
+            } else {
+                templateParams.set(to.name, from);
+                return true;
+            }
+        }
+
         // Determine const, scope and unbox
         let toIsScoped: Scope | null = null;
         if (to instanceof RestrictedType) {
@@ -3956,12 +3971,21 @@ export class TypeChecker {
             }
         }
 
+        if (templateParams && to instanceof GenericParameter) {
+            if (templateParams.has(to.name)) {
+                to = templateParams.get(to.name);
+            } else {
+                templateParams.set(to.name, from);
+                return true;
+            }
+        }
+
         if (to == from && (this.isPrimitive(to) || to == this.t_string || to instanceof StructType || to instanceof StringLiteralType)) {
             return true;
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
             for(let i = 0; i < to.types.length; i++) {
-                if (!this.checkIsAssignableType(to.types[i], from.types[i], loc, false, false, isCopied, toIsConst, fromIsConst, isFunctionParameter)) {
+                if (!this.checkIsAssignableType(to.types[i], from.types[i], loc, false, false, isCopied, toIsConst, fromIsConst, isFunctionParameter, templateParams)) {
                     ok = false;
                     break;
                 }
@@ -3991,6 +4015,7 @@ export class TypeChecker {
                     }
                 }
             } else {
+                // TODO: Use checkIsAssignableType here
                 for(let o of to.types) {
                     if (this.checkTypeEquality(o, from, loc, false)) {
                         return true;
@@ -4013,7 +4038,7 @@ export class TypeChecker {
                         }
                     }
                 }
-                if (this.checkIsAssignableType(to.elementType, fromElement, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+                if (this.checkIsAssignableType(to.elementType, fromElement, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter, templateParams)) {
                     return true;
                 }
             }
@@ -4048,25 +4073,25 @@ export class TypeChecker {
                             }
                         }
                     }
-                    if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+                    if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter, templateParams)) {
                         return true;
                     }
                 }
             }
         } else if (to instanceof ArrayType && from instanceof ArrayType) {
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, isCopied, toIsConst, fromIsConst, isFunctionParameter)) {
+            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, isCopied, toIsConst, fromIsConst, isFunctionParameter, templateParams)) {
                 return true;
             }
         } else if (to instanceof SliceType && from instanceof SliceType) {
             if (!this.checkIsAssignableScope(to.arrayScope, from.arrayScope, loc, false, isFunctionParameter)) {
                 throw new TypeError("Mismatch in variable scope. Cannot assign " + from.toString() + " to " + to.toString(), loc);
             }
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter, templateParams)) {
                 return true;
             }            
         } else if (to instanceof MapType && from instanceof MapType) {
             if (this.checkIsAssignableType(to.keyType, from.keyType, loc, false, false, false, toIsConst, fromIsConst) &&
-                this.checkIsAssignableType(to.valueType, from.valueType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
+                this.checkIsAssignableType(to.valueType, from.valueType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter, templateParams)) {
                     return true;
             }
         } else if (to == this.t_string && from == this.t_string) {
@@ -4076,7 +4101,7 @@ export class TypeChecker {
                 return true;
             }
             if (to.isBoxedType()) {
-                return this.checkIsAssignableType(to.extendsInterfaces[0], from, loc, doThrow, false, isCopied, toIsConst, fromIsConst, isFunctionParameter);
+                return this.checkIsAssignableType(to.extendsInterfaces[0], from, loc, doThrow, false, isCopied, toIsConst, fromIsConst, isFunctionParameter, templateParams);
             }
             if (from instanceof InterfaceType) {
                 this.checkIsAssignableScope(to.pointerScope, from.pointerScope, loc);
@@ -4141,19 +4166,19 @@ export class TypeChecker {
         throw new TypeError("Type " + from.toString() + " cannot be assigned to type " + to.toString(), loc);        
     }
 
-    public checkFunctionArguments(ft: FunctionType, parameters: Array<Node> | null, scope: Scope, loc: Location, doThrow: boolean = true): boolean {
+    public checkFunctionArguments(ft: FunctionType, args: Array<Node> | null, scope: Scope, loc: Location, doThrow: boolean = true): boolean {
         // Type check all parameters
-        if (parameters) {
-            if (ft.parameters.length != parameters.length) {
-                if (ft.requiredParameterCount() > parameters.length || (parameters.length > ft.parameters.length && !ft.hasEllipsis())) {
+        if (args) {
+            if (ft.parameters.length != args.length) {
+                if (ft.requiredParameterCount() > args.length || (args.length > ft.parameters.length && !ft.hasEllipsis())) {
                     if (doThrow) {
                         throw new TypeError("Supplied parameter count does not match function signature " + ft.toString(), loc);
                     }
                     return false;
                 }
             }
-            for(let i = 0; i < parameters.length; i++) {
-                let pnode = parameters[i];
+            for(let i = 0; i < args.length; i++) {
+                let pnode = args[i];
                 if (pnode.op == "unary...") {
                     if (!ft.hasEllipsis()) {
                         if (doThrow) {
@@ -4161,7 +4186,7 @@ export class TypeChecker {
                         }
                         return false;
                     }
-                    if (i != ft.parameters.length - 1 || i != parameters.length - 1) {
+                    if (i != ft.parameters.length - 1 || i != args.length - 1) {
                         if (doThrow) {
                             throw new TypeError("Ellipsis must only appear with the last parameter", pnode.loc);
                         }
@@ -4189,6 +4214,59 @@ export class TypeChecker {
             return false;
         }
         return true;
+    }
+
+    public checkTemplateFunctionArguments(t: TemplateType, args: Array<Node>, scope: Scope, loc: Location) : Map<string, Type> {
+        if (t.node.parameters.length == 0) {
+            throw "Implementation error";
+        }
+        let s = new Scope(scope);
+        let result = new Map<string, Type>();
+        for(let n of t.templateParameterNames) {
+            let g = new GenericParameter();
+            g.name = n;
+            s.registerType(n, g);
+        }
+                
+        let requiredParameterCount = t.node.parameters.length;
+        let ellipsis = false; // TODO
+        if (ellipsis) {
+            requiredParameterCount--;
+        }
+        let lastParameter: Node = t.node.parameters[t.node.parameters.length - 1];
+
+        if (t.node.parameters.length != args.length) {
+            if (requiredParameterCount > args.length || (args.length > t.node.parameters.length && !ellipsis)) {
+                throw new TypeError("Supplied parameter count does not match function signature of " + t.toString(), loc);
+            }
+        }
+        for(let i = 0; i < args.length; i++) {
+            let pnode = args[i];
+            if (pnode.op == "unary...") {
+                if (!ellipsis) {
+                    throw new TypeError("Ellipsis not allowed here. Function is not variadic", pnode.loc);
+                }
+                if (i != t.node.parameters.length - 1 || i != args.length - 1) {
+                    throw new TypeError("Ellipsis must only appear with the last parameter", pnode.loc);
+                }
+                this.checkIsAssignableNode(this.createType(lastParameter, s), pnode.rhs, true, true, result);
+            } else {
+                if (ellipsis && i >= t.node.parameters.length - 1) {
+                    this.checkIsAssignableNode((this.createType(lastParameter, s) as SliceType).elementType, pnode, true, true, result);
+                } else {
+                    this.checkIsAssignableNode(this.createType(t.node.parameters[i], s), pnode, true, true, result);
+                }
+            }
+//            console.log("resolved", result);
+        }
+    
+        for(let n of t.templateParameterNames) {
+            if (!result.has(n)) {
+                result.set(n, this.t_void);
+            }
+        }
+
+        return result;
     }
 
     public checkIsEnumerable(node: Node): [Type, Type] {
@@ -4966,10 +5044,6 @@ export class TypeChecker {
         let t = new StringLiteralType(name);
         this.stringLiteralTypes.set(name, t);
         return t;
-    }
-
-    private resolveTemplateType(node: Node, t: Type, scope: Scope): Map<BasicType, Type> {
-        throw "TODO"
     }
 
     private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
