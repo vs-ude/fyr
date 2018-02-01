@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "frozen" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
             return true;
         }
         return false;
@@ -215,9 +215,6 @@ primitiveType
     }
   / "#" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "unsafePointerType", rhs: t});
-    }
-  / "^" [ \t]* t:primitiveType {
-      return new ast.Node({loc: fl(location()), op: "guardedPointerType", rhs: t});
     }
   / "struct" [ \t]* "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
         return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : []});

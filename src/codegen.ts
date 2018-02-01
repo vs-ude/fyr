@@ -1,5 +1,5 @@
 import {Location, Node, NodeOp} from "./ast"
-import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, GuardedPointerType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
+import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import {Wasm32Backend} from "./backend_wasm"
@@ -284,7 +284,7 @@ export class CodeGenerator {
             ftype.result = this.getSSAType(t.returnType);
         }
         if (t.hasEllipsis()) {
-            ftype.ellipsisParam = this.getSSAType((t.lastParameter().type as SliceType).elementType);
+            ftype.ellipsisParam = this.getSSAType(((t.lastParameter().type as SliceType).arrayType as ArrayType).elementType);
         }
         return ftype;
     }
@@ -584,8 +584,6 @@ export class CodeGenerator {
                     } else if (snode.op == "-=") {
                         b.assign(dest, "sub", storage, [p1, p2]);
                     }
-                } else if (t instanceof GuardedPointerType) {
-                    throw "TODO"
                 } else {
                     if (snode.op == "+=") {
                         b.assign(dest, "add", storage, [p1, p2]);
@@ -632,15 +630,11 @@ export class CodeGenerator {
                     p1 = tmp;
                     dest = tmp;
                 }
-                if (t instanceof GuardedPointerType) {
-                    throw "TODO"
-                } else {
-                    let increment = 1;
-                    if (t instanceof UnsafePointerType) {
-                        increment = ssa.sizeOf(this.getSSAType(t.elementType));
-                    }
-                    b.assign(dest, snode.op == "++" ? "add" : "sub", storage, [p1, increment]);
+                let increment = 1;
+                if (t instanceof UnsafePointerType) {
+                    increment = ssa.sizeOf(this.getSSAType(t.elementType));
                 }
+                b.assign(dest, snode.op == "++" ? "add" : "sub", storage, [p1, increment]);
                 if (tmp instanceof ssa.Pointer) {
                     b.assign(b.mem, "store", storage, [tmp.variable, tmp.offset, dest]);
                 }
@@ -663,7 +657,9 @@ export class CodeGenerator {
                     // A for loop of the form "for(var i in list) or for(var i, j in list)" or the same without "var"
                     let t = RestrictedType.strip(snode.condition.rhs.type);
                     if (t instanceof SliceType || t instanceof ArrayType) {
+                        let arrayType: ArrayType;
                         if (t instanceof SliceType) {
+                            arrayType = t.getStrippedArrayType();
                             // Get the address of the slice header
                             let sliceHeaderAddr: ssa.Pointer;
                             if (this.isLeftHandSide(snode.condition.rhs)) {
@@ -698,7 +694,7 @@ export class CodeGenerator {
                             }
                         }
                         // Compute the end of the slice
-                        let storage = this.getSSAType(t.elementType);
+                        let storage = this.getSSAType(arrayType.elementType);
                         let size = ssa.sizeOf(storage);
                         if (size > 1) {
                             len = b.assign(b.tmp(), "mul", "i32", [len, size]);
@@ -1001,8 +997,6 @@ export class CodeGenerator {
                         index2 = b.assign(b.tmp(), "mul", "i32", [index, size]);
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
-                } else if (ltype instanceof GuardedPointerType) {
-                    throw "TODO";
                 } else if (ltype instanceof SliceType) {
                     let size = ssa.sizeOf(this.getSSAType(ltype.elementType));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
@@ -1169,8 +1163,6 @@ export class CodeGenerator {
                     } else {
                         throw "TODO interface and class"
                     }          
-                } else if (t instanceof GuardedPointerType) {
-                    throw "TODO";
                 } else if (t instanceof PackageType) {
                     throw "TODO";
                 } else if (t instanceof StructType) {
@@ -1373,8 +1365,6 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), v, 0]);
             } else if (this.tc.isSlice(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderSlice, [this.typecode(enode.type), v]);
-            } else if (this.tc.isGuardedPointer(enode.type)) {
-                throw "TODO";
             } else if (this.tc.isArray(enode.type)) {
                 // TODO: Copy to allocated area
                 throw "TODO";
@@ -1411,8 +1401,6 @@ export class CodeGenerator {
             return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
         } else if (this.tc.isSlice(targetType)) {
             return b.assign(b.tmp(), "load", this.sliceHeader, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
-        } else if (this.tc.isGuardedPointer(targetType)) {
-            throw "TODO";
         } else if (this.tc.isArray(targetType)) {
             // TODO: Copy to allocated area
             throw "TODO";
@@ -1718,8 +1706,6 @@ export class CodeGenerator {
                 } else if (t instanceof PointerType) {
                     let storage = this.getSSAType(t.elementType);
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
-                } else if (t instanceof GuardedPointerType) {
-                    throw "TODO"
                 }                                
                 throw "Implementation error";
             }
@@ -1988,9 +1974,6 @@ export class CodeGenerator {
                     } else if (ltype instanceof UnsafePointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
                         objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
-                    } else if (ltype instanceof GuardedPointerType) {
-                        objType = RestrictedType.strip(ltype.elementType);
-                        throw "TODO";
                     } else if (ltype instanceof StructType) {
                         objType = ltype;
                         if (this.isLeftHandSide(enode.lhs.lhs)) {
@@ -2145,8 +2128,6 @@ export class CodeGenerator {
                         }
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, l, l]);
-                } else if (t instanceof GuardedPointerType) {
-                    throw "TODO";
                 } else if (t instanceof SliceType) {
                     let size = ssa.sizeOf(this.getSSAType(t.elementType));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
@@ -2556,7 +2537,7 @@ export class CodeGenerator {
 
     private isPureLiteral(t: Type, n: Node): boolean {        
         t = RestrictedType.strip(t);
-        if (t instanceof InterfaceType || t instanceof GuardedPointerType) {
+        if (t instanceof InterfaceType) {
             return false;
         }
         switch (n.op) {

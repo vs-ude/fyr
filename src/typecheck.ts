@@ -71,6 +71,7 @@ export class Function implements ScopeElement {
     public isExported: boolean;
 }
 
+// FunctionParameter is the parameter of a function inside a function's body.
 export class FunctionParameter implements ScopeElement {
     public name: string;
     public ellipsis: boolean;
@@ -210,6 +211,9 @@ export class Scope {
     public isPseudoScope: boolean; 
 }
 
+/**
+ * Type is the base class for all types.
+ */
 export abstract class Type {
     public name: string;
     public loc: Location;
@@ -221,8 +225,11 @@ export abstract class Type {
     public abstract toTypeCodeString(): string;
 }
 
+/**
+ * BasicType represents all built-in types.
+ */
 export class BasicType extends Type {
-    constructor(name: "void" | "string" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "any" | "rune") {
+    constructor(name: "void" | "string" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune") {
         super();
         this.name = name;
     }
@@ -723,26 +730,6 @@ export class UnsafePointerType extends Type {
     public elementType: Type;
 }
 
-export class GuardedPointerType extends Type {
-    constructor(elementType: Type) {
-        super();
-        this.elementType = elementType;
-    }
-
-    public toString(): string {
-        if (this.name) {
-            return this.name;
-        }
-        return "@" + this.elementType.toString();
-    }
-
-    public toTypeCodeString(): string {
-        return "@" + this.elementType.toString();
-    }
-
-    public elementType: Type;
-}
-
 export class MapType extends Type {
     constructor(keyType: Type, valueType: Type) {
         super();
@@ -768,9 +755,40 @@ export class MapType extends Type {
     public valueType: Type;
 }
 
+export type Lifetime = "borrowed" | "owned" | "unbound" | "frozen";
+
+export class Clique {
+    /**
+     * scope is not null for variables which are located on the stack.
+     */
+    scope: Scope | null;
+    lifetime: Lifetime;
+    joinedClique: Clique;
+
+    public rootClique(): Clique {
+        if (this.joinedClique) {
+            return this.rootClique();
+        }
+        return this.joinedClique;
+    }
+
+    public joinCliques(clique: Clique): Clique {
+        let root = this.rootClique();
+        clique.rootClique().joinedClique = root;
+        return root;
+    }
+}
+
+
 export type Restrictions = {
     isConst: boolean;
-    scope: Scope | null;
+    isFrozen: boolean;
+    isBorrowed: boolean;
+    isOwned: boolean;
+    /**
+     * Clique is not null if the ownership is
+     */
+    clique: Clique | null;
 }
 
 // Implements restrictions
@@ -780,13 +798,20 @@ export class RestrictedType extends Type {
         this.elementType = elementType;
         if (r) {
             this.isConst = r.isConst;
-            this.scope = r.scope;
+            this.isFrozen = r.isFrozen;
+            this.isBorrowed = r.isBorrowed;
+            this.isOwned = r.isOwned;
+            this.clique = r.clique;
         } else {
             this.isConst = false;
-            this.scope = null;
+            this.isFrozen = false;
+            this.isBorrowed = false;
+            this.isOwned = false;
+            this.clique = null;
         }
     }
 
+    /*
     public static combineRestrictions(r1: Restrictions | null, r2: Restrictions | null): Restrictions | null {
         if (!r1) {
             return r2;
@@ -799,6 +824,7 @@ export class RestrictedType extends Type {
             scope: r2.scope ? r2.scope : r1.scope
         }
     }
+    */
 
     public static strip(t: Type): Type {
         if (t instanceof RestrictedType) {
@@ -807,6 +833,7 @@ export class RestrictedType extends Type {
         return t;
     }
 
+    /*
     public static isLess(r1: Restrictions | null, r2: Restrictions | null): boolean {
         if (!r1 && !r2) {
             return false;
@@ -825,6 +852,7 @@ export class RestrictedType extends Type {
         }
         return false;
     }
+    */
 
     public toString(): string {
         if (this.name) {
@@ -834,6 +862,12 @@ export class RestrictedType extends Type {
         if (this.isConst) {
             str += "const ";
         }
+        if (this.isFrozen) {
+            str += "frozen ";
+        }
+        if (this.isOwned) {
+            str += "new ";
+        }
         return str + this.elementType.toString();
     }
 
@@ -842,7 +876,13 @@ export class RestrictedType extends Type {
         if (this.isConst) {
             str += "const ";
         }
-        if (this.scope) {
+        if (this.isFrozen) {
+            str += "frozen ";
+        }
+        if (this.isOwned) {
+            str += "new ";
+        }
+        if (this.isBorrowed) {
             str += "&";
         }
         return str + this.elementType.toString();
@@ -850,7 +890,10 @@ export class RestrictedType extends Type {
     
     public elementType: Type;
     public isConst: boolean;
-    public scope: Scope;
+    public isFrozen: boolean;
+    public isBorrowed: boolean;
+    public isOwned: boolean;
+    public clique: Clique;
 }
 
 export class ArrayType extends Type {
@@ -876,27 +919,33 @@ export class ArrayType extends Type {
 }
 
 export class SliceType extends Type {
-    constructor(elementType: Type) {
+    constructor(arrayType: ArrayType | RestrictedType) {
         super();
-        this.elementType = elementType;
+        this.arrayType = arrayType;
+    }
+
+    public getStrippedArrayType(): ArrayType {
+        if (this.arrayType instanceof ArrayType) {
+            return this.arrayType;
+        }
+        return this.arrayType.elementType as ArrayType;
     }
 
     public toString(): string {
         if (this.name) {
             return this.name;
         }
-        if (this.elementType instanceof RestrictedType) {
-            return "&[]" + this.elementType.toString();
+        if (this.arrayType instanceof RestrictedType) {
+            return "&[]" + this.arrayType.toString();
         }
-        return "[]" + this.elementType.toString();
+        return "[]" + this.arrayType.toString();
     }
 
     public toTypeCodeString(): string {
-        return "[]" + this.elementType.toString();
+        return "[]" + this.arrayType.toString();
     }
     
-    public elementType: Type;
-    public arrayScope: Scope | null = null;
+    public arrayType: ArrayType | RestrictedType;
 }
 
 // ArrayLiteralTypes are created while parsing and are then unified.
@@ -1110,7 +1159,6 @@ export class TypeChecker {
         this.t_bool = new BasicType("bool");
         this.t_float = new BasicType("float");
         this.t_double = new BasicType("double");
-        this.t_any = new BasicType("any");
         this.t_null = new BasicType("null");
         this.t_int8 = new BasicType("int8");
         this.t_int16 = new BasicType("int16");
@@ -1206,10 +1254,6 @@ export class TypeChecker {
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope);
             return this.makeUnsafePointer(t, tnode.loc);
-        } else if (tnode.op == "guardedPointerType") {
-            let t = this.createType(tnode.rhs, scope);
-            throw "TODO"
-            // return this.makeGuardardPointer(t, tnode.loc);
         } else if (tnode.op == "sliceType") {
             let t = this.createType(tnode.rhs, scope);
             return this.makeSlice(t, tnode.loc);
@@ -3241,7 +3285,7 @@ export class TypeChecker {
                 let isConst = this.isConst(enode.lhs.type);
                 let isScoped = this.isScoped(enode.lhs.type);
                 let type: Type = this.stripType(enode.lhs.type);
-                if (type instanceof PointerType || type instanceof UnsafePointerType || type instanceof GuardedPointerType) {
+                if (type instanceof PointerType || type instanceof UnsafePointerType) {
                     isConst = isConst || this.isConst(type.elementType);
                     isScoped = this.isScoped(type.elementType);
                     type = this.stripType(type.elementType);
@@ -3339,7 +3383,7 @@ export class TypeChecker {
                     if (isConst) {
                         enode.type = this.makeConst(enode.type, enode.loc);
                     }
-                } else if (t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                } else if (t instanceof UnsafePointerType) {
                     enode.type = this.makeSlice(elementType, enode.loc);
                     if (isConst) {
                         enode.type = this.makeConst(enode.type, enode.loc);
@@ -3383,7 +3427,7 @@ export class TypeChecker {
                 } else if (t instanceof SliceType) {
                     isScoped = t.arrayScope;
                     enode.type = t.elementType;
-                } else if (t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                } else if (t instanceof UnsafePointerType) {
                     isScoped = null;
                     enode.type = t.elementType;
                 } else {
@@ -3879,7 +3923,7 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             case "null":
-                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     node.type = t;
                     return true;
                 }
@@ -4042,14 +4086,6 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (to instanceof GuardedPointerType && from instanceof GuardedPointerType) {
-            if (from == this.t_null) {
-                // null can be assigned to any pointer type
-                return true;
-            }
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toIsConst, fromIsConst, isFunctionParameter)) {
-                return true;
-            }            
         } else if (to instanceof UnsafePointerType) {
             if (from == this.t_int || from == this.t_uint || from == this.t_null) {
                 // 32-bit integers and null can be assigned to an usafe pointer type
@@ -4324,14 +4360,14 @@ export class TypeChecker {
             case ".":
             {
                 let t = RestrictedType.strip(node.lhs.type);                
-                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     return true;
                 }
                 return this.checkIsAddressable(node.lhs, scope, false, doThrow);
             }
             case "[":
                 let t = RestrictedType.strip(node.lhs.type);                
-                if (t instanceof SliceType || t instanceof GuardedPointerType || t instanceof UnsafePointerType) {
+                if (t instanceof SliceType || t instanceof UnsafePointerType) {
                     return true;
                 }
                 if (t instanceof ArrayType || t instanceof TupleType) {
@@ -4610,12 +4646,12 @@ export class TypeChecker {
         } else if (node.op == "unary*") {
             return false;
         } else if (node.op == ".") {
-            if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType) {
+            if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
                 return false;
             }
             return this.checkIsIntermediate(node.lhs);
         } else if (node.op == "[" && node.lhs.type != this.t_string) {
-            if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof GuardedPointerType || node.lhs.type instanceof SliceType) {
+            if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
                 return false;
             }
             return this.checkIsIntermediate(node.lhs);
@@ -4636,7 +4672,7 @@ export class TypeChecker {
         } else if (node.op == ".") {
             if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
                 let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -4646,7 +4682,7 @@ export class TypeChecker {
         } else if (node.op == "[" && node.lhs.type != this.t_string) {
             if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
                 let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof UnsafePointerType || t instanceof GuardedPointerType || t instanceof SliceType) {
+                if (t instanceof UnsafePointerType || t instanceof SliceType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -4668,7 +4704,7 @@ export class TypeChecker {
         } else if (node.op == ".") {
             if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
                 let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType) {
+                if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -4678,7 +4714,7 @@ export class TypeChecker {
         } else if (node.op == "[" && node.lhs.type != this.t_string) {
             if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
                 let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof UnsafePointerType || t instanceof GuardedPointerType || t instanceof SliceType) {
+                if (t instanceof UnsafePointerType || t instanceof SliceType) {
                     return true;
                 }
                 if (!this.checkIsIntermediate(node.lhs)) {
@@ -4746,11 +4782,6 @@ export class TypeChecker {
     public isArray(t: Type): boolean {
         t = this.stripType(t);
         return t instanceof ArrayType;
-    }
-
-    public isGuardedPointer(t: Type): boolean {
-        t = this.stripType(t);
-        return t instanceof GuardedPointerType;
     }
 
     public isUnsafePointer(t: Type): boolean {
@@ -4842,7 +4873,7 @@ export class TypeChecker {
     
     public isPointer(t: Type): boolean {
         t = this.stripType(t);
-        if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof GuardedPointerType || t instanceof MapType || t instanceof SliceType || t == this.t_string) {
+        if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof MapType || t instanceof SliceType || t == this.t_string) {
             return true;
         }    
         return t instanceof InterfaceType && t.isPointerType();
@@ -4970,7 +5001,7 @@ export class TypeChecker {
         if (value instanceof RestrictedType && value.scope) {
             throw "Implementation error"
         }
-        if (key != this.t_string && !this.isPrimitive(key) && !(key instanceof PointerType) && !(key instanceof GuardedPointerType) && !(key instanceof UnsafePointerType)) {
+        if (key != this.t_string && !this.isPrimitive(key) && !(key instanceof PointerType) && !(key instanceof UnsafePointerType)) {
             throw new TypeError("The type " + key.toString() + " is not allowed as a map key", loc);
         }
         return new MapType(key, value);
@@ -5031,7 +5062,7 @@ export class TypeChecker {
 
     public pointerElementType(t: Type): Type {
         t = RestrictedType.strip(t);
-        if (t instanceof PointerType || t instanceof GuardedPointerType || t instanceof UnsafePointerType) {
+        if (t instanceof PointerType || t instanceof UnsafePointerType) {
             return t.elementType;
         }
         return null;
@@ -5126,7 +5157,6 @@ export class TypeChecker {
     public t_uint: Type;
     public t_string: Type;
     public t_rune: Type;
-    public t_any: Type;
     public t_void: Type;
     public t_error: InterfaceType;
 
