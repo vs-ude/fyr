@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "frozen" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "as" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "enum" || n == "readonly" || n == "virtual" || n == "get" || n == "set") {
+        if (n == "weak" || n == "group" || n == "box" || n == "frozen" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
