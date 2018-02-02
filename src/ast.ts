@@ -24,6 +24,7 @@ export type NodeConfig = {
     readonly elseBranch?: Node;
     readonly parameters?: Array<Node>;
     readonly genericParameters?: Array<Node>;
+    readonly lifetime: Node;
 }
 
 export type LocationPoint = {
@@ -81,6 +82,9 @@ export class Node {
             }
             if (config.genericParameters !== undefined) {
                 this.genericParameters = config.genericParameters;
+            }
+            if (config.lifetime !== undefined) {
+                this.lifetime = config.lifetime;
             }
         }
     }
@@ -195,6 +199,9 @@ export class Node {
     public elseBranch: Node;
     public parameters: Array<Node>;
     public genericParameters: Array<Node>;
+    // Used by types to specify the lifetime, i.e. *A@a where "@a" is the lifetime and the node
+    // supplied here is an identifier that has the value "a".
+    public lifetime: Node;
     public type: Type;
     public nspace: string;
     public scope: Scope;

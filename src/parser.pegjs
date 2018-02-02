@@ -171,7 +171,7 @@ genericTypeList
     }
 
 type
-  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* {
+  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "@" [ \t]* identifier)? {
       if (!r || r.length == 0) {
           return t;
       }
