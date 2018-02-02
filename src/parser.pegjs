@@ -222,8 +222,17 @@ primitiveType
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
     }
-  / "&" [ \t]* t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t})
+  / "group" [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "groupType", rhs: t})
+    }
+  / "frozen" [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "frozenType", rhs: t})
+    }
+  / "weak" [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "weakType", rhs: t})
+    }
+  / "box" [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "boxType", rhs: t})
     }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
