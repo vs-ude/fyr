@@ -39,10 +39,7 @@ export class Variable implements ScopeElement {
     // TODO
     // A variable is const if its value cannot be assigned to except during its initial definition.
     public isConst: boolean;
-    // Variable belongs to the global scope.
-    // All other variables belong to a function scope.
-    public isGlobal: boolean;
-    // Variable is the return value of a function
+    // Variable is the named return variable of a function, e.g. "count" or "error" in "func foo() (count int, err error) { }"
     public isResult: boolean = false;
     public name: string;
     public type: Type;
@@ -766,23 +763,59 @@ export class MapType extends Type {
     public valueType: Type;
 }
 
+export class Box {
+    bound: boolean;
+    joinedBox: Box;
+    name: string;
+
+    public canonical(): Box {
+        let t: Box = this;
+        while (t.joinedBox) {
+            t = t.joinedBox;
+        }
+        return t;
+    }
+
+    public join(box: Box): boolean {
+        let b1 = this.canonical();
+        let b2 = box.canonical();
+        if (b1 == b2) {
+            return true;
+        }
+        if (b1.bound && b2.bound) {
+            return false;
+        }
+        if (b1.bound) {
+            b2.joinedBox = b1;
+        } else {
+            b1.joinedBox = b2;
+        }
+        return true;
+    }
+}
+
 export class Group {
+    name: string;
     /**
      * scope is not null for variables which are located on the stack.
      */
     scope: Scope | null;
     /**
-     * unbound is true if the lifetime of the group is (yet) unbound, i.e.
+     * bound is not-true if the lifetime of the group is (yet) unbound, i.e.
      * the entire group currently lives on the heap and the group is owned by
      * a pointer on the stack.
      */
-    unbound: boolean;
+    bound: boolean;
+    /**
+     * joinedGroup is set if two groups are joined.
+     * Following the joinedGroup leads to the canonical group object.
+     */
     joinedGroup: Group;
     /**
-     * box of null means that the group has not yet joined any box.
-     * So it can either join another box or become a box by itself.
+     * joinedBox pointing to 'this' means that the group has not yet joined any other box.
+     * So it can either join another box or stay a box by itself.
      */
-    box: Group | null;
+    joinedBox: Box;
 
     public canonical(): Group {
         let t: Group = this;
@@ -792,18 +825,29 @@ export class Group {
         return t;
     }
 
-    public join(group: Group): Group {
+    public join(group: Group): boolean {
         let g1 = this.canonical();
         let g2 = group.canonical();
+        let b1 = g1.box();
+        let b2 = g2.box();
+        if (!b1.join(b2)) {
+            return false;
+        }
         g2.joinedGroup = g1;
-        return g1;
+        return true;
     }
 
-    public joinBox(box: Group) {
-        if (this.box && this.box != box) {
-            throw "Implementation error";
+    public joinBox(box: Box): boolean {
+        let c = this.canonical();
+        if (c.joinedBox && c.joinedBox != box) {
+            return false;
         }
-        this.box = box;
+        c.joinedBox = box;
+        return true;
+    }
+
+    public box(): Box {        
+        return this.canonical().joinedBox.canonical();
     }
 }
 
@@ -1227,6 +1271,8 @@ export class TypeChecker {
         this.builtin_cap.callingConvention = "system";
         this.builtin_cap.name = "cap";
         this.builtin_cap.returnType = this.t_int;
+
+        this.globalGroup = new Group();
     }
 
     public createScope(): Scope {
@@ -1253,7 +1299,7 @@ export class TypeChecker {
         return s;
     }
 
-    public createType(tnode: Node, scope: Scope): Type {
+    public createType(tnode: Node, scope: Scope, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
         if (tnode.op == "basicType") {
             if (tnode.nspace) {
                 let p = scope.resolveType(tnode.nspace);
@@ -1887,6 +1933,8 @@ export class TypeChecker {
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
+            let groups = new Map<string, Group>();
+            let boxes = new Map<string, Box>();
             for(let pnode of fnode.parameters) {
                 let original_pnode = pnode;
                 var p = new FunctionParameter();
@@ -1900,7 +1948,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope.parent);
+                p.type = this.createType(pnode, f.scope.parent, groups, boxes);
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -1960,7 +2008,6 @@ export class TypeChecker {
         v.loc = vnode.loc;
         v.name = vnode.value;
         v.isConst = isConst;
-        v.isGlobal = isGlobal;
         if (!vnode.rhs) {
             if (needType) {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
@@ -1970,9 +2017,6 @@ export class TypeChecker {
 //            if (isConst) {
 //                v.type = this.makeConst(v.type, vnode.loc);
 //            }
-            if (isGlobal) {
-                v.type = this.makeGlobal(v.type, scope, vnode.loc);
-            }
         }
         if (v.name != "_") {
             scope.registerElement(v.name, v);
@@ -5104,6 +5148,8 @@ export class TypeChecker {
     
 //    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
+
+    private globalGroup: Group;
 }
 
 export class TypeError {
