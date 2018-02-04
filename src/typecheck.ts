@@ -1343,7 +1343,7 @@ export class TypeChecker {
             // TODO: Allow all types in maps?
             let k = this.createType(tnode.genericParameters[0], scope);
             let v = this.createType(tnode.genericParameters[1], scope);
-            if (!this.isIntNumber(k) && k != this.t_string && !this.isPointer(k)) {
+            if (!this.isIntNumber(k) && !this.isString(k) && !this.isPointer(k)) {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
             return new MapType(k, v);
@@ -2305,6 +2305,7 @@ export class TypeChecker {
 
     // TODO: Remove isConst
     public checkVarAssignment(isConst: boolean, scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
+        // TODO: const and frozen and lifetime are not handled properly here
         if (vnode.op == "id" || vnode.op == "optionalId") {
             let v = this.createVar(vnode, scope, false, isConst);
             if (!v.type) {
@@ -2327,12 +2328,13 @@ export class TypeChecker {
                 }
             }
         } else if (vnode.op == "tuple") {
-            if (!(rtype instanceof TupleType) && !(rtype instanceof TupleLiteralType)) {
+            let rtypeStripped = RestrictedType.strip(rtype);
+            if (!(rtypeStripped instanceof TupleType) && !(rtypeStripped instanceof TupleLiteralType)) {
                 throw new TypeError("Expected tuple expression or json on right hand side", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
-                if (i >= rtype.types.length) {
+                if (i >= rtypeStripped.types.length) {
                     throw new TypeError("Mismatch in tuple type length", vnode.loc);                    
                 }
                 let p = vnode.parameters[i];
@@ -2345,7 +2347,7 @@ export class TypeChecker {
                     hasEllipsis = true;
                     let v = this.createVar(p, scope, false, isConst);
                     if (!v.type) {
-                        v.type = new TupleType(rtype.types.slice(i));
+                        v.type = new TupleType(rtypeStripped.types.slice(i));
                         if (isConst) {
                             v.type = new RestrictedType(v.type, {isConst: true, isFrozen: false, group: null});
                         }
@@ -2354,7 +2356,7 @@ export class TypeChecker {
                         if (!(lt instanceof TupleType)) {
                             throw new TypeError("Ellipsis identifier in a tuple context must be of tuple type", vnode.loc);
                         }
-                        if (lt.types.length != rtype.types.length - i) {
+                        if (lt.types.length != rtypeStripped.types.length - i) {
                             throw new TypeError("Mismatch in tuple type length", vnode.loc);                                                
                         }
                         if (rnode && rnode.op == "tuple") {
@@ -2363,7 +2365,7 @@ export class TypeChecker {
                                 this.checkIsAssignableNode(lt.types[j-i], r);
                             }
                         } else {
-                            this.checkIsAssignableType(v.type, new TupleType(rtype.types.slice(i)), vnode.loc);
+                            this.checkIsAssignableType(v.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc);
                         }
                     }
 //                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
@@ -2375,20 +2377,21 @@ export class TypeChecker {
                     if (rnode && rnode.op == "tuple") {
                         r = rnode.parameters[i];
                     }
-                    this.checkVarAssignment(isConst, scope, p, rtype.types[i], r);
+                    this.checkVarAssignment(isConst, scope, p, rtypeStripped.types[i], r);
                 }
             }
-            if (!hasEllipsis && rtype.types.length != vnode.parameters.length) {
+            if (!hasEllipsis && rtypeStripped.types.length != vnode.parameters.length) {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "array") {
-            if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_string) {
-                throw new TypeError("Expected an expression of array type, slice type, or string or json", vnode.loc);
+            let rtypeStripped = RestrictedType.strip(rtype);
+            if (!(rtypeStripped instanceof ArrayLiteralType) && !(rtypeStripped instanceof ArrayType) && !(rtypeStripped instanceof SliceType)) {
+                throw new TypeError("Expected an expression of array type or slice type", vnode.loc);
             }
             let hasEllipsis = false;
             let hasOptional = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
-                if (rtype instanceof ArrayType && i >= rtype.size) {
+                if (rtypeStripped instanceof ArrayType && i >= rtypeStripped.size) {
                     throw new TypeError("Mismatch in array type length", vnode.loc);
                 }
                 let p = vnode.parameters[i];
@@ -2399,7 +2402,6 @@ export class TypeChecker {
                     hasEllipsis = true;
                     let v = this.createVar(p, scope, false, isConst);
                     if (!v.type) {
-                        let rtypeStripped = RestrictedType.strip(rtype);
                         if (rtypeStripped instanceof ArrayLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 // TODO: Check that all elements of the array have the same type
@@ -2417,43 +2419,37 @@ export class TypeChecker {
                             // TODO; Clone the restrictions of the array
                             v.type = rtype;
                             throw "TODO"
-                        } else if (rtypeStripped == this.t_string) {
-                            v.type = this.t_string;
                         }
                     } else {
                         let lt = RestrictedType.strip(v.type);
-                        if (rtype instanceof ArrayLiteralType) {
+                        if (rtypeStripped instanceof ArrayLiteralType) {
                             let rt: Type;
                             if (lt instanceof ArrayType) {
-                                if (rtype.types.length - i != lt.size) {
+                                if (rtypeStripped.types.length - i != lt.size) {
                                     throw new TypeError("Mismatch in array type length", vnode.loc);
                                 }
                                 rt = lt.elementType;
                             } else if (lt instanceof SliceType) {
                                 rt = lt.elementType;
-                            } else if (lt == this.t_string) {
-                                rt = this.t_byte;
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of array type, slice type, string or json", vnode.loc);
                             }
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 this.checkIsAssignableNode(rt, rnode.parameters[j]);
                             }
-                        } else if (rtype instanceof ArrayType) {
+                        } else if (rtypeStripped instanceof ArrayType) {
                             if (!(lt instanceof ArrayType)) {
                                 throw new TypeError("Ellipsis identifier must be of array type", vnode.loc);
                             }
-                            if (lt.size != rtype.size - i) {
+                            if (lt.size != rtypeStripped.size - i) {
                                 throw new TypeError("Mismatch in array size", vnode.loc);                                                
                             }
-                            this.checkIsAssignableType(lt.elementType, rtype.elementType, vnode.loc);
-                        } else if (rtype instanceof SliceType) {
+                            this.checkIsAssignableType(lt.elementType, rtypeStripped.elementType, vnode.loc);
+                        } else if (rtypeStripped instanceof SliceType) {
                             if (!(lt instanceof SliceType)) {
                                 throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                             }
-                            this.checkIsAssignableType(lt.elementType, rtype.elementType, vnode.loc);
-                        } else if (rtype == this.t_string) {
-                            this.checkIsAssignableType(v.type, this.t_string, vnode.loc);
+                            this.checkIsAssignableType(lt.elementType, rtypeStripped.elementType, vnode.loc);
                         }
                     }
 //                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
@@ -2478,8 +2474,6 @@ export class TypeChecker {
                         r = rnode.parameters[i];
                     } else if (rtype instanceof ArrayType || rtype instanceof SliceType) {
                         rt = rtype.elementType;
-                    } else if (rtype == this.t_string) {
-                        rt = this.t_byte;
                     }
                     this.checkVarAssignment(isConst, scope, p, rt, r);
                 }
@@ -2488,7 +2482,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && (!(rtype instanceof MapType) || rtype.keyType != this.t_string)) {
+            let rtypeStripped = RestrictedType.strip(rtype);
+            if (!(rtypeStripped instanceof ObjectLiteralType) && (!(rtypeStripped instanceof MapType) || this.isString(rtypeStripped.keyType))) {
                 throw new TypeError("Expected an expression of type object literal or map<string,...>", vnode.loc);
             }
             let hasEllipsis = false;
@@ -2501,33 +2496,33 @@ export class TypeChecker {
                     hasEllipsis = true;
                     let v = this.createVar(kv, scope, false, isConst);
                     if (!v.type) {
-                        if (rtype instanceof ObjectLiteralType) {
+                        if (rtypeStripped instanceof ObjectLiteralType) {
                             let valueType: Type = null; // TODO
                             for(let j = i; j < rnode.parameters.length; j++) {
 //                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
                             }
                             v.type = new MapType(this.t_string, valueType);
                             throw "TODO";
-                        } else if (rtype instanceof TemplateStructType) {
+                        } else if (rtypeStripped instanceof TemplateStructType) {
                             v.type = rtype;
                         }
                     } else {
                         let lt = RestrictedType.strip(v.type);
-                        if (rtype instanceof ObjectLiteralType) {
+                        if (rtypeStripped instanceof ObjectLiteralType) {
                             let rt: Type;
-                            if (lt instanceof MapType && lt.keyType == this.t_string) {
+                            if (lt instanceof MapType && this.isString(lt.keyType)) {
                                 rt = lt.valueType;
                             } else {
-                                throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
+                                throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
                             }
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                             }
-                        } else if (rtype instanceof MapType) {
-                            if (!(lt instanceof MapType) || lt.keyType != this.t_string) {
+                        } else if (rtypeStripped instanceof MapType) {
+                            if (!(lt instanceof MapType) || !this.isString(lt.keyType)) {
                                 throw new TypeError("Ellipsis identifier must be of type map<string, ...>", vnode.loc);
                             }
-                            this.checkIsAssignableType(lt.valueType, rtype.valueType, vnode.loc);
+                            this.checkIsAssignableType(lt.valueType, rtypeStripped.valueType, vnode.loc);
                         }
                     }
 //                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
@@ -2556,13 +2551,15 @@ export class TypeChecker {
     }
 
     public checkAssignment(scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
+        // TODO: const and frozen and lifetime are not handled properly here
+        let rtypeStripped = RestrictedType.strip(rtype);
         if (vnode.op == "tuple") {
-            if (!(rtype instanceof TupleType) && !(rtype instanceof TupleLiteralType)) {
-                throw new TypeError("Expected tuple expression or json on right hand side", vnode.loc);
+            if (!(rtypeStripped instanceof TupleType) && !(rtypeStripped instanceof TupleLiteralType)) {
+                throw new TypeError("Expected tuple expression on right hand side", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
-                if (i >= rtype.types.length) {
+                if (i >= rtypeStripped.types.length) {
                     throw new TypeError("Mismatch in tuple type length", vnode.loc);                    
                 }
                 let p = vnode.parameters[i];
@@ -2578,7 +2575,7 @@ export class TypeChecker {
                     if (!(p.lhs.type instanceof TupleType)) {
                         throw new TypeError("Ellipsis identifier in a tuple context must be of tuple type", vnode.loc);
                     }
-                    if (p.lhs.type.types.length != rtype.types.length - i) {
+                    if (p.lhs.type.types.length != rtypeStripped.types.length - i) {
                         throw new TypeError("Mismatch in tuple type length", vnode.loc);                                                
                     }
                     if (rnode && rnode.op == "tuple") {
@@ -2587,7 +2584,7 @@ export class TypeChecker {
                             this.checkIsAssignableNode(p.lhs.type.types[j-i], r);
                         }
                     } else {
-                        this.checkIsAssignableType(p.lhs.type, new TupleType(rtype.types.slice(i)), vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc);
                     }
                     break;
                 } else {
@@ -2595,10 +2592,10 @@ export class TypeChecker {
                     if (rnode && rnode.op == "tuple") {
                         r = rnode.parameters[i];
                     }
-                    this.checkAssignment(scope, p, rtype.types[i], r);
+                    this.checkAssignment(scope, p, rtypeStripped.types[i], r);
                 }
             }
-            if (!hasEllipsis && rtype.types.length != vnode.parameters.length) {
+            if (!hasEllipsis && rtypeStripped.types.length != vnode.parameters.length) {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
             // The type of the right-hand side might have been inferred. In this case, compute the new type
@@ -2610,13 +2607,13 @@ export class TypeChecker {
                 rnode.type = new TupleType(types);
             }
         } else if (vnode.op == "array") {
-            if (!(rtype instanceof ArrayLiteralType) && !(rtype instanceof ArrayType) && !(rtype instanceof SliceType) && rtype != this.t_string) {
-                throw new TypeError("Expected an expression of array type, slice type, or string or json", vnode.loc);
+            if (!(rtypeStripped instanceof ArrayLiteralType) && !(rtypeStripped instanceof ArrayType) && !(rtypeStripped instanceof SliceType)) {
+                throw new TypeError("Expected an expression of array type or slice type", vnode.loc);
             }
             let hasEllipsis = false;
             let hasOptional = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
-                if (rtype instanceof ArrayType && i >= rtype.size) {
+                if (rtypeStripped instanceof ArrayType && i >= rtypeStripped.size) {
                     throw new TypeError("Mismatch in array type length", vnode.loc);
                 }
                 let p = vnode.parameters[i];
@@ -2627,43 +2624,39 @@ export class TypeChecker {
                     hasEllipsis = true;
                     this.checkExpression(p.lhs, scope);
                     this.checkIsMutable(p.lhs, scope);
-                    if (rtype instanceof ArrayLiteralType) {
+                    if (rtypeStripped instanceof ArrayLiteralType) {
                         let rt: Type;
                         if (p.lhs.type instanceof ArrayType) {
-                            if (rtype.types.length - i != p.lhs.type.size) {
+                            if (rtypeStripped.types.length - i != p.lhs.type.size) {
                                 throw new TypeError("Mismatch in array type length", vnode.loc);
                             }
                             rt = p.lhs.type.elementType;
                         } else if (p.lhs.type instanceof SliceType) {
                             rt = p.lhs.type.elementType;
-                        } else if (p.lhs.type == this.t_string) {
-                            rt = this.t_byte;
                         } else {
-                            throw new TypeError("Ellipsis identifier must be of array type, slice type, string or json", vnode.loc);
+                            throw new TypeError("Ellipsis identifier must be of array type or slice type", vnode.loc);
                         }
                         for(let j = i; j < rnode.parameters.length; j++) {
                             this.checkIsAssignableNode(rt, rnode.parameters[j]);
                         }
-                    } else if (rtype instanceof ArrayType) {
+                    } else if (rtypeStripped instanceof ArrayType) {
                         if (!(p.lhs.type instanceof ArrayType)) {
                             throw new TypeError("Ellipsis identifier must be of array type", vnode.loc);
                         }
-                        if (p.lhs.type.size != rtype.size - i) {
+                        if (p.lhs.type.size != rtypeStripped.size - i) {
                             throw new TypeError("Mismatch in array size", vnode.loc);                                                
                         }
-                        this.checkIsAssignableType(p.lhs.type.elementType, rtype.elementType, vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type.elementType, rtypeStripped.elementType, vnode.loc);
                     } else if (rtype instanceof SliceType) {
                         if (!(p.lhs.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                         }
-                        this.checkIsAssignableType(p.lhs.type.elementType, rtype.elementType, vnode.loc);
-                    } else if (rtype == this.t_string) {
-                        this.checkIsAssignableType(p.lhs.type, this.t_string, vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type.elementType, rtypeStripped.elementType, vnode.loc);
                     }
                     break;
                 } else {
                     if (p.op == "optionalAssign") {
-                        if (rtype instanceof ArrayType || rtype instanceof ArrayLiteralType) {
+                        if (rtypeStripped instanceof ArrayType || rtypeStripped instanceof ArrayLiteralType) {
                             throw new TypeError("Optional identifiers are not allowed in array context", vnode.loc);
                         }
                         hasOptional = true;
@@ -2679,8 +2672,6 @@ export class TypeChecker {
                         r = rnode.parameters[i];
                     } else if (rtype instanceof ArrayType || rtype instanceof SliceType) {
                         rt = rtype.elementType;
-                    } else if (rtype == this.t_string) {
-                        rt = this.t_byte;
                     }
                     this.checkAssignment(scope, p, rt, r);
                 }
@@ -2689,7 +2680,7 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtype instanceof ObjectLiteralType) && (!(rtype instanceof MapType) || rtype.keyType != this.t_string)) {
+            if (!(rtypeStripped instanceof ObjectLiteralType) && (!(rtype instanceof MapType) || !this.isString(rtype.keyType))) {
                 throw new TypeError("Expected an expression of type object literal or map<string, ...>", vnode.loc);
             }
             let hasEllipsis = false;
@@ -2704,7 +2695,7 @@ export class TypeChecker {
                     this.checkIsMutable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
                         let rt: Type;
-                        if (kv.lhs.type instanceof MapType && kv.lhs.type.keyType == this.t_string) {
+                        if (kv.lhs.type instanceof MapType && this.isString(kv.lhs.type.keyType)) {
                             rt = kv.lhs.type.valueType;
                         } else {
                             throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
@@ -2712,11 +2703,11 @@ export class TypeChecker {
                         for(let j = i; j < rnode.parameters.length; j++) {
                             this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                         }
-                    } else if (rtype instanceof TemplateStructType) {
-                        if (!(kv.lhs.type instanceof MapType) || kv.lhs.type.keyType != this.t_string) {
+                    } else if (rtypeStripped instanceof MapType) {
+                        if (!(kv.lhs.type instanceof MapType) || !this.isString(kv.lhs.type.keyType)) {
                             throw new TypeError("Ellipsis identifier must be of type map<string,...>", vnode.loc);
                         }
-                        this.checkIsAssignableType(kv.lhs.type.valueType, rtype.valueType, vnode.loc);
+                        this.checkIsAssignableType(kv.lhs.type.valueType, rtypeStripped.valueType, vnode.loc);
                     }
                 } else {
                     let p = kv.lhs;
@@ -2724,15 +2715,15 @@ export class TypeChecker {
                     let optional = (p.op == "optionalKeyValue");
                     let r: Node;
                     let rt: Type;
-                    if (rtype instanceof ObjectLiteralType) {
-                        if (!optional && !rtype.types.has(name)) {
+                    if (rtypeStripped instanceof ObjectLiteralType) {
+                        if (!optional && !rtypeStripped.types.has(name)) {
                             throw new TypeError("Object literal has no key '" + name + "'", p.loc);
                         }
-                        rt = rtype.types.get(name);
+                        rt = rtypeStripped.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtype instanceof MapType) {
-                        rt = rtype.valueType;
+                    } else if (rtypeStripped instanceof MapType) {
+                        rt = rtypeStripped.valueType;
                     }
                     this.checkAssignment(scope, p, rt, r);
                 }
@@ -3101,7 +3092,7 @@ export class TypeChecker {
             case ">=":
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
-                if ((enode.op == "+" || enode.op == ">" || enode.op == "<" || enode.op == ">=" || enode.op == "<=") && enode.lhs.type == this.t_string) {
+                if ((enode.op == "+" || enode.op == ">" || enode.op == "<" || enode.op == ">=" || enode.op == "<=") && this.isString(enode.lhs.type)) {
                     this.checkIsString(enode.rhs);
                     if (enode.lhs.op == "str" && enode.rhs.op == "str") {
                         enode.op = "str";
@@ -3677,20 +3668,20 @@ export class TypeChecker {
                 } else if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
                     // Unsafe pointers can be converted to 32-bit integers
                     enode.type = t;
-                } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || right == this.t_string || this.isInt32Number(right))) {
+                } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || this.isString(right) || this.isInt32Number(right))) {
                     // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
                     enode.type = t;
                 } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.isIntNumber(right)) && t != right) {
                     // bool and all integers can be converted into each other
                     enode.type = t;
-                } else if (t == this.t_string && right instanceof UnsafePointerType) {
+                } else if (this.isString(t) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (t == this.t_string && right instanceof SliceType && right.elementType == this.t_byte) {
+                } else if (this.isString(t) && right instanceof SliceType && right.elementType == this.t_byte) {
                     // A slice of bytes can be converted to a string by copying it by copying it.
                     // Restrictions are irrelevant.
                     enode.type = t;
-                } else if (t instanceof SliceType && t.elementType == this.t_byte && right == this.t_string) {
+                } else if (t instanceof SliceType && t.elementType == this.t_byte && this.isString(right)) {
                     // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
@@ -3858,7 +3849,7 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between floating point number and " + t.toString(), loc);                
             case "str":
-                if (t == this.t_string) {
+                if (this.isString(t)) {
                     node.type = t;
                     return true;
                 } else if (t instanceof StringLiteralType) {
@@ -3909,7 +3900,7 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
-                if (t instanceof MapType && t.keyType == this.t_string) {
+                if (t instanceof MapType && this.isString(t.keyType)) {
                     if (node.parameters) {
                         for(let pnode of node.parameters) {
                             this.checkIsAssignableNode(t.valueType, pnode.lhs);
@@ -4024,7 +4015,7 @@ export class TypeChecker {
             }
         }
 
-        if (to == from && (this.isPrimitive(to) || to == this.t_string || to instanceof StructType || to instanceof StringLiteralType)) {
+        if (to == from && (this.isPrimitive(to) || this.isString(to) || to instanceof StructType || to instanceof StringLiteralType)) {
             return true;
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
@@ -4127,8 +4118,6 @@ export class TypeChecker {
                 this.checkIsAssignableType(to.valueType, from.valueType, loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
                     return true;
             }
-        } else if (to == this.t_string && from == this.t_string) {
-            return true;
         } else if (to instanceof InterfaceType) {
             if (to.isEmptyInterface()) {
                 return true;
@@ -4391,8 +4380,7 @@ export class TypeChecker {
     }
 
     public checkIsString(node: Node, doThrow: boolean = true): boolean {
-        let t = this.stripType(node.type);
-        if (t == this.t_string) {
+        if (this.isString(node.type)) {
             return true;
         }
         if (doThrow) {
@@ -4637,7 +4625,7 @@ export class TypeChecker {
                 return false;
             }
             return this.checkIsIntermediate(node.lhs);
-        } else if (node.op == "[" && node.lhs.type != this.t_string) {
+        } else if (node.op == "[" && !this.isString(node.lhs.type)) {
             if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
                 return false;
             }
@@ -4666,7 +4654,7 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (node.op == "[" && node.lhs.type != this.t_string) {
+        } else if (node.op == "[" && !this.isString(node.lhs.type)) {
             if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
                 let t = RestrictedType.strip(node.lhs.type);
                 if (t instanceof UnsafePointerType || t instanceof SliceType) {
@@ -4698,7 +4686,7 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (node.op == "[" && node.lhs.type != this.t_string) {
+        } else if (node.op == "[" && !this.isString(node.lhs.type)) {
             if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
                 let t = RestrictedType.strip(node.lhs.type);
                 if (t instanceof UnsafePointerType || t instanceof SliceType) {
@@ -4727,8 +4715,9 @@ export class TypeChecker {
     }
     
     public isString(t: Type): boolean {
-        t = this.stripType(t);
-        return t == this.t_string;
+        let s = this.stripType(t);
+        // A string is a frozen slice of bytes
+        return this.isFrozen(t) && s instanceof SliceType && s.elementType == this.t_byte;
     }
 
     public isOrType(t: Type): boolean {
@@ -4959,7 +4948,7 @@ export class TypeChecker {
     }
     
     public makeMap(key: Type, value: Type, loc: Location): Type {
-        if (key != this.t_string && !this.isPrimitive(key) && !(key instanceof PointerType) && !(key instanceof UnsafePointerType)) {
+        if (!this.isString(key) && !this.isPrimitive(key) && !(key instanceof PointerType) && !(key instanceof UnsafePointerType)) {
             throw new TypeError("The type " + key.toString() + " is not allowed as a map key", loc);
         }
         return new MapType(key, value);
@@ -5027,11 +5016,7 @@ export class TypeChecker {
 
     private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
         let type = this.stripType(t);
-        if (type == this.t_string) {
-            if (name == "len") {
-                return this.builtin_len;
-            }
-        } else if (type instanceof SliceType) {
+        if (type instanceof SliceType) {
             if (name == "len") {
                 return this.builtin_len;
             } else if (name == "cap") {
