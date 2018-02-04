@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ c:(("const" / "frozen") [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -100,7 +100,7 @@ func
               scope = new ast.Node({loc: scope.loc, op: "referenceType", rhs: scope});
           }
           if (c) {
-              scope = new ast.Node({loc: scope.loc, op: "constType", rhs: scope});
+              scope = new ast.Node({loc: scope.loc, op: c[0][0] == "const" ? "constType" : "frozenType", rhs: scope});
           }
       } else if (c || v) {
           error("'const' is only allowed for member functions");
@@ -171,7 +171,7 @@ genericTypeList
     }
 
 type
-  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "@" [ \t]* identifier)? {
+  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "+" [ \t]* identifier)? {
       if (!r || r.length == 0) {
           return t;
       }
@@ -179,7 +179,7 @@ type
       for(let x of r) {
           result.push(x[3]);
       }
-      return new ast.Node({loc: fl(location()), op: "orType", parameters: result})
+      return new ast.Node({loc: fl(location()), op: "orType", parameters: result, lifetime: l ? l[3] : null});
     }
 
 andType
