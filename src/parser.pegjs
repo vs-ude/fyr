@@ -171,18 +171,27 @@ genericTypeList
     }
 
 type
-  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "~" [ \t]* identifier ([ \t]* "/" [ \t]* identifier))? {
+  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "~" [ \t]* identifier ([ \t]* "/" [ \t]* identifier)?)? {
+      let group = null;
+      let box = null;
+      if (l && l[4]) {
+          box = l[3];
+          group = l[4][3];
+      } else {
+          group = l[3];
+      }
+
       if (!r || r.length == 0) {
+          t.box = box;
+          t.group = group;
           return t;
       }
+
       let result = [t];
       for(let x of r) {
           result.push(x[3]);
       }
-      if (l) {
-          return new ast.Node({loc: fl(location()), op: "orType", parameters: result, group: l[4] ? : l[4][3] : l[3], box: l[4] ? l[3] : null});          
-      }
-      return new ast.Node({loc: fl(location()), op: "orType", parameters: result});
+      return new ast.Node({loc: fl(location()), op: "orType", parameters: result, group: group, box: box});
     }
 
 andType
@@ -198,13 +207,24 @@ andType
     }
 
 primitiveType
-  = "[" [ \t]* e:expression? "]" [ \t]* t:type {
-      if (e) {
-          return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
+  = "[" [ \t]* e:expression? l:([ \t]* "~" [ \t]* identifier ([ \t]* "/" [ \t]* identifier)?)? "]" [ \t]* t:type {
+      let group = null;
+      let box = null;
+      if (l && l[4]) {
+          box = l[3];
+          group = l[4][3];
+      } else {
+          group = l[3];
       }
-      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t})
+      if (e) {
+          return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e, box: box, group: group})
+      }
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, box: box, group: group})
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
+      if (t.length == 1) {
+          return t[0];
+      }
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
     }
   / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:type? {
