@@ -24,7 +24,8 @@ export type NodeConfig = {
     readonly elseBranch?: Node;
     readonly parameters?: Array<Node>;
     readonly genericParameters?: Array<Node>;
-    readonly lifetime: Node;
+    readonly group: Node;
+    readonly box: Node;
 }
 
 export type LocationPoint = {
@@ -83,8 +84,11 @@ export class Node {
             if (config.genericParameters !== undefined) {
                 this.genericParameters = config.genericParameters;
             }
-            if (config.lifetime !== undefined) {
-                this.lifetime = config.lifetime;
+            if (config.group !== undefined) {
+                this.group = config.group;
+            }
+            if (config.box !== undefined) {
+                this.box = config.box;
             }
         }
     }
@@ -165,6 +169,8 @@ export class Node {
         n.name = this.name ? this.name.clone() : null;
         n.condition = this.condition ? this.condition.clone() : null;
         n.elseBranch = this.elseBranch ? this.elseBranch.clone() : null;
+        n.group = this.group ? this.group.clone() : null;
+        n.box = this.box ? this.box.clone() : null;
         if (this.statements) {
             n.statements = [];
             for(let s of this.statements) {
@@ -199,9 +205,8 @@ export class Node {
     public elseBranch: Node;
     public parameters: Array<Node>;
     public genericParameters: Array<Node>;
-    // Used by types to specify the lifetime, i.e. *A@a where "@a" is the lifetime and the node
-    // supplied here is an identifier that has the value "a".
-    public lifetime: Node;
+    public group: Node;
+    public box: Node;
     public type: Type;
     public nspace: string;
     public scope: Scope;

@@ -171,7 +171,7 @@ genericTypeList
     }
 
 type
-  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "+" [ \t]* identifier)? {
+  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "~" [ \t]* identifier ([ \t]* "/" [ \t]* identifier))? {
       if (!r || r.length == 0) {
           return t;
       }
@@ -179,7 +179,10 @@ type
       for(let x of r) {
           result.push(x[3]);
       }
-      return new ast.Node({loc: fl(location()), op: "orType", parameters: result, lifetime: l ? l[3] : null});
+      if (l) {
+          return new ast.Node({loc: fl(location()), op: "orType", parameters: result, group: l[4] ? : l[4][3] : l[3], box: l[4] ? l[3] : null});          
+      }
+      return new ast.Node({loc: fl(location()), op: "orType", parameters: result});
     }
 
 andType
