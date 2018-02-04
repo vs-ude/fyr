@@ -814,6 +814,20 @@ export type Restrictions = {
     group: Group;
 }
 
+export function combineRestrictions(r1: Restrictions, r2: Restrictions): Restrictions {
+    if (!r1) {
+        return r2;
+    }
+    if (!r2) {
+        return r1;
+    }
+    return {
+        isConst: r1.isConst || r2.isConst,
+        isFrozen: r1.isFrozen || r2.isFrozen,
+        group: r1.group ? r1.group : r2.group
+    };
+}
+
 // Implements restrictions
 export class RestrictedType extends Type {
     constructor(elementType: Type, r: Restrictions | null = null) {
@@ -4492,9 +4506,9 @@ export class TypeChecker {
                     }
                 }
                 if (a.objectType) {
-                    if (allowMoreRestrictions && ((a.objectTypeIsScoped && !b.objectTypeIsScoped)) || (a.objectTypeIsConst && !b.objectTypeIsConst)) {
+                    if (allowMoreRestrictions && ((a.objectTypeIsFrozen && !b.objectTypeIsFrozen) || (a.objectTypeIsConst && !b.objectTypeIsConst && !b.objectTypeIsFrozen))) {
                         ok = false;
-                    } else if (!allowMoreRestrictions && ((a.objectTypeIsScoped != b.objectTypeIsScoped) || a.objectTypeIsConst != b.objectTypeIsConst)) {
+                    } else if (!allowMoreRestrictions && ((a.objectTypeIsFrozen != b.objectTypeIsFrozen) || a.objectTypeIsConst != b.objectTypeIsConst)) {
                         ok = false;
                     }
                 }
@@ -4518,7 +4532,7 @@ export class TypeChecker {
             return true;
         }
         if (a instanceof RestrictedType && b instanceof RestrictedType) {
-            if (a.isConst == b.isConst && !!a.scope == !!b.scope) {
+            if (a.isConst == b.isConst) {
                 if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
                     return true;
                 }
@@ -4532,7 +4546,7 @@ export class TypeChecker {
                 return true;
             }
         } else if (a instanceof SliceType && b instanceof SliceType) {
-            if (!!a.arrayScope == !!b.arrayScope && this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
                 return true;
             }
         } else if (a instanceof ArrayType && b instanceof ArrayType) {
@@ -4848,17 +4862,12 @@ export class TypeChecker {
     
     public isPointer(t: Type): boolean {
         t = this.stripType(t);
-        if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof MapType || t instanceof SliceType || t == this.t_string) {
+        if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof MapType || t instanceof SliceType) {
             return true;
         }    
         return t instanceof InterfaceType && t.isPointerType();
     }
-    
-    public isReferencePointer(t: Type): boolean {
-        t = this.stripType(t);
-        return t instanceof PointerType && t.elementType instanceof RestrictedType && t.elementType.scope != null;
-    }
-    
+        
     public isSafePointer(t: Type): boolean {
         t = this.stripType(t);
         return (t instanceof PointerType);
@@ -4866,7 +4875,7 @@ export class TypeChecker {
     
     public isPureValue(t: Type): boolean {
         t = this.stripType(t);
-        if (t == this.t_rune || t == this.t_string || t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void) {
+        if (t == this.t_rune || t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void) {
             return true;
         }
         if (t instanceof TupleType) {
@@ -4950,12 +4959,6 @@ export class TypeChecker {
     }
     
     public makeMap(key: Type, value: Type, loc: Location): Type {
-        if (key instanceof RestrictedType && key.scope) {
-            throw "Implementation error"
-        }
-        if (value instanceof RestrictedType && value.scope) {
-            throw "Implementation error"
-        }
         if (key != this.t_string && !this.isPrimitive(key) && !(key instanceof PointerType) && !(key instanceof UnsafePointerType)) {
             throw new TypeError("The type " + key.toString() + " is not allowed as a map key", loc);
         }
