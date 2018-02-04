@@ -993,35 +993,33 @@ export class ArrayType extends Type {
 }
 
 export class SliceType extends Type {
-    constructor(elementType: Type, mode: PointerMode) {
+    constructor(arrayType: ArrayType | RestrictedType, mode: PointerMode) {
         super();
-        this.elementType = elementType;
+        this.arrayType = arrayType;
         this.mode = mode;
     }
-
-    /*
-    public getStrippedArrayType(): ArrayType {
+    
+    public array(): ArrayType {
         if (this.arrayType instanceof ArrayType) {
             return this.arrayType;
         }
         return this.arrayType.elementType as ArrayType;
     }
-    */
 
     public toString(): string {
         if (this.name) {
             return this.name;
         }
-        return this.mode.toString() + "[]" + this.elementType.toString();
+        return this.mode.toString() + "[]" + this.array().elementType.toString();
     }
 
     public toTypeCodeString(): string {
-        return this.mode.toString() + "[]" + this.elementType.toString();
+        return this.mode.toString() + "[]" + this.array().elementType.toString();
     }
     
     public mode: PointerMode;
-    public elementType: Type;
-    // TODO: Store the size of the slice in case this is statically known
+    // If the size of the underlying array is -1, then its size is dynamic
+    public arrayType: ArrayType | RestrictedType;
 }
 
 // ArrayLiteralTypes are created while parsing and are then unified.
@@ -1247,7 +1245,7 @@ export class TypeChecker {
         this.t_uint32 = new BasicType("uint32");
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
-        this.t_string = new RestrictedType(new SliceType(this.t_byte, "default"), {isFrozen: true, isConst: true, group: null});
+        this.t_string = new RestrictedType(new SliceType(new ArrayType(this.t_byte, -1), "default"), {isFrozen: true, isConst: true, group: null});
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
         
@@ -1312,33 +1310,35 @@ export class TypeChecker {
             if (!t) {
                 throw new TypeError("Unknown type " + tnode.value, tnode.loc);
             }
-            return t;
+            return this.makeLifetime(t, tnode, groups, boxes);
         } else if (tnode.op == "str") {
-            return this.stringLiteralType(tnode.value);
+            let t = this.stringLiteralType(tnode.value);
+            this.checkNoLifetime(t, tnode);
+            return t;
         } else if (tnode.op == "constType") {
-            let c = this.createType(tnode.rhs, scope);
-            return this.makeConst(c, tnode.loc);
+            let c = this.createType(tnode.rhs, scope, groups, boxes);
+            return this.makeLifetime(this.makeConst(c, tnode.loc), tnode, groups, boxes);
         } else if (tnode.op == "frozenType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeFrozen(c, tnode.loc);
+            return this.makeLifetime(this.makeFrozen(c, tnode.loc), tnode, groups, boxes);
         } else if (tnode.op == "weakType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeWeakPointerOrSlice(c, tnode.loc);
+            return this.makeLifetime(this.makeWeak(c, tnode.loc), tnode, groups, boxes);
         } else if (tnode.op == "groupType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeGroupPointerOrSlice(c, tnode.loc);
+            return this.makeLifetime(this.makeGroup(c, tnode.loc), tnode, groups, boxes);
         } else if (tnode.op == "boxType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeBoxPointerOrSlice(c, tnode.loc);
+            return this.makeLifetime(this.makeBox(c, tnode.loc), tnode, groups, boxes);
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope);
-            return this.makePointer(t, "default", tnode.loc);
+            return this.makeLifetime(new PointerType(t, "default"), tnode, groups, boxes);
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope);
-            return this.makeUnsafePointer(t, tnode.loc);
+            return this.makeLifetime(new UnsafePointerType(t), tnode, groups, boxes);
         } else if (tnode.op == "sliceType") {
             let t = this.createType(tnode.rhs, scope);
-            return this.makeSlice(t, "default", tnode.loc);
+            return this.makeLifetime(new SliceType(new ArrayType(t, -1), "default"), tnode, groups, boxes);
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
             for(let p of tnode.parameters) {
@@ -1346,7 +1346,7 @@ export class TypeChecker {
                 types.push(pt);
             }
             let t = new TupleType(types);
-            return t;
+            return this.makeLifetime(t, tnode, groups, boxes);
         } else if (tnode.op == "arrayType") {
             this.checkExpression(tnode.lhs, scope);
             if (tnode.lhs.op != "int") {
@@ -1354,7 +1354,7 @@ export class TypeChecker {
             }
             // TODO: Check range before parseInt
             let t = new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
-            return t;
+            return this.makeLifetime(t, tnode, groups, boxes);
         } else if (tnode.op == "funcType" || tnode.op == "asyncFuncType") {
             let t = new FunctionType();
             if (tnode.op == "asyncFuncType") {
@@ -1381,7 +1381,7 @@ export class TypeChecker {
             } else {
                 t.returnType = this.t_void;
             }
-            return t;
+            return this.makeLifetime(t, tnode, groups, boxes);
         } else if (tnode.op == "genericType" && tnode.lhs.op == "id" && tnode.lhs.value == "map") {
             if (tnode.genericParameters.length != 2) {
                 throw new TypeError("Supplied type arguments do not match signature of map", tnode.loc);
@@ -1392,6 +1392,7 @@ export class TypeChecker {
             if (!this.isIntNumber(k) && !this.isString(k) && !this.isPointer(k)) {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
+            // TODO: Lifetime of a map
             return new MapType(k, v);
         } else if (tnode.op == "genericType") {
             let baset = scope.resolveType(tnode.lhs.value);
@@ -1406,20 +1407,20 @@ export class TypeChecker {
                 let t = this.createType(tnode.genericParameters[i], scope);
                 types.push(t);
             }
-            return this.instantiateTemplateType(baset, types, tnode.loc);
+            return this.makeLifetime(this.instantiateTemplateType(baset, types, tnode.loc), tnode, groups, boxes);
         } else if (tnode.op == "orType") {
-            return this.createOrType(tnode, scope);
+            return this.createOrType(tnode, scope, null, groups, boxes);
         } else if (tnode.op == "andType") {
-            return this.createInterfaceType(tnode, scope);
+            return this.createInterfaceType(tnode, scope, null, groups, boxes);
         } else if (tnode.op == "structType") {
-            return this.createStructType(tnode, scope);
+            return this.createStructType(tnode, scope, null, groups, boxes);
         } else if (tnode.op == "interfaceType") {
-            return this.createInterfaceType(tnode, scope);
+            return this.createInterfaceType(tnode, scope, null, groups, boxes);
         }
         throw "Implementation error for type " + tnode.op
     }
 
-    private createOrType(tnode: Node, scope: Scope, t?: OrType): Type {
+    private createOrType(tnode: Node, scope: Scope, t?: OrType, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
         // TODO: Avoid double entries
         if (!t) {
             t = new OrType();
@@ -1433,10 +1434,10 @@ export class TypeChecker {
                 t.types.push(pt);
             }
         }
-        return t;
+        return this.makeLifetime(t, tnode, groups, boxes);
     }
 
-    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType): Type {
+    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
         if (!iface) {
             iface = new InterfaceType();
             iface.loc = tnode.loc;
@@ -1453,12 +1454,12 @@ export class TypeChecker {
                 }
                 iface.extendsInterfaces.push(pt);
             }
-            return iface;
+            return this.makeLifetime(iface, tnode, groups, boxes);
         }
 
         if (tnode.parameters.length == 1 && tnode.parameters[0].op == "extends") {
             let t = this.createType(tnode.parameters[0].rhs, scope);
-            return this.makeBox(t, tnode.parameters[0].rhs.loc, iface);
+            return this.makeLifetime(this.createBoxedInterface(t, tnode.parameters[0].rhs.loc, iface), tnode, groups, boxes);
         }
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
@@ -1496,7 +1497,7 @@ export class TypeChecker {
                 throw "Implementation error " + mnode.op + " " + iface.name;
             }
         }
-        return iface;
+        return this.makeLifetime(iface, tnode, groups, boxes);
     }
 
     private checkInterfaceType(iface: InterfaceType) {
@@ -1547,7 +1548,7 @@ export class TypeChecker {
         }
     }
 
-    private createStructType(tnode: Node, scope: Scope, s?: StructType): StructType {
+    private createStructType(tnode: Node, scope: Scope, s?: StructType, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
         if (!s) {
             s = new StructType();
             s.loc = tnode.loc;
@@ -1593,7 +1594,7 @@ export class TypeChecker {
             }
         }
 
-        return s;
+        return this.makeLifetime(s, tnode, groups, boxes);
     }
 
     public checkStructType(s: StructType) {
@@ -1625,6 +1626,49 @@ export class TypeChecker {
         for(let iface of s.implements) {
             this.checkIsAssignableType(iface, new PointerType(s, "default"), s.loc);
         }
+    }
+
+    public createBoxedInterface(t: Type, loc: Location, iface?: InterfaceType): Type {
+        if (!iface) {
+            iface = new InterfaceType();
+        }
+        iface.loc = t.loc;
+        if (t instanceof RestrictedType) {
+            iface.extendsInterfaces.push(t.elementType);
+            return new RestrictedType(iface, t);
+        }
+        iface.extendsInterfaces.push(t);  
+        this.ifaces.push(iface);        
+        return iface;
+    }
+    
+    public unbox(t: Type, loc: Location): Type {
+        if (t instanceof RestrictedType) {
+            if (t.elementType instanceof InterfaceType && t.elementType.isBoxedType()) {
+                return new RestrictedType(t.elementType.extendsInterfaces[0], t);
+            }
+        }
+        if (t instanceof InterfaceType && t.isBoxedType()) {
+            return t.extendsInterfaces[0];
+        }
+        return t;
+    }
+
+    public rebox(oldT: Type, newT: Type): Type {
+        let result = newT;
+        if (oldT instanceof RestrictedType) {
+            if (oldT.elementType instanceof InterfaceType && oldT.elementType.isBoxedType()) {
+                let i = new InterfaceType();
+                i.extendsInterfaces.push(result);
+                result = i;
+            }
+            result = new RestrictedType(result, oldT);
+        } else if (oldT instanceof InterfaceType && oldT.isBoxedType()) {
+            let i = new InterfaceType();
+            i.extendsInterfaces.push(result);
+            result = i;
+        }
+        return result;
     }
 
     private instantiateTemplateType(t: TemplateType, types: Array<Type>, loc: Location): Type {
@@ -4332,6 +4376,12 @@ export class TypeChecker {
         return result;
     }
 
+    public checkNoLifetime(t: Type, node: Node) {
+        if (node.group || node.box) {
+            throw new TypeError("Lifetime attributes are only allowed for type " + t.toString(), node.loc);
+        }
+    }
+
     public checkIsEnumerable(node: Node): [Type, Type] {
         let t = this.stripType(node.type);
         if (t instanceof MapType) {
@@ -4974,71 +5024,45 @@ export class TypeChecker {
         }
         return new RestrictedType(t, {isConst: true, group: null, isFrozen: true});
     }
-
-    public makePointer(t: Type, mode: PointerMode, loc: Location): PointerType {
-        return new PointerType(t, mode);
-    }
-
-    public makeUnsafePointer(t: Type, loc: Location): Type {
-        return new UnsafePointerType(t);
-    }
-
-    public makeSlice(t: Type, mode: PointerMode, loc: Location): SliceType {
-        return new SliceType(t, mode);
-    }
     
-    public makeArray(t: Type, len: number, loc: Location): ArrayType {
-        return new ArrayType(t, len);
-    }
-    
-    public makeMap(key: Type, value: Type, loc: Location): Type {
-        if (!this.isString(key) && !this.isPrimitive(key) && !(key instanceof PointerType) && !(key instanceof UnsafePointerType)) {
-            throw new TypeError("The type " + key.toString() + " is not allowed as a map key", loc);
+    public makeWeak(t: Type, loc: Location): Type {
+        if (!this.isSafePointer(t) && !this.isSlice(t)) {
+            throw new TypeError("The keyword 'weak' can only be used on pointer and slice types", loc);
         }
-        return new MapType(key, value);
-    }
-    
-    public makeBox(t: Type, loc: Location, iface?: InterfaceType): Type {
-        if (!iface) {
-            iface = new InterfaceType();
+        let p: PointerType | SliceType = RestrictedType.strip(t) as PointerType | SliceType;
+        if (p.mode != "default") {
+            throw new TypeError("The keyword 'weak' must not be used together with 'group' or 'box'", loc);
         }
-        iface.loc = t.loc;
-        if (t instanceof RestrictedType) {
-            iface.extendsInterfaces.push(t.elementType);
-            return new RestrictedType(iface, t);
-        }
-        iface.extendsInterfaces.push(t);  
-        this.ifaces.push(iface);        
-        return iface;
-    }
-    
-    public unbox(t: Type, loc: Location): Type {
-        if (t instanceof RestrictedType) {
-            if (t.elementType instanceof InterfaceType && t.elementType.isBoxedType()) {
-                return new RestrictedType(t.elementType.extendsInterfaces[0], t);
-            }
-        }
-        if (t instanceof InterfaceType && t.isBoxedType()) {
-            return t.extendsInterfaces[0];
-        }
+        p.mode = "weakGroup";
         return t;
     }
 
-    public rebox(oldT: Type, newT: Type): Type {
-        let result = newT;
-        if (oldT instanceof RestrictedType) {
-            if (oldT.elementType instanceof InterfaceType && oldT.elementType.isBoxedType()) {
-                let i = new InterfaceType();
-                i.extendsInterfaces.push(result);
-                result = i;
-            }
-            result = new RestrictedType(result, oldT);
-        } else if (oldT instanceof InterfaceType && oldT.isBoxedType()) {
-            let i = new InterfaceType();
-            i.extendsInterfaces.push(result);
-            result = i;
+    public makeGroup(t: Type, loc: Location): Type {
+        if (!this.isSafePointer(t) && !this.isSlice(t)) {
+            throw new TypeError("The keyword 'group' can only be used on pointer and slice types", loc);
         }
-        return result;
+        let p: PointerType | SliceType = RestrictedType.strip(t) as PointerType | SliceType;
+        if (p.mode != "default") {
+            throw new TypeError("The keyword 'group' must not be used together with 'weak' or 'box'", loc);
+        }
+        p.mode = "group";
+        return t;
+    }
+
+    public makeBox(t: Type, loc: Location): Type {
+        if (!this.isSafePointer(t) && !this.isSlice(t)) {
+            throw new TypeError("The keyword 'box' can only be used on pointer and slice types", loc);
+        }
+        let p: PointerType | SliceType = RestrictedType.strip(t) as PointerType | SliceType;
+        if (p.mode != "default") {
+            throw new TypeError("The keyword 'box' must not be used together with 'group' or 'weak'", loc);
+        }
+        p.mode = "box";
+        return t;
+    }
+
+    public makeLifetime(t: Type, tnode: Node, groups: Map<string, Group>, boxes: Map<string, Box>): Type {
+        throw "TODO";
     }
 
     public pointerElementType(t: Type): Type {

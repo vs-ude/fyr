@@ -659,7 +659,7 @@ export class CodeGenerator {
                     if (t instanceof SliceType || t instanceof ArrayType) {
                         let arrayType: ArrayType;
                         if (t instanceof SliceType) {
-                            arrayType = t.getStrippedArrayType();
+                            arrayType = t.array();
                             // Get the address of the slice header
                             let sliceHeaderAddr: ssa.Pointer;
                             if (this.isLeftHandSide(snode.condition.rhs)) {
