@@ -24,8 +24,8 @@ export type NodeConfig = {
     readonly elseBranch?: Node;
     readonly parameters?: Array<Node>;
     readonly genericParameters?: Array<Node>;
-    readonly group: Node;
-    readonly box: Node;
+    readonly group?: Node;
+    readonly box?: Node;
 }
 
 export type LocationPoint = {

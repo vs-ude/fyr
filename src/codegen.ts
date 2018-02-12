@@ -819,7 +819,7 @@ export class CodeGenerator {
                             let endcond = b.assign(b.tmp(), "eq", "addr", [ptr, end]);
                             b.br_if(endcond, outer);
                             // Store the current value in a variable
-                            let storage = this.getSSAType(t.elementType);
+                            let storage = this.getSSAType(t.getElementType());
                             if (val instanceof ssa.Variable) {
                                 b.assign(val, "load", storage, [ptr, 0]);
                             } else if (val instanceof ssa.Pointer) {
@@ -998,7 +998,7 @@ export class CodeGenerator {
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
                 } else if (ltype instanceof SliceType) {
-                    let size = ssa.sizeOf(this.getSSAType(ltype.elementType));
+                    let size = ssa.sizeOf(this.getSSAType(ltype.getElementType()));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
@@ -1305,7 +1305,7 @@ export class CodeGenerator {
 
     private createInterfaceTable(scope: Scope, s: StructType): number {
         let methods = new Map<string, number>();
-        let t = new PointerType(s);
+        let t = new PointerType(s, "default");
         let offset = this.interfaceTableLength;
         let minOffset = 0xffffff;
         let maxOffset = -1;
@@ -1515,11 +1515,11 @@ export class CodeGenerator {
             {
                 let t = this.tc.stripType(enode.type);
                 if (t instanceof SliceType) {
-                    let et = this.getSSAType(t.elementType);
+                    let et = this.getSSAType(t.getElementType());
                     let esize = ssa.sizeOf(et);
                     let ptr = b.assign(b.tmp("ptr"), "alloc", et, [enode.parameters.length]);
                     for(let i = 0; i < enode.parameters.length; i++) {
-                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars, t.elementType);
+                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars, t.getElementType());
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, enode.parameters.length, enode.parameters.length]);
@@ -1835,7 +1835,7 @@ export class CodeGenerator {
                     if (!(objType instanceof SliceType)) {
                         throw "Implementation error";
                     }
-                    let elementType = this.getSSAType(RestrictedType.strip(objType.elementType));
+                    let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                     let size = ssa.sizeOf(elementType);
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
@@ -1857,7 +1857,7 @@ export class CodeGenerator {
                     if (!(objType instanceof SliceType)) {
                         throw "Implementation error";
                     }
-                    let elementType = this.getSSAType(RestrictedType.strip(objType.elementType));
+                    let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                     let size = ssa.sizeOf(elementType);
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
@@ -1902,7 +1902,7 @@ export class CodeGenerator {
                         let offset = b.assign(b.tmp(), "mul", "i32", [size, len]);
                         let new_data_ptr = b.assign(b.tmp("addr"), "add", "i32", [data_ptr, offset]);
                         for(let i = 0; i < add; i++) {
-                            let p = this.processExpression(f, scope, enode.parameters[i], b, vars, objType.elementType);
+                            let p = this.processExpression(f, scope, enode.parameters[i], b, vars, objType.getElementType());
                             b.assign(b.mem, "store", elementType, [new_data_ptr, i * size, p]);
                         }
                         return b.assign(b.tmp(), "struct", this.sliceHeader, [data_ptr, new_len, cap]);
@@ -2047,7 +2047,7 @@ export class CodeGenerator {
                 }
                 if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
                     // TODO: If the last parameter is volatile, the alloc is not necessary.
-                    let elementType = this.getSSAType((t.lastParameter().type as SliceType).elementType);
+                    let elementType = this.getSSAType((t.lastParameter().type as SliceType).getElementType());
                     let normalParametersCount = t.parameters.length - 1 - (t.objectType ? 1 : 0);
                     for(let i = 0; i < normalParametersCount; i++) {
                         args.push(this.processExpression(f, scope, enode.parameters[i], b, vars, t.parameters[i].type));
@@ -2056,7 +2056,7 @@ export class CodeGenerator {
                     let offset = 0;
                     let elementSize = ssa.sizeOf(elementType);
                     for(let i = normalParametersCount; i < enode.parameters.length; i++, offset += elementSize) {
-                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars, (t.lastParameter().type as SliceType).elementType);
+                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars, (t.lastParameter().type as SliceType).getElementType());
                         b.assign(b.mem, "store", elementType, [mem, offset, v]);
                     }
                     args.push(b.assign(b.tmp(), "struct", this.sliceHeader, [mem, enode.parameters.length - normalParametersCount, enode.parameters.length - normalParametersCount]));
@@ -2129,7 +2129,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr, l, l]);
                 } else if (t instanceof SliceType) {
-                    let size = ssa.sizeOf(this.getSSAType(t.elementType));
+                    let size = ssa.sizeOf(this.getSSAType(t.getElementType()));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
@@ -2438,7 +2438,7 @@ export class CodeGenerator {
                     return expr;
                 } else if (t instanceof PointerType && t2 instanceof UnsafePointerType) {
                     return expr;
-                } else if (t instanceof SliceType && t.elementType == this.tc.t_byte && t2 == this.tc.t_string) {
+                } else if (t instanceof SliceType && t.getElementType() == this.tc.t_byte && t2 == this.tc.t_string) {
                     let l = b.assign(b.tmp(), "load", "i32", [expr]);
                     let src = b.assign(b.tmp("addr"), "add", "i32", [expr, 4]);
                     let mem = b.assign(b.tmp("ptr"), "alloc", "i8", [l]);

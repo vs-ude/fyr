@@ -971,6 +971,10 @@ export class ArrayType extends Type {
         this.size = size;
     }
 
+    public getElementType(): Type {
+        return this.elementType;
+    }
+
     public toString(): string {
         if (this.name) {
             return this.name;
@@ -1006,6 +1010,13 @@ export class SliceType extends Type {
         return this.arrayType.elementType as ArrayType;
     }
 
+    public getElementType(): Type {
+        if (this.arrayType instanceof ArrayType) {
+            return this.arrayType.elementType;
+        }
+        return (this.arrayType.elementType as ArrayType).elementType;    
+    }
+    
     public toString(): string {
         if (this.name) {
             return this.name;
@@ -2518,7 +2529,7 @@ export class TypeChecker {
                                 }
                                 rt = lt.elementType;
                             } else if (lt instanceof SliceType) {
-                                rt = lt.elementType;
+                                rt = lt.getElementType();
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of array type, slice type, string or json", vnode.loc);
                             }
@@ -2537,7 +2548,7 @@ export class TypeChecker {
                             if (!(lt instanceof SliceType)) {
                                 throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                             }
-                            this.checkIsAssignableType(lt.elementType, rtypeStripped.elementType, vnode.loc);
+                            this.checkIsAssignableType(lt.getElementType(), rtypeStripped.getElementType(), vnode.loc);
                         }
                     }
 //                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
@@ -2561,7 +2572,7 @@ export class TypeChecker {
                         rt = rtype.types[i];
                         r = rnode.parameters[i];
                     } else if (rtype instanceof ArrayType || rtype instanceof SliceType) {
-                        rt = rtype.elementType;
+                        rt = rtype.getElementType();
                     }
                     this.checkVarAssignment(isConst, scope, p, rt, r);
                 }
@@ -2720,7 +2731,7 @@ export class TypeChecker {
                             }
                             rt = p.lhs.type.elementType;
                         } else if (p.lhs.type instanceof SliceType) {
-                            rt = p.lhs.type.elementType;
+                            rt = p.lhs.type.getElementType();
                         } else {
                             throw new TypeError("Ellipsis identifier must be of array type or slice type", vnode.loc);
                         }
@@ -2739,7 +2750,7 @@ export class TypeChecker {
                         if (!(p.lhs.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                         }
-                        this.checkIsAssignableType(p.lhs.type.elementType, rtypeStripped.elementType, vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type.getElementType(), rtypeStripped.getElementType(), vnode.loc);
                     }
                     break;
                 } else {
@@ -2759,7 +2770,7 @@ export class TypeChecker {
                         rt = rtype.types[i];
                         r = rnode.parameters[i];
                     } else if (rtype instanceof ArrayType || rtype instanceof SliceType) {
-                        rt = rtype.elementType;
+                        rt = rtype.getElementType();
                     }
                     this.checkAssignment(scope, p, rt, r);
                 }
@@ -3167,7 +3178,7 @@ export class TypeChecker {
             {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsAddressable(enode.rhs, scope, true, true);
-                enode.type = this.makePointer(enode.rhs.type, "default", enode.loc); 
+                enode.type = new PointerType(enode.rhs.type, "default"); 
                 break;
             }
             case "+":                                             
@@ -3480,7 +3491,7 @@ export class TypeChecker {
                     this.checkIsAddressable(enode.lhs, scope, false);
                     this.checkIsIndexable(enode.lhs, index2, true);
                     // TODO: Group of the slice
-                    enode.type = this.makeSlice(elementType, "default", enode.loc);
+                    enode.type = new SliceType(t, "default");
                     if (isFrozen) {
                         enode.type = this.makeFrozen(enode.type, enode.loc);
                     } else if (isConst) {
@@ -3488,7 +3499,7 @@ export class TypeChecker {
                     }
                 } else if (t instanceof UnsafePointerType) {
                     // TODO: Group of the slice
-                    enode.type = this.makeSlice(elementType, "default", enode.loc);
+                    enode.type = new SliceType(new ArrayType(elementType, -1), "default");
                     if (isFrozen) {
                         enode.type = this.makeFrozen(enode.type, enode.loc);
                     } else if (isConst) {
@@ -3531,7 +3542,7 @@ export class TypeChecker {
                     }
                     enode.type = t.valueType;
                 } else if (t instanceof SliceType) {
-                    enode.type = t.elementType;
+                    enode.type = t.getElementType();
                 } else if (t instanceof UnsafePointerType) {
                     enode.type = t.elementType;
                 } else {
@@ -3765,11 +3776,11 @@ export class TypeChecker {
                 } else if (this.isString(t) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (this.isString(t) && right instanceof SliceType && right.elementType == this.t_byte) {
+                } else if (this.isString(t) && right instanceof SliceType && right.getElementType() == this.t_byte) {
                     // A slice of bytes can be converted to a string by copying it by copying it.
                     // Restrictions are irrelevant.
                     enode.type = t;
-                } else if (t instanceof SliceType && t.elementType == this.t_byte && this.isString(right)) {
+                } else if (t instanceof SliceType && t.getElementType() == this.t_byte && this.isString(right)) {
                     // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
@@ -3839,7 +3850,7 @@ export class TypeChecker {
                     }
                 }
                 // TODO: Set the group of this new slice to unbound
-                node.type = new SliceType(t, "default");
+                node.type = new SliceType(new ArrayType(t, -1), "default");
             }
             return node.type;
         } else if (node.type instanceof TupleLiteralType) {
@@ -3962,7 +3973,7 @@ export class TypeChecker {
                     return true;
                 } else if (t instanceof SliceType) {
                     for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode(t.elementType, pnode);
+                        this.checkIsAssignableNode(t.getElementType(), pnode);
                     }
                     node.type = t;
                     return true;
@@ -4198,7 +4209,7 @@ export class TypeChecker {
                 return true;
             }
         } else if (to instanceof SliceType && from instanceof SliceType) {
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
+            if (this.checkIsAssignableType(to.getElementType(), from.getElementType(), loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
                 return true;
             }            
         } else if (to instanceof MapType && from instanceof MapType) {
@@ -4305,7 +4316,7 @@ export class TypeChecker {
                     }
                 } else {
                     if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
-                        if (!this.checkIsAssignableNode((ft.lastParameter().type as SliceType).elementType, pnode, doThrow)) {
+                        if (!this.checkIsAssignableNode((ft.lastParameter().type as SliceType).getElementType(), pnode, doThrow)) {
                             return false;
                         }
                     } else {
@@ -4360,7 +4371,7 @@ export class TypeChecker {
                 this.checkIsAssignableNode(this.createType(lastParameter, s), pnode.rhs, true, result);
             } else {
                 if (ellipsis && i >= t.node.parameters.length - 1) {
-                    this.checkIsAssignableNode((this.createType(lastParameter, s) as SliceType).elementType, pnode, true, result);
+                    this.checkIsAssignableNode((this.createType(lastParameter, s) as SliceType).getElementType(), pnode, true, result);
                 } else {
                     this.checkIsAssignableNode(this.createType(t.node.parameters[i], s), pnode, true, result);
                 }
@@ -4389,7 +4400,7 @@ export class TypeChecker {
         } else if (t instanceof ArrayType) {
             return [this.t_int, t.elementType];
         } else if (t instanceof SliceType) {
-            return [this.t_int, t.elementType];
+            return [this.t_int, t.getElementType()];
         }
         throw new TypeError("The type " + t.toString() + " is not enumerable", node.loc);
     }
@@ -4405,7 +4416,7 @@ export class TypeChecker {
             if (index < 0) {
                 throw new TypeError("Index out of range", node.loc);
             }
-            return t.elementType;
+            return t.getElementType();
         } else if (t instanceof TupleType) {
             if (index < 0 || index >= t.types.length) {
                 throw new TypeError("The index " + index + " does not exist in the tuple " + t.name, node.loc);
@@ -4628,7 +4639,7 @@ export class TypeChecker {
                 return true;
             }
         } else if (a instanceof SliceType && b instanceof SliceType) {
-            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (this.checkTypeEquality(a.getElementType(), b.getElementType(), loc, false)) {
                 return true;
             }
         } else if (a instanceof ArrayType && b instanceof ArrayType) {
@@ -4811,7 +4822,7 @@ export class TypeChecker {
     public isString(t: Type): boolean {
         let s = this.stripType(t);
         // A string is a frozen slice of bytes
-        return this.isFrozen(t) && s instanceof SliceType && s.elementType == this.t_byte;
+        return this.isFrozen(t) && s instanceof SliceType && s.getElementType() == this.t_byte;
     }
 
     public isOrType(t: Type): boolean {
@@ -5110,8 +5121,8 @@ export class TypeChecker {
                 ft.name = "clone";
                 ft.callingConvention = "system";
                 ft.objectType = type;
-                ft.returnType = new SliceType(type.elementType);
-                if (this.isConst(t) && !this.isPureValue(type.elementType)) {
+                ft.returnType = new SliceType(new ArrayType(type.getElementType(), -1), "default");
+                if (this.isConst(t) && !this.isPureValue(type.getElementType())) {
                     ft.returnType = this.makeConst(ft.returnType, loc);
                 }
                 return ft;                
