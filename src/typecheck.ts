@@ -322,10 +322,6 @@ export class InterfaceType extends Type {
         throw "TODO"
     }
 
-    public isPointerType(): boolean {
-        return !this.isEmptyInterface() && !this.isBoxedType();
-    }
-
     public isEmptyInterface(): boolean {
         return this.extendsInterfaces.length == 0 && this.methods.size == 0;
     }
@@ -360,6 +356,8 @@ export class InterfaceType extends Type {
     }
 
     public mode: PointerMode = "strong";
+    public contentType: RestrictedType;
+    // TODO: Do not use for boxed type
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -1312,10 +1310,17 @@ export class TypeChecker {
                 ptr.elementType = this.makeConst(ptr.elementType, tnode.loc);
                 return c;
             } else if (this.isInterface(c)) {
-                // TODO
+                let ptr = RestrictedType.strip(c) as InterfaceType;
+                if (ptr.contentType) {
+                    ptr.contentType = this.makeConst(ptr.contentType, tnode.loc) as RestrictedType;
+                } else {
+                    ptr.contentType = new RestrictedType(null, {isConst: true, box: null});
+                }
+                return c;
             } else if (this.isSlice(c)) {
                 let ptr = RestrictedType.strip(c) as SliceType;
                 ptr.arrayType = this.makeConst(ptr.arrayType, tnode.loc) as RestrictedType;
+                return c;
             }
             // TODO: Map
             return this.makeConst(c, tnode.loc)
@@ -1328,22 +1333,38 @@ export class TypeChecker {
         } else if (tnode.op == "boxType") {
             let c = this.createType(tnode.rhs, scope, isParameter);
             // A named box?
+            let box: Box;
             if (tnode.parameters && tnode.parameters.length == 1) {
                 let b = tnode.parameters[0].value;
-                let box = scope.lookupBox(b);
+                box = scope.lookupBox(b);
                 if (!box) {
                     box = new Box();
                     box.name = b;
                     box.bound = isParameter;
-                    if (this.isConst(c)) {
-                        box.freeze();
-                    }
                     scope.registerBox(box.name, box, tnode.loc);
                 }
-                return this.makeBox(c, box, tnode.loc);
+            } else {
+                box = new Box();
             }
-            // An anonymous box
-            return this.makeBox(c, new Box(), tnode.loc);
+            if (this.isSafePointer(c)) {
+                let ptr = RestrictedType.strip(c) as PointerType;
+                ptr.elementType = this.makeBox(ptr.elementType, box, tnode.loc);
+                return c;
+            } else if (this.isInterface(c)) {
+                let ptr = RestrictedType.strip(c) as InterfaceType;
+                if (ptr.contentType) {
+                    ptr.contentType = this.makeBox(ptr.contentType, box, tnode.loc);
+                } else {
+                    ptr.contentType = new RestrictedType(null, {isConst: false, box: box});
+                }
+                return c;
+            } else if (this.isSlice(c)) {
+                let ptr = RestrictedType.strip(c) as SliceType;
+                ptr.arrayType = this.makeBox(ptr.arrayType, box, tnode.loc);
+                return c;
+            }
+            throw new TypeError("The keyword 'box' can only be used on pointers, interfaces and slices", tnode.loc);
+            // TODO: Map
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope, isParameter);
             return new PointerType(t, "strong");
@@ -1402,10 +1423,9 @@ export class TypeChecker {
             // TODO: Allow all types in maps?
             let k = this.createType(tnode.genericParameters[0], scope, isParameter);
             let v = this.createType(tnode.genericParameters[1], scope, isParameter);
-            if (!this.isIntNumber(k) && !this.isString(k) && !this.isPointer(k)) {
+            if (!this.isIntNumber(k) && !this.isString(k) && !this.isSafePointer(k) && !this.isUnsafePointer(k)) {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
-            // TODO: Lifetime of a map
             return new MapType(k, v);
         } else if (tnode.op == "genericType") {
             let baset = scope.resolveType(tnode.lhs.value);
@@ -4888,15 +4908,7 @@ export class TypeChecker {
         t = this.stripType(t);
         return (t == this.t_rune || t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void);
     }
-    
-    public isPointer(t: Type): boolean {
-        t = this.stripType(t);
-        if (t instanceof PointerType || t instanceof UnsafePointerType || t instanceof MapType || t instanceof SliceType) {
-            return true;
-        }    
-        return t instanceof InterfaceType && t.isPointerType();
-    }
-        
+            
     public isSafePointer(t: Type): boolean {
         t = this.stripType(t);
         return (t instanceof PointerType);
@@ -4954,7 +4966,17 @@ export class TypeChecker {
         }
         return new RestrictedType(t, {isConst: true, box: null});
     }
-    
+
+    public makeBox(t: Type, box: Box, loc: Location): RestrictedType {
+        if (t instanceof RestrictedType) {
+            if (t.box) {
+                throw "Implementation error";
+            }
+            return new RestrictedType(t.elementType, {isConst: t.isConst, box: box});
+        }
+        return new RestrictedType(t, {isConst: false, box: box});
+    }
+
     public makeWeak(t: Type, loc: Location): Type {
         if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
             throw new TypeError("The keyword 'weak' can only be used on pointers, interfaces and slices", loc);
@@ -4979,6 +5001,7 @@ export class TypeChecker {
         return new PointerType(t, "reference");
     }
 
+    /*
     public makeBox(t: Type, box: Box, loc: Location): Type {
         if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
             throw new TypeError("The keyword 'box' can only be used on pointers, interfaces and slices", loc);
@@ -4988,6 +5011,7 @@ export class TypeChecker {
         }
         return new RestrictedType(t, {isConst: false, box: box});
     }
+    */
 
     public pointerElementType(t: Type): Type {
         t = RestrictedType.strip(t);
