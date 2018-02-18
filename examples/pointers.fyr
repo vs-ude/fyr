@@ -48,6 +48,5 @@ func main() {
 }
 
 func wrong(ptr box(a) *Point) {
-    // err: a is bound and cannot be frozen
     var ptr2 const box(a) *Point
 }

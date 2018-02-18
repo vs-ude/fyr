@@ -363,7 +363,6 @@ export class InterfaceType extends Type {
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
-    public pointerScope: Scope | null = null;
     // Required during recursive checking
     public _markChecked: boolean = false;
 }
@@ -1308,6 +1307,17 @@ export class TypeChecker {
             return t;
         } else if (tnode.op == "constType") {
             let c = this.createType(tnode.rhs, scope, isParameter);
+            if (this.isSafePointer(c)) {
+                let ptr = RestrictedType.strip(c) as PointerType;
+                ptr.elementType = this.makeConst(ptr.elementType, tnode.loc);
+                return c;
+            } else if (this.isInterface(c)) {
+                // TODO
+            } else if (this.isSlice(c)) {
+                let ptr = RestrictedType.strip(c) as SliceType;
+                ptr.arrayType = this.makeConst(ptr.arrayType, tnode.loc) as RestrictedType;
+            }
+            // TODO: Map
             return this.makeConst(c, tnode.loc)
         } else if (tnode.op == "weakType") {
             let c = this.createType(tnode.rhs, scope, isParameter);
@@ -4641,20 +4651,18 @@ export class TypeChecker {
                 return this.checkTypeEquality(a.extendsInterfaces[0], b.extendsInterfaces[0], loc, false);
             }
         } else if (a instanceof InterfaceType && b instanceof InterfaceType && !a.isBoxedType() && !b.isBoxedType()) {
-            if (!!a.pointerScope == !!b.pointerScope) {
-                let m1 = a.getAllMethods();
-                let m2 = b.getAllMethods();
-                if (m1.size == m2.size) {
-                    let ok = true;
-                    for(let entry of m1.entries()) {
-                        if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
-                            ok = false;
-                            break;
-                        }
+            let m1 = a.getAllMethods();
+            let m2 = b.getAllMethods();
+            if (m1.size == m2.size) {
+                let ok = true;
+                for(let entry of m1.entries()) {
+                    if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
+                        ok = false;
+                        break;
                     }
-                    if (ok) {
-                        return true;
-                    }
+                }
+                if (ok) {
+                    return true;
                 }
             }
         }
