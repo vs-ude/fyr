@@ -330,6 +330,7 @@ export class InterfaceType extends Type {
         return null;
     }
 
+    public mode: PointerMode = "default";
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -461,8 +462,6 @@ export class FunctionType extends Type {
                 let r = "";
                 if (this.objectTypeIsConst) {
                     r = "const ";
-                } else if (this.objectTypeIsFrozen) {
-                    r = "frozen ";
                 }
                 return r + this.objectType.toString() + "." + this.name;
             }
@@ -512,7 +511,6 @@ export class FunctionType extends Type {
     public parameters: Array<FunctionParameter>;
     public callingConvention: CallingConvention = "fyr";
     public objectType: Type;
-    public objectTypeIsFrozen: boolean = false;
     public objectTypeIsConst: boolean = false;
     // Only used when the callingConvention is "system"
     public systemCallType: number;
@@ -764,9 +762,23 @@ export class MapType extends Type {
 }
 
 export class Box {
-    bound: boolean;
-    joinedBox: Box;
-    name: string;
+    /**
+     * bound is not-true if the lifetime of the group is (yet) unbound, i.e.
+     * the entire group currently lives on the heap and the group is owned by
+     * a pointer on the stack.
+     */
+    public bound: boolean;
+    /**
+     * joinedBox pointing to 'this' means that the group has not yet joined any other box.
+     * So it can either join another box or stay a box by itself.
+     */
+    public joinedBox: Box;
+    public name: string;
+    /**
+     * scope is not null for variables which are located on the stack.
+     */
+    scope: Scope | null;
+    private _isFrozen: boolean;
 
     public canonical(): Box {
         let t: Box = this;
@@ -792,70 +804,19 @@ export class Box {
         }
         return true;
     }
-}
 
-export class Group {
-    name: string;
-    /**
-     * scope is not null for variables which are located on the stack.
-     */
-    scope: Scope | null;
-    /**
-     * bound is not-true if the lifetime of the group is (yet) unbound, i.e.
-     * the entire group currently lives on the heap and the group is owned by
-     * a pointer on the stack.
-     */
-    bound: boolean;
-    /**
-     * joinedGroup is set if two groups are joined.
-     * Following the joinedGroup leads to the canonical group object.
-     */
-    joinedGroup: Group;
-    /**
-     * joinedBox pointing to 'this' means that the group has not yet joined any other box.
-     * So it can either join another box or stay a box by itself.
-     */
-    joinedBox: Box;
-
-    public canonical(): Group {
-        let t: Group = this;
-        while (t.joinedGroup) {
-            t = t.joinedGroup;
-        }
-        return t;
+    public isFrozen(): boolean {
+        return this.canonical()._isFrozen;
     }
 
-    public join(group: Group): boolean {
-        let g1 = this.canonical();
-        let g2 = group.canonical();
-        let b1 = g1.box();
-        let b2 = g2.box();
-        if (!b1.join(b2)) {
-            return false;
-        }
-        g2.joinedGroup = g1;
-        return true;
-    }
-
-    public joinBox(box: Box): boolean {
-        let c = this.canonical();
-        if (c.joinedBox && c.joinedBox != box) {
-            return false;
-        }
-        c.joinedBox = box;
-        return true;
-    }
-
-    public box(): Box {        
-        return this.canonical().joinedBox.canonical();
+    public freeze(): void {
+        this.canonical()._isFrozen = true;
     }
 }
-
 
 export type Restrictions = {
-    isConst: boolean;
-    isFrozen: boolean;
-    group: Group;
+    isConst?: boolean;
+    box?: Box;
 }
 
 export function combineRestrictions(r1: Restrictions, r2: Restrictions): Restrictions {
@@ -867,8 +828,7 @@ export function combineRestrictions(r1: Restrictions, r2: Restrictions): Restric
     }
     return {
         isConst: r1.isConst || r2.isConst,
-        isFrozen: r1.isFrozen || r2.isFrozen,
-        group: r1.group ? r1.group : r2.group
+        box: r1.box ? r1.box : r2.box
     };
 }
 
@@ -879,12 +839,10 @@ export class RestrictedType extends Type {
         this.elementType = elementType;
         if (r) {
             this.isConst = r.isConst;
-            this.isFrozen = r.isFrozen;
-            this.group = r.group;
+            this.box = r.box;
         } else {
             this.isConst = false;
-            this.isFrozen = false;
-            this.group = null;
+            this.box = null;
         }
     }
 
@@ -939,9 +897,6 @@ export class RestrictedType extends Type {
         if (this.isConst) {
             str += "const ";
         }
-        if (this.isFrozen) {
-            str += "frozen ";
-        }
         return str + this.elementType.toString();
     }
 
@@ -950,19 +905,15 @@ export class RestrictedType extends Type {
         if (this.isConst) {
             str += "const ";
         }
-        if (this.isFrozen) {
-            str += "frozen ";
-        }
         return str + this.elementType.toString();
     }
     
     public elementType: Type;
-    public isConst: boolean;
-    public isFrozen: boolean;
-    public group: Group;
+    public isConst?: boolean;
+    public box?: Box;
 }
 
-export type PointerMode = "default" | "group" | "box" | "weakGroup";
+export type PointerMode = "default" | "weak" | "reference";
 
 export class ArrayType extends Type {
     constructor(elementType: Type, size: number) {
@@ -1256,7 +1207,9 @@ export class TypeChecker {
         this.t_uint32 = new BasicType("uint32");
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
-        this.t_string = new RestrictedType(new SliceType(new ArrayType(this.t_byte, -1), "default"), {isFrozen: true, isConst: true, group: null});
+        let b = new Box();
+        b.freeze();        
+        this.t_string = new RestrictedType(new SliceType(new ArrayType(this.t_byte, -1), "default"), {isConst: true, box: b});
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
         
@@ -1267,7 +1220,6 @@ export class TypeChecker {
         toError.returnType = this.t_string;
         toError.objectType = this.t_error;
         toError.objectTypeIsConst = true;
-        toError.objectTypeIsFrozen = true;
         this.t_error.methods.set("toError", toError);
         this.ifaces.push(this.t_error);
 
@@ -1281,7 +1233,7 @@ export class TypeChecker {
         this.builtin_cap.name = "cap";
         this.builtin_cap.returnType = this.t_int;
 
-        this.globalGroup = new Group();
+        this.globalBox = new Box();
     }
 
     public createScope(): Scope {
@@ -1308,7 +1260,7 @@ export class TypeChecker {
         return s;
     }
 
-    public createType(tnode: Node, scope: Scope, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
+    public createType(tnode: Node, scope: Scope, boxes?: Map<string, Box>): Type {
         if (tnode.op == "basicType") {
             if (tnode.nspace) {
                 let p = scope.resolveType(tnode.nspace);
@@ -1321,35 +1273,43 @@ export class TypeChecker {
             if (!t) {
                 throw new TypeError("Unknown type " + tnode.value, tnode.loc);
             }
-            return this.makeLifetime(t, tnode, groups, boxes);
+            return t;
         } else if (tnode.op == "str") {
             let t = this.stringLiteralType(tnode.value);
-            this.checkNoLifetime(t, tnode);
             return t;
         } else if (tnode.op == "constType") {
-            let c = this.createType(tnode.rhs, scope, groups, boxes);
-            return this.makeLifetime(this.makeConst(c, tnode.loc), tnode, groups, boxes);
-        } else if (tnode.op == "frozenType") {
-            let c = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(this.makeFrozen(c, tnode.loc), tnode, groups, boxes);
+            let c = this.createType(tnode.rhs, scope, boxes);
+            return this.makeConst(c, tnode.loc)
         } else if (tnode.op == "weakType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(this.makeWeak(c, tnode.loc), tnode, groups, boxes);
-        } else if (tnode.op == "groupType") {
+            return this.makeWeak(c, tnode.loc);
+        } else if (tnode.op == "referenceType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(this.makeGroup(c, tnode.loc), tnode, groups, boxes);
+            return this.makeReference(c, tnode.loc);
         } else if (tnode.op == "boxType") {
             let c = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(this.makeBox(c, tnode.loc), tnode, groups, boxes);
+            // A named box?
+            if (tnode.parameters && tnode.parameters.length == 1) {
+                let b = tnode.parameters[0].value;
+                if (boxes.has(b)) {
+                    return this.makeBox(c, boxes.get(b), tnode.loc);
+                }
+                let box = new Box();
+                box.name = b;
+                boxes.set(box.name, box);
+                return this.makeBox(c, box, tnode.loc);
+            }
+            // An anonymous box
+            return this.makeBox(c, new Box(), tnode.loc);
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(new PointerType(t, "default"), tnode, groups, boxes);
+            return new PointerType(t, "default");
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(new UnsafePointerType(t), tnode, groups, boxes);
+            return new UnsafePointerType(t);
         } else if (tnode.op == "sliceType") {
             let t = this.createType(tnode.rhs, scope);
-            return this.makeLifetime(new SliceType(new ArrayType(t, -1), "default"), tnode, groups, boxes);
+            return new SliceType(new ArrayType(t, -1), "default");
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
             for(let p of tnode.parameters) {
@@ -1357,15 +1317,14 @@ export class TypeChecker {
                 types.push(pt);
             }
             let t = new TupleType(types);
-            return this.makeLifetime(t, tnode, groups, boxes);
+            return t;
         } else if (tnode.op == "arrayType") {
             this.checkExpression(tnode.lhs, scope);
             if (tnode.lhs.op != "int") {
                 throw new TypeError("Expected a constant number for array size", tnode.lhs.loc);
             }
             // TODO: Check range before parseInt
-            let t = new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
-            return this.makeLifetime(t, tnode, groups, boxes);
+            return new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
         } else if (tnode.op == "funcType" || tnode.op == "asyncFuncType") {
             let t = new FunctionType();
             if (tnode.op == "asyncFuncType") {
@@ -1392,7 +1351,7 @@ export class TypeChecker {
             } else {
                 t.returnType = this.t_void;
             }
-            return this.makeLifetime(t, tnode, groups, boxes);
+            return t;
         } else if (tnode.op == "genericType" && tnode.lhs.op == "id" && tnode.lhs.value == "map") {
             if (tnode.genericParameters.length != 2) {
                 throw new TypeError("Supplied type arguments do not match signature of map", tnode.loc);
@@ -1418,37 +1377,37 @@ export class TypeChecker {
                 let t = this.createType(tnode.genericParameters[i], scope);
                 types.push(t);
             }
-            return this.makeLifetime(this.instantiateTemplateType(baset, types, tnode.loc), tnode, groups, boxes);
+            return this.instantiateTemplateType(baset, types, tnode.loc);
         } else if (tnode.op == "orType") {
-            return this.createOrType(tnode, scope, null, groups, boxes);
+            return this.createOrType(tnode, scope, null, boxes);
         } else if (tnode.op == "andType") {
-            return this.createInterfaceType(tnode, scope, null, groups, boxes);
+            return this.createInterfaceType(tnode, scope, null, boxes);
         } else if (tnode.op == "structType") {
-            return this.createStructType(tnode, scope, null, groups, boxes);
+            return this.createStructType(tnode, scope, null, boxes);
         } else if (tnode.op == "interfaceType") {
-            return this.createInterfaceType(tnode, scope, null, groups, boxes);
+            return this.createInterfaceType(tnode, scope, null, boxes);
         }
         throw "Implementation error for type " + tnode.op
     }
 
-    private createOrType(tnode: Node, scope: Scope, t?: OrType, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
+    private createOrType(tnode: Node, scope: Scope, t?: OrType, boxes?: Map<string, Box>): Type {
         // TODO: Avoid double entries
         if (!t) {
             t = new OrType();
         }
         for(let i = 0; i < tnode.parameters.length; i++) {
             let pnode = tnode.parameters[i];
-            let pt = this.createType(pnode, scope);
+            let pt = this.createType(pnode, scope, boxes);
             if (pt instanceof OrType) {
                 t.types = t.types.concat(pt.types);
             } else {
                 t.types.push(pt);
             }
         }
-        return this.makeLifetime(t, tnode, groups, boxes);
+        return t;
     }
 
-    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
+    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, boxes?: Map<string, Box>): Type {
         if (!iface) {
             iface = new InterfaceType();
             iface.loc = tnode.loc;
@@ -1459,22 +1418,22 @@ export class TypeChecker {
         if (tnode.op == "andType") {
             for(let i = 0; i < tnode.parameters.length; i++) {
                 let pnode = tnode.parameters[i];
-                let pt = this.createType(pnode, scope);
+                let pt = this.createType(pnode, scope, boxes);
                 if (!(pt instanceof InterfaceType)) {
                     throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
                 }
                 iface.extendsInterfaces.push(pt);
             }
-            return this.makeLifetime(iface, tnode, groups, boxes);
+            return iface;
         }
 
         if (tnode.parameters.length == 1 && tnode.parameters[0].op == "extends") {
-            let t = this.createType(tnode.parameters[0].rhs, scope);
-            return this.makeLifetime(this.createBoxedInterface(t, tnode.parameters[0].rhs.loc, iface), tnode, groups, boxes);
+            let t = this.createType(tnode.parameters[0].rhs, scope, boxes);
+            return this.createBoxedInterface(t, tnode.parameters[0].rhs.loc, iface);
         }
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
-                let t = this.createType(mnode.rhs, scope);
+                let t = this.createType(mnode.rhs, scope, boxes);
                 if (!(t instanceof InterfaceType)) {
                     throw new TypeError(t.toString() + " is not an interface", mnode.loc);
                 }
@@ -1488,7 +1447,7 @@ export class TypeChecker {
                 if (iface.isBoxedType()) {
                     throw new TypeError("Boxed types cannot have functions", mnode.loc);
                 }
-                let ft = this.createType(mnode, scope) as FunctionType;
+                let ft = this.createType(mnode, scope, boxes) as FunctionType;
                 ft.name = mnode.name.value;
                 if (iface.methods.has(ft.name)) {
                     throw new TypeError("Duplicate member name " + ft.name, mnode.loc);
@@ -1497,9 +1456,7 @@ export class TypeChecker {
                 ft.objectType = iface;
                 if (mnode.lhs) {
                     if (mnode.lhs.op == "constType") {
-                        ft.objectType = new RestrictedType(ft.objectType, {isConst: true, isFrozen: false, group: null});
-                    } else if (mnode.lhs.op == "frozenType") {
-                        ft.objectType = new RestrictedType(ft.objectType, {isConst: true, isFrozen: true, group: null});
+                        ft.objectType = new RestrictedType(ft.objectType, {isConst: true, box: null});
                     } else {
                         throw "Implementation error";
                     }
@@ -1508,7 +1465,7 @@ export class TypeChecker {
                 throw "Implementation error " + mnode.op + " " + iface.name;
             }
         }
-        return this.makeLifetime(iface, tnode, groups, boxes);
+        return iface;
     }
 
     private checkInterfaceType(iface: InterfaceType) {
@@ -1559,7 +1516,7 @@ export class TypeChecker {
         }
     }
 
-    private createStructType(tnode: Node, scope: Scope, s?: StructType, groups?: Map<string, Group>, boxes?: Map<string, Box>): Type {
+    private createStructType(tnode: Node, scope: Scope, s?: StructType, boxes?: Map<string, Box>): Type {
         if (!s) {
             s = new StructType();
             s.loc = tnode.loc;
@@ -1568,7 +1525,7 @@ export class TypeChecker {
                 
         for(let fnode of tnode.parameters) {
             if (fnode.op == "extends") {
-                let ext: Type = this.createType(fnode.rhs, scope);
+                let ext: Type = this.createType(fnode.rhs, scope, boxes);
                 if (!(ext instanceof StructType)) {
                     throw new TypeError("Struct can only extend another struct", tnode.lhs.loc);
                 }
@@ -1586,7 +1543,7 @@ export class TypeChecker {
                 f.type = s.extends;
                 s.fields.unshift(f);
             } else if (fnode.op == "implements") {
-                let ext: Type = this.createType(fnode.rhs, scope);
+                let ext: Type = this.createType(fnode.rhs, scope, boxes);
                 if (!(ext instanceof InterfaceType)) {
                     throw new TypeError(ext.toString() + " is not an interface type", tnode.rhs.loc);
                 }
@@ -1605,7 +1562,7 @@ export class TypeChecker {
             }
         }
 
-        return this.makeLifetime(s, tnode, groups, boxes);
+        return s;
     }
 
     public checkStructType(s: StructType) {
@@ -1909,10 +1866,6 @@ export class TypeChecker {
                 objectTypeIsConst = true;
                 obj = obj.rhs;
             }
-            if (obj.op == "frozenType") {
-                objectTypeIsFrozen = true;
-                obj = obj.rhs;
-            }
             objectType = this.createType(obj, parentScope);
         }
         let f: Function | TemplateFunction;
@@ -1971,7 +1924,6 @@ export class TypeChecker {
         // A member function?
         if (objectType) {
             f.type.objectTypeIsConst = objectTypeIsConst;
-            f.type.objectTypeIsFrozen = objectTypeIsFrozen;
             f.type.objectType = objectType;
             if (!this.isStruct(f.type.objectType)) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);                
@@ -1988,7 +1940,6 @@ export class TypeChecker {
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
-            let groups = new Map<string, Group>();
             let boxes = new Map<string, Box>();
             for(let pnode of fnode.parameters) {
                 let original_pnode = pnode;
@@ -2003,7 +1954,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope.parent, groups, boxes);
+                p.type = this.createType(pnode, f.scope.parent, boxes);
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -2404,7 +2355,7 @@ export class TypeChecker {
 
     // TODO: Remove isConst
     public checkVarAssignment(isConst: boolean, scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
-        // TODO: const and frozen and lifetime are not handled properly here
+        // TODO: const and box are not handled properly here
         if (vnode.op == "id" || vnode.op == "optionalId") {
             let v = this.createVar(vnode, scope, false, isConst);
             if (!v.type) {
@@ -2448,7 +2399,7 @@ export class TypeChecker {
                     if (!v.type) {
                         v.type = new TupleType(rtypeStripped.types.slice(i));
                         if (isConst) {
-                            v.type = new RestrictedType(v.type, {isConst: true, isFrozen: false, group: null});
+                            v.type = new RestrictedType(v.type, {isConst: true, box: null});
                         }
                     } else {
                         let lt = RestrictedType.strip(v.type);
@@ -2650,7 +2601,7 @@ export class TypeChecker {
     }
 
     public checkAssignment(scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
-        // TODO: const and frozen and lifetime are not handled properly here
+        // TODO: const and box are not handled properly here
         let rtypeStripped = RestrictedType.strip(rtype);
         if (vnode.op == "tuple") {
             if (!(rtypeStripped instanceof TupleType) && !(rtypeStripped instanceof TupleLiteralType)) {
@@ -3399,11 +3350,9 @@ export class TypeChecker {
             {
                 this.checkExpression(enode.lhs, scope);
                 let isConst = this.isConst(enode.lhs.type);
-                let isFrozen = this.isFrozen(enode.lhs.type);
                 let type: Type = this.stripType(enode.lhs.type);
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
                     isConst = isConst || this.isConst(type.elementType);
-                    isFrozen = this.isFrozen(type.elementType);
                     type = this.stripType(type.elementType);
                 }
                 if (type instanceof StructType) {
@@ -3414,19 +3363,13 @@ export class TypeChecker {
                         if (isConst) {
                             enode.type = this.makeConst(enode.type, enode.loc);
                         }
-                        if (isFrozen) {
-                            enode.type = this.makeFrozen(enode.type, enode.loc);
-                        }
                     } else {
                         let method = type.method(name);
                         if (!method) {
                             throw new TypeError("Unknown field or method " + name + " in " + type.toString(), enode.name.loc);
                         }
-                        if (isConst && !method.objectTypeIsConst && !method.objectTypeIsFrozen) {
+                        if (isConst && !method.objectTypeIsConst) {
                             throw new TypeError("Method " + name + " is not const", enode.loc);
-                        }
-                        if (isFrozen && !method.objectTypeIsFrozen) {
-                            throw new TypeError("Method " + name + " is not frozen", enode.loc);
                         }
                         enode.type = method;
                     }
@@ -3436,10 +3379,7 @@ export class TypeChecker {
                     if (!method) {
                         throw new TypeError("Unknown method " + name + " in " + type.toString(), enode.name.loc);
                     }
-                    if (isConst && !method.objectTypeIsConst && !method.objectTypeIsFrozen) {
-                        throw new TypeError("Method " + name + " is not const", enode.loc);
-                    }
-                    if (isFrozen && !method.objectTypeIsFrozen) {
+                    if (isConst && !method.objectTypeIsConst) {
                         throw new TypeError("Method " + name + " is not const", enode.loc);
                     }
                     enode.type = method;
@@ -3484,7 +3424,6 @@ export class TypeChecker {
                     throw new TypeError("Index out of range", enode.rhs.loc);
                 }
                 let isConst = this.isConst(enode.lhs.type);
-                let isFrozen = this.isFrozen(enode.lhs.type);
                 let t: Type = this.stripType(enode.lhs.type);
                 let elementType = this.checkIsIndexable(enode.lhs, index1);
                 if (t instanceof ArrayType) {
@@ -3492,17 +3431,9 @@ export class TypeChecker {
                     this.checkIsIndexable(enode.lhs, index2, true);
                     // TODO: Group of the slice
                     enode.type = new SliceType(t, "default");
-                    if (isFrozen) {
-                        enode.type = this.makeFrozen(enode.type, enode.loc);
-                    } else if (isConst) {
-                        enode.type = this.makeConst(enode.type, enode.loc);
-                    }
                 } else if (t instanceof UnsafePointerType) {
-                    // TODO: Group of the slice
                     enode.type = new SliceType(new ArrayType(elementType, -1), "default");
-                    if (isFrozen) {
-                        enode.type = this.makeFrozen(enode.type, enode.loc);
-                    } else if (isConst) {
+                    if (isConst) {
                         enode.type = this.makeConst(enode.type, enode.loc);
                     }
                 } else if (t instanceof MapType) {
@@ -3518,7 +3449,6 @@ export class TypeChecker {
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let isConst = this.isConst(enode.lhs.type);
-                let isFrozen = this.isFrozen(enode.lhs.type);
                 let t: Type = this.stripType(enode.lhs.type);
                 if (t instanceof TupleType) {
                     this.checkIsIntNumber(enode.rhs);
@@ -3548,9 +3478,7 @@ export class TypeChecker {
                 } else {
                     throw new TypeError("[] operator is not allowed on " + enode.lhs.type.toString(), enode.loc);
                 }
-                if (isFrozen) {
-                    enode.type = this.makeFrozen(enode.type, enode.loc);
-                } else if (isConst) {
+                if (isConst) {
                     enode.type = this.makeConst(enode.type, enode.loc);
                 }
                 break;
@@ -4063,13 +3991,13 @@ export class TypeChecker {
     // Checks whether the type 'from' can be assigned to the type 'to'.
     public checkIsAssignableType(to: Type, from: Type, loc: Location, doThrow: boolean = true, unbox: boolean = true, isCopied: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
-            toRestrictions = {isFrozen: false, isConst: false, group: null}
+            toRestrictions = {isConst: false, box: null}
         }
         if (fromRestrictions == null) {
-            fromRestrictions = {isFrozen: false, isConst: false, group: null}
+            fromRestrictions = {isConst: false, box: null}
         }
         
-        // Determine const, frozen and group
+        // Determine const and box
         if (to instanceof RestrictedType) {
             toRestrictions = combineRestrictions(toRestrictions, to);
             to = RestrictedType.strip(to);
@@ -4095,7 +4023,6 @@ export class TypeChecker {
             }
         }
 
-        // TODO: Handle frozen here
         if (!toRestrictions.isConst && !!fromRestrictions.isConst && (!isCopied || !this.isPureValue(to))) {
             if (doThrow) {
                 throw new TypeError("Mismatch of const restriction on variables", loc);
@@ -4387,12 +4314,6 @@ export class TypeChecker {
         return result;
     }
 
-    public checkNoLifetime(t: Type, node: Node) {
-        if (node.group || node.box) {
-            throw new TypeError("Lifetime attributes are only allowed for type " + t.toString(), node.loc);
-        }
-    }
-
     public checkIsEnumerable(node: Node): [Type, Type] {
         let t = this.stripType(node.type);
         if (t instanceof MapType) {
@@ -4599,9 +4520,9 @@ export class TypeChecker {
                     }
                 }
                 if (a.objectType) {
-                    if (allowMoreRestrictions && ((a.objectTypeIsFrozen && !b.objectTypeIsFrozen) || (a.objectTypeIsConst && !b.objectTypeIsConst && !b.objectTypeIsFrozen))) {
+                    if (allowMoreRestrictions && (a.objectTypeIsConst && !b.objectTypeIsConst)) {
                         ok = false;
-                    } else if (!allowMoreRestrictions && ((a.objectTypeIsFrozen != b.objectTypeIsFrozen) || a.objectTypeIsConst != b.objectTypeIsConst)) {
+                    } else if (!allowMoreRestrictions && a.objectTypeIsConst != b.objectTypeIsConst) {
                         ok = false;
                     }
                 }
@@ -4776,6 +4697,7 @@ export class TypeChecker {
     // Returns true if a value can be assigned to this expression
     public checkIsAssignable(node: Node, scope: Scope): boolean {
         if (node.op == "id") {
+            // TODO: Not if the underlying variable is a constant
             return true;
         } else if (node.op == "unary*") {
             if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
@@ -4820,9 +4742,8 @@ export class TypeChecker {
     }
     
     public isString(t: Type): boolean {
-        let s = this.stripType(t);
         // A string is a frozen slice of bytes
-        return this.isFrozen(t) && s instanceof SliceType && s.getElementType() == this.t_byte;
+        return t instanceof RestrictedType && t.box && t.box.isFrozen && t.elementType instanceof SliceType && t.elementType.getElementType() == this.t_byte;
     }
 
     public isOrType(t: Type): boolean {
@@ -4913,24 +4834,6 @@ export class TypeChecker {
         return false;
     }
 
-    public isFrozen(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            if (t.isFrozen) {
-                return true;
-            }
-            t = t.elementType;
-        }
-        if (t instanceof InterfaceType && t.isBoxedType()) {
-            t = t.extendsInterfaces[0];
-            if (t instanceof RestrictedType) {
-                if (t.isFrozen) {
-                    return true;
-                }
-            }    
-        }
-        return false;
-    }
-
     public isIntNumber(type: Type): boolean {
         type = this.stripType(type);
         if (type == this.t_int8 || type == this.t_int16 || type == this.t_int32 || type == this.t_int64 || type == this.t_uint8 || type == this.t_uint16 || type == this.t_uint32 || type == this.t_uint64) {
@@ -5009,71 +4912,49 @@ export class TypeChecker {
             if (t.isConst) {
                 return t;
             }
-            if (this.isPrimitive(t.elementType) || this.isConst(t.elementType) || this.isFrozen(t.elementType)) {
+            if (this.isPrimitive(t.elementType) || this.isConst(t.elementType)) {
                 return t;
             }
-            return new RestrictedType(t.elementType, {isConst: true, isFrozen: false, group: t.group});
+            return new RestrictedType(t.elementType, {isConst: true, box: t.box});
         }
         if (this.isPrimitive(t)) {
             return t;
         }
-        return new RestrictedType(t, {isConst: true, group: null, isFrozen: false});
-    }
-
-    public makeFrozen(t: Type, loc: Location): Type {
-        if (t instanceof RestrictedType) {
-            if (t.isFrozen) {
-                return t;
-            }
-            if (this.isPrimitive(t.elementType) || this.isConst(t.elementType) || this.isFrozen(t.elementType)) {
-                return t;
-            }
-            return new RestrictedType(t.elementType, {isConst: true, isFrozen: true, group: t.group});
-        }
-        if (this.isPrimitive(t)) {
-            return t;
-        }
-        return new RestrictedType(t, {isConst: true, group: null, isFrozen: true});
+        return new RestrictedType(t, {isConst: true, box: null});
     }
     
     public makeWeak(t: Type, loc: Location): Type {
-        if (!this.isSafePointer(t) && !this.isSlice(t)) {
-            throw new TypeError("The keyword 'weak' can only be used on pointer and slice types", loc);
+        if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
+            throw new TypeError("The keyword 'weak' can only be used on pointers, interfaces and slices", loc);
         }
-        let p: PointerType | SliceType = RestrictedType.strip(t) as PointerType | SliceType;
+        let p = RestrictedType.strip(t) as PointerType | SliceType | InterfaceType;
         if (p.mode != "default") {
-            throw new TypeError("The keyword 'weak' must not be used together with 'group' or 'box'", loc);
+            throw new TypeError("The keyword 'weak' must not be used together with '&'", loc);
         }
-        p.mode = "weakGroup";
+        p.mode = "weak";
         return t;
     }
 
-    public makeGroup(t: Type, loc: Location): Type {
-        if (!this.isSafePointer(t) && !this.isSlice(t)) {
-            throw new TypeError("The keyword 'group' can only be used on pointer and slice types", loc);
+    public makeReference(t: Type, loc: Location): Type {
+        if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
+            throw new TypeError("The operator '&' can only be used on pointers, interfaces and slices", loc);
         }
-        let p: PointerType | SliceType = RestrictedType.strip(t) as PointerType | SliceType;
+        let p = RestrictedType.strip(t) as PointerType | SliceType | InterfaceType;
         if (p.mode != "default") {
-            throw new TypeError("The keyword 'group' must not be used together with 'weak' or 'box'", loc);
+            throw new TypeError("The operator '&' must not be used together with 'weak'", loc);
         }
-        p.mode = "group";
+        p.mode = "reference";
         return t;
     }
 
-    public makeBox(t: Type, loc: Location): Type {
-        if (!this.isSafePointer(t) && !this.isSlice(t)) {
-            throw new TypeError("The keyword 'box' can only be used on pointer and slice types", loc);
+    public makeBox(t: Type, box: Box, loc: Location): Type {
+        if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
+            throw new TypeError("The keyword 'box' can only be used on pointers, interfaces and slices", loc);
         }
-        let p: PointerType | SliceType = RestrictedType.strip(t) as PointerType | SliceType;
-        if (p.mode != "default") {
-            throw new TypeError("The keyword 'box' must not be used together with 'group' or 'weak'", loc);
+        if (t instanceof RestrictedType) {
+            return new RestrictedType(t.elementType, {isConst: t.isConst, box: box});
         }
-        p.mode = "box";
-        return t;
-    }
-
-    public makeLifetime(t: Type, tnode: Node, groups: Map<string, Group>, boxes: Map<string, Box>): Type {
-        throw "TODO";
+        return new RestrictedType(t, {isConst: false, box: box});
     }
 
     public pointerElementType(t: Type): Type {
@@ -5184,7 +5065,7 @@ export class TypeChecker {
 //    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
 
-    private globalGroup: Group;
+    private globalBox: Box;
 }
 
 export class TypeError {

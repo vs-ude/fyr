@@ -171,19 +171,8 @@ genericTypeList
     }
 
 type
-  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* l:([ \t]* "~" [ \t]* identifier ([ \t]* "/" [ \t]* identifier)?)? {
-      let group = null;
-      let box = null;
-      if (l && l[4]) {
-          box = l[3];
-          group = l[4][3];
-      } else {
-          group = l[3];
-      }
-
+  = t:(andType / string) r:([ \t]* "|" [ \t]* (andType / string))* {
       if (!r || r.length == 0) {
-          t.box = box;
-          t.group = group;
           return t;
       }
 
@@ -191,7 +180,7 @@ type
       for(let x of r) {
           result.push(x[3]);
       }
-      return new ast.Node({loc: fl(location()), op: "orType", parameters: result, group: group, box: box});
+      return new ast.Node({loc: fl(location()), op: "orType", parameters: result});
     }
 
 andType
@@ -207,19 +196,11 @@ andType
     }
 
 primitiveType
-  = "[" [ \t]* e:expression? l:([ \t]* "~" [ \t]* identifier ([ \t]* "/" [ \t]* identifier)?)? "]" [ \t]* t:type {
-      let group = null;
-      let box = null;
-      if (l && l[4]) {
-          box = l[3];
-          group = l[4][3];
-      } else {
-          group = l[3];
-      }
+  = "[" [ \t]* e:expression? "]" [ \t]* t:type {
       if (e) {
-          return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e, box: box, group: group})
+          return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
       }
-      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, box: box, group: group})
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t})
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
       if (t.length == 1) {
@@ -239,23 +220,20 @@ primitiveType
   / "#" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "unsafePointerType", rhs: t});
     }
+  / "&" [ \t]* t:primitiveType {
+      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
+    }
   / "struct" [ \t]* "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
         return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : []});
     }
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
     }
-  / "group" [ \t]+ t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "groupType", rhs: t})
-    }
-  / "frozen" [ \t]+ t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "frozenType", rhs: t})
-    }
   / "weak" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "weakType", rhs: t})
     }
-  / "box" [ \t]+ t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "boxType", rhs: t})
+  / "box" n:([ \t]* "(" [ \t]* identifier [ \t]* ")" )? [ \t]+ t:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
     }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
