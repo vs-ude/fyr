@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ c:(("const" / "frozen") [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* n2:("." [ \t]* identifier)? [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ obj:((primitiveType [ \t]* "." [ \t]* identifier) / identifier) [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -92,18 +92,12 @@ func
           }
       }
       let scope = undefined;
-      if (n2) {
-          scope = name;
-          name = n2[2];
-          scope.op = "basicType";
-          if (v) {
-              scope = new ast.Node({loc: scope.loc, op: "referenceType", rhs: scope});
-          }
-          if (c) {
-              scope = new ast.Node({loc: scope.loc, op: c[0][0] == "const" ? "constType" : "frozenType", rhs: scope});
-          }
-      } else if (c || v) {
-          error("'const' is only allowed for member functions");
+      let name = undefined;
+      if (obj.op == "id") {
+          name = obj;
+      } else {
+          scope = obj[0];
+          name = obj[4];
       }      
       let op = ex ? "export_func" : "func";
       if (async) {
