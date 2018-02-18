@@ -1305,7 +1305,7 @@ export class CodeGenerator {
 
     private createInterfaceTable(scope: Scope, s: StructType): number {
         let methods = new Map<string, number>();
-        let t = new PointerType(s, "default");
+        let t = new PointerType(s, "strong");
         let offset = this.interfaceTableLength;
         let minOffset = 0xffffff;
         let maxOffset = -1;

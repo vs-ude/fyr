@@ -52,6 +52,7 @@ export class Function implements ScopeElement {
     constructor() {
         this.scope = new Scope(null);
         this.scope.func = this;
+        this.box = new Box();
     }
 
     public get isImported(): boolean {
@@ -63,6 +64,7 @@ export class Function implements ScopeElement {
     public namedReturnTypes: boolean;
     // The scope containing FunctionParameters and local Variables of the function.
     public scope: Scope;
+    public box: Box;
     public node: Node;
     public loc: Location;
     public importFromModule: string;
@@ -119,6 +121,7 @@ export class Scope {
         this.parent = parent;
         this.elements = new Map<string, ScopeElement>();
         this.types = new Map<string, Type>();
+        this.boxes = new Map<string, Box>();
     }
 
     public resolveElement(name: string): ScopeElement {
@@ -171,6 +174,30 @@ export class Scope {
         this.elements.set(name, element);
     }
 
+    public registerBox(name: string, box: Box, loc: Location): void {
+        if (this.boxes.has(name)) {
+            throw "Implementation error";
+        }
+        this.boxes.set(name, box);
+    }
+
+    public lookupBox(name: string): Box {
+        if (this.boxes.has(name)) {
+            return this.boxes.get(name);
+        }
+        if (this.parent && !this.func) {
+            return this.parent.lookupBox(name);
+        }
+        return null;
+    }
+
+    public boxOf(t: Type): Box {
+        if (t instanceof RestrictedType && t.box) {
+            return t.box;
+        }
+        return this.envelopingFunction().box;
+    }
+
     public envelopingFunction(): Function {
         if (this.func) {
             return this.func;
@@ -181,6 +208,7 @@ export class Scope {
         return null;
     }
 
+    // TODO: If in closure, stop at function boundary?
     public isInForLoop(): boolean {
         if (this.forLoop) {
             return true;
@@ -205,6 +233,7 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
+    public boxes: Map<string, Box>;
     public parent: Scope | null = null;
 }
 
@@ -330,7 +359,7 @@ export class InterfaceType extends Type {
         return null;
     }
 
-    public mode: PointerMode = "default";
+    public mode: PointerMode = "strong";
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -699,14 +728,14 @@ export class PointerType extends Type {
         if (this.name) {
             return this.name;
         }
-        if (this.mode != "default") {
+        if (this.mode != "strong") {
             return this.mode.toString() + "*" + this.elementType.toString();    
         }
         return "*" + this.elementType.toString();
     }
 
     public toTypeCodeString(): string {
-        if (this.mode != "default") {
+        if (this.mode != "strong") {
             return this.mode.toString() + "*" + this.elementType.toString();    
         }
         return "*" + this.elementType.toString();
@@ -913,7 +942,7 @@ export class RestrictedType extends Type {
     public box?: Box;
 }
 
-export type PointerMode = "default" | "weak" | "reference";
+export type PointerMode = "strong" | "weak" | "reference";
 
 export class ArrayType extends Type {
     constructor(elementType: Type, size: number) {
@@ -1209,7 +1238,7 @@ export class TypeChecker {
         this.t_uint64 = new BasicType("uint64");
         let b = new Box();
         b.freeze();        
-        this.t_string = new RestrictedType(new SliceType(new ArrayType(this.t_byte, -1), "default"), {isConst: true, box: b});
+        this.t_string = new RestrictedType(new SliceType(new ArrayType(this.t_byte, -1), "strong"), {isConst: true, box: b});
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
         
@@ -1260,7 +1289,7 @@ export class TypeChecker {
         return s;
     }
 
-    public createType(tnode: Node, scope: Scope, boxes?: Map<string, Box>): Type {
+    public createType(tnode: Node, scope: Scope, isParameter: boolean): Type {
         if (tnode.op == "basicType") {
             if (tnode.nspace) {
                 let p = scope.resolveType(tnode.nspace);
@@ -1278,43 +1307,46 @@ export class TypeChecker {
             let t = this.stringLiteralType(tnode.value);
             return t;
         } else if (tnode.op == "constType") {
-            let c = this.createType(tnode.rhs, scope, boxes);
+            let c = this.createType(tnode.rhs, scope, isParameter);
             return this.makeConst(c, tnode.loc)
         } else if (tnode.op == "weakType") {
-            let c = this.createType(tnode.rhs, scope);
+            let c = this.createType(tnode.rhs, scope, isParameter);
             return this.makeWeak(c, tnode.loc);
         } else if (tnode.op == "referenceType") {
-            let c = this.createType(tnode.rhs, scope);
+            let c = this.createType(tnode.rhs, scope, isParameter);
             return this.makeReference(c, tnode.loc);
         } else if (tnode.op == "boxType") {
-            let c = this.createType(tnode.rhs, scope);
+            let c = this.createType(tnode.rhs, scope, isParameter);
             // A named box?
             if (tnode.parameters && tnode.parameters.length == 1) {
                 let b = tnode.parameters[0].value;
-                if (boxes.has(b)) {
-                    return this.makeBox(c, boxes.get(b), tnode.loc);
+                let box = scope.lookupBox(b);
+                if (!box) {
+                    box = new Box();
+                    box.name = b;
+                    box.bound = isParameter;
+                    if (this.isConst(c)) {
+                        box.freeze();
+                    }
+                    scope.registerBox(box.name, box, tnode.loc);
                 }
-                let box = new Box();
-                box.name = b;
-                box.bound = false;
-                boxes.set(box.name, box);
                 return this.makeBox(c, box, tnode.loc);
             }
             // An anonymous box
             return this.makeBox(c, new Box(), tnode.loc);
         } else if (tnode.op == "pointerType") {
-            let t = this.createType(tnode.rhs, scope);
-            return new PointerType(t, "default");
+            let t = this.createType(tnode.rhs, scope, isParameter);
+            return new PointerType(t, "strong");
         } else if (tnode.op == "unsafePointerType") {
-            let t = this.createType(tnode.rhs, scope);
+            let t = this.createType(tnode.rhs, scope, isParameter);
             return new UnsafePointerType(t);
         } else if (tnode.op == "sliceType") {
-            let t = this.createType(tnode.rhs, scope);
-            return new SliceType(new ArrayType(t, -1), "default");
+            let t = this.createType(tnode.rhs, scope, isParameter);
+            return new SliceType(new ArrayType(t, -1), "strong");
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
             for(let p of tnode.parameters) {
-                let pt = this.createType(p, scope);
+                let pt = this.createType(p, scope, isParameter);
                 types.push(pt);
             }
             let t = new TupleType(types);
@@ -1325,7 +1357,7 @@ export class TypeChecker {
                 throw new TypeError("Expected a constant number for array size", tnode.lhs.loc);
             }
             // TODO: Check range before parseInt
-            return new ArrayType(this.createType(tnode.rhs, scope), parseInt(tnode.lhs.value));
+            return new ArrayType(this.createType(tnode.rhs, scope, isParameter), parseInt(tnode.lhs.value));
         } else if (tnode.op == "funcType" || tnode.op == "asyncFuncType") {
             let t = new FunctionType();
             if (tnode.op == "asyncFuncType") {
@@ -1339,7 +1371,7 @@ export class TypeChecker {
                         p.ellipsis = true;
                         pnode = pnode.lhs;
                     }
-                    p.type = this.createType(pnode, scope);
+                    p.type = this.createType(pnode, scope, isParameter);
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
@@ -1348,7 +1380,7 @@ export class TypeChecker {
                 }
             }
             if (tnode.rhs) {
-                t.returnType = this.createType(tnode.rhs, scope);
+                t.returnType = this.createType(tnode.rhs, scope, isParameter);
             } else {
                 t.returnType = this.t_void;
             }
@@ -1358,8 +1390,8 @@ export class TypeChecker {
                 throw new TypeError("Supplied type arguments do not match signature of map", tnode.loc);
             }
             // TODO: Allow all types in maps?
-            let k = this.createType(tnode.genericParameters[0], scope);
-            let v = this.createType(tnode.genericParameters[1], scope);
+            let k = this.createType(tnode.genericParameters[0], scope, isParameter);
+            let v = this.createType(tnode.genericParameters[1], scope, isParameter);
             if (!this.isIntNumber(k) && !this.isString(k) && !this.isPointer(k)) {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
@@ -1375,30 +1407,30 @@ export class TypeChecker {
             }
             let types: Array<Type> = [];
             for(let i = 0; i < tnode.genericParameters.length; i++) {                
-                let t = this.createType(tnode.genericParameters[i], scope);
+                let t = this.createType(tnode.genericParameters[i], scope, isParameter);
                 types.push(t);
             }
             return this.instantiateTemplateType(baset, types, tnode.loc);
         } else if (tnode.op == "orType") {
-            return this.createOrType(tnode, scope, null, boxes);
+            return this.createOrType(tnode, scope, null, isParameter);
         } else if (tnode.op == "andType") {
-            return this.createInterfaceType(tnode, scope, null, boxes);
+            return this.createInterfaceType(tnode, scope, null, isParameter);
         } else if (tnode.op == "structType") {
-            return this.createStructType(tnode, scope, null, boxes);
+            return this.createStructType(tnode, scope, null, isParameter);
         } else if (tnode.op == "interfaceType") {
-            return this.createInterfaceType(tnode, scope, null, boxes);
+            return this.createInterfaceType(tnode, scope, null, isParameter);
         }
         throw "Implementation error for type " + tnode.op
     }
 
-    private createOrType(tnode: Node, scope: Scope, t?: OrType, boxes?: Map<string, Box>): Type {
+    private createOrType(tnode: Node, scope: Scope, t?: OrType, isParameter?: boolean): Type {
         // TODO: Avoid double entries
         if (!t) {
             t = new OrType();
         }
         for(let i = 0; i < tnode.parameters.length; i++) {
             let pnode = tnode.parameters[i];
-            let pt = this.createType(pnode, scope, boxes);
+            let pt = this.createType(pnode, scope, isParameter);
             if (pt instanceof OrType) {
                 t.types = t.types.concat(pt.types);
             } else {
@@ -1408,7 +1440,7 @@ export class TypeChecker {
         return t;
     }
 
-    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, boxes?: Map<string, Box>): Type {
+    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, isParameter?: boolean): Type {
         if (!iface) {
             iface = new InterfaceType();
             iface.loc = tnode.loc;
@@ -1419,7 +1451,7 @@ export class TypeChecker {
         if (tnode.op == "andType") {
             for(let i = 0; i < tnode.parameters.length; i++) {
                 let pnode = tnode.parameters[i];
-                let pt = this.createType(pnode, scope, boxes);
+                let pt = this.createType(pnode, scope, isParameter);
                 if (!(pt instanceof InterfaceType)) {
                     throw new TypeError(pt.toString() + " is not an interface", pnode.loc);
                 }
@@ -1429,12 +1461,12 @@ export class TypeChecker {
         }
 
         if (tnode.parameters.length == 1 && tnode.parameters[0].op == "extends") {
-            let t = this.createType(tnode.parameters[0].rhs, scope, boxes);
+            let t = this.createType(tnode.parameters[0].rhs, scope, isParameter);
             return this.createBoxedInterface(t, tnode.parameters[0].rhs.loc, iface);
         }
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
-                let t = this.createType(mnode.rhs, scope, boxes);
+                let t = this.createType(mnode.rhs, scope, isParameter);
                 if (!(t instanceof InterfaceType)) {
                     throw new TypeError(t.toString() + " is not an interface", mnode.loc);
                 }
@@ -1448,7 +1480,7 @@ export class TypeChecker {
                 if (iface.isBoxedType()) {
                     throw new TypeError("Boxed types cannot have functions", mnode.loc);
                 }
-                let ft = this.createType(mnode, scope, boxes) as FunctionType;
+                let ft = this.createType(mnode, scope, isParameter) as FunctionType;
                 ft.name = mnode.name.value;
                 if (iface.methods.has(ft.name)) {
                     throw new TypeError("Duplicate member name " + ft.name, mnode.loc);
@@ -1517,7 +1549,7 @@ export class TypeChecker {
         }
     }
 
-    private createStructType(tnode: Node, scope: Scope, s?: StructType, boxes?: Map<string, Box>): Type {
+    private createStructType(tnode: Node, scope: Scope, s?: StructType, isParameter?: boolean): Type {
         if (!s) {
             s = new StructType();
             s.loc = tnode.loc;
@@ -1526,7 +1558,7 @@ export class TypeChecker {
                 
         for(let fnode of tnode.parameters) {
             if (fnode.op == "extends") {
-                let ext: Type = this.createType(fnode.rhs, scope, boxes);
+                let ext: Type = this.createType(fnode.rhs, scope, isParameter);
                 if (!(ext instanceof StructType)) {
                     throw new TypeError("Struct can only extend another struct", tnode.lhs.loc);
                 }
@@ -1544,7 +1576,7 @@ export class TypeChecker {
                 f.type = s.extends;
                 s.fields.unshift(f);
             } else if (fnode.op == "implements") {
-                let ext: Type = this.createType(fnode.rhs, scope, boxes);
+                let ext: Type = this.createType(fnode.rhs, scope, isParameter);
                 if (!(ext instanceof InterfaceType)) {
                     throw new TypeError(ext.toString() + " is not an interface type", tnode.rhs.loc);
                 }
@@ -1556,7 +1588,7 @@ export class TypeChecker {
                 // TODO: Check for duplicate names in the structs extends by this struct
                 let field = new StructField();
                 field.name = fnode.lhs.value;
-                field.type = this.createType(fnode.rhs, scope);
+                field.type = this.createType(fnode.rhs, scope, isParameter);
                 s.fields.push(field);
             } else {
                 throw "Implementation error";
@@ -1593,7 +1625,7 @@ export class TypeChecker {
             }
         }
         for(let iface of s.implements) {
-            this.checkIsAssignableType(iface, new PointerType(s, "default"), s.loc);
+            this.checkIsAssignableType(iface, new PointerType(s, "strong"), s.loc);
         }
     }
 
@@ -1666,7 +1698,7 @@ export class TypeChecker {
         let scope = new Scope(t.parentScope);
         for(let i = 0; i < t.templateParameterNames.length; i++) {
             if (t.templateParameterTypes[i]) {
-                let tp = this.createType(t.templateParameterTypes[i], scope);
+                let tp = this.createType(t.templateParameterTypes[i], scope, true);
                 if (!(tp instanceof OrType)) {
                     throw new TypeError("Template parameter type constraints must be an or'ed type", loc);
                 }
@@ -1776,7 +1808,7 @@ export class TypeChecker {
         let types: Array<Type> = [];
         for(let i = 0; i < tnode.genericParameters.length; i++) {
             let pnode = tnode.genericParameters[i];
-            let pt = this.createType(pnode, scope);
+            let pt = this.createType(pnode, scope, false);
             pnode.type = pt;
             types.push(pt);
         }
@@ -1811,7 +1843,7 @@ export class TypeChecker {
         let scope = new Scope(t.parentScope);
         for(let i = 0; i < t.templateParameterNames.length; i++) {
             if (t.templateParameterTypes[i]) {
-                let tp = this.createType(t.templateParameterTypes[i], scope);
+                let tp = this.createType(t.templateParameterTypes[i], scope, true);
                 if (!(tp instanceof OrType)) {
                     throw new TypeError("Template parameter type constraints must be an or'ed type", loc);
                 }
@@ -1858,16 +1890,9 @@ export class TypeChecker {
             throw new TypeError("Function must be named", fnode.loc);
         }
         let objectType: Type;
-        let objectTypeIsConst = false;
-        let objectTypeIsFrozen = false;
         // A member function?
         if (fnode.lhs) {
-            let obj = fnode.lhs;
-            if (obj.op == "constType") {
-                objectTypeIsConst = true;
-                obj = obj.rhs;
-            }
-            objectType = this.createType(obj, parentScope);
+            objectType = this.createType(fnode.lhs, parentScope, true);
         }
         let f: Function | TemplateFunction;
         if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
@@ -1924,7 +1949,6 @@ export class TypeChecker {
         }
         // A member function?
         if (objectType) {
-            f.type.objectTypeIsConst = objectTypeIsConst;
             f.type.objectType = objectType;
             if (!this.isStruct(f.type.objectType)) {
                 throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);                
@@ -1934,9 +1958,9 @@ export class TypeChecker {
             p.loc = fnode.lhs.loc;
             p.isConst = true;
             if (f.type.objectType instanceof RestrictedType) {
-                p.type = new RestrictedType(new PointerType(f.type.objectType.elementType, "default"), f.type.objectType);
+                p.type = new RestrictedType(new PointerType(f.type.objectType.elementType, "strong"), f.type.objectType);
             } else {
-                p.type = new PointerType(f.type.objectType, "default");
+                p.type = new PointerType(f.type.objectType, "strong");
             }
             f.scope.registerElement("this", p);
         }
@@ -1955,7 +1979,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope.parent, boxes);
+                p.type = this.createType(pnode, f.scope.parent, true);
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -1966,7 +1990,7 @@ export class TypeChecker {
         }
         // A return type?
         if (fnode.rhs) {
-            f.type.returnType = this.createType(fnode.rhs, f.scope);
+            f.type.returnType = this.createType(fnode.rhs, f.scope, false);
             if (fnode.rhs.op == "tupleType") {
                 for(let i = 0; i < fnode.rhs.parameters.length; i++) {
                     let pnode = fnode.rhs.parameters[i];
@@ -2020,7 +2044,7 @@ export class TypeChecker {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
-            v.type = this.createType(vnode.rhs, scope);
+            v.type = this.createType(vnode.rhs, scope, false);
 //            if (isConst) {
 //                v.type = this.makeConst(v.type, vnode.loc);
 //            }
@@ -2179,14 +2203,14 @@ export class TypeChecker {
                 let p = new FunctionParameter();
                 p.name = "p" + i.toString();
                 i++;
-                p.type = this.createType(pnode, f.scope);
+                p.type = this.createType(pnode, f.scope, true);
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
             }
         }
         if (fnode.rhs) {
-            f.type.returnType = this.createType(fnode.rhs, f.scope);
+            f.type.returnType = this.createType(fnode.rhs, f.scope, false);
             if (fnode.rhs.op == "tupleType") {
                 for(let i = 0; i < fnode.rhs.parameters.length; i++) {
                     let pnode = fnode.rhs.parameters[i];
@@ -3130,7 +3154,7 @@ export class TypeChecker {
             {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsAddressable(enode.rhs, scope, true, true);
-                enode.type = new PointerType(enode.rhs.type, "default"); 
+                enode.type = new PointerType(enode.rhs.type, "reference"); 
                 break;
             }
             case "+":                                             
@@ -3430,10 +3454,9 @@ export class TypeChecker {
                 if (t instanceof ArrayType) {
                     this.checkIsAddressable(enode.lhs, scope, false);
                     this.checkIsIndexable(enode.lhs, index2, true);
-                    // TODO: Group of the slice
-                    enode.type = new SliceType(t, "default");
+                    enode.type = new SliceType(t, "strong");
                 } else if (t instanceof UnsafePointerType) {
-                    enode.type = new SliceType(new ArrayType(elementType, -1), "default");
+                    enode.type = new SliceType(new ArrayType(elementType, -1), "strong");
                     if (isConst) {
                         enode.type = this.makeConst(enode.type, enode.loc);
                     }
@@ -3542,7 +3565,7 @@ export class TypeChecker {
                 let t = new TupleLiteralType(types);
                 enode.type = t;
                 if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope);
+                    let ct = this.createType(enode.lhs, scope, false);
                     this.unifyLiterals(ct, enode, enode.loc);
                 }
                 break;
@@ -3556,7 +3579,7 @@ export class TypeChecker {
                 let t = new ArrayLiteralType(types);
                 enode.type = t;
                 if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope);
+                    let ct = this.createType(enode.lhs, scope, false);
                     this.unifyLiterals(ct, enode, enode.loc);
                 }
                 break;
@@ -3573,7 +3596,7 @@ export class TypeChecker {
                 let t = new ObjectLiteralType(types);
                 enode.type = t;
                 if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope);
+                    let ct = this.createType(enode.lhs, scope, false);
                     this.unifyLiterals(ct, enode, enode.loc);
                 }
                 break;
@@ -3603,7 +3626,7 @@ export class TypeChecker {
                                 throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                             }
                         }
-                        p.type = this.createType(pnode, enode.scope);
+                        p.type = this.createType(pnode, enode.scope, true);
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                         }
@@ -3613,7 +3636,7 @@ export class TypeChecker {
                     }
                 }
                 if (enode.lhs) {
-                    f.type.returnType = this.createType(enode.lhs, f.scope);
+                    f.type.returnType = this.createType(enode.lhs, f.scope, false);
                     if (enode.lhs.op == "tupleType") {
                         for(let i = 0; i < enode.lhs.parameters.length; i++) {
                             let pnode = enode.lhs.parameters[i];
@@ -3646,7 +3669,7 @@ export class TypeChecker {
             case "is":
             {
                 this.checkExpression(enode.lhs, scope);
-                let t = this.createType(enode.rhs, scope);
+                let t = this.createType(enode.rhs, scope, false);
                 enode.rhs.type = t
                 if (this.isOrType(enode.lhs.type)) {
                     let ot = this.stripType(enode.lhs.type) as OrType;
@@ -3671,7 +3694,7 @@ export class TypeChecker {
             }
             case "typeCast":
             {
-                let t = this.createType(enode.lhs, scope);
+                let t = this.createType(enode.lhs, scope, false);
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
                 // TODO: Casts remove restrictions
@@ -3779,7 +3802,7 @@ export class TypeChecker {
                     }
                 }
                 // TODO: Set the group of this new slice to unbound
-                node.type = new SliceType(new ArrayType(t, -1), "default");
+                node.type = new SliceType(new ArrayType(t, -1), "strong");
             }
             return node.type;
         } else if (node.type instanceof TupleLiteralType) {
@@ -4296,12 +4319,12 @@ export class TypeChecker {
                 if (i != t.node.parameters.length - 1 || i != args.length - 1) {
                     throw new TypeError("Ellipsis must only appear with the last parameter", pnode.loc);
                 }
-                this.checkIsAssignableNode(this.createType(lastParameter, s), pnode.rhs, true, result);
+                this.checkIsAssignableNode(this.createType(lastParameter, s, true), pnode.rhs, true, result);
             } else {
                 if (ellipsis && i >= t.node.parameters.length - 1) {
-                    this.checkIsAssignableNode((this.createType(lastParameter, s) as SliceType).getElementType(), pnode, true, result);
+                    this.checkIsAssignableNode((this.createType(lastParameter, s, true) as SliceType).getElementType(), pnode, true, result);
                 } else {
-                    this.checkIsAssignableNode(this.createType(t.node.parameters[i], s), pnode, true, result);
+                    this.checkIsAssignableNode(this.createType(t.node.parameters[i], s, true), pnode, true, result);
                 }
             }
         }
@@ -4929,7 +4952,7 @@ export class TypeChecker {
             throw new TypeError("The keyword 'weak' can only be used on pointers, interfaces and slices", loc);
         }
         let p = RestrictedType.strip(t) as PointerType | SliceType | InterfaceType;
-        if (p.mode != "default") {
+        if (p.mode != "strong") {
             throw new TypeError("The keyword 'weak' must not be used together with '&'", loc);
         }
         p.mode = "weak";
@@ -4939,7 +4962,7 @@ export class TypeChecker {
     public makeReference(t: Type, loc: Location): Type {
         if (this.isSlice(t) || this.isInterface(t)) {
             let p = RestrictedType.strip(t) as SliceType | InterfaceType;
-            if (p.mode != "default") {
+            if (p.mode != "strong") {
                 throw new TypeError("The operator '&' must not be used together with 'weak'", loc);
             }
             p.mode = "reference";
@@ -5003,7 +5026,7 @@ export class TypeChecker {
                 ft.name = "clone";
                 ft.callingConvention = "system";
                 ft.objectType = type;
-                ft.returnType = new SliceType(new ArrayType(type.getElementType(), -1), "default");
+                ft.returnType = new SliceType(new ArrayType(type.getElementType(), -1), "strong");
                 if (this.isConst(t) && !this.isPureValue(type.getElementType())) {
                     ft.returnType = this.makeConst(ft.returnType, loc);
                 }

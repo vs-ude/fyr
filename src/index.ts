@@ -119,8 +119,8 @@ program
     .option('-G, --disable-codegen', "Do not include the standard runtime")
 
 program
-	.command('compile')
-	.description('Compile Fyr source code')
+    .command('compile')
+    .description('Compile Fyr source code')
 	.action( compileModules );
 
 program.parse(process.argv);
