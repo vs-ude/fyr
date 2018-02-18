@@ -65,22 +65,24 @@ function compileModules() {
         let tc = new typecheck.TypeChecker();
         pkg.initPackages(tc);
         let scope = tc.checkModule(mnode);
-        // Generate IR and WASM code
-        let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck, program.emitC);
-        cg.processModule(mnode);
-        if (!program.disableWasm) {
-            let wastcode = cg.getCode();
-            var input = path.resolve(args[args.length - 2]);
-            let f = path.parse(input);
-            let wastfile = f.dir + path.sep + f.name + ".wat";
-            fs.writeFileSync(wastfile, wastcode, 'utf8');
-        }
-        if (program.emitC) {
-            let code = cg.getCode();
-            var input = path.resolve(args[args.length - 2]);
-            let f = path.parse(input);
-            let cfile = f.dir + path.sep + f.name + ".c";
-            fs.writeFileSync(cfile, code, 'utf8');
+        if (!program.disableCodegen) {
+            // Generate IR and WASM code
+            let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck, program.emitC);
+            cg.processModule(mnode);
+            if (!program.disableWasm) {
+                let wastcode = cg.getCode();
+                var input = path.resolve(args[args.length - 2]);
+                let f = path.parse(input);
+                let wastfile = f.dir + path.sep + f.name + ".wat";
+                fs.writeFileSync(wastfile, wastcode, 'utf8');
+            }
+            if (program.emitC) {
+                let code = cg.getCode();
+                var input = path.resolve(args[args.length - 2]);
+                let f = path.parse(input);
+                let cfile = f.dir + path.sep + f.name + ".c";
+                fs.writeFileSync(cfile, code, 'utf8');
+            }
         }
     } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
@@ -96,7 +98,7 @@ function compileModules() {
     }
 
     // Compile Wast to Wasm
-    if (!program.disableWasm) {
+    if (!program.disableWasm && !program.disableCodegen) {
         var input = path.resolve(args[args.length - 2]);
         let f = path.parse(input);
         let wastfile = f.dir + path.sep + f.name + ".wat";
@@ -106,7 +108,7 @@ function compileModules() {
 }
 
 program
-	.version(pkgJson.version)
+	.version(pkgJson.version, '-v, --version', "Output version")
 	.usage('[options] [command] <module ...>')
     .option('-r, --emit-ir', "Emit IR code")
     .option('-f, --emit-ir-function <name>', "Emit IR code only for one function", null)
@@ -114,10 +116,11 @@ program
     .option('-N, --disable-null-check', "Do not check for null pointers")
     .option('-c, --emit-c', "Emit C code")
     .option('-T, --disable-runtime', "Do not include the standard runtime")
+    .option('-G, --disable-codegen', "Do not include the standard runtime")
 
 program
 	.command('compile')
-	.description('The fyr compiler')
+	.description('Compile Fyr source code')
 	.action( compileModules );
 
 program.parse(process.argv);

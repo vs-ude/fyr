@@ -1,7 +1,7 @@
 {
   "name": "fyr",
-  "version": "0.0.1",
-  "description": "Fyr: an experimental compiler for WebAssembly",
+  "version": "0.0.2",
+  "description": "Fyr: an experimental compiler for WebAssembly and IoT applications",
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {

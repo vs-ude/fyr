@@ -1,0 +1,47 @@
+type Point struct {
+    x int
+    y int
+}
+
+func main() {
+    var p1 *Point
+    var p2 weak *Point
+    var p3 const *Point
+    var p4 const weak *Point
+    var p5 &Point
+    var p6 const &Point
+    var p7 box *Point
+    var p8 const box *Point
+    var p13 box(x) *Point
+    var p14 box(x) &Point
+    // err: anonymous box
+    var p9 box weak *Point
+    // err: anonymous box
+    var p10 weak box *Point
+    // err: box in front of pointer
+    // var p11 & box Point
+    // err: anonymous box
+    var p12 box &Point
+
+    var s1 []int
+    var s2 const []int
+    var s3 weak []int
+    var s4 const weak []int
+    var s5 &[]int
+    var s6 const &[]int
+    var s7 box []int
+    var s8 const box []int
+    var s9 weak box []int
+    var s10 box &[]int
+
+    var i1 interface{}
+    var i2 const interface{}
+    var i3 weak interface{}
+    var i4 const weak interface{}
+    var i5 &interface{}
+    var i6 const &interface{}
+    var i7 box interface{}
+    var i8 const box interface{}
+    var i9 weak box interface{}
+    var i10 box &interface{}
+}

@@ -1296,6 +1296,7 @@ export class TypeChecker {
                 }
                 let box = new Box();
                 box.name = b;
+                box.bound = false;
                 boxes.set(box.name, box);
                 return this.makeBox(c, box, tnode.loc);
             }
@@ -4936,15 +4937,15 @@ export class TypeChecker {
     }
 
     public makeReference(t: Type, loc: Location): Type {
-        if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
-            throw new TypeError("The operator '&' can only be used on pointers, interfaces and slices", loc);
+        if (this.isSlice(t) || this.isInterface(t)) {
+            let p = RestrictedType.strip(t) as SliceType | InterfaceType;
+            if (p.mode != "default") {
+                throw new TypeError("The operator '&' must not be used together with 'weak'", loc);
+            }
+            p.mode = "reference";
+            return t;
         }
-        let p = RestrictedType.strip(t) as PointerType | SliceType | InterfaceType;
-        if (p.mode != "default") {
-            throw new TypeError("The operator '&' must not be used together with 'weak'", loc);
-        }
-        p.mode = "reference";
-        return t;
+        return new PointerType(t, "reference");
     }
 
     public makeBox(t: Type, box: Box, loc: Location): Type {
