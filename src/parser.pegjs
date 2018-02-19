@@ -83,7 +83,7 @@ importElement
     }
 
 func
-  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ obj:((primitiveType [ \t]* "." [ \t]* identifier) / identifier) [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ obj:((memberObjectType [ \t]* "." [ \t]* identifier) / identifier) [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -241,6 +241,24 @@ primitiveType
       if (g) {
           return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i, nspace: nspace});
       } 
+      i.op = "basicType";
+      return i;
+    }
+
+memberObjectType
+  = "const" [ \t]+ t:memberObjectType {
+        return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+    }
+  / "box" n:([ \t]* "(" [ \t]* identifier [ \t]* ")" )? [ \t]+ t:memberObjectType {
+        return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
+    }
+  / "&" [ \t]* t:memberObjectType {
+      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
+    }
+  / "*" [ \t]* t:memberObjectType {
+      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
+    }
+  / i: identifier {
       i.op = "basicType";
       return i;
     }

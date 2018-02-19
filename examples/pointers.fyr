@@ -3,6 +3,11 @@ type Point struct {
     y int
 }
 
+func &Point.translate(x int, y int) {
+    this.x += x
+    this.y += y
+}
+
 func add(p1 const box &Point, p2 const box &Point) Point {
     return {x: p1.x + p2.x, y: p1.y + p2.y}
 }
@@ -45,6 +50,8 @@ func main() {
     var i8 const box interface{}
     var i9 weak box interface{}
     var i10 box &interface{}
+
+    const c1 *Point = p1
 }
 
 func wrong(ptr box(a) *Point) {

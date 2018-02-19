@@ -485,11 +485,7 @@ export class FunctionType extends Type {
     public toString(): string {
         if (this.name) {
             if (this.objectType) {
-                let r = "";
-                if (this.objectTypeIsConst) {
-                    r = "const ";
-                }
-                return r + this.objectType.toString() + "." + this.name;
+                return this.objectType.toString() + "." + this.name;
             }
             return this.name;
         }
@@ -537,7 +533,6 @@ export class FunctionType extends Type {
     public parameters: Array<FunctionParameter>;
     public callingConvention: CallingConvention = "fyr";
     public objectType: Type;
-    public objectTypeIsConst: boolean = false;
     // Only used when the callingConvention is "system"
     public systemCallType: number;
 // Enable this line to measure coroutines
@@ -1244,8 +1239,7 @@ export class TypeChecker {
         let toError = new FunctionType();
         toError.name = "toError";
         toError.returnType = this.t_string;
-        toError.objectType = this.t_error;
-        toError.objectTypeIsConst = true;
+        toError.objectType = new RestrictedType(this.t_error, {isConst: true, box: null});
         this.t_error.methods.set("toError", toError);
         this.ifaces.push(this.t_error);
 
@@ -1923,6 +1917,14 @@ export class TypeChecker {
         // A member function?
         if (fnode.lhs) {
             objectType = this.createType(fnode.lhs, parentScope, true);
+            let obj = RestrictedType.strip(objectType);
+            if (!(obj instanceof PointerType)) {
+                throw new TypeError(objectType.toString() + " is not a pointer", fnode.lhs.loc);
+            }
+            let s = obj.elementType;
+            if (!(s instanceof StructType) || s.name == "") {
+                throw new TypeError(s.toString() + " is not a named struct", fnode.lhs.loc);
+            }
         }
         let f: Function | TemplateFunction;
         if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
@@ -1979,10 +1981,8 @@ export class TypeChecker {
         }
         // A member function?
         if (objectType) {
+            // TODO: Restrictions on this
             f.type.objectType = objectType;
-            if (!this.isStruct(f.type.objectType)) {
-                throw new TypeError("Functions cannot be attached to " + f.type.objectType.toString(), fnode.lhs.loc);                
-            }
             let p = new FunctionParameter();
             p.name = "this";            
             p.loc = fnode.lhs.loc;
@@ -2063,7 +2063,6 @@ export class TypeChecker {
         return f;
     }
 
-    // TODO: Remove isConst
     private createVar(vnode: Node, scope: Scope, needType: boolean = true, isConst: boolean = false, isGlobal: boolean = false): Variable {
         let v = new Variable();
         v.loc = vnode.loc;
@@ -2075,9 +2074,9 @@ export class TypeChecker {
             }
         } else {
             v.type = this.createType(vnode.rhs, scope, false);
-//            if (isConst) {
-//                v.type = this.makeConst(v.type, vnode.loc);
-//            }
+            if (isConst) {
+                v.type = this.makeConst(v.type, vnode.loc);
+            }
         }
         if (v.name != "_") {
             scope.registerElement(v.name, v);
@@ -2408,7 +2407,6 @@ export class TypeChecker {
         }
     }
 
-    // TODO: Remove isConst
     public checkVarAssignment(isConst: boolean, scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
         // TODO: const and box are not handled properly here
         if (vnode.op == "id" || vnode.op == "optionalId") {
@@ -2422,9 +2420,6 @@ export class TypeChecker {
                 } else {
                     v.type = rtype;
                 }
-//                if (isConst && this.isMutableValue(v.type)) {
-//                    v.type = this.makeConst(v.type, vnode.loc);
-//                }
             } else {
                 if (rnode) {
                     this.checkIsAssignableNode(v.type, rnode);
@@ -2473,9 +2468,6 @@ export class TypeChecker {
                             this.checkIsAssignableType(v.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc);
                         }
                     }
-//                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
-//                        v.type = this.makeConst(v.type, vnode.loc);
-//                    }
                     break;
                 } else {
                     let r: Node;
@@ -2557,9 +2549,6 @@ export class TypeChecker {
                             this.checkIsAssignableType(lt.getElementType(), rtypeStripped.getElementType(), vnode.loc);
                         }
                     }
-//                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
-//                        v.type = this.makeConst(v.type, vnode.loc);
-//                    }
                     break;
                 } else {
                     if (p.op == "optionalId") {
@@ -2630,9 +2619,6 @@ export class TypeChecker {
                             this.checkIsAssignableType(lt.valueType, rtypeStripped.valueType, vnode.loc);
                         }
                     }
-//                    if (isConst && !this.isPrimitiveOrPointer(v.type)) {
-//                        v.type = this.makeConst(v.type, vnode.loc);
-//                    }
                 } else {
                     let p = kv.lhs;
                     let name = kv.name.value;
@@ -2656,7 +2642,6 @@ export class TypeChecker {
     }
 
     public checkAssignment(scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
-        // TODO: const and box are not handled properly here
         let rtypeStripped = RestrictedType.strip(rtype);
         if (vnode.op == "tuple") {
             if (!(rtypeStripped instanceof TupleType) && !(rtypeStripped instanceof TupleLiteralType)) {
@@ -3407,7 +3392,7 @@ export class TypeChecker {
                 let isConst = this.isConst(enode.lhs.type);
                 let type: Type = this.stripType(enode.lhs.type);
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
-                    isConst = isConst || this.isConst(type.elementType);
+                    isConst = this.isConst(type.elementType);
                     type = this.stripType(type.elementType);
                 }
                 if (type instanceof StructType) {
@@ -3416,6 +3401,8 @@ export class TypeChecker {
                     if (field) {
                         enode.type = field.type;
                         if (isConst) {
+                            // TODO: Wrong const handling
+                            // TODO: No box propagation
                             enode.type = this.makeConst(enode.type, enode.loc);
                         }
                     } else {
@@ -3423,7 +3410,7 @@ export class TypeChecker {
                         if (!method) {
                             throw new TypeError("Unknown field or method " + name + " in " + type.toString(), enode.name.loc);
                         }
-                        if (isConst && !method.objectTypeIsConst) {
+                        if (isConst && !this.isConst(method.objectType)) {
                             throw new TypeError("Method " + name + " is not const", enode.loc);
                         }
                         enode.type = method;
@@ -3434,7 +3421,7 @@ export class TypeChecker {
                     if (!method) {
                         throw new TypeError("Unknown method " + name + " in " + type.toString(), enode.name.loc);
                     }
-                    if (isConst && !method.objectTypeIsConst) {
+                    if (isConst && !this.isConst(method.objectType)) {
                         throw new TypeError("Method " + name + " is not const", enode.loc);
                     }
                     enode.type = method;
@@ -4574,9 +4561,9 @@ export class TypeChecker {
                     }
                 }
                 if (a.objectType) {
-                    if (allowMoreRestrictions && (a.objectTypeIsConst && !b.objectTypeIsConst)) {
+                    if (allowMoreRestrictions && (this.isConst(a.objectType) && !this.isConst(b.objectType))) {
                         ok = false;
-                    } else if (!allowMoreRestrictions && a.objectTypeIsConst != b.objectTypeIsConst) {
+                    } else if (!allowMoreRestrictions && this.isConst(a.objectType) != this.isConst(b.objectType)) {
                         ok = false;
                     }
                 }
