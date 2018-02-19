@@ -3842,6 +3842,10 @@ export class TypeChecker {
             t = templateParams.get(t.name);
         }
 
+        if (t instanceof RestrictedType) {
+            t = t.elementType;
+        }  
+
         if (t instanceof OrType) {
             let count = 0;
             for(let o of t.types) {
@@ -3861,17 +3865,13 @@ export class TypeChecker {
             return false;
         }
 
-        if (t instanceof RestrictedType) {
-            return this.unifyLiterals(t.elementType, node, loc, doThrow);
-        }  
-
         if (t instanceof InterfaceType && t.isEmptyInterface()) {
             node.type = this.defaultLiteralType(node);
             return true;
         }
 
         if (t instanceof InterfaceType && t.isBoxedType()) {
-            return this.unifyLiterals(t.extendsInterfaces[0], node, loc, doThrow);
+            return this.unifyLiterals(t.extendsInterfaces[0], node, loc, doThrow, templateParams);
         }
 
         if (templateParams && t instanceof GenericParameter) {
@@ -3959,6 +3959,7 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
                 if (t instanceof MapType && this.isString(t.keyType)) {
+                    // A map, e.g. "{foo: 42}"
                     if (node.parameters) {
                         for(let pnode of node.parameters) {
                             this.checkIsAssignableNode(t.valueType, pnode.lhs);
@@ -3967,9 +3968,11 @@ export class TypeChecker {
                     node.type = t;
                     return true;
                 } else if (t instanceof MapType && (!node.parameters || node.parameters.length == 0)) {
+                    // An empty map, e.g. "{}"
                     node.type = t;
                     return true;
                 } else if (t instanceof StructType) {
+                    // A struct initialization
                     if (node.parameters) {
                         for(let pnode of node.parameters) {
                             let field = t.field(pnode.name.value);
@@ -3988,7 +3991,7 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             case "unary&":
                 if (t instanceof PointerType || t instanceof UnsafePointerType) {
-                    let r = this.unifyLiterals(t.elementType, node.rhs, loc, doThrow);
+                    let r = this.unifyLiterals(t.elementType, node.rhs, loc, doThrow, templateParams);
                     node.type = t;
                     return r;
                 }

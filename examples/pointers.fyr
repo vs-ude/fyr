@@ -52,6 +52,8 @@ func main() {
     var i10 box &interface{}
 
     const c1 *Point = p1
+
+    p2 = {x: 1, y: 2}
 }
 
 func wrong(ptr box(a) *Point) {
