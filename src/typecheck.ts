@@ -1982,17 +1982,11 @@ export class TypeChecker {
         }
         // A member function?
         if (objectType) {
-            // TODO: Restrictions on this
             f.type.objectType = objectType;
             let p = new FunctionParameter();
             p.name = "this";            
             p.loc = fnode.lhs.loc;
-            p.isConst = true;
-            if (f.type.objectType instanceof RestrictedType) {
-                p.type = new RestrictedType(new PointerType(f.type.objectType.elementType, "strong"), f.type.objectType);
-            } else {
-                p.type = new PointerType(f.type.objectType, "strong");
-            }
+            p.type = objectType;
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
