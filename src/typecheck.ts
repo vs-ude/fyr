@@ -1987,6 +1987,7 @@ export class TypeChecker {
             p.name = "this";            
             p.loc = fnode.lhs.loc;
             p.type = objectType;
+            p.isConst = true;
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
