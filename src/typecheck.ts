@@ -1914,6 +1914,7 @@ export class TypeChecker {
             throw new TypeError("Function must be named", fnode.loc);
         }
         let objectType: Type;
+        let structType: StructType;
         // A member function?
         if (fnode.lhs) {
             objectType = this.createType(fnode.lhs, parentScope, true);
@@ -1921,10 +1922,10 @@ export class TypeChecker {
             if (!(obj instanceof PointerType)) {
                 throw new TypeError(objectType.toString() + " is not a pointer", fnode.lhs.loc);
             }
-            let s = obj.elementType;
-            if (!(s instanceof StructType) || s.name == "") {
-                throw new TypeError(s.toString() + " is not a named struct", fnode.lhs.loc);
+            if (!(obj.elementType instanceof StructType) || obj.elementType.name == "") {
+                throw new TypeError(obj.elementType.toString() + " is not a named struct", fnode.lhs.loc);
             }
+            structType = obj.elementType;
         }
         let f: Function | TemplateFunction;
         if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
@@ -2039,23 +2040,17 @@ export class TypeChecker {
             f.type.returnType = this.t_void;
         }
 
-        let objType = f.type.objectType;
-        if (objType instanceof RestrictedType) {
-            objType = objType.elementType;
-        }
         // The function is a member function
-        if (objType instanceof StructType) {
-            if (objType.methods.has(f.name)) {
-                let loc = objType.methods.get(f.name).loc;
-                throw new TypeError("Method " + objType.toString() + "." + f.name + " is already defined at " + loc.file + " (" + loc.start.line + "," + loc.start.column + ")", fnode.loc);
+        if (structType) {
+            if (structType.methods.has(f.name)) {
+                let loc = structType.methods.get(f.name).loc;
+                throw new TypeError("Method " + structType.toString() + "." + f.name + " is already defined at " + loc.file + " (" + loc.start.line + "," + loc.start.column + ")", fnode.loc);
             }
-            if (objType.field(f.name)) {
-                throw new TypeError("Field " + objType.toString() + "." + f.name + " is already defined", fnode.loc);
+            if (structType.field(f.name)) {
+                throw new TypeError("Field " + structType.toString() + "." + f.name + " is already defined", fnode.loc);
             }
-            objType.methods.set(f.name, f.type);
-            registerScope.registerElement(this.qualifiedTypeName(objType) + "." + f.name, f);
-        } else if (objType) {
-            throw "Implementation error";
+            structType.methods.set(f.name, f.type);
+            registerScope.registerElement(this.qualifiedTypeName(structType) + "." + f.name, f);
         } else {
             registerScope.registerElement(f.name, f);
         }
