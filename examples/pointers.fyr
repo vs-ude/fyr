@@ -3,6 +3,8 @@ type Point struct {
     y int
 }
 
+type JSON int | double | string | null | ([]JSON) | map<string, JSON>
+
 func &Point.translate(x int, y int) {
     this.x += x
     this.y += y
@@ -60,6 +62,10 @@ func main() {
     var l2 = [{x: 1, y: 2}, {x:42, y:84}]
     var l3 = &{x: 1, y: 2}
     var l4 = &[&{x: 1, y: 2}, &{x:42, y:84}]
+
+    var str string = "Hallo"
+//    var json JSON = [42, 1.32, "Hallo"]
+    var json JSON = [42, 1.32, "Hallo", null, [1,2,3], {age:42, name: "Heinz"}]
 }
 
 func wrong(ptr box(a) *Point) {

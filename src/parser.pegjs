@@ -232,6 +232,9 @@ primitiveType
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
     }
+  / "null" {
+      return new ast.Node({loc: fl(location()), op: "basicType", value: "null" })
+    }
   / i: identifier s:([ \t]* "." [ \t]* identifier)? g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       let nspace = null;
       if (s) {
@@ -839,6 +842,7 @@ primary
 
 primary2
   = n: number { return n; }
+  / s: string { return s; }
   / "true" { return new ast.Node({loc: fl(location()), op: "bool", value: "true"}); }
   / "false" { return new ast.Node({loc: fl(location()), op: "bool", value: "false"}); }
   / "null" { return new ast.Node({loc: fl(location()), op: "null"}); }
@@ -846,7 +850,6 @@ primary2
   / i: identifier {
       return i;
     }
-  / s: string { return s; }
   / "..." [\t ]* 
   / "(" [ \t\n]* e: expressionList ")" {
       if (e.length == 1) {
@@ -955,7 +958,14 @@ identifier "identifier"
     }
 
 string "string"
-  = "\"" s:$runechar* "\"" { return new ast.Node({loc: fl(location()), op: "str", value: s}); }
+  = '"' s:$stringchar* '"' { return new ast.Node({loc: fl(location()), op: "str", value: s}); }
+
+stringchar
+  = r: runecharSpecial { return r; }
+  / "'" { return "'"; }
+  / s:$([^"]) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: s.charCodeAt(0)});
+    }
 
 rune
   = "'" c:runechar "'" {
@@ -963,6 +973,12 @@ rune
   }
 
 runechar
+  = r: runecharSpecial { return r; }
+  / s:$([^']) {
+      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: s.charCodeAt(0)});
+    }
+
+runecharSpecial
   = s:"\\a" {
       return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: 7});
     }
@@ -1005,6 +1021,3 @@ runechar
   / s:$("\\" [0-7] [0-7] [0-7]) {
       return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 8)});
     }    
-  / s:$(.) {
-      return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: s.charCodeAt(0)});
-    }

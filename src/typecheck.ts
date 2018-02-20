@@ -915,7 +915,7 @@ export class RestrictedType extends Type {
             return this.name;
         }
         let str = "";
-        if (this.isConst) {
+        if (this.isConst && this.elementType.name != "string") {
             str += "const ";
         }
         return str + this.elementType.toString();
@@ -993,7 +993,13 @@ export class SliceType extends Type {
         if (this.name) {
             return this.name;
         }
-        return this.mode.toString() + "[]" + this.array().elementType.toString();
+        let mode = "";
+        if (this.mode == "reference") {
+            mode = "&";
+        } else if (this.mode == "weak") {
+            mode = "weak ";
+        }
+        return mode + "[]" + this.array().elementType.toString();
     }
 
     public toTypeCodeString(): string {
@@ -1229,8 +1235,11 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         let b = new Box();
-        b.freeze();        
-        this.t_string = new RestrictedType(new SliceType(new ArrayType(this.t_byte, -1), "strong"), {isConst: true, box: b});
+        b.freeze();
+        let str = new SliceType(new ArrayType(this.t_byte, -1), "strong");
+        str.name = "string";
+        this.t_string = new RestrictedType(str, {isConst: true, box: b});
+        
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
         
@@ -3859,20 +3868,13 @@ export class TypeChecker {
         }  
 
         if (t instanceof OrType) {
-            let count = 0;
             for(let o of t.types) {
                 if (this.unifyLiterals(o, node, loc, false)) {
-                    count++;
+                    return true;
                 }
-            }
-            if (count == 1) {
-                return true;
             }
             if (doThrow) {
-                if (count == 0) {
-                    throw new TypeError("Literal of type " + node.type.toString() + " is not an opton of " + t.toString(), node.loc);                    
-                }
-                throw new TypeError("Ambiguous type inference", node.loc);
+                throw new TypeError("Literal of type " + node.type.toString() + " is not an option of " + t.toString(), node.loc);                    
             }
             return false;
         }
@@ -3896,7 +3898,7 @@ export class TypeChecker {
 
         // TODO: Map
 
-        if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference") && node.op == "array") {
+        if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference") && node.op == "array" && t.name != "string") {
             if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams)) {
                 return false;
             }
@@ -3956,7 +3958,9 @@ export class TypeChecker {
                         throw new TypeError("Mismatch in array size", node.loc);                                                
                     }
                     for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode(t.elementType, pnode);
+                        if (!this.checkIsAssignableNode(t.elementType, pnode, doThrow)) {
+                            return false;
+                        }
                     }
                     node.type = t;
                     return true;
@@ -3972,7 +3976,9 @@ export class TypeChecker {
                     }
                     for(let i = 0; i < node.parameters.length; i++) {
                         let pnode = node.parameters[i];
-                        this.checkIsAssignableNode(t.types[i], pnode);
+                        if (!this.checkIsAssignableNode(t.types[i], pnode, doThrow)) {
+                            return false;
+                        }
                     }
                     node.type = t;
                     return true;                    
@@ -3986,7 +3992,9 @@ export class TypeChecker {
                     // A map, e.g. "{foo: 42}"
                     if (node.parameters) {
                         for(let pnode of node.parameters) {
-                            this.checkIsAssignableNode(t.valueType, pnode.lhs);
+                            if (!this.checkIsAssignableNode(t.valueType, pnode.lhs, doThrow)) {
+                                return false;
+                            }
                         }
                     }
                     node.type = t;
@@ -4003,7 +4011,9 @@ export class TypeChecker {
                             if (!field) {
                                 throw new TypeError("Unknown field " + pnode.name.value + " in " + t.toString(), pnode.name.loc);
                             }
-                            this.checkIsAssignableNode(field.type, pnode.lhs);
+                            if (!this.checkIsAssignableNode(field.type, pnode.lhs, doThrow)) {
+                                return false;
+                            }
                         }
                     }
                     node.type = t;
@@ -4788,6 +4798,13 @@ export class TypeChecker {
     }
     
     public isString(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            return t.elementType.name == "string";
+        }
+        return t.name == "string";
+    }
+    
+    public isStringLike(t: Type): boolean {
         // A string is a frozen slice of bytes
         return t instanceof RestrictedType && t.box && t.box.isFrozen && t.elementType instanceof SliceType && t.elementType.getElementType() == this.t_byte;
     }
