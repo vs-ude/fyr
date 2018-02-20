@@ -3158,8 +3158,12 @@ export class TypeChecker {
             case "unary&":
             {
                 this.checkExpression(enode.rhs, scope);
-                this.checkIsAddressable(enode.rhs, scope, true, true);
-                enode.type = new PointerType(enode.rhs.type, "reference"); 
+                if (enode.isUnifyableLiteral()) {
+                    enode.type = this.defaultLiteralType(enode);
+                } else {
+                    this.checkIsAddressable(enode.rhs, scope, true, true);
+                    enode.type = new PointerType(enode.rhs.type, "reference");
+                }
                 break;
             }
             case "+":                                             
@@ -3778,7 +3782,7 @@ export class TypeChecker {
         if (v.node.rhs) {
             this.checkExpression(v.node.rhs, scope);
             if (!v.type) {
-                if (v.node.rhs.type instanceof ArrayLiteralType || v.node.rhs.type instanceof TupleLiteralType || v.node.rhs.type instanceof ObjectLiteralType) {
+                if (v.node.rhs.isUnifyableLiteral()) {
                     v.type = this.defaultLiteralType(v.node.rhs);
                 } else {
                     v.type = v.node.rhs.type;
@@ -3790,7 +3794,15 @@ export class TypeChecker {
     }
 
     private defaultLiteralType(node: Node): Type {
-        if (node.type instanceof ArrayLiteralType) {
+        if (node.op == "unary&") {
+            let t = this.defaultLiteralType(node.rhs);
+            if (t instanceof ArrayType) {
+                node.type = new SliceType(t, "strong");
+            } else {
+                node.type = new PointerType(t, "strong");
+            }
+            return node.type;
+        } else if (node.type instanceof ArrayLiteralType) {
             for(let pnode of node.parameters) {
                 this.defaultLiteralType(pnode);
             }
@@ -3882,6 +3894,8 @@ export class TypeChecker {
             return true;
         }
 
+        // TODO: Map
+
         if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference") && node.op == "array") {
             if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams)) {
                 return false;
@@ -3946,12 +3960,6 @@ export class TypeChecker {
                     }
                     node.type = t;
                     return true;
-                } else if (t instanceof SliceType) {
-                    for(let pnode of node.parameters) {
-                        this.checkIsAssignableNode(t.getElementType(), pnode);
-                    }
-                    node.type = t;
-                    return true;
                 }
                 if (!doThrow) {
                     return false;
@@ -4006,25 +4014,15 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             case "unary&":
-                if (t instanceof PointerType || t instanceof UnsafePointerType) {
-                    let r = this.unifyLiterals(t.elementType, node.rhs, loc, doThrow, templateParams);
-                    node.type = t;
+                if (t instanceof PointerType) {
+                    let r = this.unifyLiterals(t, node.rhs, loc, doThrow, templateParams);
+                    node.type = node.rhs.type;
                     return r;
                 }
                 if (!doThrow) {
                     return false;
                 }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
-            case "null":
-                if (t instanceof PointerType || t instanceof UnsafePointerType) {
-                    node.type = t;
-                    return true;
-                }
-
-                if (!doThrow) {
-                    return false;
-                }
-                throw new TypeError("Type mismatch between null literal and " + t.toString(), loc);
             default:
                 throw "Implementation error";
         }
