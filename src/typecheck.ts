@@ -3874,6 +3874,22 @@ export class TypeChecker {
             return this.unifyLiterals(t.extendsInterfaces[0], node, loc, doThrow, templateParams);
         }
 
+        if (t instanceof PointerType && (t.mode == "strong" || t.mode == "reference") && node.op == "object") {
+            if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams)) {
+                return false;
+            }
+            node.type = new PointerType(node.type, t.mode);
+            return true;
+        }
+
+        if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference") && node.op == "array") {
+            if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams)) {
+                return false;
+            }
+            node.type = new SliceType(node.type as ArrayType, t.mode);
+            return true;
+        }
+
         if (templateParams && t instanceof GenericParameter) {
             node.type = this.defaultLiteralType(node);
             templateParams.set(t.name, node.type);
@@ -3922,7 +3938,7 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between string and " + t.toString(), loc);   
             case "array":
                 if (t instanceof ArrayType) {
-                    if (node.parameters.length != t.size) {
+                    if (node.parameters.length != t.size && t.size != -1) {
                         throw new TypeError("Mismatch in array size", node.loc);                                                
                     }
                     for(let pnode of node.parameters) {
