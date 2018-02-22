@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "weak" || n == "group" || n == "box" || n == "frozen" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -226,7 +226,7 @@ primitiveType
   / "weak" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "weakType", rhs: t})
     }
-  / "box" n:([ \t]* "(" [ \t]* identifier [ \t]* ")" )? [ \t]+ t:primitiveType {
+  / "box" n:([ \t]* "(" [ \t]* identifierList [ \t]* ")" )? [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
     }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
@@ -252,7 +252,7 @@ memberObjectType
   = "const" [ \t]+ t:memberObjectType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
     }
-  / "box" n:([ \t]* "(" [ \t]* identifier [ \t]* ")" )? [ \t]+ t:memberObjectType {
+  / "box" n:([ \t]* "(" [ \t]* identifierList [ \t]* ")" )? [ \t]+ t:memberObjectType {
         return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
     }
   / "&" [ \t]* t:memberObjectType {
