@@ -784,11 +784,10 @@ export class MapType extends Type {
 
 export class Box {
     /**
-     * bound is not-true if the lifetime of the group is (yet) unbound, i.e.
-     * the entire group currently lives on the heap and the group is owned by
-     * a pointer on the stack.
+     * isExtern is true if the box is owned by the caller of the function.
+     * Consequently such boxes 
      */
-    public bound: boolean;
+    public isExtern: boolean;
     /**
      * joinedBox pointing to 'this' means that the group has not yet joined any other box.
      * So it can either join another box or stay a box by itself.
@@ -799,7 +798,7 @@ export class Box {
      * scope is not null for variables which are located on the stack.
      */
     scope: Scope | null;
-    private _isFrozen: boolean;
+//    private _isFrozen: boolean;
 
     public canonical(): Box {
         let t: Box = this;
@@ -826,6 +825,7 @@ export class Box {
         return true;
     }
 
+    /*
     public isFrozen(): boolean {
         return this.canonical()._isFrozen;
     }
@@ -833,6 +833,7 @@ export class Box {
     public freeze(): void {
         this.canonical()._isFrozen = true;
     }
+    */
 }
 
 export type Restrictions = {
@@ -1235,7 +1236,7 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         let b = new Box();
-        b.freeze();
+//        b.freeze();
         let str = new SliceType(new ArrayType(this.t_byte, -1), "strong");
         str.name = "string";
         this.t_string = new RestrictedType(str, {isConst: true, box: b});
@@ -4806,7 +4807,7 @@ export class TypeChecker {
     
     public isStringLike(t: Type): boolean {
         // A string is a frozen slice of bytes
-        return t instanceof RestrictedType && t.box && t.box.isFrozen && t.elementType instanceof SliceType && t.elementType.getElementType() == this.t_byte;
+        return t instanceof RestrictedType && t.box && t.isConst && t.elementType instanceof SliceType && t.elementType.mode == "strong" && t.elementType.getElementType() == this.t_byte;
     }
 
     public isOrType(t: Type): boolean {
