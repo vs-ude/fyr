@@ -21,15 +21,6 @@ func main() {
     var p4 const weak *Point
     var p5 &Point
     var p6 const &Point
-    var p7 box *Point
-    var p8 const box *Point
-    var p9 box weak *Point
-    var p10 weak box *Point
-    // err: box in front of pointer
-    // var p11 & box Point
-    var p12 box &Point
-    var p13 box(x) *Point
-    var p14 box(x) &Point
 
     var s1 []int
     var s2 const []int
@@ -37,10 +28,6 @@ func main() {
     var s4 const weak []int
     var s5 &[]int
     var s6 const &[]int
-    var s7 box []int
-    var s8 const box []int
-    var s9 weak box []int
-    var s10 box &[]int
 
     var i1 interface{}
     var i2 const interface{}
@@ -48,10 +35,6 @@ func main() {
     var i4 const weak interface{}
     var i5 &interface{}
     var i6 const &interface{}
-    var i7 box interface{}
-    var i8 const box interface{}
-    var i9 weak box interface{}
-    var i10 box &interface{}
 
     const c1 *Point = p1
 
@@ -66,6 +49,5 @@ func main() {
     var json JSON = [42, 1.32, "Hallo", null, [1,2,3], {age:42, name: "Heinz"}]
 }
 
-func wrong(ptr box(a) *Point) {
-    var ptr2 const box(a) *Point
+func f(ptr box *Point, compareWith box(a) &Point, lessThan box(a) &Point) {
 }
