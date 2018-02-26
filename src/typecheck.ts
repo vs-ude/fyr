@@ -4024,12 +4024,12 @@ export class TypeChecker {
         if (from.isUnifyableLiteral()) {
             return this.unifyLiterals(to, from, from.loc, doThrow, templateParams);
         }
-        return this.checkIsAssignableType(to, from.type, from.loc, doThrow, true, true, null, null, templateParams);
+        return this.checkIsAssignableType(to, from.type, from.loc, "assign", doThrow, null, null, templateParams);
     }
 
     // TODO: Remove unbox
     // Checks whether the type 'from' can be assigned to the type 'to'.
-    public checkIsAssignableType(to: Type, from: Type, loc: Location, doThrow: boolean = true, unbox: boolean = true, isCopied: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
+    public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equivalence", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
             toRestrictions = {isConst: false, boxes: null}
         }
@@ -4047,14 +4047,13 @@ export class TypeChecker {
             from = RestrictedType.strip(from);
         }
 
-        if (!toRestrictions.isConst && !!fromRestrictions.isConst && (!isCopied || !this.isPureValue(to))) {
+        // A const-mismatch can be tolerated if the value is a pure value and if it is being copied.
+        if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode != "assign" || !this.isPureValue(to))) {
             if (doThrow) {
                 throw new TypeError("Mismatch of const restriction on variables", loc);
             }
             return false;
         }
-
-        //
 
         if (templateParams && to instanceof GenericParameter) {
             if (templateParams.has(to.name)) {
@@ -4070,7 +4069,7 @@ export class TypeChecker {
         } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
             let ok = true;
             for(let i = 0; i < to.types.length; i++) {
-                if (!this.checkIsAssignableType(to.types[i], from.types[i], loc, false, false, isCopied, toRestrictions, fromRestrictions, templateParams)) {
+                if (!this.checkIsAssignableType(to.types[i], from.types[i], loc, "equivalence", false, toRestrictions, fromRestrictions, templateParams)) {
                     ok = false;
                     break;
                 }
@@ -4100,9 +4099,8 @@ export class TypeChecker {
                     }
                 }
             } else {
-                // TODO: Use checkIsAssignableType here
                 for(let o of to.types) {
-                    if (this.checkTypeEquality(o, from, loc, false)) {
+                    if (this.checkIsAssignableType(o, from, loc, mode, false, toRestrictions, fromRestrictions, templateParams)) {
                         return true;
                     }
                 }
@@ -4919,6 +4917,9 @@ export class TypeChecker {
         return (t instanceof PointerType);
     }
     
+    /**
+     * A pure value contains no pointers and can be copied byte by byte.
+     */
     public isPureValue(t: Type): boolean {
         t = this.stripType(t);
         if (t == this.t_rune || t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void) {
@@ -4938,6 +4939,9 @@ export class TypeChecker {
                 if (!this.isPureValue(f.type)) {
                     return false;
                 }
+            }
+            if (t.extends && !this.isPureValue(t.extends)) {
+                return false;
             }
             return true;
         }
