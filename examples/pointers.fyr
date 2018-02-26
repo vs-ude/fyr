@@ -21,6 +21,8 @@ func main() {
     var p4 const weak *Point
     var p5 &Point
     var p6 const &Point
+    var p7 ^Point
+    var p8 const ^Point
 
     var s1 []int
     var s2 const []int

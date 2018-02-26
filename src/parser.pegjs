@@ -217,6 +217,9 @@ primitiveType
   / "&" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
     }
+  / "^" [ \t]* t:primitiveType {
+      return new ast.Node({loc: fl(location()), op: "uniquePointerType", rhs: t});
+    }
   / "struct" [ \t]* "{" [ \t]* "\n" [ \t]* f:structFields? comments? [ \t]* "}" [ \t]* "\n" {
         return new ast.Node({loc: fl(location()), op: "structType", parameters: f ? f : []});
     }
@@ -269,9 +272,6 @@ memberObjectType
 interfaceContent
   = "\n" [ \t]* m:interfaceMembers {
       return m;
-    }
-  / t:type [ \t]* {
-      return [new ast.Node({loc: fl(location()), op: "extends", rhs: t})];
     }
 
 interfaceMembers

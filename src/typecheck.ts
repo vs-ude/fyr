@@ -306,9 +306,6 @@ export class InterfaceType extends Type {
         if (this.name) {
             return this.name;
         }
-        if (this.isBoxedType()) {
-            return "interface{" + this.unbox().toString() + "}";
-        }
         if (this.extendsInterfaces.length > 0 || this.methods.size > 0) {
             return "interface{...}";
         }
@@ -328,20 +325,6 @@ export class InterfaceType extends Type {
         return this.extendsInterfaces.length == 0 && this.methods.size == 0;
     }
 
-    public isBoxedType(): boolean {
-        if (this.extendsInterfaces.length == 1 && !(this.extendsInterfaces[0] instanceof InterfaceType)) {
-            return true;
-        }
-        return false;
-    }
-
-    public unbox(): Type {
-        if (this.extendsInterfaces.length == 1 && !(this.extendsInterfaces[0] instanceof InterfaceType)) {
-            return this.extendsInterfaces[0];
-        }
-        return this;
-    }
-
     public method(name: string): FunctionType {
         if (this.methods.has(name)) {
             return this.methods.get(name);
@@ -359,7 +342,6 @@ export class InterfaceType extends Type {
 
     public mode: PointerMode = "strong";
     public contentType: RestrictedType;
-    // TODO: Do not use for boxed type
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -953,7 +935,7 @@ export class RestrictedType extends Type {
     public boxes?: Array<Box>;
 }
 
-export type PointerMode = "strong" | "weak" | "reference";
+export type PointerMode = "unique" | "strong" | "weak" | "reference";
 
 export class ArrayType extends Type {
     constructor(elementType: Type, size: number) {
@@ -1321,6 +1303,15 @@ export class TypeChecker {
             if (!t) {
                 throw new TypeError("Unknown type " + tnode.value, tnode.loc);
             }
+            if (mode == "variable") {
+                if (this.isSafePointer(t)) {
+                    throw "TODO: Make boxed recursively"
+                } else if (this.isInterface(t)) {
+                    throw "TODO: Make boxed recursively"
+                } else if (this.isSlice(t)) {
+                    throw "TODO: Make boxed recursively"
+                }
+            }
             return t;
         } else if (tnode.op == "str") {
             let t = this.stringLiteralType(tnode.value);
@@ -1352,11 +1343,18 @@ export class TypeChecker {
         } else if (tnode.op == "referenceType") {
             let c = this.createType(tnode.rhs, scope, mode);
             return this.makeReference(c, tnode.loc);
+        } else if (tnode.op == "uniquePointerType") {
+            let c = this.createType(tnode.rhs, scope, mode);
+            c = this.makeUniquePointer(c, tnode.loc);
+            return new RestrictedType(c, {isConst: false, boxes: [new Box()]});
         } else if (tnode.op == "boxType") {
             if (mode == "variable") {
                 throw new TypeError("'box' must not be used in variable type definitions", tnode.loc);
             }
             let c = this.createType(tnode.rhs, scope, mode);
+            if (this.isUnique(c)) {
+                throw new TypeError("'box' must not be used together with the '^' operator", tnode.loc);
+            }
             // A named box?
             let boxes: Array<Box>;
             if (tnode.parameters && tnode.parameters.length > 0) {
@@ -1401,21 +1399,19 @@ export class TypeChecker {
             // TODO: Map
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
-            let p: Type = new PointerType(t, "strong");
             if (mode == "variable") {
-                p = new RestrictedType(p, {isConst: false, boxes: [new Box()]});
+                t = new RestrictedType(t, {isConst: false, boxes: [new Box()]});
             }
-            return p;
+            return new PointerType(t, "strong");
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
             return new UnsafePointerType(t);
         } else if (tnode.op == "sliceType") {
             let t = this.createType(tnode.rhs, scope, mode);
-            let s: Type = new SliceType(new ArrayType(t, -1), "strong");
             if (mode == "variable") {
-                s = new RestrictedType(s, {isConst: false, boxes: [new Box()]});
+                t = new RestrictedType(t, {isConst: false, boxes: [new Box()]});
             }
-            return s;
+            return new SliceType(new ArrayType(t, -1), "strong");
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
             for(let p of tnode.parameters) {
@@ -1490,7 +1486,11 @@ export class TypeChecker {
         } else if (tnode.op == "structType") {
             return this.createStructType(tnode, scope, null, mode);
         } else if (tnode.op == "interfaceType") {
-            return this.createInterfaceType(tnode, scope, null, mode);
+            let iface = this.createInterfaceType(tnode, scope, null, mode);
+            if (mode == "variable") {
+                iface.contentType = new RestrictedType(null, {isConst: false, boxes: [new Box()]});
+            }
+            return iface;
         }
         throw "Implementation error for type " + tnode.op
     }
@@ -1512,7 +1512,7 @@ export class TypeChecker {
         return t;
     }
 
-    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, mode?: "default" | "parameter" | "variable"): Type {
+    private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, mode?: "default" | "parameter" | "variable"): InterfaceType {
         if (!iface) {
             iface = new InterfaceType();
             iface.loc = tnode.loc;
@@ -1532,10 +1532,6 @@ export class TypeChecker {
             return iface;
         }
 
-        if (tnode.parameters.length == 1 && tnode.parameters[0].op == "extends") {
-            let t = this.createType(tnode.parameters[0].rhs, scope, mode ? mode : "default");
-            return this.createBoxedInterface(t, tnode.parameters[0].rhs.loc, iface);
-        }
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
                 let t = this.createType(mnode.rhs, scope, mode ? mode : "default");
@@ -1549,9 +1545,6 @@ export class TypeChecker {
             if (mnode.op == "extends") {
                 // Do nothing by intention
             } else if (mnode.op == "funcType" || mnode.op == "asyncFuncType") {
-                if (iface.isBoxedType()) {
-                    throw new TypeError("Boxed types cannot have functions", mnode.loc);
-                }
                 let ft = this.createType(mnode, scope, mode ? mode : "default") as FunctionType;
                 ft.name = mnode.name.value;
                 if (iface.methods.has(ft.name)) {
@@ -1578,10 +1571,6 @@ export class TypeChecker {
             return;
         }
         iface._markChecked = true;
-
-        if (iface.isBoxedType()) {
-            return;
-        }
 
         let bases = iface.getAllBaseTypes();
         if (bases && bases.indexOf(iface) != -1) {
@@ -1700,50 +1689,7 @@ export class TypeChecker {
             this.checkIsAssignableType(iface, new PointerType(s, "strong"), s.loc);
         }
     }
-
-    public createBoxedInterface(t: Type, loc: Location, iface?: InterfaceType): Type {
-        if (!iface) {
-            iface = new InterfaceType();
-        }
-        iface.loc = t.loc;
-        if (t instanceof RestrictedType) {
-            iface.extendsInterfaces.push(t.elementType);
-            return new RestrictedType(iface, t);
-        }
-        iface.extendsInterfaces.push(t);  
-        this.ifaces.push(iface);        
-        return iface;
-    }
     
-    public unbox(t: Type, loc: Location): Type {
-        if (t instanceof RestrictedType) {
-            if (t.elementType instanceof InterfaceType && t.elementType.isBoxedType()) {
-                return new RestrictedType(t.elementType.extendsInterfaces[0], t);
-            }
-        }
-        if (t instanceof InterfaceType && t.isBoxedType()) {
-            return t.extendsInterfaces[0];
-        }
-        return t;
-    }
-
-    public rebox(oldT: Type, newT: Type): Type {
-        let result = newT;
-        if (oldT instanceof RestrictedType) {
-            if (oldT.elementType instanceof InterfaceType && oldT.elementType.isBoxedType()) {
-                let i = new InterfaceType();
-                i.extendsInterfaces.push(result);
-                result = i;
-            }
-            result = new RestrictedType(result, oldT);
-        } else if (oldT instanceof InterfaceType && oldT.isBoxedType()) {
-            let i = new InterfaceType();
-            i.extendsInterfaces.push(result);
-            result = i;
-        }
-        return result;
-    }
-
     private instantiateTemplateType(t: TemplateType, types: Array<Type>, loc: Location, mode: "default" | "parameter" | "variable"): Type {
         let a = this.templateTypeInstantiations.get(t);
         if (a) {
@@ -3389,15 +3335,15 @@ export class TypeChecker {
                 if (tl instanceof OrType && !tl.stringsOnly()) {
                     throw new TypeError("Or'ed types cannot be compared", enode.lhs.loc);
                 }
-                if (tl instanceof InterfaceType && (tl.isBoxedType() || tl.isEmptyInterface())) {
-                    throw new TypeError("Empty interfaces and boxed types cannot be compared", enode.lhs.loc);
+                if (tl instanceof InterfaceType && tl.isEmptyInterface()) {
+                    throw new TypeError("Empty interfaces cannot be compared", enode.lhs.loc);
                 }
                 let tr = this.stripType(enode.rhs.type);
                 if (tr instanceof OrType && !tr.stringsOnly()) {
                     throw new TypeError("Or'ed types cannot be compared", enode.rhs.loc);
                 }
-                if (tr instanceof InterfaceType && (tr.isBoxedType() || tr.isEmptyInterface())) {
-                    throw new TypeError("Empty interfaces and boxed types cannot be compared", enode.rhs.loc);
+                if (tr instanceof InterfaceType && tr.isEmptyInterface()) {
+                    throw new TypeError("Empty interfaces cannot be compared", enode.rhs.loc);
                 }
                 if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
                     // TODO: parse in a BigNumber representation
@@ -3923,10 +3869,6 @@ export class TypeChecker {
             return true;
         }
 
-        if (t instanceof InterfaceType && t.isBoxedType()) {
-            return this.unifyLiterals(t.extendsInterfaces[0], node, loc, doThrow, templateParams);
-        }
-
         if (t instanceof PointerType && (t.mode == "strong" || t.mode == "reference") && node.op == "object") {
             if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams)) {
                 return false;
@@ -4085,6 +4027,7 @@ export class TypeChecker {
         return this.checkIsAssignableType(to, from.type, from.loc, doThrow, true, true, null, null, templateParams);
     }
 
+    // TODO: Remove unbox
     // Checks whether the type 'from' can be assigned to the type 'to'.
     public checkIsAssignableType(to: Type, from: Type, loc: Location, doThrow: boolean = true, unbox: boolean = true, isCopied: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
@@ -4102,22 +4045,6 @@ export class TypeChecker {
         if (from instanceof RestrictedType) {
             fromRestrictions = combineRestrictions(fromRestrictions, from);
             from = RestrictedType.strip(from);
-        }
-
-        // Unbox if necessary
-        if (unbox && to instanceof InterfaceType && to.isBoxedType()) {
-            to = this.unbox(to.extendsInterfaces[0], loc);
-            if (to instanceof RestrictedType) {
-                toRestrictions = combineRestrictions(toRestrictions, to);
-                to = RestrictedType.strip(to);
-            }
-        }
-        if (unbox && from instanceof InterfaceType && from.isBoxedType()) {
-            from = this.unbox(from.extendsInterfaces[0], loc);
-            if (from instanceof RestrictedType) {
-                fromRestrictions = combineRestrictions(fromRestrictions, from);
-                from = RestrictedType.strip(from);
-            }
         }
 
         if (!toRestrictions.isConst && !!fromRestrictions.isConst && (!isCopied || !this.isPureValue(to))) {
@@ -4190,9 +4117,11 @@ export class TypeChecker {
                 if (this.isStruct(to.elementType) && this.isStruct(fromElement)) {
                     let toStruct = this.stripType(to.elementType) as StructType;
                     let fromStruct = this.stripType(from.elementType) as StructType;
-                    if (toStruct != fromStruct) {
-                        if (fromStruct.doesExtend(toStruct)) {
-                            fromElement = this.rebox(fromElement, toStruct);
+                    if (toStruct != fromStruct && fromStruct.doesExtend(toStruct)) {
+                        if (fromElement instanceof RestrictedType) {
+                            fromElement = new RestrictedType(toStruct, fromElement);
+                        } else {
+                            fromElement = toStruct;
                         }
                     }
                 }
@@ -4217,9 +4146,11 @@ export class TypeChecker {
                     if (this.isStruct(to.elementType) && this.isStruct(fromElement)) {
                         let toStruct = this.stripType(to.elementType) as StructType;
                         let fromStruct = this.stripType(from.elementType) as StructType;
-                        if (toStruct != fromStruct) {
-                            if (fromStruct.doesExtend(toStruct)) {
-                                fromElement = this.rebox(fromElement, toStruct);
+                        if (toStruct != fromStruct && fromStruct.doesExtend(toStruct)) {
+                            if (fromElement instanceof RestrictedType) {
+                                fromElement = new RestrictedType(toStruct, fromElement);
+                            } else {
+                                fromElement = toStruct;
                             }
                         }
                     }
@@ -4245,30 +4176,25 @@ export class TypeChecker {
             if (to.isEmptyInterface()) {
                 return true;
             }
-            if (to.isBoxedType()) {
-                return this.checkIsAssignableType(to.extendsInterfaces[0], from, loc, doThrow, false, isCopied, toRestrictions, fromRestrictions, templateParams);
-            }
             if (from instanceof InterfaceType) {
-                if (!from.isBoxedType()) {
-                    // Check two interfaces
-                    let fromMethods = from.getAllMethods();
-                    let toMethods = to.getAllMethods();
-                    if (fromMethods.size >= toMethods.size) {
-                        let ok = true;
-                        for(let entry of toMethods.entries()) {
-                            if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false)) {
-                                ok = false;
-                                if (doThrow) {
-                                    throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
-                                }
-                                break;
+                // Check two interfaces
+                let fromMethods = from.getAllMethods();
+                let toMethods = to.getAllMethods();
+                if (fromMethods.size >= toMethods.size) {
+                    let ok = true;
+                    for(let entry of toMethods.entries()) {
+                        if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false)) {
+                            ok = false;
+                            if (doThrow) {
+                                throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
                             }
-                        }
-                        if (ok) {
-                            return true;
+                            break;
                         }
                     }
-                } 
+                    if (ok) {
+                        return true;
+                    }
+                }
             } else if (from == this.t_null) {
                 return true;
             } else {
@@ -4709,11 +4635,7 @@ export class TypeChecker {
             if (this.checkFunctionEquality(a, b, loc, false, doThrow)) {
                 return true;
             }
-        } else if (a instanceof InterfaceType && b instanceof InterfaceType && a.isBoxedType() && b.isBoxedType()) {
-            if (a.extendsInterfaces.length == b.extendsInterfaces.length && a.extendsInterfaces.length == 1) {
-                return this.checkTypeEquality(a.extendsInterfaces[0], b.extendsInterfaces[0], loc, false);
-            }
-        } else if (a instanceof InterfaceType && b instanceof InterfaceType && !a.isBoxedType() && !b.isBoxedType()) {
+        } else if (a instanceof InterfaceType && b instanceof InterfaceType) {
             let m1 = a.getAllMethods();
             let m2 = b.getAllMethods();
             if (m1.size == m2.size) {
@@ -4822,16 +4744,9 @@ export class TypeChecker {
         throw new TypeError("The expression is not assignable", node.loc);
     }
 
-    // Removes const, scope and unboxes
     public stripType(t: Type): Type {
         if (t instanceof RestrictedType) {
             t = t.elementType;
-        }
-        if (t instanceof InterfaceType && t.isBoxedType()) {
-            t = t.extendsInterfaces[0];
-            if (t instanceof RestrictedType) {
-                t = t.elementType;
-            }
         }
         return t;
     }
@@ -4950,20 +4865,28 @@ export class TypeChecker {
         return false;
     }
 
+    public isUnique(t: Type): boolean {
+        if (t instanceof RestrictedType) {
+            t = t.elementType;
+        }
+        if (t instanceof PointerType && t.mode == "unique") {
+            return true;
+        }
+        if (t instanceof SliceType && t.mode == "unique") {
+            return true;
+        }
+        if (t instanceof InterfaceType && t.mode == "unique") {
+            return true;
+        }
+        return false;
+    }
+
     public isConst(t: Type): boolean {
         if (t instanceof RestrictedType) {
             if (t.isConst) {
                 return true;
             }
             t = t.elementType;
-        }
-        if (t instanceof InterfaceType && t.isBoxedType()) {
-            t = t.extendsInterfaces[0];
-            if (t instanceof RestrictedType) {
-                if (t.isConst) {
-                    return true;
-                }
-            }    
         }
         return false;
     }
@@ -5053,7 +4976,7 @@ export class TypeChecker {
         }
         let p = RestrictedType.strip(t) as PointerType | SliceType | InterfaceType;
         if (p.mode != "strong") {
-            throw new TypeError("The keyword 'weak' must not be used together with '&'", loc);
+            throw new TypeError("The keyword 'weak' must not be used together with '&' or '^", loc);
         }
         p.mode = "weak";
         return t;
@@ -5063,12 +4986,24 @@ export class TypeChecker {
         if (this.isSlice(t) || this.isInterface(t)) {
             let p = RestrictedType.strip(t) as SliceType | InterfaceType;
             if (p.mode != "strong") {
-                throw new TypeError("The operator '&' must not be used together with 'weak'", loc);
+                throw new TypeError("The operator '&' must not be used together with 'weak' or '^", loc);
             }
             p.mode = "reference";
             return t;
         }
         return new PointerType(t, "reference");
+    }
+
+    public makeUniquePointer(t: Type, loc: Location): Type {
+        if (this.isSlice(t) || this.isInterface(t)) {
+            let p = RestrictedType.strip(t) as SliceType | InterfaceType;
+            if (p.mode != "strong") {
+                throw new TypeError("The operator '^' must not be used together with 'weak' or '&", loc);
+            }
+            p.mode = "unique";
+            return t;
+        }
+        return new PointerType(t, "unique");
     }
 
     public pointerElementType(t: Type): Type {
