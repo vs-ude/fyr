@@ -1310,7 +1310,7 @@ export class CodeGenerator {
         let minOffset = 0xffffff;
         let maxOffset = -1;
         for(let iface of this.tc.ifaces) {
-            if (this.tc.checkIsAssignableType(iface, t, null, false)) {
+            if (this.tc.checkIsAssignableType(iface, t, null, "assign", false)) {
                 for(let m of iface.getAllMethods().values()) {
                     if (methods.has(m.name)) {
                         continue;

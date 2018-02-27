@@ -1686,7 +1686,7 @@ export class TypeChecker {
             }
         }
         for(let iface of s.implements) {
-            this.checkIsAssignableType(iface, new PointerType(s, "strong"), s.loc);
+            this.checkIsAssignableType(iface, new PointerType(s, iface.mode), s.loc, "assign", true);
         }
     }
     
@@ -2408,7 +2408,7 @@ export class TypeChecker {
                 if (rnode) {
                     this.checkIsAssignableNode(v.type, rnode);
                 } else {
-                    this.checkIsAssignableType(v.type, rtype, vnode.loc, true);
+                    this.checkIsAssignableType(v.type, rtype, vnode.loc, "assign", true);
                 }
             }
         } else if (vnode.op == "tuple") {
@@ -2449,7 +2449,7 @@ export class TypeChecker {
                                 this.checkIsAssignableNode(lt.types[j-i], r);
                             }
                         } else {
-                            this.checkIsAssignableType(v.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc);
+                            this.checkIsAssignableType(v.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc, "assign", true);
                         }
                     }
                     break;
@@ -2525,12 +2525,12 @@ export class TypeChecker {
                             if (lt.size != rtypeStripped.size - i) {
                                 throw new TypeError("Mismatch in array size", vnode.loc);                                                
                             }
-                            this.checkIsAssignableType(lt.elementType, rtypeStripped.elementType, vnode.loc);
+                            this.checkIsAssignableType(lt.elementType, rtypeStripped.elementType, vnode.loc, "assign", true);
                         } else if (rtypeStripped instanceof SliceType) {
                             if (!(lt instanceof SliceType)) {
                                 throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                             }
-                            this.checkIsAssignableType(lt.getElementType(), rtypeStripped.getElementType(), vnode.loc);
+                            this.checkIsAssignableType(lt.getElementType(), rtypeStripped.getElementType(), vnode.loc, "assign", true);
                         }
                     }
                     break;
@@ -2600,7 +2600,7 @@ export class TypeChecker {
                             if (!(lt instanceof MapType) || !this.isString(lt.keyType)) {
                                 throw new TypeError("Ellipsis identifier must be of type map<string, ...>", vnode.loc);
                             }
-                            this.checkIsAssignableType(lt.valueType, rtypeStripped.valueType, vnode.loc);
+                            this.checkIsAssignableType(lt.valueType, rtypeStripped.valueType, vnode.loc, "assign", true);
                         }
                     }
                 } else {
@@ -2658,7 +2658,7 @@ export class TypeChecker {
                             this.checkIsAssignableNode(p.lhs.type.types[j-i], r);
                         }
                     } else {
-                        this.checkIsAssignableType(p.lhs.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc, "assign", true);
                     }
                     break;
                 } else {
@@ -2720,12 +2720,12 @@ export class TypeChecker {
                         if (p.lhs.type.size != rtypeStripped.size - i) {
                             throw new TypeError("Mismatch in array size", vnode.loc);                                                
                         }
-                        this.checkIsAssignableType(p.lhs.type.elementType, rtypeStripped.elementType, vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type.elementType, rtypeStripped.elementType, vnode.loc, "assign", true);
                     } else if (rtype instanceof SliceType) {
                         if (!(p.lhs.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis identifier must be of slice type", vnode.loc);
                         }
-                        this.checkIsAssignableType(p.lhs.type.getElementType(), rtypeStripped.getElementType(), vnode.loc);
+                        this.checkIsAssignableType(p.lhs.type.getElementType(), rtypeStripped.getElementType(), vnode.loc, "assign", true);
                     }
                     break;
                 } else {
@@ -2781,7 +2781,7 @@ export class TypeChecker {
                         if (!(kv.lhs.type instanceof MapType) || !this.isString(kv.lhs.type.keyType)) {
                             throw new TypeError("Ellipsis identifier must be of type map<string,...>", vnode.loc);
                         }
-                        this.checkIsAssignableType(kv.lhs.type.valueType, rtypeStripped.valueType, vnode.loc);
+                        this.checkIsAssignableType(kv.lhs.type.valueType, rtypeStripped.valueType, vnode.loc, "assign", true);
                     }
                 } else {
                     let p = kv.lhs;
@@ -2808,7 +2808,7 @@ export class TypeChecker {
             if (rnode) {
                 this.checkIsAssignableNode(vnode.type, rnode);
             } else {
-                this.checkIsAssignableType(vnode.type, rtype, vnode.loc, true);
+                this.checkIsAssignableType(vnode.type, rtype, vnode.loc, "assign", true);
             }
         }
     }
@@ -2862,7 +2862,7 @@ export class TypeChecker {
                     this.checkStatement(snode.lhs, s);
                 }
                 this.checkExpression(snode.condition, s);
-                this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc);
+                this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
                 for(let st of snode.statements) {
                     this.checkStatement(st, s);
                 }
@@ -2888,7 +2888,7 @@ export class TypeChecker {
                         }
                         if (snode.condition.condition) {
                             this.checkExpression(snode.condition.condition, forScope);
-                            this.checkIsAssignableType(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc);
+                            this.checkIsAssignableType(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
                         }
                         if (snode.condition.rhs) {
                             this.checkStatement(snode.condition.rhs, forScope);
@@ -2943,7 +2943,7 @@ export class TypeChecker {
                     if (snode.rhs.op == "int" || snode.rhs.op == "float") {
                         this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
                     } else {
-                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc);
+                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc, "assign", true);
                     }
                 }
                 break;                
@@ -2964,7 +2964,7 @@ export class TypeChecker {
                     if (snode.rhs.op == "int") {
                         this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
                     } else {
-                        this.checkIsAssignableType(this.t_int, snode.rhs.type, snode.loc);
+                        this.checkIsAssignableType(this.t_int, snode.rhs.type, snode.loc, "assign", true);
                     }
                 } else {
                     this.checkIsIntNumber(snode.lhs);
@@ -2972,7 +2972,7 @@ export class TypeChecker {
                     if (snode.rhs.op == "int" || snode.rhs.op == "float") {
                         this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
                     } else {
-                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc);
+                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc, "assign", true);
                     }
                 }
                 break;
@@ -2984,18 +2984,18 @@ export class TypeChecker {
                     if (snode.lhs.parameters[0].value != "_") {
                         this.checkExpression(snode.lhs.parameters[0], scope);
                         this.checkIsAssignable(snode.lhs.parameters[0], scope);
-                        this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc);
+                        this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc, "assign", true);
                     } 
                     if (snode.lhs.parameters[1].value != "_") {
                         this.checkExpression(snode.lhs.parameters[1], scope);
                         this.checkIsAssignable(snode.lhs.parameters[1], scope);
-                        this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc);
+                        this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc, "assign", true);
                     }
                 } else {
                     if (snode.lhs.value != "_") {
                         this.checkExpression(snode.lhs, scope);
                         this.checkIsAssignable(snode.lhs, scope);
-                        this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc);
+                        this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc, "assign", true);
                     }
                 }
                 break;
@@ -3007,7 +3007,7 @@ export class TypeChecker {
                     if (snode.lhs.parameters[0].value != "_") {
                         let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
                         if (v1.type) {
-                            this.checkIsAssignableType(v1.type, tindex1, snode.loc);
+                            this.checkIsAssignableType(v1.type, tindex1, snode.loc, "assign", true);
                         } else {
                             v1.type = tindex1
                         }
@@ -3015,7 +3015,7 @@ export class TypeChecker {
                     if (snode.lhs.parameters[1].value != "_") {
                         let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
                         if (v2.type) {
-                            this.checkIsAssignableType(v2.type, tindex2, snode.loc);
+                            this.checkIsAssignableType(v2.type, tindex2, snode.loc, "assign", true);
                         } else {
                             v2.type = tindex2;
                         }
@@ -3023,7 +3023,7 @@ export class TypeChecker {
                 } else {
                     let v = this.createVar(snode.lhs, scope, false);
                     if (v.type) {
-                        this.checkIsAssignableType(v.type, tindex1, snode.loc);
+                        this.checkIsAssignableType(v.type, tindex1, snode.loc, "assign", true);
                     } else {
                         v.type = tindex1;
                     }
@@ -3188,7 +3188,7 @@ export class TypeChecker {
                     if (enode.op == "+" || enode.op == "-") {
                         this.checkIsInt32Number(enode.rhs);
                     } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc);
+                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
                     enode.type = this.stripType(enode.lhs.type);
                 } else if (this.isUnsafePointer(enode.rhs.type)) {
@@ -3198,7 +3198,7 @@ export class TypeChecker {
                     if (enode.op == "+" || enode.op == "-") {
                         this.checkIsInt32Number(enode.lhs);
                     } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc);
+                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
                     enode.type = this.stripType(enode.rhs.type);
                 } else {
@@ -3247,7 +3247,7 @@ export class TypeChecker {
                     } else if (enode.rhs.op == "int" || enode.rhs.op == "float") {
                         this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
                     } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc);
+                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
                     if (enode.op == "+" || enode.op == "-" || enode.op == "*" || enode.op == "/" || enode.op == "float" || enode.op == "int") {
                         enode.type = this.stripType(enode.lhs.type);
@@ -3320,9 +3320,9 @@ export class TypeChecker {
                     if (enode.op == "<<" || enode.op == ">>") {
                         this.checkIsUnsignedNumber(enode.rhs);
                     } else if (this.isUnsafePointer(enode.lhs.type)) {
-                        this.checkIsAssignableType(this.t_uint, enode.rhs.type, enode.rhs.loc);
+                        this.checkIsAssignableType(this.t_uint, enode.rhs.type, enode.rhs.loc, "assign", true);
                     } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc);
+                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
                 }
                 enode.type = this.stripType(enode.lhs.type);
@@ -3370,7 +3370,7 @@ export class TypeChecker {
                 } else if  (enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str" || enode.rhs.op == "null") {
                     this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
                 } else {
-                    this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc);
+                    this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                 }
                 enode.type = this.t_bool;
                 break;
@@ -3497,7 +3497,7 @@ export class TypeChecker {
                     if (enode.rhs.isUnifyableLiteral()) {
                         this.unifyLiterals(t.keyType, enode.rhs, enode.rhs.loc);
                     } else {
-                        this.checkIsAssignableType(t.keyType, enode.rhs.type, enode.rhs.loc);
+                        this.checkIsAssignableType(t.keyType, enode.rhs.type, enode.rhs.loc, "assign", true);
                     }
                     enode.type = t.valueType;
                 } else if (t instanceof SliceType) {
@@ -3743,7 +3743,7 @@ export class TypeChecker {
                 } else if (this.isComplexOrType(right)) {
                     let ok = false;
                     for(let ot of (right as OrType).types) {
-                        if (this.checkIsAssignableType(t, ot, enode.loc, false)) {
+                        if (this.checkIsAssignableType(t, ot, enode.loc, "assign", false)) {
                             enode.type = t;
                             ok = true;
                             break;
@@ -3752,7 +3752,8 @@ export class TypeChecker {
                     if (!ok) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
                     }
-                } else if (this.checkIsAssignableType(t, right, enode.loc, false)) {
+                } else if (this.checkIsAssignableType(t, right, enode.loc, "assign", false)) {
+                    // null can be casted, especially when it is assigned to interface{}
                     if (right != this.t_null) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
                     }
@@ -3805,7 +3806,7 @@ export class TypeChecker {
             } else {
                 let t = node.parameters[0].type;
                 for(let i = 1; i < node.parameters.length; i++) {
-                    if (!this.checkIsAssignableType(t, node.parameters[i].type, node.loc, false)) {
+                    if (!this.checkIsAssignableType(t, node.parameters[i].type, node.loc, "assign", false)) {
                         if (!(t instanceof OrType)) {
                             let o = new OrType();
                             o.types.push(t);
@@ -4029,7 +4030,7 @@ export class TypeChecker {
 
     // TODO: Remove unbox
     // Checks whether the type 'from' can be assigned to the type 'to'.
-    public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equivalence", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
+    public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equal" | "pointer", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
             toRestrictions = {isConst: false, boxes: null}
         }
@@ -4040,11 +4041,11 @@ export class TypeChecker {
         // Determine const and box
         if (to instanceof RestrictedType) {
             toRestrictions = combineRestrictions(toRestrictions, to);
-            to = RestrictedType.strip(to);
+            to = to.elementType;
         }
         if (from instanceof RestrictedType) {
             fromRestrictions = combineRestrictions(fromRestrictions, from);
-            from = RestrictedType.strip(from);
+            from = from.elementType;
         }
 
         // A const-mismatch can be tolerated if the value is a pure value and if it is being copied.
@@ -4064,12 +4065,19 @@ export class TypeChecker {
             }
         }
 
-        if (to == from && (this.isPrimitive(to) || this.isString(to) || to instanceof StructType || to instanceof StringLiteralType)) {
+        if (mode == "pointer") {
+            if (to instanceof StructType && from instanceof StructType && to != from && from.doesExtend(to)) {
+                return true;
+            }
+            mode = "equal";
+        }
+
+        if (to == from) {
             return true;
-        } else if (to instanceof TupleType && from instanceof TupleType && to.types.length == from.types.length) {
-            let ok = true;
+        } else if (to instanceof TupleType && from instanceof TupleType) {
+            let ok = (to.types.length == from.types.length);
             for(let i = 0; i < to.types.length; i++) {
-                if (!this.checkIsAssignableType(to.types[i], from.types[i], loc, "equivalence", false, toRestrictions, fromRestrictions, templateParams)) {
+                if (!this.checkIsAssignableType(to.types[i], from.types[i], loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                     ok = false;
                     break;
                 }
@@ -4079,7 +4087,7 @@ export class TypeChecker {
             }
         } else if (to instanceof OrType) {
             if (from instanceof OrType) {
-                if (from.types.length <= to.types.length) {
+                if ((mode == "assign" && from.types.length <= to.types.length) || from.types.length == to.types.length) {
                     let ok = true;
                     for(let f of from.types) {
                         let ok2 = false;
@@ -4098,87 +4106,82 @@ export class TypeChecker {
                         return true;
                     }
                 }
-            } else {
+            } else if (mode == "assign") {
                 for(let o of to.types) {
                     if (this.checkIsAssignableType(o, from, loc, mode, false, toRestrictions, fromRestrictions, templateParams)) {
                         return true;
                     }
                 }
             }
-        } else if (to instanceof PointerType) {
-            if (from == this.t_null) {
-                // null can be assigned to any pointer type
+        } else if (to instanceof PointerType && from == this.t_null) {
+            // null can be assigned to any pointer type
+            if (mode == "assign") {
                 return true;
-            } else if (from instanceof PointerType || from instanceof UnsafePointerType) {
-                // Pointers to derived types can be assigned to pointers of the super type
-                let fromElement = from.elementType;
-                if (this.isStruct(to.elementType) && this.isStruct(fromElement)) {
-                    let toStruct = this.stripType(to.elementType) as StructType;
-                    let fromStruct = this.stripType(from.elementType) as StructType;
-                    if (toStruct != fromStruct && fromStruct.doesExtend(toStruct)) {
-                        if (fromElement instanceof RestrictedType) {
-                            fromElement = new RestrictedType(toStruct, fromElement);
-                        } else {
-                            fromElement = toStruct;
-                        }
-                    }
-                }
-                if (this.checkIsAssignableType(to.elementType, fromElement, loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
+            }
+        } else if (to instanceof PointerType && from instanceof UnsafePointerType) {
+            if (mode == "assign" && this.checkIsAssignableType(to.elementType, from.elementType, loc, "pointer", false, toRestrictions, fromRestrictions, templateParams)) {
+                return true;
+            }
+        } else if (to instanceof PointerType && from instanceof PointerType) {
+            if (to.mode == from.mode || (mode == "assign" &&
+                (to.mode == "reference" ||
+                (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
+                (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
+                (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))))) {
+                if (this.checkIsAssignableType(to.elementType, from.elementType, loc, mode == "assign" ? "pointer" : "equal", false, toRestrictions, fromRestrictions, templateParams)) {
+                    return true;
+                }            
+            }
+        } else if (to instanceof UnsafePointerType && (from == this.t_int || from == this.t_uint || from == this.t_null)) {
+            // integers and null can be assigned to an usafe pointer type
+            if (mode == "assign") {
+                return true;
+            }
+        } else if (to instanceof UnsafePointerType && (from instanceof UnsafePointerType || from instanceof PointerType)) {            
+            if (to.elementType == this.t_void) {
+                // Safe and unsafe pointers to anything can be assigned to #void
+                if (mode == "assign") {
                     return true;
                 }
             }
-        } else if (to instanceof UnsafePointerType) {
-            if (from == this.t_int || from == this.t_uint || from == this.t_null) {
-                // integers and null can be assigned to an usafe pointer type
-                return true;
-            } else if (from instanceof UnsafePointerType || from instanceof PointerType) {                
-                if (to.elementType == this.t_void) {
-                    // Safe and unsafe pointers to anything can be assigned to #void
+            if (from.elementType == this.t_void) {
+                // #void can be assigned to any unsafe pointer
+                if (mode == "assign") {
                     return true;
-                } else if (from.elementType == this.t_void) {
-                    // #void can be assigned to any unsafe pointer
-                    return true;
-                } else {
-                    // Pointers to derived types can be assigned to pointers of the super type
-                    let fromElement = from.elementType;
-                    if (this.isStruct(to.elementType) && this.isStruct(fromElement)) {
-                        let toStruct = this.stripType(to.elementType) as StructType;
-                        let fromStruct = this.stripType(from.elementType) as StructType;
-                        if (toStruct != fromStruct && fromStruct.doesExtend(toStruct)) {
-                            if (fromElement instanceof RestrictedType) {
-                                fromElement = new RestrictedType(toStruct, fromElement);
-                            } else {
-                                fromElement = toStruct;
-                            }
-                        }
-                    }
-                    if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
-                        return true;
-                    }
                 }
             }
+            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, mode == "assign" ? "pointer" : "equal", false, toRestrictions, fromRestrictions, templateParams)) {
+                return true;
+            }            
         } else if (to instanceof ArrayType && from instanceof ArrayType) {
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, false, false, isCopied, toRestrictions, fromRestrictions, templateParams)) {
+            if (to.size == from.size && this.checkIsAssignableType(to.elementType, from.elementType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                 return true;
             }
         } else if (to instanceof SliceType && from instanceof SliceType) {
-            if (this.checkIsAssignableType(to.getElementType(), from.getElementType(), loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
-                return true;
-            }            
+            if (to.mode == from.mode || (mode == "assign" && 
+                (to.mode == "reference" ||
+                (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
+                (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
+                (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))))) {
+                if (this.checkIsAssignableType(to.arrayType, from.arrayType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
+                    return true;
+                }            
+            }
         } else if (to instanceof MapType && from instanceof MapType) {
-            if (this.checkIsAssignableType(to.keyType, from.keyType, loc, false, false, false, toRestrictions, fromRestrictions, templateParams) &&
-                this.checkIsAssignableType(to.valueType, from.valueType, loc, false, false, false, toRestrictions, fromRestrictions, templateParams)) {
+            if (this.checkIsAssignableType(to.keyType, from.keyType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams) &&
+                this.checkIsAssignableType(to.valueType, from.valueType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                     return true;
             }
         } else if (to instanceof InterfaceType) {
+            // Everything can be asssigned to the empty interface
             if (to.isEmptyInterface()) {
                 return true;
             }
             if (from instanceof InterfaceType) {
-                // Check two interfaces
+                // Check two interfaces (which are not the same InterfaceType objects)
                 let fromMethods = from.getAllMethods();
                 let toMethods = to.getAllMethods();
-                if (fromMethods.size >= toMethods.size) {
+                if ((mode == "assign" && fromMethods.size >= toMethods.size) || fromMethods.size == toMethods.size) {
                     let ok = true;
                     for(let entry of toMethods.entries()) {
                         if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false)) {
@@ -4188,43 +4191,53 @@ export class TypeChecker {
                             }
                             break;
                         }
-                    }
+                    }    
                     if (ok) {
-                        return true;
+                        if (to.mode == from.mode || (mode == "assign" && 
+                            (to.mode == "reference" ||
+                            (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
+                            (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
+                            (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))))) {
+                            return true;
+                        }
                     }
                 }
-            } else if (from == this.t_null) {
+            } else if (from == this.t_null && mode == "assign") {
+                // null can be assigned to all interfaces
                 return true;
-            } else {
-                if (from instanceof PointerType || from instanceof UnsafePointerType) {
-                    let fromElement = this.stripType(from.elementType);
-                    if (fromElement instanceof StructType) {
-                        let toMethods = to.getAllMethods();
-                        let fromMethods = fromElement.getAllMethodsAndFields();
-                        let ok = true;
-                        for(let entry of toMethods.entries()) {
-                            if (fromMethods.has(entry[0])) {
-                                let fieldOrMethod = fromMethods.get(entry[0]);
-                                if (!(fieldOrMethod instanceof FunctionType) || !this.checkFunctionEquality(entry[1], fieldOrMethod, loc, true, false)) {
-                                    ok = false;
-                                    if (doThrow) {
-                                        throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + fromElement.toString() + " and " + to.toString(), loc);
-                                    }
-                                    break;
-                                }
-                            } else {
+            } else if (from instanceof PointerType || from instanceof UnsafePointerType && mode == "assign") {
+                let fromElement = this.stripType(from.elementType);
+                if (fromElement instanceof StructType) {
+                    let toMethods = to.getAllMethods();
+                    let fromMethods = fromElement.getAllMethodsAndFields();
+                    let ok = true;
+                    for(let entry of toMethods.entries()) {
+                        if (fromMethods.has(entry[0])) {
+                            let fieldOrMethod = fromMethods.get(entry[0]);
+                            if (!(fieldOrMethod instanceof FunctionType) || !this.checkFunctionEquality(entry[1], fieldOrMethod, loc, true, false)) {
                                 ok = false;
                                 if (doThrow) {
-                                    throw new TypeError("Type " + fromElement.toString() + " is missing method " + entry[0] + " as required by " + to.toString(), loc);
+                                    throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + fromElement.toString() + " and " + to.toString(), loc);
                                 }
                                 break;
                             }
+                        } else {
+                            ok = false;
+                            if (doThrow) {
+                                throw new TypeError("Type " + fromElement.toString() + " is missing method " + entry[0] + " as required by " + to.toString(), loc);
+                            }
+                            break;
                         }
-                        if (ok) {
+                    }
+                    if (ok) {
+                        if (from instanceof UnsafePointerType || to.mode == "reference" ||
+                            (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
+                            (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
+                            (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))) {
                             return true;
                         }
-                    }                
-                }
+                    }
+                }                
             }
         }
         if (!doThrow) {
