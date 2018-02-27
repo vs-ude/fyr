@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "class" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -865,6 +865,9 @@ primary2
           expected("return type in lambda expression", fl(location()));
       }
       return new ast.Node({loc: fl(location()), op: "=>", parameters: p, lhs: t, statements: b});
+    }
+  / "take" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "take", lhs: e});
     }
   / o:object { return o; }
   / a:array { return a; }

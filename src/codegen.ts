@@ -133,7 +133,7 @@ export class CodeGenerator {
             let g = this.globalVars.get(v);
             if ((this.tc.isStruct(v.type) || this.tc.isArray(v.type)) && this.isPureLiteral(v.type, v.node.rhs)) {
                 let expr = this.processPureLiteral(v.node.rhs);
-                if (v.isConst && this.tc.isConst(v.type)) {
+                if (this.tc.isConst(v.type)) {
                     g.isConstant = true;
                     g.constantValue = (expr as ssa.Variable).constantValue;
                 } else {
@@ -393,7 +393,7 @@ export class CodeGenerator {
                         let v = vars.get(element);
                         if ((this.tc.isArray(element.type) || this.tc.isStruct(element.type)) && this.isPureLiteral(element.type, snode.rhs)) {
                             let data = this.processPureLiteral(snode.rhs);
-                            if (element.isConst && this.tc.isConst(element.type)) {
+                            if (this.tc.isConst(element.type)) {
                                 v.isConstant = true;
                                 v.constantValue = (data as ssa.Variable).constantValue;
                             } else {                                

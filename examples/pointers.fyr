@@ -3,6 +3,15 @@ type Point struct {
     y int
 }
 
+type Image struct {
+}
+
+type Widget struct {
+    background const ^Image
+    width int
+    numbers []int
+}
+
 type JSON int | double | string | null | ([]JSON) | map<string, JSON>
 
 func &Point.translate(x int, y int) {
@@ -30,6 +39,8 @@ func main() {
     var s4 const weak []int
     var s5 &[]int
     var s6 const &[]int
+    var s7 ^[]int
+    var s8 const ^[]int
 
     var i1 interface{}
     var i2 const interface{}
@@ -37,8 +48,11 @@ func main() {
     var i4 const weak interface{}
     var i5 &interface{}
     var i6 const &interface{}
+    var i7 ^interface{}
+    var i8 const ^interface{}
 
     const c1 *Point = p1
+    c1.x = 5
 
     p1 = {x: 1, y: 2}
     s1 = [1,2,3]
@@ -49,6 +63,17 @@ func main() {
     var l4 = &[&{x: 1, y: 2}, &{x:42, y:84}]
 
     var json JSON = [42, 1.32, "Hallo", null, [1,2,3], {age:42, name: "Heinz"}]
+
+    var w *Widget
+    w.numbers[0] = 0
+    w.width += 10
+    w.width = 100
+    w.background = null
+    var img const ^Image = take(w.background)
+
+    s1[0] = 0
+//    s2[0] = 0
+    s6 = s2[:]
 }
 
 func f(ptr box *Point, compareWith box(a) &Point, lessThan box(a) &Point) {

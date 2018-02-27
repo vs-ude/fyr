@@ -36,9 +36,6 @@ export class ImportedPackage implements ScopeElement {
 
 // Variable is a global or function-local variable.
 export class Variable implements ScopeElement {
-    // TODO
-    // A variable is const if its value cannot be assigned to except during its initial definition.
-    public isConst: boolean;
     // Variable is the named return variable of a function, e.g. "count" or "error" in "func foo() (count int, err error) { }"
     public isResult: boolean = false;
     public name: string;
@@ -76,9 +73,7 @@ export class FunctionParameter implements ScopeElement {
     public name: string;
     public ellipsis: boolean;
     public type: Type;
-    public loc: Location;   
-    // 'this' is const, because the function parameter cannot be assigned to
-    public isConst: boolean;
+    public loc: Location;
 }
 
 /**
@@ -1873,7 +1868,6 @@ export class TypeChecker {
                     }
                 }
                 if (!ok) {
-                    console.log(types[i])
                     throw new TypeError(types[i].toString() + " does not match with template parameter constraint " + tp.toString() + " of parameter " + t.templateParameterNames[i] + " of template function " + t.name, loc);
                 }
             }
@@ -1981,7 +1975,6 @@ export class TypeChecker {
             p.name = "this";            
             p.loc = fnode.lhs.loc;
             p.type = objectType;
-            p.isConst = true;
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
@@ -2051,7 +2044,6 @@ export class TypeChecker {
         let v = new Variable();
         v.loc = vnode.loc;
         v.name = vnode.value;
-        v.isConst = isConst;
         if (!vnode.rhs) {
             if (needType) {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
@@ -2911,7 +2903,7 @@ export class TypeChecker {
                         let v = this.createVar(snode.lhs, scope, true);
                     } else {
                         for (let p of snode.lhs.parameters) {
-                            let v = this.createVar(p, scope);                            
+                            let v = this.createVar(p, scope, true);
                         }
                     }
                 } else {
@@ -3389,9 +3381,7 @@ export class TypeChecker {
                     if (field) {
                         enode.type = field.type;
                         if (isConst) {
-                            // TODO: Wrong const handling
-                            // TODO: No box propagation
-                            enode.type = this.makeConst(enode.type, enode.loc);
+                            enode.type = this.applyConst(enode.type, enode.loc);
                         }
                     } else {
                         let method = type.method(name);
@@ -3461,14 +3451,14 @@ export class TypeChecker {
                     this.checkIsIndexable(enode.lhs, index2, true);
                     enode.type = new SliceType(t, "strong");
                 } else if (t instanceof UnsafePointerType) {
-                    enode.type = new SliceType(new ArrayType(elementType, -1), "strong");
+                    enode.type = new SliceType(enode.lhs.type as (ArrayType | RestrictedType), "reference");
                     if (isConst) {
-                        enode.type = this.makeConst(enode.type, enode.loc);
+                        enode.type = this.applyConst(enode.type, enode.loc);
                     }
                 } else if (t instanceof MapType) {
                     throw new TypeError("Ranges are not supported on maps", enode.loc);
                 } else {
-                    // For strings and slices the type remains the same
+                    // For slices the type remains the same
                     enode.type = enode.lhs.type;
                 }
                 break;
@@ -3502,13 +3492,14 @@ export class TypeChecker {
                     enode.type = t.valueType;
                 } else if (t instanceof SliceType) {
                     enode.type = t.getElementType();
+                    isConst = isConst || this.isConst(t.arrayType);
                 } else if (t instanceof UnsafePointerType) {
                     enode.type = t.elementType;
                 } else {
                     throw new TypeError("[] operator is not allowed on " + enode.lhs.type.toString(), enode.loc);
                 }
                 if (isConst) {
-                    enode.type = this.makeConst(enode.type, enode.loc);
+                    enode.type = this.applyConst(enode.type, enode.loc);
                 }
                 break;
             }
@@ -3764,6 +3755,15 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "take":
+                this.checkExpression(enode.lhs, scope);
+                this.checkIsMutable(enode.lhs, scope);
+                let takeType = RestrictedType.strip(enode.lhs.type);
+                if (!(takeType instanceof PointerType || takeType instanceof SliceType || takeType instanceof InterfaceType) || takeType.mode == "reference") {
+                    throw new TypeError("take() can only be applied to non-reference pointer types", enode.lhs.loc);
+                }
+                enode.type = enode.lhs.type;
+                break;
             case "ellipsisId":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
             case "optionalId":
@@ -4698,9 +4698,13 @@ export class TypeChecker {
     }
 
     public checkIsMutable(node: Node, scope: Scope): boolean {
+        if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
+            return true;
+        }
+        /*
         if (node.op == "id") {
             let element = scope.resolveElement(node.value);
-            if ((!(element instanceof Variable) || !element.isConst) && (!(element instanceof FunctionParameter) || !element.isConst)) {
+            if ((element instanceof Variable && !this.isConst(element.type)) || (element instanceof FunctionParameter && !this.isConst(element.type) && element.name != "this")) {
                 return true;
             }
         } else if (node.op == "unary*") {
@@ -4708,31 +4712,26 @@ export class TypeChecker {
                 return true;
             }
         } else if (node.op == ".") {
-            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
-                let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof PointerType || t instanceof UnsafePointerType) {
-                    return true;
-                }
-                if (!this.checkIsIntermediate(node.lhs)) {
+            if (this.isSafePointer(node.lhs.type) || this.isUnsafePointer(node.lhs.type)) {
+                if (!this.isConst((node.lhs.type as (PointerType | UnsafePointerType)).elementType)) {
                     return true;
                 }
             }
         } else if (node.op == "[" && !this.isString(node.lhs.type)) {
-            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
-                let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof UnsafePointerType || t instanceof SliceType) {
-                    return true;
-                }
-                if (!this.checkIsIntermediate(node.lhs)) {
+            if (this.isSlice(node.lhs.type)) {
+                if (!this.isConst((node.lhs.type as SliceType).arrayType)) {
                     return true;
                 }
             }
         }
+        */
         throw new TypeError("The expression is not mutable", node.loc);
     }
 
     // Returns true if a value can be assigned to this expression
     public checkIsAssignable(node: Node, scope: Scope): boolean {
+        return this.checkIsMutable(node, scope);
+        /*
         if (node.op == "id") {
             // TODO: Not if the underlying variable is a constant
             return true;
@@ -4762,6 +4761,7 @@ export class TypeChecker {
             }
         }
         throw new TypeError("The expression is not assignable", node.loc);
+        */
     }
 
     public stripType(t: Type): Type {
@@ -4970,19 +4970,27 @@ export class TypeChecker {
         return false;
     }
 
+    public applyConst(t: Type, loc: Location): Type {
+        if (this.isSafePointer(t)) {
+            let ptr = RestrictedType.strip(t) as PointerType;
+            ptr.elementType = this.makeConst(ptr.elementType, loc);
+        } else if (this.isSlice(t)) {
+            let ptr = RestrictedType.strip(t) as SliceType;
+            ptr.arrayType = this.makeConst(ptr.arrayType, loc) as RestrictedType;
+        }
+        return this.makeConst(t, loc);
+    }
+
     public makeConst(t: Type, loc: Location): Type {
         if (t instanceof RestrictedType) {
             if (t.isConst) {
                 return t;
             }
-            if (this.isPrimitive(t.elementType) || this.isConst(t.elementType)) {
-                return t;
-            }
             return new RestrictedType(t.elementType, {isConst: true, boxes: t.boxes});
         }
-        if (this.isPrimitive(t)) {
-            return t;
-        }
+//        if (this.isPrimitive(t)) {
+//            return t;
+//        }
         return new RestrictedType(t, {isConst: true, boxes: null});
     }
 
