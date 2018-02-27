@@ -252,7 +252,7 @@ export abstract class Type {
  * BasicType represents all built-in types.
  */
 export class BasicType extends Type {
-    constructor(name: "void" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune") {
+    constructor(name: "void" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune" | "any") {
         super();
         this.name = name;
     }
@@ -316,10 +316,6 @@ export class InterfaceType extends Type {
         throw "TODO"
     }
 
-    public isEmptyInterface(): boolean {
-        return this.extendsInterfaces.length == 0 && this.methods.size == 0;
-    }
-
     public method(name: string): FunctionType {
         if (this.methods.has(name)) {
             return this.methods.get(name);
@@ -335,8 +331,6 @@ export class InterfaceType extends Type {
         return null;
     }
 
-    public mode: PointerMode = "strong";
-    public contentType: RestrictedType;
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -1230,6 +1224,7 @@ export class TypeChecker {
         this.t_uint32 = new BasicType("uint32");
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
+        this.t_any = new BasicType("any");
         let b = new Box();
 //        b.freeze();
         let str = new SliceType(new ArrayType(this.t_byte, -1), "strong");
@@ -1301,8 +1296,6 @@ export class TypeChecker {
             if (mode == "variable") {
                 if (this.isSafePointer(t)) {
                     throw "TODO: Make boxed recursively"
-                } else if (this.isInterface(t)) {
-                    throw "TODO: Make boxed recursively"
                 } else if (this.isSlice(t)) {
                     throw "TODO: Make boxed recursively"
                 }
@@ -1316,14 +1309,6 @@ export class TypeChecker {
             if (this.isSafePointer(c)) {
                 let ptr = RestrictedType.strip(c) as PointerType;
                 ptr.elementType = this.makeConst(ptr.elementType, tnode.loc);
-                return c;
-            } else if (this.isInterface(c)) {
-                let ptr = RestrictedType.strip(c) as InterfaceType;
-                if (ptr.contentType) {
-                    ptr.contentType = this.makeConst(ptr.contentType, tnode.loc) as RestrictedType;
-                } else {
-                    ptr.contentType = new RestrictedType(null, {isConst: true, boxes: null});
-                }
                 return c;
             } else if (this.isSlice(c)) {
                 let ptr = RestrictedType.strip(c) as SliceType;
@@ -1376,14 +1361,6 @@ export class TypeChecker {
             if (this.isSafePointer(c)) {
                 let ptr = RestrictedType.strip(c) as PointerType;
                 ptr.elementType = this.makeBox(ptr.elementType, boxes, tnode.loc);
-                return c;
-            } else if (this.isInterface(c)) {
-                let ptr = RestrictedType.strip(c) as InterfaceType;
-                if (ptr.contentType) {
-                    ptr.contentType = this.makeBox(ptr.contentType, boxes, tnode.loc);
-                } else {
-                    ptr.contentType = new RestrictedType(null, {isConst: false, boxes: boxes});
-                }
                 return c;
             } else if (this.isSlice(c)) {
                 let ptr = RestrictedType.strip(c) as SliceType;
@@ -1481,11 +1458,11 @@ export class TypeChecker {
         } else if (tnode.op == "structType") {
             return this.createStructType(tnode, scope, null, mode);
         } else if (tnode.op == "interfaceType") {
-            let iface = this.createInterfaceType(tnode, scope, null, mode);
+            let iface: Type = this.createInterfaceType(tnode, scope, null, mode);
             if (mode == "variable") {
-                iface.contentType = new RestrictedType(null, {isConst: false, boxes: [new Box()]});
+                iface = new RestrictedType(null, {isConst: false, boxes: [new Box()]});
             }
-            return iface;
+            return new PointerType(iface, "strong");
         }
         throw "Implementation error for type " + tnode.op
     }
@@ -1526,7 +1503,7 @@ export class TypeChecker {
             }
             return iface;
         }
-
+        
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
                 let t = this.createType(mnode.rhs, scope, mode ? mode : "default");
@@ -1546,14 +1523,17 @@ export class TypeChecker {
                     throw new TypeError("Duplicate member name " + ft.name, mnode.loc);
                 }
                 iface.methods.set(ft.name, ft);
-                ft.objectType = iface;
-                if (mnode.lhs) {
-                    if (mnode.lhs.op == "constType") {
-                        ft.objectType = new RestrictedType(ft.objectType, {isConst: true, boxes: null});
-                    } else {
-                        throw "Implementation error";
-                    }
+                let fscope = new Scope(scope); // This scope is required for box names
+                let r = this.createType(mnode.lhs, fscope, "default");
+                let ptr = r;
+                if (!(ptr instanceof PointerType)) {
+                    throw "Implementation error";
                 }
+                if (ptr.elementType instanceof RestrictedType) {
+                    ptr = ptr.elementType;
+                }
+                (ptr as PointerType | RestrictedType).elementType = iface;
+                ft.objectType = r;
             } else {
                 throw "Implementation error " + mnode.op + " " + iface.name;
             }
@@ -1681,7 +1661,7 @@ export class TypeChecker {
             }
         }
         for(let iface of s.implements) {
-            this.checkIsAssignableType(iface, new PointerType(s, iface.mode), s.loc, "assign", true);
+            this.checkIsAssignableType(new PointerType(iface, "strong"), new PointerType(s, "strong"), s.loc, "assign", true);
         }
     }
     
@@ -1906,14 +1886,14 @@ export class TypeChecker {
         // A member function?
         if (fnode.lhs) {
             objectType = this.createType(fnode.lhs, parentScope, "parameter");
-            let obj = RestrictedType.strip(objectType);
-            if (!(obj instanceof PointerType)) {
+            if (!(objectType instanceof PointerType)) {
                 throw new TypeError(objectType.toString() + " is not a pointer", fnode.lhs.loc);
             }
-            if (!(obj.elementType instanceof StructType) || obj.elementType.name == "") {
-                throw new TypeError(obj.elementType.toString() + " is not a named struct", fnode.lhs.loc);
+            let obj = RestrictedType.strip(objectType.elementType);
+            if (!(obj instanceof StructType) || obj.name == "") {
+                throw new TypeError(obj.toString() + " is not a named struct", fnode.lhs.loc);
             }
-            structType = obj.elementType;
+            structType = obj;
         }
         let f: Function | TemplateFunction;
         if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
@@ -3135,6 +3115,9 @@ export class TypeChecker {
                 this.checkIsPointer(enode.rhs);
                 let t = this.stripType(enode.rhs.type);
                 enode.type = (t as (PointerType | UnsafePointerType)).elementType;
+                if (this.isInterface(enode.type)) {
+                    throw new TypeError("Interfaces cannot be dereferenced", enode.loc);
+                }
                 break;
             }
             case "unary&":
@@ -3323,15 +3306,9 @@ export class TypeChecker {
                 if (tl instanceof OrType && !tl.stringsOnly()) {
                     throw new TypeError("Or'ed types cannot be compared", enode.lhs.loc);
                 }
-                if (tl instanceof InterfaceType && tl.isEmptyInterface()) {
-                    throw new TypeError("Empty interfaces cannot be compared", enode.lhs.loc);
-                }
                 let tr = this.stripType(enode.rhs.type);
                 if (tr instanceof OrType && !tr.stringsOnly()) {
                     throw new TypeError("Or'ed types cannot be compared", enode.rhs.loc);
-                }
-                if (tr instanceof InterfaceType && tr.isEmptyInterface()) {
-                    throw new TypeError("Empty interfaces cannot be compared", enode.rhs.loc);
                 }
                 if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
                     // TODO: parse in a BigNumber representation
@@ -3365,52 +3342,55 @@ export class TypeChecker {
             case ".":
             {
                 this.checkExpression(enode.lhs, scope);
-                let isConst = this.isConst(enode.lhs.type);
                 let type: Type = this.stripType(enode.lhs.type);
+                let name = enode.name.value;
+                if (type instanceof PackageType) {
+                    if (!type.elements.has(name)) {
+                        throw new TypeError("Unknown identifier " + name + " in " + type.toString(), enode.name.loc);                        
+                    }
+                    enode.type = type.elements.get(name);
+                    break;
+                }
+                let method = this.getBuiltinFunction(enode.lhs.type, name, enode.name.loc);
+                if (method) {
+                    enode.type = method;
+                    break;
+                }
+                let objectType = type;
+                let isConst = this.isConst(enode.lhs.type);
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
                     isConst = this.isConst(type.elementType);
-                    type = this.stripType(type.elementType);
+                    objectType = this.stripType(type.elementType);
+                } else if (type instanceof StructType) {
+                    objectType = type;
+                    type = new PointerType(type, "reference");
+                } else {
+                    throw new TypeError("Unknown field or method " + name + " in " + type.toString(), enode.name.loc);                                        
                 }
-                if (type instanceof StructType) {
-                    let name = enode.name.value;
-                    let field = type.field(name);
+                if (objectType instanceof StructType) {
+                    let field = objectType.field(name);
                     if (field) {
                         enode.type = field.type;
                         if (isConst) {
                             enode.type = this.applyConst(enode.type, enode.loc);
                         }
                     } else {
-                        let method = type.method(name);
+                        let method = objectType.method(name);
                         if (!method) {
-                            throw new TypeError("Unknown field or method " + name + " in " + type.toString(), enode.name.loc);
+                            throw new TypeError("Unknown field or method " + name + " in " + objectType.toString(), enode.name.loc);
                         }
-                        if (isConst && !this.isConst(method.objectType)) {
-                            throw new TypeError("Method " + name + " is not const", enode.loc);
-                        }
+                        this.checkIsAssignableType(method.objectType, type, enode.loc, "assign", true);
                         enode.type = method;
                     }
-                } else if (type instanceof InterfaceType) {
-                    let name = enode.name.value;
-                    let method = type.method(name);
+                } else if (objectType instanceof InterfaceType) {
+                    let method = objectType.method(name);
                     if (!method) {
-                        throw new TypeError("Unknown method " + name + " in " + type.toString(), enode.name.loc);
+                        throw new TypeError("Unknown method " + name + " in " + objectType.toString(), enode.name.loc);
                     }
-                    if (isConst && !this.isConst(method.objectType)) {
-                        throw new TypeError("Method " + name + " is not const", enode.loc);
-                    }
+                    this.checkIsAssignableType(method.objectType, type, enode.loc, "assign", true);
                     enode.type = method;
-                } else if (type instanceof PackageType) {
-                    if (!type.elements.has(enode.name.value)) {
-                        throw new TypeError("Unknown identifier " + enode.name.value + " in " + type.toString(), enode.name.loc);                        
-                    }
-                    enode.type = type.elements.get(enode.name.value);
                 } else {
-                    let name = enode.name.value;
-                    let method = this.getBuiltinFunction(enode.lhs.type, name, enode.name.loc);
-                    if (!method) {
-                        throw new TypeError("Unknown method " + name + " in " + type.toString(), enode.name.loc);
-                    }
-                    enode.type = method;
+                    throw new TypeError("Unknown field or method " + name + " in " + objectType.toString(), enode.name.loc);                    
                 }
                 break;
             }
@@ -3755,7 +3735,7 @@ export class TypeChecker {
                 this.checkExpression(enode.lhs, scope);
                 this.checkIsMutable(enode.lhs, scope);
                 let takeType = RestrictedType.strip(enode.lhs.type);
-                if (!(takeType instanceof PointerType || takeType instanceof SliceType || takeType instanceof InterfaceType) || takeType.mode == "reference") {
+                if (!(takeType instanceof PointerType || takeType instanceof SliceType) || takeType.mode == "reference") {
                     throw new TypeError("take() can only be applied to non-reference pointer types", enode.lhs.loc);
                 }
                 enode.type = enode.lhs.type;
@@ -3861,7 +3841,7 @@ export class TypeChecker {
             return false;
         }
 
-        if (t instanceof InterfaceType && t.isEmptyInterface()) {
+        if (t == this.t_any) {
             node.type = this.defaultLiteralType(node);
             return true;
         }
@@ -4043,13 +4023,6 @@ export class TypeChecker {
             fromRestrictions = combineRestrictions(fromRestrictions, from);
             from = from.elementType;
         }
-        if (to instanceof InterfaceType) {
-            toRestrictions = combineRestrictions(toRestrictions, to.contentType);
-        }
-        if (from instanceof InterfaceType) {
-            fromRestrictions = combineRestrictions(fromRestrictions, from.contentType);
-        }
-
         
         // A const-mismatch can be tolerated if the value is a pure value and if it is being copied.
         if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode != "assign" || !this.isPureValue(to))) {
@@ -4072,7 +4045,6 @@ export class TypeChecker {
             if (to instanceof StructType && from instanceof StructType && to != from && from.doesExtend(to)) {
                 return true;
             }
-            mode = "equal";
         }
 
         if (to == from) {
@@ -4175,11 +4147,10 @@ export class TypeChecker {
                 this.checkIsAssignableType(to.valueType, from.valueType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                     return true;
             }
-        } else if (to instanceof InterfaceType) {
+        } else if (to == this.t_any) {
             // Everything can be asssigned to the empty interface
-            if (to.isEmptyInterface()) {
-                return true;
-            }
+            return true;
+        } else if (to instanceof InterfaceType) {
             if (from instanceof InterfaceType) {
                 // Check two interfaces (which are not the same InterfaceType objects)
                 let fromMethods = from.getAllMethods();
@@ -4196,51 +4167,34 @@ export class TypeChecker {
                         }
                     }    
                     if (ok) {
-                        if (to.mode == from.mode || (mode == "assign" && 
-                            (to.mode == "reference" ||
-                            (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
-                            (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
-                            (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))))) {
-                            return true;
-                        }
+                        return true;
                     }
                 }
-            } else if (from == this.t_null && mode == "assign") {
-                // null can be assigned to all interfaces
-                return true;
-            } else if (from instanceof PointerType || from instanceof UnsafePointerType && mode == "assign") {
-                let fromElement = this.stripType(from.elementType);
-                if (fromElement instanceof StructType) {
-                    let toMethods = to.getAllMethods();
-                    let fromMethods = fromElement.getAllMethodsAndFields();
-                    let ok = true;
-                    for(let entry of toMethods.entries()) {
-                        if (fromMethods.has(entry[0])) {
-                            let fieldOrMethod = fromMethods.get(entry[0]);
-                            if (!(fieldOrMethod instanceof FunctionType) || !this.checkFunctionEquality(entry[1], fieldOrMethod, loc, true, false)) {
-                                ok = false;
-                                if (doThrow) {
-                                    throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + fromElement.toString() + " and " + to.toString(), loc);
-                                }
-                                break;
-                            }
-                        } else {
+            } else if (from instanceof StructType && mode == "pointer") {
+                let toMethods = to.getAllMethods();
+                let fromMethods = from.getAllMethodsAndFields();
+                let ok = true;
+                for(let entry of toMethods.entries()) {
+                    if (fromMethods.has(entry[0])) {
+                        let fieldOrMethod = fromMethods.get(entry[0]);
+                        if (!(fieldOrMethod instanceof FunctionType) || !this.checkFunctionEquality(entry[1], fieldOrMethod, loc, true, false)) {
                             ok = false;
                             if (doThrow) {
-                                throw new TypeError("Type " + fromElement.toString() + " is missing method " + entry[0] + " as required by " + to.toString(), loc);
+                                throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
                             }
                             break;
                         }
-                    }
-                    if (ok) {
-                        if (from instanceof UnsafePointerType || to.mode == "reference" ||
-                            (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
-                            (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
-                            (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))) {
-                            return true;
+                    } else {
+                        ok = false;
+                        if (doThrow) {
+                            throw new TypeError("Type " + from.toString() + " is missing method " + entry[0] + " as required by " + to.toString(), loc);
                         }
+                        break;
                     }
-                }                
+                }
+                if (ok) {
+                    return true;
+                }
             }
         }
         if (!doThrow) {
@@ -4650,20 +4604,18 @@ export class TypeChecker {
                 return true;
             }
         } else if (a instanceof InterfaceType && b instanceof InterfaceType) {
-            if (a.mode == b.mode && this.checkTypeEquality(a.contentType, b.contentType, loc, doThrow)) {
-                let m1 = a.getAllMethods();
-                let m2 = b.getAllMethods();
-                if (m1.size == m2.size) {
-                    let ok = true;
-                    for(let entry of m1.entries()) {
-                        if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
-                            ok = false;
-                            break;
-                        }
+            let m1 = a.getAllMethods();
+            let m2 = b.getAllMethods();
+            if (m1.size == m2.size) {
+                let ok = true;
+                for(let entry of m1.entries()) {
+                    if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
+                        ok = false;
+                        break;
                     }
-                    if (ok) {
-                        return true;
-                    }
+                }
+                if (ok) {
+                    return true;
                 }
             }
         }
@@ -4802,9 +4754,6 @@ export class TypeChecker {
         if (t instanceof SliceType && t.mode == "weak") {
             return true;
         }
-        if (t instanceof InterfaceType && t.mode == "weak") {
-            return true;
-        }
         return false;
     }
 
@@ -4818,9 +4767,6 @@ export class TypeChecker {
         if (t instanceof SliceType && t.mode == "strong") {
             return true;
         }
-        if (t instanceof InterfaceType && t.mode == "strong") {
-            return true;
-        }
         return false;
     }
 
@@ -4832,9 +4778,6 @@ export class TypeChecker {
             return true;
         }
         if (t instanceof SliceType && t.mode == "unique") {
-            return true;
-        }
-        if (t instanceof InterfaceType && t.mode == "unique") {
             return true;
         }
         return false;
@@ -4944,10 +4887,10 @@ export class TypeChecker {
     }
 
     public makeWeak(t: Type, loc: Location): Type {
-        if (!this.isSafePointer(t) && !this.isSlice(t) && !this.isInterface(t)) {
+        if (!this.isSafePointer(t) && !this.isSlice(t)) {
             throw new TypeError("The keyword 'weak' can only be used on pointers, interfaces and slices", loc);
         }
-        let p = RestrictedType.strip(t) as PointerType | SliceType | InterfaceType;
+        let p = RestrictedType.strip(t) as PointerType | SliceType;
         if (p.mode != "strong") {
             throw new TypeError("The keyword 'weak' must not be used together with '&' or '^", loc);
         }
@@ -4956,8 +4899,8 @@ export class TypeChecker {
     }
 
     public makeReference(t: Type, loc: Location): Type {
-        if (this.isSlice(t) || this.isInterface(t)) {
-            let p = RestrictedType.strip(t) as SliceType | InterfaceType;
+        if (this.isSlice(t)) {
+            let p = RestrictedType.strip(t) as SliceType;
             if (p.mode != "strong") {
                 throw new TypeError("The operator '&' must not be used together with 'weak' or '^", loc);
             }
@@ -4968,8 +4911,8 @@ export class TypeChecker {
     }
 
     public makeUniquePointer(t: Type, loc: Location): Type {
-        if (this.isSlice(t) || this.isInterface(t)) {
-            let p = RestrictedType.strip(t) as SliceType | InterfaceType;
+        if (this.isSlice(t)) {
+            let p = RestrictedType.strip(t) as SliceType;
             if (p.mode != "strong") {
                 throw new TypeError("The operator '^' must not be used together with 'weak' or '&", loc);
             }
@@ -5073,6 +5016,7 @@ export class TypeChecker {
     public t_string: Type;
     public t_rune: Type;
     public t_void: Type;
+    public t_any: Type;
     public t_error: InterfaceType;
 
     public builtin_len: FunctionType;

@@ -12,11 +12,19 @@ type Widget struct {
     numbers []int
 }
 
+type IPoint interface {
+    func &translate(x int, y int)
+    func const &log()
+}
+
 type JSON int | double | string | null | ([]JSON) | map<string, JSON>
 
 func &Point.translate(x int, y int) {
     this.x += x
     this.y += y
+}
+
+func const &Point.log() {
 }
 
 func add(p1 const box &Point, p2 const box &Point) Point {
@@ -51,7 +59,8 @@ func main() {
     var i7 ^interface{}
     var i8 const ^interface{}
 
-    const c1 *Point = p1
+    const c1 &Point = p1
+    c1.translate(1, 2)
     c1.x = 5
 
     p1 = {x: 1, y: 2}
@@ -74,6 +83,15 @@ func main() {
     s1[0] = 0
 //    s2[0] = 0
     s6 = s2[:]
+
+    var if1 *IPoint = p1
+    var if2 const *IPoint = p1
+    var if3 &IPoint = p1
+    var if4 const &IPoint = p1
+    if1.translate(1, 2)
+    if2.log()
+    if3.translate(1, 2)
+    if4.log()
 }
 
 func f(ptr box *Point, compareWith box(a) &Point, lessThan box(a) &Point) {

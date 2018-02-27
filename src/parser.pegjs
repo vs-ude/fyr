@@ -252,19 +252,31 @@ primitiveType
     }
 
 memberObjectType
-  = "const" [ \t]+ t:memberObjectType {
-        return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
-    }
-  / "box" n:([ \t]* "(" [ \t]* identifierList [ \t]* ")" )? [ \t]+ t:memberObjectType {
+  = "box" n:([ \t]* "(" [ \t]* identifierList [ \t]* ")" )? [ \t]+ t:memberObjectType2 {
         return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
     }
-  / "&" [ \t]* t:memberObjectType {
+  / m: memberObjectType2 {
+      return m;
+   }
+
+memberObjectType2
+  = "const" [ \t]+ t:memberObjectType3 {
+        return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+    }
+  / m: memberObjectType3 {
+      return m;
+   }
+    
+memberObjectType3
+  = "&" [ \t]* t:memberObjectType4 {
       return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
     }
-  / "*" [ \t]* t:memberObjectType {
+  / "*" [ \t]* t:memberObjectType4 {
       return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
-  / i: identifier {
+
+memberObjectType4
+  = i: identifier {
       i.op = "basicType";
       return i;
     }
@@ -283,7 +295,7 @@ interfaceMembers
   } 
 
 interfaceMember
-  = async:("async" [ \t+])? "func" [ \t]+ c:("const" [ \t]+)? v:("&" [ \t]*)? name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
+  = async:("async" [ \t+])? "func" [ \t]* scope:ifaceObjectType? [ \t]* name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -291,17 +303,36 @@ interfaceMember
               }
           }
       }
-      let scope = undefined;
-      if (c) {
-          scope = new ast.Node({loc: fl(location()), op: "constType", rhs: scope});
-      }
-      if (v) {
-          scope = new ast.Node({loc: fl(location()), op: "referenceType", rhs: scope});
-      }
       return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }
   / "extends" [ \t]+ t:type [ \t]* semicolon {
         return new ast.Node({loc: fl(location()), op: "extends", rhs: t});
+    }
+
+ifaceObjectType
+  = "box" n:([ \t]* "(" [ \t]* identifierList [ \t]* ")" )? [ \t]+ t:ifaceObjectType2 {
+        return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
+    }
+  / m: ifaceObjectType2 {
+      return m;
+   }
+
+ifaceObjectType2
+  = "const" [ \t]+ t:ifaceObjectType3 {
+        return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+    }
+  / m: ifaceObjectType3 {
+      return m;
+   }
+    
+ifaceObjectType3
+  = "&" {
+      let t = new ast.Node({loc: fl(location()), op: "basicType", value: "int"});
+      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
+    }
+  / "*" {
+      let t = new ast.Node({loc: fl(location()), op: "basicType", value: "int"});
+      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
 
 namedType
