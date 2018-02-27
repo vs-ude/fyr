@@ -2018,7 +2018,6 @@ export class TypeChecker {
                     }
                 }
             }
-            f.type.returnType = this.makeConst(f.type.returnType, fnode.rhs.loc);
         } else {
             f.type.returnType = this.t_void;
         }
@@ -3134,12 +3133,8 @@ export class TypeChecker {
             {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsPointer(enode.rhs);
-                let isConst = this.isConst(enode.rhs.type);
                 let t = this.stripType(enode.rhs.type);
-                enode.type = (t as PointerType).elementType;
-                if (isConst) {
-                    enode.type = this.makeConst(enode.type, enode.loc);
-                }
+                enode.type = (t as (PointerType | UnsafePointerType)).elementType;
                 break;
             }
             case "unary&":
