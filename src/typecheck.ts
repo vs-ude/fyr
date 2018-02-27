@@ -4038,7 +4038,7 @@ export class TypeChecker {
             fromRestrictions = {isConst: false, boxes: null}
         }
         
-        // Determine const and box
+        // Determine const
         if (to instanceof RestrictedType) {
             toRestrictions = combineRestrictions(toRestrictions, to);
             to = to.elementType;
@@ -4047,7 +4047,14 @@ export class TypeChecker {
             fromRestrictions = combineRestrictions(fromRestrictions, from);
             from = from.elementType;
         }
+        if (to instanceof InterfaceType) {
+            toRestrictions = combineRestrictions(toRestrictions, to.contentType);
+        }
+        if (from instanceof InterfaceType) {
+            fromRestrictions = combineRestrictions(fromRestrictions, from.contentType);
+        }
 
+        
         // A const-mismatch can be tolerated if the value is a pure value and if it is being copied.
         if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode != "assign" || !this.isPureValue(to))) {
             if (doThrow) {
@@ -4586,14 +4593,14 @@ export class TypeChecker {
                 }
             }
         } else if (a instanceof PointerType && b instanceof PointerType) {
-            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
+            if (this.checkTypeEquality(a.elementType, b.elementType, loc, false) && a.mode == b.mode) {
                 return true;
             }
         } else if (a instanceof UnsafePointerType && b instanceof UnsafePointerType) {
             if (this.checkTypeEquality(a.elementType, b.elementType, loc, false)) {
                 return true;
             }
-        } else if (a instanceof SliceType && b instanceof SliceType) {
+        } else if (a instanceof SliceType && b instanceof SliceType && a.mode == b.mode) {
             if (this.checkTypeEquality(a.getElementType(), b.getElementType(), loc, false)) {
                 return true;
             }
@@ -4647,18 +4654,20 @@ export class TypeChecker {
                 return true;
             }
         } else if (a instanceof InterfaceType && b instanceof InterfaceType) {
-            let m1 = a.getAllMethods();
-            let m2 = b.getAllMethods();
-            if (m1.size == m2.size) {
-                let ok = true;
-                for(let entry of m1.entries()) {
-                    if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
-                        ok = false;
-                        break;
+            if (a.mode == b.mode && this.checkTypeEquality(a.contentType, b.contentType, loc, doThrow)) {
+                let m1 = a.getAllMethods();
+                let m2 = b.getAllMethods();
+                if (m1.size == m2.size) {
+                    let ok = true;
+                    for(let entry of m1.entries()) {
+                        if (!m2.has(entry[0]) || !this.checkTypeEquality(m2.get(entry[0]), entry[1], loc, false)) {
+                            ok = false;
+                            break;
+                        }
                     }
-                }
-                if (ok) {
-                    return true;
+                    if (ok) {
+                        return true;
+                    }
                 }
             }
         }
