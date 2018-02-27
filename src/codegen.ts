@@ -1300,7 +1300,22 @@ export class CodeGenerator {
     */
 
     public isLeftHandSide(node: Node): boolean {
-        return !this.tc.checkIsIntermediate(node);
+        if (node.op == "id") {
+            return true;
+        } else if (node.op == "unary*") {
+            return true;
+        } else if (node.op == ".") {
+            if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
+                return true;
+            }
+            return this.isLeftHandSide(node.lhs);
+        } else if (node.op == "[") {
+            if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
+                return true;
+            }
+            return this.isLeftHandSide(node.lhs);
+        }
+        return false;
     }
 
     private createInterfaceTable(scope: Scope, s: StructType): number {

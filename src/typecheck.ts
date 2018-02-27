@@ -2018,6 +2018,7 @@ export class TypeChecker {
                     }
                 }
             }
+            f.type.returnType = this.makeConst(f.type.returnType, fnode.rhs.loc);
         } else {
             f.type.returnType = this.t_void;
         }
@@ -2975,18 +2976,18 @@ export class TypeChecker {
 //                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
                     if (snode.lhs.parameters[0].value != "_") {
                         this.checkExpression(snode.lhs.parameters[0], scope);
-                        this.checkIsAssignable(snode.lhs.parameters[0], scope);
+                        this.checkIsMutable(snode.lhs.parameters[0], scope);
                         this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc, "assign", true);
                     } 
                     if (snode.lhs.parameters[1].value != "_") {
                         this.checkExpression(snode.lhs.parameters[1], scope);
-                        this.checkIsAssignable(snode.lhs.parameters[1], scope);
+                        this.checkIsMutable(snode.lhs.parameters[1], scope);
                         this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc, "assign", true);
                     }
                 } else {
                     if (snode.lhs.value != "_") {
                         this.checkExpression(snode.lhs, scope);
-                        this.checkIsAssignable(snode.lhs, scope);
+                        this.checkIsMutable(snode.lhs, scope);
                         this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc, "assign", true);
                     }
                 }
@@ -4678,90 +4679,33 @@ export class TypeChecker {
         return false;
     }
 
-    public checkIsIntermediate(node: Node): boolean {
+    private isLeftHandSide(node: Node): boolean {
         if (node.op == "id") {
-            return false;
+            return true;
         } else if (node.op == "unary*") {
-            return false;
+            return true;
         } else if (node.op == ".") {
             if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
-                return false;
+                return true;
             }
-            return this.checkIsIntermediate(node.lhs);
-        } else if (node.op == "[" && !this.isString(node.lhs.type)) {
+            return this.isLeftHandSide(node.lhs);
+        } else if (node.op == "[") {
             if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
-                return false;
+                return true;
             }
-            return this.checkIsIntermediate(node.lhs);
+            return this.isLeftHandSide(node.lhs);
         }
-        return true;
+        return false;
     }
 
-    public checkIsMutable(node: Node, scope: Scope): boolean {
-        if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-            return true;
+    public checkIsMutable(node: Node, scope: Scope) {
+        if (node.type instanceof RestrictedType && node.type.isConst) {
+            throw new TypeError("The expression is not mutable because is const", node.loc);
         }
-        /*
-        if (node.op == "id") {
-            let element = scope.resolveElement(node.value);
-            if ((element instanceof Variable && !this.isConst(element.type)) || (element instanceof FunctionParameter && !this.isConst(element.type) && element.name != "this")) {
-                return true;
-            }
-        } else if (node.op == "unary*") {
-            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-                return true;
-            }
-        } else if (node.op == ".") {
-            if (this.isSafePointer(node.lhs.type) || this.isUnsafePointer(node.lhs.type)) {
-                if (!this.isConst((node.lhs.type as (PointerType | UnsafePointerType)).elementType)) {
-                    return true;
-                }
-            }
-        } else if (node.op == "[" && !this.isString(node.lhs.type)) {
-            if (this.isSlice(node.lhs.type)) {
-                if (!this.isConst((node.lhs.type as SliceType).arrayType)) {
-                    return true;
-                }
-            }
-        }
-        */
-        throw new TypeError("The expression is not mutable", node.loc);
-    }
 
-    // Returns true if a value can be assigned to this expression
-    public checkIsAssignable(node: Node, scope: Scope): boolean {
-        return this.checkIsMutable(node, scope);
-        /*
-        if (node.op == "id") {
-            // TODO: Not if the underlying variable is a constant
-            return true;
-        } else if (node.op == "unary*") {
-            if (!(node.type instanceof RestrictedType) || !node.type.isConst) {
-                return true;
-            }
-        } else if (node.op == ".") {
-            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
-                let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof PointerType || t instanceof UnsafePointerType) {
-                    return true;
-                }
-                if (!this.checkIsIntermediate(node.lhs)) {
-                    return true;
-                }
-            }
-        } else if (node.op == "[" && !this.isString(node.lhs.type)) {
-            if (!(node.lhs.type instanceof RestrictedType) || !node.lhs.type.isConst) {
-                let t = RestrictedType.strip(node.lhs.type);
-                if (t instanceof UnsafePointerType || t instanceof SliceType) {
-                    return true;
-                }
-                if (!this.checkIsIntermediate(node.lhs)) {
-                    return true;
-                }
-            }
+        if (!this.isLeftHandSide(node)) {
+            throw new TypeError("The expression is not mutable because it is an intermediate value", node.loc);
         }
-        throw new TypeError("The expression is not assignable", node.loc);
-        */
     }
 
     public stripType(t: Type): Type {
