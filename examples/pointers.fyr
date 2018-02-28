@@ -17,7 +17,7 @@ type IPoint interface {
     func const &log()
 }
 
-type JSON int | double | string | null | ([]JSON) | map<string, JSON>
+type JSON int | double | string | null | []JSON | map[string]JSON
 
 func &Point.translate(x int, y int) {
     this.x += x

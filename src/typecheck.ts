@@ -694,16 +694,30 @@ export class PointerType extends Type {
             return this.name;
         }
         let op;
-        if (this.mode == "weak") {
-            op = "weak *";
-        } else if (this.mode == "reference") {
-            op = "&";
-        } else if (this.mode == "unique") {
-            op = "^";
-        } else if (this.mode == "strong") {
-            op = "*";
+        if (RestrictedType.strip(this.elementType) instanceof MapType) {
+            if (this.mode == "weak") {
+                op = "weak ";
+            } else if (this.mode == "reference") {
+                op = "&";
+            } else if (this.mode == "unique") {
+                op = "^";
+            } else if (this.mode == "strong") {
+                op = "";
+            } else {
+                throw "Implementation error";
+            }
         } else {
-            throw "Implementation error";
+            if (this.mode == "weak") {
+                op = "weak *";
+            } else if (this.mode == "reference") {
+                op = "&";
+            } else if (this.mode == "unique") {
+                op = "^";
+            } else if (this.mode == "strong") {
+                op = "*";
+            } else {
+                throw "Implementation error";
+            }
         }
         if (this.elementType instanceof RestrictedType) {
             return this.elementType.toString(true) + op + this.elementType.elementType.toString();
@@ -753,14 +767,14 @@ export class MapType extends Type {
         if (this.name) {
             return this.name;
         }
-        return "map<" + this.keyType.toString() + "," + this.valueType.toString() + ">";
+        return "map[" + this.keyType.toString() + "]" + this.valueType.toString();
     }
 
     public toTypeCodeString(): string {
         if (this.name) {
             return this.name;
         }
-        return "map<" + this.keyType.toString() + "," + this.valueType.toString() + ">";
+        return "map[" + this.keyType.toString() + "]" + this.valueType.toString();
     }
 
     public keyType: Type;
@@ -1411,27 +1425,31 @@ export class TypeChecker {
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
+                    this.checkVariableType(p.type, pnode.loc);
                     p.loc = pnode.loc;
                     t.parameters.push(p);
                 }
             }
             if (tnode.rhs) {
                 t.returnType = this.createType(tnode.rhs, scope, mode);
+                this.checkVariableType(t.returnType, tnode.rhs.loc);
             } else {
                 t.returnType = this.t_void;
             }
             return t;
-        } else if (tnode.op == "genericType" && tnode.lhs.op == "id" && tnode.lhs.value == "map") {
-            if (tnode.genericParameters.length != 2) {
-                throw new TypeError("Supplied type arguments do not match signature of map", tnode.loc);
-            }
-            // TODO: Allow all types in maps?
-            let k = this.createType(tnode.genericParameters[0], scope, mode);
-            let v = this.createType(tnode.genericParameters[1], scope, mode);
+        } else if (tnode.op == "mapType") {
+            let k = this.createType(tnode.lhs, scope, mode);
+            let v = this.createType(tnode.rhs, scope, mode);
             if (!this.isIntNumber(k) && !this.isString(k) && !this.isSafePointer(k) && !this.isUnsafePointer(k)) {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
-            return new MapType(k, v);
+            let p = new PointerType(new MapType(k, v), "strong");
+            if (tnode.value == "&map") {
+                p.mode = "reference";
+            } else if (tnode.value == "^map") {
+                p.mode = "unique";
+            }
+            return p;
         } else if (tnode.op == "genericType") {
             let baset = scope.resolveType(tnode.lhs.value);
             if (!baset) {
@@ -1971,6 +1989,7 @@ export class TypeChecker {
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
+                this.checkVariableType(p.type, pnode.loc);
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -1993,6 +2012,7 @@ export class TypeChecker {
                     }
                 }
             }
+            this.checkVariableType(f.type.returnType, fnode.rhs.loc);
         } else {
             f.type.returnType = this.t_void;
         }
@@ -2028,6 +2048,7 @@ export class TypeChecker {
             if (isConst) {
                 v.type = this.makeConst(v.type, vnode.loc);
             }
+            this.checkVariableType(v.type, vnode.loc);
         }
         if (v.name != "_") {
             scope.registerElement(v.name, v);
@@ -2528,8 +2549,8 @@ export class TypeChecker {
             }
         } else if (vnode.op == "object") {
             let rtypeStripped = RestrictedType.strip(rtype);
-            if (!(rtypeStripped instanceof ObjectLiteralType) && (!(rtypeStripped instanceof MapType) || this.isString(rtypeStripped.keyType))) {
-                throw new TypeError("Expected an expression of type object literal or map<string,...>", vnode.loc);
+            if (!(rtypeStripped instanceof ObjectLiteralType) && (!this.isMap(rtypeStripped) || this.isString(this.mapKeyType(rtypeStripped)))) {
+                throw new TypeError("Expected an expression of type object literal or map[string]...", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
@@ -2546,7 +2567,7 @@ export class TypeChecker {
                             for(let j = i; j < rnode.parameters.length; j++) {
 //                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
                             }
-                            v.type = new MapType(this.t_string, valueType);
+                            v.type = new PointerType(new MapType(this.t_string, valueType), "strong");
                             throw "TODO";
                         } else if (rtypeStripped instanceof TemplateStructType) {
                             v.type = rtype;
@@ -2555,19 +2576,19 @@ export class TypeChecker {
                         let lt = RestrictedType.strip(v.type);
                         if (rtypeStripped instanceof ObjectLiteralType) {
                             let rt: Type;
-                            if (lt instanceof MapType && this.isString(lt.keyType)) {
-                                rt = lt.valueType;
+                            if (this.isMap(lt) && this.isString(this.mapKeyType(lt))) {
+                                rt = this.mapValueType(lt);
                             } else {
                                 throw new TypeError("Ellipsis identifier must be of map type", vnode.loc);
                             }
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                             }
-                        } else if (rtypeStripped instanceof MapType) {
-                            if (!(lt instanceof MapType) || !this.isString(lt.keyType)) {
+                        } else if (this.isMap(rtypeStripped)) {
+                            if (!this.isMap(lt) || !this.isString(this.mapKeyType(lt))) {
                                 throw new TypeError("Ellipsis identifier must be of type map<string, ...>", vnode.loc);
                             }
-                            this.checkIsAssignableType(lt.valueType, rtypeStripped.valueType, vnode.loc, "assign", true);
+                            this.checkIsAssignableType(this.mapKeyType(lt), this.mapValueType(rtypeStripped), vnode.loc, "assign", true);
                         }
                     }
                 } else {
@@ -2583,8 +2604,8 @@ export class TypeChecker {
                         rt = rtype.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtype instanceof MapType) {
-                        rt = rtype.valueType;
+                    } else if (this.isMap(rtype)) {
+                        rt = this.mapValueType(rtype);
                     }
                     this.checkVarAssignment(isConst, scope, p, rt, r);
                 }
@@ -2721,8 +2742,8 @@ export class TypeChecker {
                 throw new TypeError("Mismatch in tuple type length", vnode.loc);
             }
         } else if (vnode.op == "object") {
-            if (!(rtypeStripped instanceof ObjectLiteralType) && (!(rtype instanceof MapType) || !this.isString(rtype.keyType))) {
-                throw new TypeError("Expected an expression of type object literal or map<string, ...>", vnode.loc);
+            if (!(rtypeStripped instanceof ObjectLiteralType) && (!this.isMap(rtype) || !this.isString(this.mapKeyType(rtype)))) {
+                throw new TypeError("Expected an expression of type object literal or map[string]...", vnode.loc);
             }
             let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
@@ -2736,19 +2757,19 @@ export class TypeChecker {
                     this.checkIsMutable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
                         let rt: Type;
-                        if (kv.lhs.type instanceof MapType && this.isString(kv.lhs.type.keyType)) {
-                            rt = kv.lhs.type.valueType;
+                        if (this.isMap(kv.lhs.type) && this.isString(this.mapKeyType(kv.lhs.type))) {
+                            rt = this.mapValueType(kv.lhs.type);
                         } else {
                             throw new TypeError("Ellipsis identifier must be of map type or json", vnode.loc);
                         }
                         for(let j = i; j < rnode.parameters.length; j++) {
                             this.checkIsAssignableNode(rt, rnode.parameters[j].lhs);
                         }
-                    } else if (rtypeStripped instanceof MapType) {
-                        if (!(kv.lhs.type instanceof MapType) || !this.isString(kv.lhs.type.keyType)) {
-                            throw new TypeError("Ellipsis identifier must be of type map<string,...>", vnode.loc);
+                    } else if (this.isMap(rtypeStripped)) {
+                        if (!this.isMap(kv.lhs.type) || !this.isString(this.mapKeyType(kv.lhs.type))) {
+                            throw new TypeError("Ellipsis identifier must be of type map[string]...", vnode.loc);
                         }
-                        this.checkIsAssignableType(kv.lhs.type.valueType, rtypeStripped.valueType, vnode.loc, "assign", true);
+                        this.checkIsAssignableType(this.mapKeyType(kv.lhs.type), this.mapValueType(rtypeStripped), vnode.loc, "assign", true);
                     }
                 } else {
                     let p = kv.lhs;
@@ -2763,8 +2784,8 @@ export class TypeChecker {
                         rt = rtypeStripped.types.get(name);
                         r = rnode.parameters[i].lhs;
                         throw "TODO: Find matching node in literal"
-                    } else if (rtypeStripped instanceof MapType) {
-                        rt = rtypeStripped.valueType;
+                    } else if (this.isMap(rtypeStripped)) {
+                        rt = this.mapValueType(rtypeStripped);
                     }
                     this.checkAssignment(scope, p, rt, r);
                 }
@@ -3426,7 +3447,7 @@ export class TypeChecker {
                     if (isConst) {
                         enode.type = this.applyConst(enode.type, enode.loc);
                     }
-                } else if (t instanceof MapType) {
+                } else if (this.isMap(t)) {
                     throw new TypeError("Ranges are not supported on maps", enode.loc);
                 } else {
                     // For slices the type remains the same
@@ -3454,13 +3475,14 @@ export class TypeChecker {
                         index = parseInt(enode.rhs.value);
                     }
                     enode.type = this.checkIsIndexable(enode.lhs, index);
-                } else if (t instanceof MapType) {
+                } else if (this.isMap(t)) {
+                    isConst = isConst || this.isConst((t as PointerType).elementType);
                     if (enode.rhs.isUnifyableLiteral()) {
-                        this.unifyLiterals(t.keyType, enode.rhs, enode.rhs.loc);
+                        this.unifyLiterals(this.mapKeyType(t), enode.rhs, enode.rhs.loc);
                     } else {
-                        this.checkIsAssignableType(t.keyType, enode.rhs.type, enode.rhs.loc, "assign", true);
+                        this.checkIsAssignableType(this.mapKeyType(t), enode.rhs.type, enode.rhs.loc, "assign", true);
                     }
-                    enode.type = t.valueType;
+                    enode.type = this.mapValueType(t);
                 } else if (t instanceof SliceType) {
                     enode.type = t.getElementType();
                     isConst = isConst || this.isConst(t.arrayType);
@@ -3841,7 +3863,7 @@ export class TypeChecker {
             return true;
         }
 
-        if (t instanceof PointerType && (t.mode == "strong" || t.mode == "reference") && node.op == "object") {
+        if (t instanceof PointerType && (t.mode == "strong" || t.mode == "reference" || t.mode == "unique") && node.op == "object") {
             if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams)) {
                 return false;
             }
@@ -3849,9 +3871,7 @@ export class TypeChecker {
             return true;
         }
 
-        // TODO: Map
-
-        if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference") && node.op == "array" && t.name != "string") {
+        if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference" || t.mode == "unique") && node.op == "array" && t.name != "string") {
             if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams)) {
                 return false;
             }
@@ -4302,8 +4322,8 @@ export class TypeChecker {
 
     public checkIsEnumerable(node: Node): [Type, Type] {
         let t = this.stripType(node.type);
-        if (t instanceof MapType) {
-            return [t.keyType, t.valueType];
+        if (this.isMap(t)) {
+            return [this.mapKeyType(t), this.mapValueType(t)];
         } else if (t instanceof ArrayType) {
             return [this.t_int, t.elementType];
         } else if (t instanceof SliceType) {
@@ -4650,6 +4670,15 @@ export class TypeChecker {
         }
     }
 
+    private checkVariableType(t: Type, loc: Location) {
+        if (RestrictedType.strip(t) instanceof InterfaceType) {
+            throw new TypeError("Interface types must be used together with a pointer", loc);
+        }
+        if (RestrictedType.strip(t) instanceof MapType) {
+            throw new TypeError("Map types must be used together with a pointer", loc);
+        }
+    }
+
     public stripType(t: Type): Type {
         if (t instanceof RestrictedType) {
             t = t.elementType;
@@ -4692,11 +4721,45 @@ export class TypeChecker {
         return t.stringsOnly();
     }
 
+    // TODO use pointer
     public isInterface(t: Type): boolean {
         if (t instanceof RestrictedType) {
             return t.elementType instanceof InterfaceType;
         }
         return t instanceof InterfaceType;
+    }
+
+    private isMap(t: Type): boolean {
+        t = this.stripType(t);
+        if (!(t instanceof PointerType)) {
+            return false;
+        }
+        t = this.stripType(t.elementType);
+        return t instanceof MapType;
+    }
+
+    private mapKeyType(t: Type): Type {
+        t = this.stripType(t);
+        if (!(t instanceof PointerType)) {
+            throw "Internal error";
+        }
+        t = this.stripType(t.elementType);
+        if (!(t instanceof MapType)) {
+            throw "Internal error";
+        }
+        return t.keyType;
+    }
+
+    private mapValueType(t: Type): Type {
+        t = this.stripType(t);
+        if (!(t instanceof PointerType)) {
+            throw "Internal error";
+        }
+        t = this.stripType(t.elementType);
+        if (!(t instanceof MapType)) {
+            throw "Internal error";
+        }
+        return t.valueType;
     }
 
     public isSlice(t: Type): boolean {
@@ -4948,7 +5011,7 @@ export class TypeChecker {
             if (name == "len") {
                 return this.builtin_len;
             }
-        } else if (type instanceof MapType) {
+        } else if (this.isMap(type)) {
             if (name == "remove") {
                 let ft = new FunctionType()
                 ft.name = "remove";
@@ -4956,7 +5019,7 @@ export class TypeChecker {
                 ft.objectType = type;
                 let p = new FunctionParameter();
                 p.name = "key";
-                p.type = type.keyType;
+                p.type = this.mapKeyType(type);
                 ft.parameters.push(p);
                 ft.returnType = this.t_bool;
                 return ft;                                

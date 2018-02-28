@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "map" || n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -190,17 +190,26 @@ andType
     }
 
 primitiveType
-  = "[]" [ \t]* t:type {
+  = "[]" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "[]"})
     }
-  / "^[]" [ \t]* t:type {
+  / "^[]" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "^[]"})
     }
-  / "&[]" [ \t]* t:type {
+  / "&[]" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "&[]"})
     }
-  / "[" [ \t]* e:expression? "]" [ \t]* t:type {
+  / "[" [ \t]* e:expression? "]" [ \t]* t:primitiveType {
     return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
+    }
+  / "map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v, value: "map"});
+    }
+  / "^map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v, value: "^map"});
+    }
+  / "&map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+        return new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v, value: "&map"});
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
       if (t.length == 1) {
