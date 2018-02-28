@@ -3837,7 +3837,7 @@ export class TypeChecker {
         return node.type;
     }
 
-    private unifyLiterals(t: Type, node: Node, loc: Location, doThrow: boolean = true, templateParams: Map<string, Type> = null): boolean {
+    private unifyLiterals(t: Type, node: Node, loc: Location, doThrow: boolean = true, templateParams: Map<string, Type> = null, allowPointerIndirection: boolean = true): boolean {
         if (templateParams && t instanceof GenericParameter && templateParams.has(t.name)) {
             t = templateParams.get(t.name);
         }
@@ -3863,16 +3863,16 @@ export class TypeChecker {
             return true;
         }
 
-        if (t instanceof PointerType && (t.mode == "strong" || t.mode == "reference" || t.mode == "unique") && node.op == "object") {
-            if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams)) {
+        if (allowPointerIndirection && t instanceof PointerType && (t.mode == "strong" || t.mode == "reference" || t.mode == "unique") && node.op == "object") {
+            if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams, false)) {
                 return false;
             }
             node.type = new PointerType(node.type, t.mode);
             return true;
         }
 
-        if (t instanceof SliceType && (t.mode == "strong" || t.mode == "reference" || t.mode == "unique") && node.op == "array" && t.name != "string") {
-            if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams)) {
+        if (allowPointerIndirection && t instanceof SliceType && (t.mode == "strong" || t.mode == "reference" || t.mode == "unique") && node.op == "array" && t.name != "string") {
+            if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams, false)) {
                 return false;
             }
             node.type = new SliceType(node.type as ArrayType, t.mode);
