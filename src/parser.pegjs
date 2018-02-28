@@ -333,11 +333,11 @@ ifaceObjectType2
     
 ifaceObjectType3
   = "&" {
-      let t = new ast.Node({loc: fl(location()), op: "basicType", value: "int"});
+      let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
       return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
     }
   / "*" {
-      let t = new ast.Node({loc: fl(location()), op: "basicType", value: "int"});
+      let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
       return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
 

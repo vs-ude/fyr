@@ -693,10 +693,22 @@ export class PointerType extends Type {
         if (this.name) {
             return this.name;
         }
-        if (this.mode != "strong") {
-            return this.mode.toString() + "*" + this.elementType.toString();    
+        let op;
+        if (this.mode == "weak") {
+            op = "weak *";
+        } else if (this.mode == "reference") {
+            op = "&";
+        } else if (this.mode == "unique") {
+            op = "^";
+        } else if (this.mode == "strong") {
+            op = "*";
+        } else {
+            throw "Implementation error";
         }
-        return "*" + this.elementType.toString();
+        if (this.elementType instanceof RestrictedType) {
+            return this.elementType.toString(true) + op + this.elementType.elementType.toString();
+        }
+        return op + this.elementType.toString();
     }
 
     public toTypeCodeString(): string {
@@ -850,21 +862,6 @@ export class RestrictedType extends Type {
         }
     }
 
-    /*
-    public static combineRestrictions(r1: Restrictions | null, r2: Restrictions | null): Restrictions | null {
-        if (!r1) {
-            return r2;
-        }
-        if (!r2) {
-            return r1;
-        }
-        return {
-            isConst : r1.isConst || r2.isConst,
-            scope: r2.scope ? r2.scope : r1.scope
-        }
-    }
-    */
-
     public static strip(t: Type): Type {
         if (t instanceof RestrictedType) {
             return t.elementType;
@@ -872,32 +869,15 @@ export class RestrictedType extends Type {
         return t;
     }
 
-    /*
-    public static isLess(r1: Restrictions | null, r2: Restrictions | null): boolean {
-        if (!r1 && !r2) {
-            return false;
-        }
-        if (!r2) {
-            return false;
-        }
-        if (!r1) {
-            return true;
-        }
-        if (!r1.isConst && r2.isConst) {
-            return true;
-        }
-        if (!r1.scope && r2.scope) {
-            return true;
-        }
-        return false;
-    }
-    */
-
-    public toString(): string {
+    public toString(omitElement?: boolean): string {
         if (this.name) {
             return this.name;
         }
+        if (this.elementType.name == "string") {
+            return "string";
+        }
         let str = "";
+        /*
         if (this.boxes) {
             str += "box("
             str += this.boxes.map(function(value: Box, index: number, arr: Box[]): any {
@@ -905,8 +885,12 @@ export class RestrictedType extends Type {
             }).join(",");
             str += ") ";
         }
+        */
         if (this.isConst && this.elementType.name != "string") {
             str += "const ";
+        }
+        if (omitElement) {
+            return str;
         }
         return str + this.elementType.toString();
     }
