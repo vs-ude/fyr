@@ -1320,13 +1320,6 @@ export class TypeChecker {
         } else if (tnode.op == "weakType") {
             let c = this.createType(tnode.rhs, scope, mode);
             return this.makeWeak(c, tnode.loc);
-        } else if (tnode.op == "referenceType") {
-            let c = this.createType(tnode.rhs, scope, mode);
-            return this.makeReference(c, tnode.loc);
-        } else if (tnode.op == "uniquePointerType") {
-            let c = this.createType(tnode.rhs, scope, mode);
-            c = this.makeUniquePointer(c, tnode.loc);
-            return new RestrictedType(c, {isConst: false, boxes: [new Box()]});
         } else if (tnode.op == "boxType") {
             if (mode == "variable") {
                 throw new TypeError("'box' must not be used in variable type definitions", tnode.loc);
@@ -1375,6 +1368,18 @@ export class TypeChecker {
                 t = new RestrictedType(t, {isConst: false, boxes: [new Box()]});
             }
             return new PointerType(t, "strong");
+        } else if (tnode.op == "uniquePointerType") {
+            let c = this.createType(tnode.rhs, scope, mode);
+            if (mode == "variable") {
+                c = new RestrictedType(c, {isConst: false, boxes: [new Box()]});
+            }
+            return new PointerType(c, "unique");
+        } else if (tnode.op == "referenceType") {
+            let c = this.createType(tnode.rhs, scope, mode);
+            if (mode == "variable") {
+                c = new RestrictedType(c, {isConst: false, boxes: [new Box()]});
+            }
+            return new PointerType(c, "reference");
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
             return new UnsafePointerType(t);
@@ -1383,7 +1388,13 @@ export class TypeChecker {
             if (mode == "variable") {
                 t = new RestrictedType(t, {isConst: false, boxes: [new Box()]});
             }
-            return new SliceType(new ArrayType(t, -1), "strong");
+            let s = new SliceType(new ArrayType(t, -1), "strong");
+            if (tnode.value == "^[]") {
+                s.mode = "unique";
+            } else if (tnode.value == "&[]") {
+                s.mode = "reference";
+            }
+            return s;
         } else if (tnode.op == "tupleType") {
             let types: Array<Type> = [];
             for(let p of tnode.parameters) {
@@ -4896,30 +4907,6 @@ export class TypeChecker {
         }
         p.mode = "weak";
         return t;
-    }
-
-    public makeReference(t: Type, loc: Location): Type {
-        if (this.isSlice(t)) {
-            let p = RestrictedType.strip(t) as SliceType;
-            if (p.mode != "strong") {
-                throw new TypeError("The operator '&' must not be used together with 'weak' or '^", loc);
-            }
-            p.mode = "reference";
-            return t;
-        }
-        return new PointerType(t, "reference");
-    }
-
-    public makeUniquePointer(t: Type, loc: Location): Type {
-        if (this.isSlice(t)) {
-            let p = RestrictedType.strip(t) as SliceType;
-            if (p.mode != "strong") {
-                throw new TypeError("The operator '^' must not be used together with 'weak' or '&", loc);
-            }
-            p.mode = "unique";
-            return t;
-        }
-        return new PointerType(t, "unique");
     }
 
     public pointerElementType(t: Type): Type {

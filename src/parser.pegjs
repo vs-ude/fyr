@@ -190,11 +190,17 @@ andType
     }
 
 primitiveType
-  = "[" [ \t]* e:expression? "]" [ \t]* t:type {
-      if (e) {
-          return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
-      }
-      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t})
+  = "[]" [ \t]* t:type {
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "[]"})
+    }
+  / "^[]" [ \t]* t:type {
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "^[]"})
+    }
+  / "&[]" [ \t]* t:type {
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "&[]"})
+    }
+  / "[" [ \t]* e:expression? "]" [ \t]* t:type {
+    return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
       if (t.length == 1) {
@@ -826,12 +832,20 @@ unary
   / p: primary { return p; }
 
 typedLiteral
-  = "[" [ \t]* e:expression? "]" [ \t]* t:type [ \t]* l: array {
-      if (e) {
-          l.lhs = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e});
-      } else {
-          l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t});
-      }
+  = "[]" [ \t]* t:type [ \t]* l: array {
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "[]"});
+      return l;
+    }
+  / "^[]" [ \t]* t:type [ \t]* l: array {
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "^[]"});
+      return l;
+    }
+  / "&[]" [ \t]* t:type [ \t]* l: array {
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "&[]"});
+      return l;
+    }
+  / "[" [ \t]* e:expression? "]" [ \t]* t:type [ \t]* l: array {
+      l.lhs = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e});
       return l;
     }
   / "(" [ \t]* t:typeList & {return t.length > 1;} [ \t]* ")" [ \t]* l: tuple {
