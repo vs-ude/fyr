@@ -3131,7 +3131,7 @@ export class TypeChecker {
                 this.checkIsPointer(enode.rhs);
                 let t = this.stripType(enode.rhs.type);
                 enode.type = (t as (PointerType | UnsafePointerType)).elementType;
-                if (this.isInterface(enode.type)) {
+                if (this.stripType(enode.type) instanceof InterfaceType) {
                     throw new TypeError("Interfaces cannot be dereferenced", enode.loc);
                 }
                 break;
@@ -4721,11 +4721,12 @@ export class TypeChecker {
         return t.stringsOnly();
     }
 
-    // TODO use pointer
     public isInterface(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            return t.elementType instanceof InterfaceType;
+        t = this.stripType(t);
+        if (!(t instanceof PointerType)) {
+            return false;
         }
+        t = this.stripType(t.elementType);
         return t instanceof InterfaceType;
     }
 
