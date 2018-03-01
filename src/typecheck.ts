@@ -1205,6 +1205,8 @@ export class PackageType extends Type {
     public types: Map<string, Type> = new Map<string, Type>();
 }
 
+export type ScopeExit = "return" | "outerScope" | "fallthrough";
+
 export class TypeChecker {
     constructor() {
         this.t_bool = new BasicType("bool");
@@ -1252,30 +1254,6 @@ export class TypeChecker {
         this.builtin_cap.returnType = this.t_int;
 
         this.globalBox = new Box();
-    }
-
-    public createScope(): Scope {
-        let s = new Scope(null);
-        s.registerType("bool", this.t_bool);
-        s.registerType("float", this.t_float);
-        s.registerType("double", this.t_double);
-        s.registerType("null", this.t_null);
-        s.registerType("byte", this.t_byte);
-        s.registerType("int8", this.t_int8);
-        s.registerType("int16", this.t_int16);
-        s.registerType("int32", this.t_int32);
-        s.registerType("int", this.t_int);
-        s.registerType("int64", this.t_int64);
-        s.registerType("uint8", this.t_uint8);
-        s.registerType("uint16", this.t_uint16);
-        s.registerType("uint32", this.t_uint32);
-        s.registerType("uint", this.t_uint32);
-        s.registerType("uint64", this.t_uint64);
-        s.registerType("string", this.t_string);
-        s.registerType("void", this.t_void);
-        s.registerType("error", this.t_error);
-        s.registerType("rune", this.t_rune);
-        return s;
     }
 
     public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" = "default"): Type {
@@ -1919,6 +1897,7 @@ export class TypeChecker {
             }
         } else {
             f = new Function();
+            fnode.scope = f.scope;
         }
         f.name = fnode.name.value;
         f.node = fnode;
@@ -2241,7 +2220,26 @@ export class TypeChecker {
         let functions: Array<Function> = [];
         let globalVariables: Array<Variable> = [];
 
-        let scope = this.createScope();
+        let scope = new Scope(null);
+        scope.registerType("bool", this.t_bool);
+        scope.registerType("float", this.t_float);
+        scope.registerType("double", this.t_double);
+        scope.registerType("null", this.t_null);
+        scope.registerType("byte", this.t_byte);
+        scope.registerType("int8", this.t_int8);
+        scope.registerType("int16", this.t_int16);
+        scope.registerType("int32", this.t_int32);
+        scope.registerType("int", this.t_int);
+        scope.registerType("int64", this.t_int64);
+        scope.registerType("uint8", this.t_uint8);
+        scope.registerType("uint16", this.t_uint16);
+        scope.registerType("uint32", this.t_uint32);
+        scope.registerType("uint", this.t_uint32);
+        scope.registerType("uint64", this.t_uint64);
+        scope.registerType("string", this.t_string);
+        scope.registerType("void", this.t_void);
+        scope.registerType("error", this.t_error);
+        scope.registerType("rune", this.t_rune);
         mnode.scope = scope;
 
         // Iterate over all files and process all imports
@@ -2352,31 +2350,17 @@ export class TypeChecker {
     }
 
     private checkFunctionBody(f: Function) {
+        let scopeExit: ScopeExit = "fallthrough";
         if (f.node.statements) {
-            for(let snode of f.node.statements) {
-                this.checkStatement(snode, f.scope);
-            }
+            scopeExit = this.checkStatements(f.node.statements, f.scope);
         }
         let needsReturn = !!f.node.rhs;
         if (needsReturn) {
-            if (!f.node.statements) {
-                throw new TypeError("Missing return at end of function", f.loc);
-            }
-            let hasReturn = false;
-            for(let i = f.node.statements.length - 1; i >= 0; i--) {
-                let s = f.node.statements[i];
-                if (s.op == "comment") {
-                    continue;
-                }
-                if (s.op == "return") {
-                    hasReturn = true;
-                    break;
-                }
-            }
-            if (!hasReturn) {
+            if (scopeExit != "return") {
                 throw new TypeError("Missing return at end of function", f.loc);
             }
         }
+        this.checkBoxesInFunction(f);
     }
 
     public checkVarAssignment(isConst: boolean, scope: Scope, vnode: Node, rtype: Type, rnode: Node = null) {
@@ -2801,9 +2785,26 @@ export class TypeChecker {
         }
     }
 
-    public checkStatement(snode: Node, scope: Scope) {
+    private checkStatements(statements: Array<Node>, scope: Scope): ScopeExit {
+        let scopeExit: ScopeExit = "fallthrough";
+        for(let i = 0; i < statements.length; i++) {
+            let st = statements[i];
+            scopeExit = this.checkStatement(st, scope);
+            if (scopeExit != "fallthrough") {
+                for(let j = i + 1; j < statements.length; j++) {
+                    st = statements[j];
+                    if (st.op != "comment") {
+                        throw new TypeError("Unreachable code", st.loc);
+                    }
+                }
+                break;         
+            }
+        }
+        return scopeExit;
+    }
+
+    public checkStatement(snode: Node, scope: Scope): ScopeExit {
         switch (snode.op) {
-        // TODO
             case "comment":
                 break;
             case "return":
@@ -2817,32 +2818,19 @@ export class TypeChecker {
                     }
                 } else {
                     this.checkExpression(snode.lhs, scope);
-/*                    if (snode.lhs.op == "tuple") {
-                        if (!(f.type.returnType instanceof TupleType)) {
-                            throw new TypeError("Mismatch in return type", snode.loc);                            
-                        }
-                        if (f.type.returnType.types.length != snode.lhs.parameters.length) {
-                            throw new TypeError("Mismatch in return type. Tuples have different length", snode.loc);                                
-                        }
-                        for(let i = 0; i < snode.lhs.parameters.length; i++) {
-                            let pnode = snode.lhs.parameters[i];
-                            this.checkIsAssignableNode(f.type.returnType.types[i], pnode);
-                        }
-                    } else { */
                     this.checkIsAssignableNode(f.type.returnType, snode.lhs);
-//                    }
                 }
-                break;
+                return "return";
             case "break":
                 if (!scope.isInForLoop()) {
                     throw new TypeError("'break' outside of loop", snode.loc);
                 }
-                break;
+                return "outerScope";
             case "continue":
                 if (!scope.isInForLoop()) {
                     throw new TypeError("'continue' outside of loop", snode.loc);
                 }
-                break;
+                return "outerScope";
             case "if":
                 let s = new Scope(scope);
                 snode.scope = s;
@@ -2851,20 +2839,21 @@ export class TypeChecker {
                 }
                 this.checkExpression(snode.condition, s);
                 this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
-                for(let st of snode.statements) {
-                    this.checkStatement(st, s);
-                }
+                let scopeExit = this.checkStatements(snode.statements, s)
                 if (snode.elseBranch) {
-                    this.checkStatement(snode.elseBranch, scope);
+                    let scopeExitElse = this.checkStatement(snode.elseBranch, scope);
+                    if (scopeExit == "return" && scopeExitElse == "return") {
+                        return "return";
+                    }
+                    if (scopeExit != "fallthrough" && scopeExitElse != "fallthrough") {
+                        return "outerScope";
+                    }
                 }
-                break;
+                return "fallthrough";
             case "else":
                 let s2 = new Scope(scope);
                 snode.scope = s2;
-                for(let st of snode.statements) {
-                    this.checkStatement(st, s2);
-                }
-                break;       
+                return this.checkStatements(snode.statements, s2);
             case "for":
                 let forScope = new Scope(scope);
                 snode.scope = forScope;
@@ -2885,10 +2874,8 @@ export class TypeChecker {
                         this.checkStatement(snode.condition, forScope);
                     }
                 }
-                for(let st of snode.statements) {
-                    this.checkStatement(st, forScope);
-                }
-                break;
+                this.checkStatements(snode.statements, forScope);
+                return "fallthrough";
             case "var":
             case "const":
                 if (!snode.rhs) {
@@ -3046,6 +3033,7 @@ export class TypeChecker {
                     throw new TypeError("Cannot infer type", snode.loc);
                 }
         }
+        return "fallthrough";
     }
 
     public checkExpression(enode: Node, scope: Scope) {
@@ -5033,6 +5021,249 @@ export class TypeChecker {
         return t.toString();
     }
 
+    private checkBoxesInFunction(f: Function) {
+        if (f.node.statements) {
+            for(let snode of f.node.statements) {
+                this.checkBoxesInStatement(snode, f.scope);
+            }
+        }
+    }
+    
+    private checkBoxesInStatement(snode: Node, scope: Scope) {
+        switch (snode.op) {
+            case "comment":
+                break;
+            /*
+            case "return":
+                let f = scope.envelopingFunction();
+                if (!f) {
+                    throw new TypeError("'return' outside of function body", snode.loc);                    
+                }
+                if (!snode.lhs) {
+                    if (f.type.returnType != this.t_void && !f.namedReturnTypes) {
+                        throw new TypeError("Mismatch in return type", snode.loc);
+                    }
+                } else {
+                    this.checkExpression(snode.lhs, scope);
+                    this.checkIsAssignableNode(f.type.returnType, snode.lhs);
+                }
+                break;
+            case "break":
+                if (!scope.isInForLoop()) {
+                    throw new TypeError("'break' outside of loop", snode.loc);
+                }
+                break;
+            case "continue":
+                if (!scope.isInForLoop()) {
+                    throw new TypeError("'continue' outside of loop", snode.loc);
+                }
+                break;
+            case "if":
+                let s = new Scope(scope);
+                snode.scope = s;
+                if (snode.lhs) {
+                    this.checkStatement(snode.lhs, s);
+                }
+                this.checkExpression(snode.condition, s);
+                this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
+                for(let st of snode.statements) {
+                    this.checkStatement(st, s);
+                }
+                if (snode.elseBranch) {
+                    this.checkStatement(snode.elseBranch, scope);
+                }
+                break;
+            case "else":
+                let s2 = new Scope(scope);
+                snode.scope = s2;
+                for(let st of snode.statements) {
+                    this.checkStatement(st, s2);
+                }
+                break;       
+            case "for":
+                let forScope = new Scope(scope);
+                snode.scope = forScope;
+                forScope.forLoop = true;
+                if (snode.condition) {
+                    if (snode.condition.op == ";;") {
+                        if (snode.condition.lhs) {
+                            this.checkStatement(snode.condition.lhs, forScope);
+                        }
+                        if (snode.condition.condition) {
+                            this.checkExpression(snode.condition.condition, forScope);
+                            this.checkIsAssignableType(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
+                        }
+                        if (snode.condition.rhs) {
+                            this.checkStatement(snode.condition.rhs, forScope);
+                        }
+                    } else {
+                        this.checkStatement(snode.condition, forScope);
+                    }
+                }
+                for(let st of snode.statements) {
+                    this.checkStatement(st, forScope);
+                }
+                break;
+            case "var":
+            case "const":
+                if (!snode.rhs) {
+                    if (snode.op == "const") {
+                        throw "Implementation error: const without initialization"
+                    }
+                    if (snode.lhs.op == "id") {
+                        let v = this.createVar(snode.lhs, scope, true);
+                    } else {
+                        for (let p of snode.lhs.parameters) {
+                            let v = this.createVar(p, scope, true);
+                        }
+                    }
+                } else {
+                    this.checkExpression(snode.rhs, scope);
+                    this.checkVarAssignment(snode.op == "const", scope, snode.lhs, snode.rhs.type, snode.rhs);
+                }
+                break;
+            case "=":
+                this.checkExpression(snode.rhs, scope);
+                this.checkAssignment(scope, snode.lhs, snode.rhs.type, snode.rhs);
+                break;                
+            case "+=":                                             
+            case "*=":
+            case "/=":
+            case "-=":
+                this.checkExpression(snode.lhs, scope);
+                this.checkIsMutable(snode.lhs, scope);
+                this.checkExpression(snode.rhs, scope);
+                if (snode.op == "+=" && this.isString(snode.lhs.type)) {
+                    this.checkIsString(snode.rhs);
+                } else if (this.isUnsafePointer(snode.lhs.type)) {
+                    if (snode.op == "*=" || snode.op == "/=") {
+                        throw new TypeError("'" + snode.op + "' is an invalid operation on pointers", snode.loc);
+                    }
+                    this.checkIsInt32Number(snode.rhs);
+                } else {
+                    this.checkIsNumber(snode.lhs);
+                    this.checkIsNumber(snode.rhs);
+                    if (snode.rhs.op == "int" || snode.rhs.op == "float") {
+                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
+                    } else {
+                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc, "assign", true);
+                    }
+                }
+                break;                
+            case "<<=":
+            case ">>=":
+            case "%=":
+            case "&=":
+            case "&^=":
+            case "|=":
+            case "^=":
+                this.checkExpression(snode.lhs, scope);
+                this.checkIsMutable(snode.lhs, scope);
+                this.checkExpression(snode.rhs, scope);
+                if (this.isUnsafePointer(snode.lhs.type)) {
+                    if (snode.op == "%=") {
+                        throw new TypeError("'%=' is an invalid operation on pointers", snode.loc);
+                    }
+                    if (snode.rhs.op == "int") {
+                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
+                    } else {
+                        this.checkIsAssignableType(this.t_int, snode.rhs.type, snode.loc, "assign", true);
+                    }
+                } else {
+                    this.checkIsIntNumber(snode.lhs);
+                    this.checkIsIntNumber(snode.rhs);
+                    if (snode.rhs.op == "int" || snode.rhs.op == "float") {
+                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
+                    } else {
+                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc, "assign", true);
+                    }
+                }
+                break;
+            case "in":
+                this.checkExpression(snode.rhs, scope);
+                let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
+                if (snode.lhs.op == "tuple") {
+//                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
+                    if (snode.lhs.parameters[0].value != "_") {
+                        this.checkExpression(snode.lhs.parameters[0], scope);
+                        this.checkIsMutable(snode.lhs.parameters[0], scope);
+                        this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc, "assign", true);
+                    } 
+                    if (snode.lhs.parameters[1].value != "_") {
+                        this.checkExpression(snode.lhs.parameters[1], scope);
+                        this.checkIsMutable(snode.lhs.parameters[1], scope);
+                        this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc, "assign", true);
+                    }
+                } else {
+                    if (snode.lhs.value != "_") {
+                        this.checkExpression(snode.lhs, scope);
+                        this.checkIsMutable(snode.lhs, scope);
+                        this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc, "assign", true);
+                    }
+                }
+                break;
+            case "var_in":
+            {
+                this.checkExpression(snode.rhs, scope);
+                let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
+                if (snode.lhs.op == "tuple") {
+                    if (snode.lhs.parameters[0].value != "_") {
+                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
+                        if (v1.type) {
+                            this.checkIsAssignableType(v1.type, tindex1, snode.loc, "assign", true);
+                        } else {
+                            v1.type = tindex1
+                        }
+                    }
+                    if (snode.lhs.parameters[1].value != "_") {
+                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
+                        if (v2.type) {
+                            this.checkIsAssignableType(v2.type, tindex2, snode.loc, "assign", true);
+                        } else {
+                            v2.type = tindex2;
+                        }
+                    }
+                } else {
+                    let v = this.createVar(snode.lhs, scope, false);
+                    if (v.type) {
+                        this.checkIsAssignableType(v.type, tindex1, snode.loc, "assign", true);
+                    } else {
+                        v.type = tindex1;
+                    }
+                }
+                break;
+            }
+            case "yield":
+            {
+                let f = scope.envelopingFunction();
+                if (f.type.callingConvention != "fyrCoroutine") {
+                    throw new TypeError("yield is only allowed in async function", snode.loc);
+                }
+                break;
+            }
+            case "spawn":
+            {
+                this.checkExpression(snode.rhs, scope);
+                if (snode.rhs.op != "(") {
+                    throw "Implementation error";
+                }
+                if (!(snode.rhs.lhs.type instanceof FunctionType)) {
+                    throw "Implementation error";
+                }
+                if ((snode.rhs.lhs.type as FunctionType).returnType != this.t_void) {
+                    throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
+                }
+                break;
+            }
+            */
+            default:
+                this.checkBoxesInExpression(snode, scope);
+        }
+    }
+
+    private checkBoxesInExpression(enode: Node, scope: Scope) {
+    }
+
     public t_bool: Type;
     public t_float: Type;
     public t_double: Type;
@@ -5063,7 +5294,6 @@ export class TypeChecker {
     public templateTypeInstantiations: Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>> = new Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>>();
     public templateFunctionInstantiations: Map<TemplateType, Array<Function>> = new Map<TemplateType, Array<Function>>();
     
-//    private callGraph: Map<Function, Array<FunctionType>> = new Map<Function, Array<FunctionType>>();
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
 
     private globalBox: Box;
