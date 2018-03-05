@@ -116,7 +116,6 @@ export class Scope {
         this.parent = parent;
         this.elements = new Map<string, ScopeElement>();
         this.types = new Map<string, Type>();
-        this.boxes = new Map<string, Box>();
     }
 
     public resolveElement(name: string): ScopeElement {
@@ -169,21 +168,71 @@ export class Scope {
         this.elements.set(name, element);
     }
 
-    public registerBox(name: string, box: Box, loc: Location): void {
-        if (this.boxes.has(name)) {
+    public registerNamedBox(name: string, box: Box, loc: Location): void {
+        if (!this.namedBoxes) {
+            this.namedBoxes = new Map<string, Box>();
+        }
+        if (this.namedBoxes.has(name)) {
             throw "Implementation error";
         }
-        this.boxes.set(name, box);
+        this.namedBoxes.set(name, box);
     }
 
-    public lookupBox(name: string): Box {
-        if (this.boxes.has(name)) {
-            return this.boxes.get(name);
+    public lookupNamedBox(name: string): Box {
+        if (!this.namedBoxes) {
+            return null;
+        }
+        if (this.namedBoxes.has(name)) {
+            return this.namedBoxes.get(name);
         }
         if (this.parent && !this.func) {
-            return this.parent.lookupBox(name);
+            return this.parent.lookupNamedBox(name);
         }
         return null;
+    }
+
+    public setPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box | null = null) {
+        if (!this.placeholderBoxes) {
+            this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
+        }
+        let s = this.placeholderBoxes.get(placeholder);
+        if (s) {
+            s.makeUnavailable();
+        }
+        s = new WrapperBox();
+        this.placeholderBoxes.set(placeholder, s);
+        if (boxes) {
+            s.addBox(boxes);
+        }
+    }
+
+    public taintPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box) {
+        if (!this.placeholderBoxes) {
+            this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
+        }
+        let s = this.placeholderBoxes.get(placeholder);
+        if (!s) {
+            s = new WrapperBox();
+            this.placeholderBoxes.set(placeholder, s);
+        }
+        s.addBox(boxes);
+    }
+
+    public mergePlaceholderBoxes(merge: Scope) {
+        if (!merge.placeholderBoxes) {
+            return;
+        }
+        if (!this.placeholderBoxes) {
+            this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
+        }
+        for(let b of merge.placeholderBoxes.entries()) {
+            let s = this.placeholderBoxes.get(b[0]);
+            if (!s) {
+                this.placeholderBoxes.set(b[0], b[1]);
+            } else {
+                s.merge(b[1]);
+            }
+        }
     }
 
     /*
@@ -230,7 +279,9 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
-    public boxes: Map<string, Box>;
+    private namedBoxes: Map<string, Box> | null;
+    private placeholderBoxes: Map<PlaceholderBox, WrapperBox> | null;
+    public scopeBox: Box = new Box();
     public parent: Scope | null = null;
 }
 
@@ -844,6 +895,69 @@ export class Box {
     */
 }
 
+export class PlaceholderBox extends Box {
+}
+
+export class WrapperBox extends Box {
+    constructor() {
+        super();
+        this.boxes = [];
+    }
+
+    public addBox(boxes: Array<Box> | Box) {
+        if (boxes instanceof Box) {
+            if (!this.hasBox(boxes)) {
+                this.boxes.push(boxes);
+            }
+        } else {
+            for(let b of boxes) {
+                if (!this.hasBox(b)) {
+                    this.boxes.push(b);
+                }
+            }
+        }
+    }
+
+    public hasBox(box: Box): boolean {
+        for(let b of this.boxes) {
+            if (b == box) {
+                return true;
+            }
+            if (b instanceof WrapperBox) {
+                if (b.hasBox(box)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public isAvailable(): boolean {
+        if (!this.available) {
+            return false;
+        }
+        for(let b of this.boxes) {
+            if (b instanceof WrapperBox) {
+                if (!b.isAvailable()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public makeUnavailable() {
+        this.available = false;
+    }
+
+    public merge(b: WrapperBox) {
+
+    }
+
+    private available: boolean;
+    private boxes: Array<Box>;
+}
+
 export type Restrictions = {
     isConst?: boolean;
     boxes?: Array<Box>;
@@ -1315,12 +1429,12 @@ export class TypeChecker {
                 }
                 boxes = [];
                 for(let b of tnode.parameters) {
-                    let box = scope.lookupBox(b.value);
+                    let box = scope.lookupNamedBox(b.value);
                     if (!box) {
                         box = new Box();
                         box.name = b.value;
                         box.isExtern = this.isWeak(c);
-                        scope.registerBox(box.name, box, tnode.loc);
+                        scope.registerNamedBox(box.name, box, tnode.loc);
                     }
                     boxes.push(box);
                 }
@@ -5022,14 +5136,16 @@ export class TypeChecker {
     }
 
     private checkBoxesInFunction(f: Function) {
-        if (f.node.statements) {
-            for(let snode of f.node.statements) {
-                this.checkBoxesInStatement(snode, f.scope);
-            }
+        if (!f.node.statements) {
+            return;
+        }
+
+        for(let snode of f.node.statements) {
+            this.checkBoxesInStatement(snode, f.scope);
         }
     }
     
-    private checkBoxesInStatement(snode: Node, scope: Scope) {
+    private checkBoxesInStatement(snode: Node, scope: Scope): Array<Scope> | null {
         switch (snode.op) {
             case "comment":
                 break;
@@ -5259,6 +5375,8 @@ export class TypeChecker {
             default:
                 this.checkBoxesInExpression(snode, scope);
         }
+
+        return null;
     }
 
     private checkBoxesInExpression(enode: Node, scope: Scope) {
