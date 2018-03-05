@@ -191,6 +191,17 @@ export class Scope {
         return null;
     }
 
+    public makeElementUnavailable(element: ScopeElement) {
+        if (!this.resolveElement(element.name)) {
+            return;
+        }
+        for(let e of this.placeholderBoxes.entries()) {
+            if (e[0].element == element) {
+                e[1].makeUnavailable();
+            }
+        }
+    }
+
     public setPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box | null = null) {
         if (!this.placeholderBoxes) {
             this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
@@ -896,6 +907,12 @@ export class Box {
 }
 
 export class PlaceholderBox extends Box {
+    constructor(element: ScopeElement) {
+        super();
+        this.element = element;
+    }
+
+    public element: ScopeElement;
 }
 
 export class WrapperBox extends Box {
@@ -1339,12 +1356,8 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         this.t_any = new BasicType("any");
-        let b = new Box();
-//        b.freeze();
-        let str = new SliceType(new ArrayType(this.t_byte, -1), "strong");
-        str.name = "string";
-        this.t_string = new RestrictedType(str, {isConst: true, boxes: [b]});
-        
+        this.t_string = new SliceType(new RestrictedType(new ArrayType(this.t_byte, -1), {isConst: true, boxes: [new Box()]}), "unique");
+        this.t_string.name = "string";        
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
         
@@ -2998,10 +3011,12 @@ export class TypeChecker {
                     }
                     if (snode.lhs.op == "id") {
                         let v = this.createVar(snode.lhs, scope, true);
-                    } else {
+                    } else if (snode.lhs.op == "tuple") {
                         for (let p of snode.lhs.parameters) {
                             let v = this.createVar(p, scope, true);
                         }
+                    } else {
+                        throw "TODO: Implementation error"
                     }
                 } else {
                     this.checkExpression(snode.rhs, scope);
@@ -5149,6 +5164,24 @@ export class TypeChecker {
         switch (snode.op) {
             case "comment":
                 break;
+            case "var":
+            case "const":
+                if (snode.lhs.op == "id") {
+                    let e = scope.resolveElement(snode.lhs.value);
+                    scope.makeElementUnavailable(e);
+                } else if (snode.lhs.op == "tuple") {
+                    for (let p of snode.lhs.parameters) {
+                        let e = scope.resolveElement(p.lhs.value);
+                        scope.makeElementUnavailable(e);
+                    }
+                } else {
+                    throw "TODO: Implementation error";
+                }
+                if (snode.rhs) {
+                    this.checkBoxesInAssignment(snode, scope);
+                }
+                break;
+    
             /*
             case "return":
                 let f = scope.envelopingFunction();
@@ -5228,10 +5261,12 @@ export class TypeChecker {
                     }
                     if (snode.lhs.op == "id") {
                         let v = this.createVar(snode.lhs, scope, true);
-                    } else {
+                    } else if (snode.lhs.op == "tuple") {
                         for (let p of snode.lhs.parameters) {
                             let v = this.createVar(p, scope, true);
                         }
+                    } else {
+                        throw "TODO: Implementation error"
                     }
                 } else {
                     this.checkExpression(snode.rhs, scope);
@@ -5379,7 +5414,31 @@ export class TypeChecker {
         return null;
     }
 
+    private checkBoxesInAssignment(snode: Node, scope: Scope) {
+
+    }
+
     private checkBoxesInExpression(enode: Node, scope: Scope) {
+    }
+
+    private injectPlaceholderBoxes(scope: Scope, element: ScopeElement): Type {
+        return this.injectPlaceholderBoxesIntern(scope, element, element.type, null);
+    }
+
+    private injectPlaceholderBoxesIntern(scope: Scope, element: ScopeElement, t: Type, boxes: Array<Box>): Type {
+        if (t instanceof RestrictedType) {
+            if ()
+        } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
+            return t;
+        } else if (t instanceof MapType) {
+
+        } else if (t instanceof ArrayType) {
+
+        } else if (t instanceof TupleType) {
+
+        } else {
+            throw "Implementation error";
+        }
     }
 
     public t_bool: Type;
