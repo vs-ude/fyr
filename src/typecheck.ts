@@ -5427,15 +5427,80 @@ export class TypeChecker {
 
     private injectPlaceholderBoxesIntern(scope: Scope, element: ScopeElement, t: Type, boxes: Array<Box>): Type {
         if (t instanceof RestrictedType) {
-            if ()
+            let e = this.injectPlaceholderBoxesIntern(scope, element, t.elementType, boxes);
+            if (e == t.elementType) {
+                return t;
+            }            
+            return new RestrictedType(e, {isConst: t.isConst, boxes: t.boxes});
         } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
             return t;
+        } else if (t instanceof UnsafePointerType) {
+            let e = this.injectPlaceholderBoxesIntern(scope, element, t.elementType, boxes);
+            if (e == t.elementType) {
+                return t;
+            }            
+            return new UnsafePointerType(e);
+        } else if (t instanceof PointerType) {
+            let e = t.elementType;
+            let isConst = false;
+            let hasBoxes = false;
+            if (e instanceof RestrictedType) {
+                isConst = e.isConst;
+                hasBoxes = !!(e.boxes);
+                e = e.elementType;
+            } 
+            let newe = this.injectPlaceholderBoxesIntern(scope, element, e, boxes);
+            if (newe == e && !hasBoxes) {
+                return t;
+            }
+            if (isConst) {
+                newe = this.makeConst(newe, element.loc);
+            }
+            return new PointerType(newe, t.mode);
+        } else if (t instanceof SliceType) {
+            let e = t.arrayType;
+            let isConst = false;
+            let hasBoxes = false;
+            if (e instanceof RestrictedType) {
+                isConst = e.isConst;
+                hasBoxes = !!(e.boxes);
+                e = e.elementType as ArrayType;
+            } 
+            let newe = this.injectPlaceholderBoxesIntern(scope, element, e, boxes);
+            if (newe == e && !hasBoxes) {
+                return t;
+            }
+            if (isConst) {
+                newe = this.makeConst(newe, element.loc);
+            }
+            return new PointerType(newe, t.mode);            
         } else if (t instanceof MapType) {
-
+            let k = this.injectPlaceholderBoxesIntern(scope, element, t.keyType, boxes);
+            let v = this.injectPlaceholderBoxesIntern(scope, element, t.valueType, boxes);
+            if (k == t.keyType && v == t.valueType) {
+                return t;
+            }            
+            return new MapType(k, v);
         } else if (t instanceof ArrayType) {
-
+            let e = this.injectPlaceholderBoxesIntern(scope, element, t.elementType, boxes);
+            if (e == t.elementType) {
+                return t;
+            }            
+            return new ArrayType(e, t.size);
         } else if (t instanceof TupleType) {
-
+            let types: Array<Type> = [];
+            let ok = true;
+            for(let e of t.types) {
+                let newe = this.injectPlaceholderBoxesIntern(scope, element, e, boxes);
+                types.push(newe);
+                if (newe != e) {
+                    ok = false;
+                }
+            }
+            if (ok) {
+                return t;
+            }
+            return new TupleType(types);
         } else {
             throw "Implementation error";
         }
