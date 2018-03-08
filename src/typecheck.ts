@@ -192,63 +192,79 @@ export class Scope {
     }
 
     public makeElementUnavailable(element: ScopeElement) {
-        for(let e of this.placeholderBoxes.entries()) {
-            if (e[0].element == element) {
-                e[1].makeUnavailable();
-            }
-        }
         if (!this.availableElements) {
-            this.availableElements = new Map<ScopeElement, boolean>();
+            this.availableElements = new Map<ScopeElement, number>();
         }
-        this.availableElements.set(element, false);
+        this.availableElements.set(element, 0);
     }
 
     public makeElementAvailable(element: ScopeElement) {
         if (!this.availableElements) {
-            this.availableElements = new Map<ScopeElement, boolean>();
+            this.availableElements = new Map<ScopeElement, number>();
         }
-        this.availableElements.set(element, true);
+        this.availableElements.set(element, Scope.counter++);
     }
 
-    public isElementAvailable(element: ScopeElement) {
+    /**
+     * Returns 0 if the element is not available
+     */
+    public isElementAvailable(element: ScopeElement): number {
         if (this.availableElements && this.availableElements.has(element)) {
             return this.availableElements.get(element);
         }
         if (this.parent) {
             return this.parent.isElementAvailable(element);
         }
-        return false;
+        return 0;
     }
 
-    public mergeAvaiableElements(merge: Scope, mode: "and" | "or") {
+    public mergeAvaiableElements(merge: Scope, mode: "optional" | "sequence") {
         if (merge.availableElements) {
             if (!this.availableElements) {
-                this.availableElements = new Map<ScopeElement, boolean>();
+                this.availableElements = new Map<ScopeElement, number>();
             }
             for(let v of merge.availableElements.entries()) {
-                let a = false;
-                if (this.availableElements.has(v[0])) {
-                    a = this.availableElements.get(v[0]);
+                let a: number = this.isElementAvailable(v[0]);
+                if (a != 0 && a == v[1]) {
+                    throw "Implementation error";
                 }
-                if (mode == "and") {
-                    a = a && v[1];
+                if (mode == "optional") {
+                    if (a != 0 && v[1] != 0) {
+                        this.availableElements.set(v[0], Scope.counter++);
+                    } else if (a != 0 && v[1] == 0) {
+                        this.availableElements.set(v[0], 0);
+                    }
+                } else if (mode == "sequence") {
+                    this.availableElements.set(v[0], v[1]);                        
                 } else {
-                    a = a || v[1];
+                    throw "Implementation error";
                 }
-                this.availableElements.set(v[0], a);
             }
         }
+    }
+
+    public resolvePlaceholderBox(placeholder: PlaceholderBox): WrapperBox | null {
+        if (this.placeholderBoxes) {
+            let w: WrapperBox = this.placeholderBoxes.get(placeholder);
+            if (w) {
+                return w;
+            }
+        }
+        if (this.parent) {
+            return this.parent.resolvePlaceholderBox(placeholder);
+        }
+        return null;
     }
 
     public setPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box | null = null) {
         if (!this.placeholderBoxes) {
             this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
         }
-        let s = this.placeholderBoxes.get(placeholder);
-        if (s) {
-            s.makeUnavailable();
+        let a = this.isElementAvailable(placeholder.element);
+        if (!a) {
+            throw "Implementation error";
         }
-        s = new WrapperBox();
+        let s = new WrapperBox(placeholder.element, a);
         this.placeholderBoxes.set(placeholder, s);
         if (boxes) {
             s.addBox(boxes);
@@ -261,7 +277,11 @@ export class Scope {
         }
         let s = this.placeholderBoxes.get(placeholder);
         if (!s) {
-            s = new WrapperBox();
+            let a = this.isElementAvailable(placeholder.element);
+            if (!a) {
+                throw "Implementation error";
+            }
+            s = new WrapperBox(placeholder.element, a);
             this.placeholderBoxes.set(placeholder, s);
         }
         s.addBox(boxes);
@@ -328,11 +348,13 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
-    private availableElements: Map<ScopeElement, boolean> | null;
+    private availableElements: Map<ScopeElement, number> | null;
     private namedBoxes: Map<string, Box> | null;
     private placeholderBoxes: Map<PlaceholderBox, WrapperBox> | null;
     public scopeBox: Box = new Box();
     public parent: Scope | null = null;
+
+    private static counter: number = 1;
 }
 
 /**
@@ -955,9 +977,11 @@ export class PlaceholderBox extends Box {
 }
 
 export class WrapperBox extends Box {
-    constructor() {
+    constructor(element: ScopeElement, version: number) {
         super();
         this.boxes = [];
+        this.element = element;
+        this.version = version;
     }
 
     public addBox(boxes: Array<Box> | Box) {
@@ -988,13 +1012,13 @@ export class WrapperBox extends Box {
         return false;
     }
 
-    public isAvailable(): boolean {
-        if (!this.available) {
+    public isAvailable(scope: Scope): boolean {
+        if (scope.isElementAvailable(this.element) != this.version) {
             return false;
         }
         for(let b of this.boxes) {
             if (b instanceof WrapperBox) {
-                if (!b.isAvailable()) {
+                if (!b.isAvailable(scope)) {
                     return false;
                 }
             }
@@ -1002,15 +1026,12 @@ export class WrapperBox extends Box {
         return true;
     }
 
-    public makeUnavailable() {
-        this.available = false;
-    }
-
     public merge(b: WrapperBox) {
-
+        throw "TODO"
     }
 
-    private available: boolean;
+    public version: number;
+    public element: ScopeElement;
     private boxes: Array<Box>;
 }
 
