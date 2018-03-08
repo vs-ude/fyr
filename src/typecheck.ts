@@ -192,28 +192,52 @@ export class Scope {
     }
 
     public makeElementUnavailable(element: ScopeElement) {
-        if (!this.resolveElement(element.name)) {
-            return;
-        }
         for(let e of this.placeholderBoxes.entries()) {
             if (e[0].element == element) {
                 e[1].makeUnavailable();
             }
         }
-        if (!this.unavailableElements) {
-            this.unavailableElements = new Set<ScopeElement>();
+        if (!this.availableElements) {
+            this.availableElements = new Map<ScopeElement, boolean>();
         }
-        this.unavailableElements.add(element);
+        this.availableElements.set(element, false);
     }
 
     public makeElementAvailable(element: ScopeElement) {
-        if (this.unavailableElements) {
-            this.unavailableElements.delete(element);
+        if (!this.availableElements) {
+            this.availableElements = new Map<ScopeElement, boolean>();
         }
+        this.availableElements.set(element, true);
     }
 
     public isElementAvailable(element: ScopeElement) {
-        return !this.unavailableElements || !(this.unavailableElements.has(element));
+        if (this.availableElements && this.availableElements.has(element)) {
+            return this.availableElements.get(element);
+        }
+        if (this.parent) {
+            return this.parent.isElementAvailable(element);
+        }
+        return false;
+    }
+
+    public mergeAvaiableElements(merge: Scope, mode: "and" | "or") {
+        if (merge.availableElements) {
+            if (!this.availableElements) {
+                this.availableElements = new Map<ScopeElement, boolean>();
+            }
+            for(let v of merge.availableElements.entries()) {
+                let a = false;
+                if (this.availableElements.has(v[0])) {
+                    a = this.availableElements.get(v[0]);
+                }
+                if (mode == "and") {
+                    a = a && v[1];
+                } else {
+                    a = a || v[1];
+                }
+                this.availableElements.set(v[0], a);
+            }
+        }
     }
 
     public setPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box | null = null) {
@@ -304,7 +328,7 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
-    private unavailableElements: Set<ScopeElement> | null;
+    private availableElements: Map<ScopeElement, boolean> | null;
     private namedBoxes: Map<string, Box> | null;
     private placeholderBoxes: Map<PlaceholderBox, WrapperBox> | null;
     public scopeBox: Box = new Box();
