@@ -243,61 +243,61 @@ export class Scope {
         }
     }
 
-    public resolvePlaceholderBox(placeholder: PlaceholderBox): WrapperBox | null {
-        if (this.placeholderBoxes) {
-            let w: WrapperBox = this.placeholderBoxes.get(placeholder);
+    public resolveVariableBox(varBox: VariableBox): PlaceholderBox | null {
+        if (this.varBoxes) {
+            let w: PlaceholderBox = this.varBoxes.get(varBox);
             if (w) {
                 return w;
             }
         }
         if (this.parent) {
-            return this.parent.resolvePlaceholderBox(placeholder);
+            return this.parent.resolveVariableBox(varBox);
         }
         return null;
     }
 
-    public setPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box | null = null) {
-        if (!this.placeholderBoxes) {
-            this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
+    public setVariableBox(varBox: VariableBox, boxes: Array<Box> | Box | null = null) {
+        if (!this.varBoxes) {
+            this.varBoxes = new Map<VariableBox, PlaceholderBox>();
         }
-        let a = this.isElementAvailable(placeholder.element);
+        let a = this.isElementAvailable(varBox.element);
         if (!a) {
             throw "Implementation error";
         }
-        let s = new WrapperBox(placeholder.element, a);
-        this.placeholderBoxes.set(placeholder, s);
+        let s = new PlaceholderBox(varBox.element, a);
+        this.varBoxes.set(varBox, s);
         if (boxes) {
             s.addBox(boxes);
         }
     }
 
-    public taintPlaceholderBox(placeholder: PlaceholderBox, boxes: Array<Box> | Box) {
-        if (!this.placeholderBoxes) {
-            this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
+    public taintVariableBox(varBox: VariableBox, boxes: Array<Box> | Box) {
+        if (!this.varBoxes) {
+            this.varBoxes = new Map<VariableBox, PlaceholderBox>();
         }
-        let s = this.placeholderBoxes.get(placeholder);
+        let s = this.varBoxes.get(varBox);
         if (!s) {
-            let a = this.isElementAvailable(placeholder.element);
+            let a = this.isElementAvailable(varBox.element);
             if (!a) {
                 throw "Implementation error";
             }
-            s = new WrapperBox(placeholder.element, a);
-            this.placeholderBoxes.set(placeholder, s);
+            s = new PlaceholderBox(varBox.element, a);
+            this.varBoxes.set(varBox, s);
         }
         s.addBox(boxes);
     }
 
-    public mergePlaceholderBoxes(merge: Scope) {
-        if (!merge.placeholderBoxes) {
+    public mergeVariableBoxes(merge: Scope) {
+        if (!merge.varBoxes) {
             return;
         }
-        if (!this.placeholderBoxes) {
-            this.placeholderBoxes = new Map<PlaceholderBox, WrapperBox>();
+        if (!this.varBoxes) {
+            this.varBoxes = new Map<VariableBox, PlaceholderBox>();
         }
-        for(let b of merge.placeholderBoxes.entries()) {
-            let s = this.placeholderBoxes.get(b[0]);
+        for(let b of merge.varBoxes.entries()) {
+            let s = this.varBoxes.get(b[0]);
             if (!s) {
-                this.placeholderBoxes.set(b[0], b[1]);
+                this.varBoxes.set(b[0], b[1]);
             } else {
                 s.merge(b[1]);
             }
@@ -350,7 +350,7 @@ export class Scope {
     public types: Map<string, Type>;
     private availableElements: Map<ScopeElement, number> | null;
     private namedBoxes: Map<string, Box> | null;
-    private placeholderBoxes: Map<PlaceholderBox, WrapperBox> | null;
+    private varBoxes: Map<VariableBox, PlaceholderBox> | null;
     public scopeBox: Box = new Box();
     public parent: Scope | null = null;
 
@@ -967,7 +967,7 @@ export class Box {
     */
 }
 
-export class PlaceholderBox extends Box {
+export class VariableBox extends Box {
     constructor(element: ScopeElement) {
         super();
         this.element = element;
@@ -976,14 +976,14 @@ export class PlaceholderBox extends Box {
     public element: ScopeElement;
 }
 
-export class WrapperBox extends Box {
-    constructor(element: ScopeElement, version: number) {
+export class PlaceholderBox extends Box {
+    constructor(varBox: VariableBox, version: number) {
         super();
-        this.boxes = [];
-        this.element = element;
+        this.varBox = varBox;
         this.version = version;
     }
 
+    /*
     public addBox(boxes: Array<Box> | Box) {
         if (boxes instanceof Box) {
             if (!this.hasBox(boxes)) {
@@ -1003,7 +1003,7 @@ export class WrapperBox extends Box {
             if (b == box) {
                 return true;
             }
-            if (b instanceof WrapperBox) {
+            if (b instanceof PlaceholderBox) {
                 if (b.hasBox(box)) {
                     return true;
                 }
@@ -1017,7 +1017,7 @@ export class WrapperBox extends Box {
             return false;
         }
         for(let b of this.boxes) {
-            if (b instanceof WrapperBox) {
+            if (b instanceof PlaceholderBox) {
                 if (!b.isAvailable(scope)) {
                     return false;
                 }
@@ -1026,13 +1026,13 @@ export class WrapperBox extends Box {
         return true;
     }
 
-    public merge(b: WrapperBox) {
+    public merge(b: PlaceholderBox) {
         throw "TODO"
     }
+    */
 
     public version: number;
-    public element: ScopeElement;
-    private boxes: Array<Box>;
+    public varBox: VariableBox;
 }
 
 export type Restrictions = {
@@ -1569,7 +1569,7 @@ export class TypeChecker {
                         p.ellipsis = true;
                         pnode = pnode.lhs;
                     }
-                    p.type = this.injectPlaceholderBoxes(this.createType(pnode, scope, "parameter"), "parameter");
+                    p.type = this.injectVariableBoxes(this.createType(pnode, scope, "parameter"), "parameter");
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
@@ -2152,7 +2152,7 @@ export class TypeChecker {
                         v.isResult = true;
                         v.loc = pnode.loc;
                         v.name = pnode.name.value;
-                        v.type = this.injectPlaceholderBoxes((f.type.returnType as TupleType).types[i], "variable");
+                        v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
                         f.scope.registerElement(v.name, v);
                         f.namedReturnTypes = true;
                     }
@@ -2194,7 +2194,7 @@ export class TypeChecker {
             if (isConst) {
                 v.type = this.makeConst(v.type, vnode.loc);
             }
-            v.type = this.injectPlaceholderBoxes(v.type, "variable");
+            v.type = this.injectVariableBoxes(v.type, "variable");
             this.checkVariableType(v.type, vnode.loc);
         }
         if (v.name != "_") {
@@ -2351,7 +2351,7 @@ export class TypeChecker {
                 let p = new FunctionParameter();
                 p.name = "p" + i.toString();
                 i++;
-                p.type = this.injectPlaceholderBoxes(this.createType(pnode, f.scope, "parameter"), "parameter");
+                p.type = this.injectVariableBoxes(this.createType(pnode, f.scope, "parameter"), "parameter");
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2369,7 +2369,7 @@ export class TypeChecker {
                         v.name = "p" + i.toString();
                         i++;
                         v.name = pnode.name.value;
-                        v.type = this.injectPlaceholderBoxes((f.type.returnType as TupleType).types[i], "variable");
+                        v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
                         f.scope.registerElement(v.name, v);
                         f.namedReturnTypes = true;
                     }
@@ -3773,7 +3773,7 @@ export class TypeChecker {
                                 throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                             }
                         }
-                        p.type = this.injectPlaceholderBoxes(this.createType(pnode, enode.scope, "parameter"), "parameter");
+                        p.type = this.injectVariableBoxes(this.createType(pnode, enode.scope, "parameter"), "parameter");
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                         }
@@ -3792,7 +3792,7 @@ export class TypeChecker {
                                 v.isResult = true;
                                 v.loc = pnode.loc;
                                 v.name = pnode.name.value;
-                                v.type = this.injectPlaceholderBoxes((f.type.returnType as TupleType).types[i], "variable");
+                                v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
                                 f.scope.registerElement(v.name, v);
                                 f.namedReturnTypes = true;
                             }
@@ -6042,7 +6042,7 @@ export class TypeChecker {
                                 throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                             }
                         }
-                        p.type = this.injectPlaceholderBoxes(this.createType(pnode, enode.scope, "parameter"), "parameter");
+                        p.type = this.injectVariableBoxes(this.createType(pnode, enode.scope, "parameter"), "parameter");
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                         }
@@ -6061,7 +6061,7 @@ export class TypeChecker {
                                 v.isResult = true;
                                 v.loc = pnode.loc;
                                 v.name = pnode.name.value;
-                                v.type = this.injectPlaceholderBoxes((f.type.returnType as TupleType).types[i], "variable");
+                                v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
                                 f.scope.registerElement(v.name, v);
                                 f.namedReturnTypes = true;
                             }
@@ -6194,9 +6194,9 @@ export class TypeChecker {
         }    
     }
 
-    private injectPlaceholderBoxes(t: Type, mode: "variable" | "parameter"): Type {
+    private injectVariableBoxes(t: Type, mode: "variable" | "parameter"): Type {
         if (t instanceof RestrictedType) {
-            let e = this.injectPlaceholderBoxes(t.elementType, mode);
+            let e = this.injectVariableBoxes(t.elementType, mode);
             if (e == t.elementType) {
                 return t;
             }            
@@ -6204,7 +6204,7 @@ export class TypeChecker {
         } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
             return t;
         } else if (t instanceof UnsafePointerType) {
-            let e = this.injectPlaceholderBoxes(t.elementType, mode);
+            let e = this.injectVariableBoxes(t.elementType, mode);
             if (e == t.elementType) {
                 return t;
             }            
@@ -6218,7 +6218,7 @@ export class TypeChecker {
                 hasBoxes = !!(e.boxes);
                 e = e.elementType;
             } 
-            let newe = this.injectPlaceholderBoxes(e, mode);
+            let newe = this.injectVariableBoxes(e, mode);
             if (newe == e && !hasBoxes) {
                 return t;
             }
@@ -6235,7 +6235,7 @@ export class TypeChecker {
                 hasBoxes = !!(e.boxes);
                 e = e.elementType as ArrayType;
             } 
-            let newe = this.injectPlaceholderBoxes(e, mode);
+            let newe = this.injectVariableBoxes(e, mode);
             if (newe == e && !hasBoxes) {
                 return t;
             }
@@ -6244,14 +6244,14 @@ export class TypeChecker {
             }
             return new PointerType(newe, t.mode);            
         } else if (t instanceof MapType) {
-            let k = this.injectPlaceholderBoxes(t.keyType, mode);
-            let v = this.injectPlaceholderBoxes(t.valueType, mode);
+            let k = this.injectVariableBoxes(t.keyType, mode);
+            let v = this.injectVariableBoxes(t.valueType, mode);
             if (k == t.keyType && v == t.valueType) {
                 return t;
             }            
             return new MapType(k, v);
         } else if (t instanceof ArrayType) {
-            let e = this.injectPlaceholderBoxes(t.elementType, mode);
+            let e = this.injectVariableBoxes(t.elementType, mode);
             if (e == t.elementType) {
                 return t;
             }            
@@ -6260,7 +6260,7 @@ export class TypeChecker {
             let types: Array<Type> = [];
             let ok = true;
             for(let e of t.types) {
-                let newe = this.injectPlaceholderBoxes(e, mode);
+                let newe = this.injectVariableBoxes(e, mode);
                 types.push(newe);
                 if (newe != e) {
                     ok = false;
