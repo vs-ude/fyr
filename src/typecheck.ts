@@ -243,9 +243,9 @@ export class Scope {
         }
     }
 
-    public resolveVariableBox(varBox: VariableBox): PlaceholderBox | null {
+    public resolveVariableBox(varBox: VariableBox): ResolvedVariableBox | null {
         if (this.varBoxes) {
-            let w: PlaceholderBox = this.varBoxes.get(varBox);
+            let w: ResolvedVariableBox = this.varBoxes.get(varBox);
             if (w) {
                 return w;
             }
@@ -256,43 +256,58 @@ export class Scope {
         return null;
     }
 
-    public setVariableBox(varBox: VariableBox, boxes: Array<Box> | Box | null = null) {
+    public setTaint(varBox: VariableBox, taints: Array<Taint> | Taint | null = null) {
         if (!this.varBoxes) {
-            this.varBoxes = new Map<VariableBox, PlaceholderBox>();
+            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
         }
         let a = this.isElementAvailable(varBox.element);
         if (!a) {
             throw "Implementation error";
         }
-        let s = new PlaceholderBox(varBox.element, a);
+        let s = new ResolvedVariableBox(varBox, a);
         this.varBoxes.set(varBox, s);
-        if (boxes) {
-            s.addBox(boxes);
+        if (taints) {
+            s.addTaints(taints);
         }
     }
 
-    public taintVariableBox(varBox: VariableBox, boxes: Array<Box> | Box) {
+    public addTaint(varBox: VariableBox, taints: Array<Taint> | Taint) {
         if (!this.varBoxes) {
-            this.varBoxes = new Map<VariableBox, PlaceholderBox>();
+            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
         }
         let s = this.varBoxes.get(varBox);
-        if (!s) {
+        if (s) {
+            s.addTaints(taints);
+            return;
+        }
+
+        let p: ResolvedVariableBox = null;
+        if (this.parent) {
+            p = this.parent.resolveVariableBox(varBox);
+        }
+        if (!p) {
             let a = this.isElementAvailable(varBox.element);
             if (!a) {
                 throw "Implementation error";
             }
-            s = new PlaceholderBox(varBox.element, a);
+            s = new ResolvedVariableBox(varBox, a);        
+            s.addTaints(taints);
             this.varBoxes.set(varBox, s);
+            return;
         }
-        s.addBox(boxes);
+
+        s = new ResolvedVariableBox(varBox, p.placeholder.version);
+        s.addTaints(p.taints);
+        s.addTaints(taints);
+        this.varBoxes.set(varBox, s);
     }
 
-    public mergeVariableBoxes(merge: Scope) {
+    public mergeTaints(merge: Scope) {
         if (!merge.varBoxes) {
             return;
         }
         if (!this.varBoxes) {
-            this.varBoxes = new Map<VariableBox, PlaceholderBox>();
+            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
         }
         for(let b of merge.varBoxes.entries()) {
             let s = this.varBoxes.get(b[0]);
@@ -350,7 +365,7 @@ export class Scope {
     public types: Map<string, Type>;
     private availableElements: Map<ScopeElement, number> | null;
     private namedBoxes: Map<string, Box> | null;
-    private varBoxes: Map<VariableBox, PlaceholderBox> | null;
+    private varBoxes: Map<VariableBox, ResolvedVariableBox> | null;
     public scopeBox: Box = new Box();
     public parent: Scope | null = null;
 
@@ -975,6 +990,37 @@ export class VariableBox extends Box {
 
     public element: ScopeElement;
 }
+
+export class Taint {
+    public loc: Location;
+    public box: Box;
+}
+
+export class ResolvedVariableBox {
+    constructor(varBox: VariableBox, version: number) {
+        this.placeholder = new PlaceholderBox(varBox, version);
+    }
+
+    public addTaints(taints: Array<Taint> | Taint) {
+        if (taints instanceof Taint) {
+            this.taints.push(taints);
+        } else {
+            this.taints = this.taints.concat(taints);
+        }
+    }
+
+    public merge(merge: ResolvedVariableBox) {
+        for(let t of merge.taints) {
+            if (this.taints.indexOf(t) == -1) {
+                this.taints.push(t);
+            }
+        }
+    }
+    
+    public placeholder: PlaceholderBox;
+    public taints: Array<Taint> = [];
+}
+
 
 export class PlaceholderBox extends Box {
     constructor(varBox: VariableBox, version: number) {
