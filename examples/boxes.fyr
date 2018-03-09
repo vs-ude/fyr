@@ -32,8 +32,8 @@ func main(param box *Point) {
 //    var ptr3 = ptr2
     p = {x: 1, y: 2}
     a = p.x
-    // Must err because ptr2 points to a location that was not initialized when ptr2 was created
-//    var ptr3 = ptr2
+    // Must not err because ptr2 points to a location that is now initialized again
+    var ptr3 = ptr2
 
     var w2 *Widget = {sibling: null};
     var w1 *Widget = {sibling: w2};

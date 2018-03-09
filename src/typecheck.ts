@@ -192,87 +192,31 @@ export class Scope {
     }
 
     public makeElementUnavailable(element: ScopeElement) {
-/*        if (!this.availableElements) {
-            this.availableElements = new Map<ScopeElement, number>();
-        }
-        this.availableElements.set(element, transitive ? -1 : 0);
-        */
-        if (!this.varBoxes) {
-            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
-        }
-
-        let t = element.type;
-        if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
-            throw "Implementation error";
-        }
-
-        let r = this.varBoxes.get(t.boxes[0] as VariableBox);
+        let varBox = this.getVariableBox(element);
+        let r = this.resolveVariableBox(varBox);
         if (r) {
             r.isAvailable = false;
         }
     }
 
     public makeElementAvailable(element: ScopeElement) {
-/*        if (!this.availableElements) {
-            this.availableElements = new Map<ScopeElement, number>();
+        let varBox = this.getVariableBox(element);
+        let r = this.resolveVariableBox(varBox);
+        if (r) {
+            r.isAvailable = true;
+            r.addTaints(new Taint(this.scopeBox, element.loc));
+        } else {
+            this.setTaint(varBox, new Taint(this.scopeBox, element.loc));
         }
-        this.availableElements.set(element, Scope.counter++);*/
-        if (!this.varBoxes) {
-            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
-        }
+    }
 
+    public getVariableBox(element: ScopeElement): VariableBox {
         let t = element.type;
         if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
             throw "Implementation error";
         }
-
-        let r = this.varBoxes.get(t.boxes[0] as VariableBox);
-        if (r) {
-            r.isAvailable = false;
-        }
+        return t.boxes[0] as VariableBox;
     }
-
-    /**
-     * Returns 0 if the element is not available
-     */
-    /*
-    public isElementAvailable(element: ScopeElement): number {
-        if (this.availableElements && this.availableElements.has(element)) {
-            return this.availableElements.get(element);
-        }
-        if (this.parent) {
-            return this.parent.isElementAvailable(element);
-        }
-        return 0;
-    }
-    */
-
-    /*
-    public mergeAvaiableElements(merge: Scope, mode: "optional" | "sequence") {
-        if (merge.availableElements) {
-            if (!this.availableElements) {
-                this.availableElements = new Map<ScopeElement, number>();
-            }
-            for(let v of merge.availableElements.entries()) {
-                let a: number = this.isElementAvailable(v[0]);
-                if (a >= 0 && a == v[1]) {
-                    throw "Implementation error";
-                }
-                if (mode == "optional") {
-                    if (a > 0 && v[1] > 0) {
-                        this.availableElements.set(v[0], Scope.counter++);
-                    } else if (a > 0 && v[1] <= 0) {
-                        this.availableElements.set(v[0], v[1]);
-                    }
-                } else if (mode == "sequence") {
-                    this.availableElements.set(v[0], v[1]);                        
-                } else {
-                    throw "Implementation error";
-                }
-            }
-        }
-    }
-    */
 
     public resolveVariableBox(varBox: VariableBox): ResolvedVariableBox | null {
         if (this.varBoxes) {
@@ -386,7 +330,6 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
-    private availableElements: Map<ScopeElement, number> | null;
     private namedBoxes: Map<string, Box> | null;
     private varBoxes: Map<VariableBox, ResolvedVariableBox> | null;
     public scopeBox: Box = new Box();
@@ -5522,8 +5465,11 @@ export class TypeChecker {
         let r = this.stripType(rnode.type);
         let l = this.stripType(ltype);
         if (l instanceof PointerType && (l.mode == "strong" || l.mode == "unique") && r instanceof PointerType && (r.mode == "strong" || r.mode == "unique")) {
+            if (l.mode == "unique") {
+                // this.joinVirtualBoxes(rnode.t)
+            }
             // console.log("ASS*", lnode.value)
-            this.taintAssignment(scope, rnode.loc, ltype, r, null);
+            this.taintAssignment(scope, rnode.loc, l, r, null);
             switch(rnode.op) {
                 case "id":
                     let relement = scope.resolveElement(rnode.value);
@@ -5831,6 +5777,7 @@ export class TypeChecker {
                     for(let p of enode.parameters) {
                         this.checkBoxesInExpression(p.lhs, scope);
                         this.checkBoxesInSingleAssignment(p.type, p.lhs, scope, enode.loc);
+                        // TODO: join boxes
                     }
                 }
                 if (this.isSafePointer(enode.type)) {
