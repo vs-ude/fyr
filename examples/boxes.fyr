@@ -1,0 +1,31 @@
+type Point struct {
+    x int
+    y int
+}
+
+type Widget struct {
+    sibling &Widget
+}
+
+func main(param box *Point) {
+    var a int = 1;
+    var b = a;
+    var ptr = &a;
+
+//    var p *Point = {x: 1, y: 2}
+    a = param.x
+    var p *Point = param
+    a = p.x
+    var r &Point = p
+    a = r.x    
+    var ptr2 &*Point = &p
+    var p2 *Point = p
+//    a = r.x
+    a = p2.x
+    var r2 &Point = p2
+    a = r2.x
+//    p.x = 5
+//    var ptr3 = ptr2
+    p = {x: 1, y: 2}
+    a = p.x
+}

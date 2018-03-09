@@ -992,6 +992,11 @@ export class VariableBox extends Box {
 }
 
 export class Taint {
+    constructor(box: Box, loc: Location) {
+        this.loc = loc;
+        this.box = box;
+    }
+
     public loc: Location;
     public box: Box;
 }
@@ -1615,7 +1620,8 @@ export class TypeChecker {
                         p.ellipsis = true;
                         pnode = pnode.lhs;
                     }
-                    p.type = this.injectVariableBoxes(this.createType(pnode, scope, "parameter"), "parameter");
+                    p.type = this.createType(pnode, scope, "parameter");
+                    this.injectVariableBoxes(p, "parameter");
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
@@ -2182,6 +2188,7 @@ export class TypeChecker {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
                 this.checkVariableType(p.type, pnode.loc);
+                this.injectVariableBoxes(p, "parameter");
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2198,7 +2205,8 @@ export class TypeChecker {
                         v.isResult = true;
                         v.loc = pnode.loc;
                         v.name = pnode.name.value;
-                        v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
+                        v.type = (f.type.returnType as TupleType).types[i];
+                        this.injectVariableBoxes(v, "variable");
                         f.scope.registerElement(v.name, v);
                         f.namedReturnTypes = true;
                     }
@@ -2240,7 +2248,7 @@ export class TypeChecker {
             if (isConst) {
                 v.type = this.makeConst(v.type, vnode.loc);
             }
-            v.type = this.injectVariableBoxes(v.type, "variable");
+            this.injectVariableBoxes(v, "variable");
             this.checkVariableType(v.type, vnode.loc);
         }
         if (v.name != "_") {
@@ -2397,7 +2405,8 @@ export class TypeChecker {
                 let p = new FunctionParameter();
                 p.name = "p" + i.toString();
                 i++;
-                p.type = this.injectVariableBoxes(this.createType(pnode, f.scope, "parameter"), "parameter");
+                p.type = this.createType(pnode, f.scope, "parameter");
+                this.injectVariableBoxes(p, "parameter");
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2415,7 +2424,8 @@ export class TypeChecker {
                         v.name = "p" + i.toString();
                         i++;
                         v.name = pnode.name.value;
-                        v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
+                        v.type = (f.type.returnType as TupleType).types[i];
+                        this.injectVariableBoxes(v, "variable");
                         f.scope.registerElement(v.name, v);
                         f.namedReturnTypes = true;
                     }
@@ -2597,6 +2607,7 @@ export class TypeChecker {
                     this.checkIsAssignableType(v.type, rtype, vnode.loc, "assign", true);
                 }
             }
+            vnode.type = v.type;
         } else if (vnode.op == "tuple") {
             let rtypeStripped = RestrictedType.strip(rtype);
             if (!(rtypeStripped instanceof TupleType) && !(rtypeStripped instanceof TupleLiteralType)) {
@@ -3098,9 +3109,11 @@ export class TypeChecker {
                     }
                     if (snode.lhs.op == "id") {
                         let v = this.createVar(snode.lhs, scope, true);
+                        snode.lhs.type = v.type;
                     } else if (snode.lhs.op == "tuple") {
                         for (let p of snode.lhs.parameters) {
                             let v = this.createVar(p, scope, true);
+                            p.type = v.type;
                         }
                     } else {
                         throw "TODO: Implementation error"
@@ -3819,7 +3832,8 @@ export class TypeChecker {
                                 throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                             }
                         }
-                        p.type = this.injectVariableBoxes(this.createType(pnode, enode.scope, "parameter"), "parameter");
+                        p.type = this.createType(pnode, enode.scope, "parameter");
+                        this.injectVariableBoxes(p, "parameter");
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                         }
@@ -3838,7 +3852,8 @@ export class TypeChecker {
                                 v.isResult = true;
                                 v.loc = pnode.loc;
                                 v.name = pnode.name.value;
-                                v.type = this.injectVariableBoxes((f.type.returnType as TupleType).types[i], "variable");
+                                v.type = (f.type.returnType as TupleType).types[i];
+                                this.injectVariableBoxes(v, "variable");
                                 f.scope.registerElement(v.name, v);
                                 f.namedReturnTypes = true;
                             }
@@ -5242,6 +5257,14 @@ export class TypeChecker {
             return;
         }
 
+        for(let pt of f.type.parameters) {
+            let p = f.scope.resolveElement(pt.name);
+            if (!p) {
+                throw "Implementation error";
+            }
+            f.scope.makeElementAvailable(p);
+            this.taintAssignment(f.scope, p.loc, p.type, null, null, false);
+        }
         for(let snode of f.node.statements) {
             this.checkBoxesInStatement(snode, f.scope);
         }
@@ -5507,14 +5530,14 @@ export class TypeChecker {
     private checkBoxesInAssignment(snode: Node, scope: Scope) {
         this.checkBoxesInExpression(snode.rhs, scope);
         if (snode.lhs.op == "id") {
-            this.checkBoxesInSingleAssignment(snode.lhs, snode.rhs.type, scope);
+            this.checkBoxesInSingleAssignment(snode.lhs, snode.rhs, snode.rhs.type, scope);
         } else if (snode.lhs.op == "tuple") {
             let t = this.stripType(snode.rhs.type);
             if (!(t instanceof TupleType)) {
                 throw "Implementation error";
             }
             for (let i = 0; i < snode.lhs.parameters.length; i++) {
-                this.checkBoxesInSingleAssignment(snode.lhs.parameters[i], t.types[i], scope);
+                this.checkBoxesInSingleAssignment(snode.lhs.parameters[i], snode.rhs, t.types[i], scope);
             }
         } else {
             throw "TODO: Implementation error";
@@ -5522,8 +5545,112 @@ export class TypeChecker {
 
     }
 
-    private checkBoxesInSingleAssignment(vnode: Node, t: Type, scope: Scope) {
-        throw "TODO"
+    private checkBoxesInSingleAssignment(vnode: Node, enode: Node, t: Type, scope: Scope) {
+        this.checkAreBoxesAvailable(t, scope, vnode.loc, true);
+        let element = scope.resolveElement(vnode.value);
+        if (!element) {
+            throw "Implementation error";
+        }
+        scope.makeElementAvailable(element);
+        
+        let r = this.stripType(t);
+        let l = this.stripType(vnode.type);
+        if (l instanceof PointerType && (l.mode == "strong" || l.mode == "unique") && r instanceof PointerType && (r.mode == "strong" || r.mode == "unique")) {
+            console.log("ASS*", vnode.value)
+            this.taintAssignment(scope, enode.loc, vnode.type, r, null, true);
+            switch(enode.op) {
+                case "id":
+                    let relement = scope.resolveElement(enode.value);
+                    if (!relement) {
+                        throw "Implementation error";
+                    }
+                    console.log("Unavail", relement.name);
+                    scope.makeElementUnavailable(relement);
+                    break;
+                case ".":
+                    throw new TypeError("Passing a strong pointer from an object requires the take operator", enode.loc);
+                case "object":
+                case "array":
+                case "tuple":
+                    break;
+                default:
+                    throw "TODO take"
+            }
+        } else {
+            console.log("ASS", vnode.value)
+            this.taintAssignment(scope, enode.loc, vnode.type, r, null, false);            
+        }
+    }
+
+    private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>, transfer: boolean): void {
+        if (vtype instanceof RestrictedType) {
+            if (vtype.boxes && vtype.boxes.length == 1 && vtype.boxes[0] instanceof VariableBox) {
+                let varBox = vtype.boxes[0] as VariableBox;
+                if (etype instanceof RestrictedType) {
+                    if (etype.boxes && etype.boxes.length != 0) {
+                        taints = [];
+                        for(let b of etype.boxes) {
+                            if (b instanceof VariableBox) {
+                                let version = scope.isElementAvailable(b.element);
+                                if (!version) {
+                                    throw "Implementation error: Element " + b.element.name + " is not available at this place";
+                                }
+                                if (transfer) {
+                                    let r = scope.resolveVariableBox(b);
+                                    if (!r) {
+                                        throw "Implementation error";
+                                    }
+                                    taints = taints.concat(r.taints);
+                                } else {
+                                    b = new PlaceholderBox(b, version);
+                                    taints.push(new Taint(b, loc));
+                                }
+                            } else {
+                                taints.push(new Taint(b, loc));
+                            }
+                        }
+                    }
+                }
+                scope.setTaint(varBox, taints);
+            }
+            if (etype instanceof RestrictedType) {
+                etype = etype.elementType;
+            }
+            this.taintAssignment(scope, loc, vtype.elementType, etype, taints, transfer);
+            return;
+        } else if (vtype instanceof BasicType || vtype instanceof InterfaceType || vtype instanceof StructType || vtype instanceof FunctionType) {
+            return;
+        } else if (vtype instanceof PointerType) {
+            if (etype instanceof PointerType || etype instanceof UnsafePointerType) {
+                this.taintAssignment(scope, loc, vtype.elementType, etype.elementType, taints, transfer);
+                return;
+            }
+            if (etype == this.t_null || etype == null) {
+                this.taintAssignment(scope, loc, vtype.elementType, null, null, transfer);
+                return;
+            }
+            throw "Implementation error";
+        } else if (vtype instanceof UnsafePointerType) {
+            if (etype instanceof PointerType || etype instanceof UnsafePointerType) {
+                this.taintAssignment(scope, loc, vtype.elementType, etype.elementType, taints, transfer);
+                return;
+            }
+            if (etype == this.t_null || etype == null) {
+                this.taintAssignment(scope, loc, vtype.elementType, null, null, transfer);
+                return;
+            }
+            throw "Implementation error";            
+        } else if (vtype instanceof SliceType) {
+            throw "TODO";
+        } else if (vtype instanceof MapType) {
+            throw "TODO";
+        } else if (vtype instanceof ArrayType) {
+            throw "TODO";
+        } else if (vtype instanceof TupleType) {
+            throw "TODO";
+        }
+        throw "Implementation error";
+
     }
 
     private checkBoxesInExpression(enode: Node, scope: Scope) {
@@ -5546,58 +5673,22 @@ export class TypeChecker {
                 if (!element) {
                     throw "Implementation error";
                 }
-                if (!scope.isElementAvailable(element)) {
-                    throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
-                }
-                break;
-                /*
+                // if (!scope.isElementAvailable(element)) {
+                //    throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
+                // }
+                this.checkAreBoxesAvailable(enode.type, scope, enode.loc, true);
+                break;                
             case "++":
             case "--":
-                this.checkExpression(enode.lhs, scope);
-                if (this.isUnsafePointer(enode.lhs.type)) {
-                    // Do nothing by intention
-                } else {
-                    this.checkIsIntNumber(enode.lhs);
-                }
-                this.checkIsMutable(enode.lhs, scope);
-                enode.type = enode.lhs.type;
+                this.checkBoxesInExpression(enode.lhs, scope);
                 break;
             case "unary-":
-                this.checkExpression(enode.rhs, scope);
-                this.checkIsSignedNumber(enode.rhs);
-                if (enode.rhs.op == "int" || enode.rhs.op == "float") {
-                    enode.op = enode.rhs.op;
-                    enode.value = (-parseFloat(enode.rhs.value)).toString(); // TODO: BigNumber
-                }
-                enode.type = this.stripType(enode.rhs.type);
-                break;
             case "unary+":
-                this.checkExpression(enode.rhs, scope);
-                this.checkIsNumber(enode.rhs);
-                if (enode.rhs.op == "int" || enode.rhs.op == "float") {
-                    enode.op = enode.rhs.op;
-                    enode.value = enode.rhs.value;
-                }
-                enode.type = this.stripType(enode.rhs.type);
-                break;
             case "unary^":
-                this.checkExpression(enode.rhs, scope);
-                this.checkIsIntNumber(enode.rhs);
-                if (enode.rhs.op == "int") {
-                    enode.op = enode.rhs.op;
-                    enode.value = (~parseInt(enode.rhs.value)).toString();
-                }
-                enode.type = this.stripType(enode.rhs.type);
-                break;
             case "unary!":
-                this.checkExpression(enode.rhs, scope);
-                this.checkIsBool(enode.rhs);
-                if (enode.rhs.op == "bool") {
-                    enode.op = enode.rhs.op;
-                    enode.value = enode.rhs.value == "true" ? "false" : "true";
-                }
-                enode.type = this.t_bool;
+                this.checkBoxesInExpression(enode.rhs, scope);
                 break;
+                /*
             case "unary*":
             {
                 this.checkExpression(enode.rhs, scope);
@@ -5609,17 +5700,12 @@ export class TypeChecker {
                 }
                 break;
             }
+            */
             case "unary&":
             {
-                this.checkExpression(enode.rhs, scope);
-                if (enode.isUnifyableLiteral()) {
-                    enode.type = this.defaultLiteralType(enode);
-                } else {
-                    this.checkIsAddressable(enode.rhs, scope, true, true);
-                    enode.type = new PointerType(enode.rhs.type, "reference");
-                }
+                this.checkBoxesInExpression(enode.rhs, scope);
                 break;
-            }
+            }            
             case "+":                                             
             case "*":
             case "/":
@@ -5628,102 +5714,8 @@ export class TypeChecker {
             case "<":
             case "<=":
             case ">=":
-                this.checkExpression(enode.lhs, scope);
-                this.checkExpression(enode.rhs, scope);
-                if ((enode.op == "+" || enode.op == ">" || enode.op == "<" || enode.op == ">=" || enode.op == "<=") && this.isString(enode.lhs.type)) {
-                    this.checkIsString(enode.rhs);
-                    if (enode.lhs.op == "str" && enode.rhs.op == "str") {
-                        enode.op = "str";
-                        enode.value = enode.lhs.value + enode.rhs.value;
-                    }
-                    if (enode.op == "+" || enode.op == "str") {
-                        enode.type = this.t_string;
-                    } else {
-                        enode.type = this.t_bool;
-                    }
-                } else if (this.isUnsafePointer(enode.lhs.type)) {
-                    if (enode.op == "*" || enode.op == "/") {
-                        throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
-                    }
-                    if (enode.op == "+" || enode.op == "-") {
-                        this.checkIsInt32Number(enode.rhs);
-                    } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
-                    }
-                    enode.type = this.stripType(enode.lhs.type);
-                } else if (this.isUnsafePointer(enode.rhs.type)) {
-                    if (enode.op == "*" || enode.op == "/") {
-                        throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
-                    }
-                    if (enode.op == "+" || enode.op == "-") {
-                        this.checkIsInt32Number(enode.lhs);
-                    } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
-                    }
-                    enode.type = this.stripType(enode.rhs.type);
-                } else {
-                    this.checkIsNumber(enode.lhs);
-                    this.checkIsNumber(enode.rhs);
-                    // If lhs and rhs are constants, compute at compile time
-                    if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
-                        // TODO: parse in a BigNumber representation
-                        let l: number = parseFloat(enode.lhs.value);
-                        let r: number = parseFloat(enode.rhs.value);
-                        switch(enode.op) {
-                            case "+":      
-                                enode.value = (l + r).toString();
-                                break;                                    
-                            case "*":
-                                enode.value = (l * r).toString();
-                                break;
-                            case "/":
-                                // TODO: integer division
-                                enode.value = (l / r).toString();
-                                break;
-                            case "-":
-                                enode.value = (l - r).toString();
-                                break;
-                            case ">":
-                                enode.value = (l > r) ? "true" : "false";
-                                break;
-                            case "<":
-                                enode.value = (l < r) ? "true" : "false";
-                                break;
-                            case "<=":
-                                enode.value = (l <= r) ? "true" : "false";
-                                break;
-                            case ">=":             
-                                enode.value = (l >= r) ? "true" : "false";
-                                break;
-                        }
-                        if (enode.lhs.op == "float" || enode.rhs.op == "float") {
-                            enode.op = "float";
-                            enode.lhs.type = this.t_double;
-                        } else {
-                            enode.op = "int";
-                        }
-                    } else if (enode.lhs.op == "int" || enode.lhs.op == "float") {
-                        this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
-                    } else if (enode.rhs.op == "int" || enode.rhs.op == "float") {
-                        this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
-                    } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
-                    }
-                    if (enode.op == "+" || enode.op == "-" || enode.op == "*" || enode.op == "/" || enode.op == "float" || enode.op == "int") {
-                        enode.type = this.stripType(enode.lhs.type);
-                    } else {
-                        enode.type = this.t_bool;
-                    }
-                }
-                break;
             case "||":
             case "&&":
-                this.checkExpression(enode.lhs, scope);
-                this.checkExpression(enode.rhs, scope);
-                this.checkIsBool(enode.lhs);
-                this.checkIsBool(enode.rhs);
-                enode.type = this.t_bool;
-                break;
             case "&":
             case "|":
             case "^":
@@ -5731,203 +5723,35 @@ export class TypeChecker {
             case "%":
             case "<<":
             case ">>":
-                this.checkExpression(enode.lhs, scope);
-                this.checkExpression(enode.rhs, scope);
-                this.checkIsIntNumberOrUnsafePointer(enode.lhs);
-                this.checkIsIntNumber(enode.rhs);
-                if (enode.lhs.op == "int" && enode.rhs.op == "int") {
-                    // TODO: parse in a BigNumber representation
-                    let l: number = parseFloat(enode.lhs.value);
-                    let r: number = parseFloat(enode.rhs.value);
-                    switch(enode.op) {
-                        case "&":      
-                            enode.value = (l & r).toString();
-                            break;                                    
-                        case "|":
-                            enode.value = (l | r).toString();
-                            break;
-                        case "^":
-                            enode.value = (l ^ r).toString();
-                            break;
-                        case "&^":
-                            enode.value = (l & ~r).toString();
-                            break;
-                        case "%":
-                            enode.value = (l % r).toString();
-                            break;
-                        case "<<":
-                            enode.value = (l << r).toString();
-                            break;
-                        case ">>":
-                            enode.value = (l >> r).toString();
-                            break;
-                    }
-                    enode.op = "int";
-                } else if (enode.lhs.op == "int") {
-                    if (enode.op == "<<" || enode.op == ">>") {
-                        this.unifyLiterals(this.t_uint, enode.lhs, enode.loc);
-                        this.checkIsUnsignedNumber(enode.rhs);
-                    } else {
-                        this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
-                    }
-                } else if (enode.rhs.op == "int") {
-                    if (enode.op == "<<" || enode.op == ">>") {
-                        this.unifyLiterals(this.t_uint, enode.rhs, enode.loc);
-                    } else {
-                        this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
-                    }
-                } else {
-                    if (enode.op == "<<" || enode.op == ">>") {
-                        this.checkIsUnsignedNumber(enode.rhs);
-                    } else if (this.isUnsafePointer(enode.lhs.type)) {
-                        this.checkIsAssignableType(this.t_uint, enode.rhs.type, enode.rhs.loc, "assign", true);
-                    } else {
-                        this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
-                    }
-                }
-                enode.type = this.stripType(enode.lhs.type);
-                break;
             case "==":
             case "!=":
-                this.checkExpression(enode.lhs, scope);
-                this.checkExpression(enode.rhs, scope);
-                let tl = this.stripType(enode.lhs.type);
-                if (tl instanceof OrType && !tl.stringsOnly()) {
-                    throw new TypeError("Or'ed types cannot be compared", enode.lhs.loc);
-                }
-                let tr = this.stripType(enode.rhs.type);
-                if (tr instanceof OrType && !tr.stringsOnly()) {
-                    throw new TypeError("Or'ed types cannot be compared", enode.rhs.loc);
-                }
-                if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
-                    // TODO: parse in a BigNumber representation
-                    let l: number = parseFloat(enode.lhs.value);
-                    let r: number = parseFloat(enode.rhs.value);
-                    if (enode.op == "==") {
-                        enode.value = (l == r) ? "true" : "false";
-                    } else {
-                        enode.value = (l != r) ? "true" : "false";                        
-                    }
-                    enode.op = "bool";
-                } else if (enode.lhs.op == "str" && enode.rhs.op == "str") {
-                    if (enode.op == "==") {
-                        enode.value = (enode.lhs.value == enode.rhs.value) ? "true" : "false";
-                    } else {
-                        enode.value = (enode.lhs.value != enode.rhs.value) ? "true" : "false";                        
-                    }
-                    enode.op = "bool";                    
-                } else if (enode.lhs.op == "null" && enode.rhs.op == "null") {
-                    enode.value = (enode.op == "==" ? "true" : "false");
-                    enode.op = "bool";                    
-                } else if (enode.lhs.op == "int" || enode.lhs.op == "float" || enode.lhs.op == "str" || enode.lhs.op == "null") {
-                    this.unifyLiterals(enode.rhs.type, enode.lhs, enode.loc);
-                } else if  (enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str" || enode.rhs.op == "null") {
-                    this.unifyLiterals(enode.lhs.type, enode.rhs, enode.loc);
-                } else {
-                    this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
-                }
-                enode.type = this.t_bool;
-                break;
+                this.checkBoxesInExpression(enode.lhs, scope);
+                this.checkBoxesInExpression(enode.rhs, scope);
+                break;                
             case ".":
             {
-                this.checkExpression(enode.lhs, scope);
                 let type: Type = this.stripType(enode.lhs.type);
-                let name = enode.name.value;
                 if (type instanceof PackageType) {
-                    if (!type.elements.has(name)) {
-                        throw new TypeError("Unknown identifier " + name + " in " + type.toString(), enode.name.loc);                        
-                    }
-                    enode.type = type.elements.get(name);
                     break;
                 }
-                let method = this.getBuiltinFunction(enode.lhs.type, name, enode.name.loc);
-                if (method) {
-                    enode.type = method;
-                    break;
-                }
-                let objectType = type;
-                let isConst = this.isConst(enode.lhs.type);
+                this.checkBoxesInExpression(enode.lhs, scope);
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
-                    isConst = this.isConst(type.elementType);
-                    objectType = this.stripType(type.elementType);
-                } else if (type instanceof StructType) {
-                    objectType = type;
-                    type = new PointerType(type, "reference");
-                } else {
-                    throw new TypeError("Unknown field or method " + name + " in " + type.toString(), enode.name.loc);                                        
-                }
-                if (objectType instanceof StructType) {
-                    let field = objectType.field(name);
-                    if (field) {
-                        enode.type = field.type;
-                        if (isConst) {
-                            enode.type = this.applyConst(enode.type, enode.loc);
-                        }
-                    } else {
-                        let method = objectType.method(name);
-                        if (!method) {
-                            throw new TypeError("Unknown field or method " + name + " in " + objectType.toString(), enode.name.loc);
-                        }
-                        this.checkIsAssignableType(method.objectType, type, enode.loc, "assign", true);
-                        enode.type = method;
-                    }
-                } else if (objectType instanceof InterfaceType) {
-                    let method = objectType.method(name);
-                    if (!method) {
-                        throw new TypeError("Unknown method " + name + " in " + objectType.toString(), enode.name.loc);
-                    }
-                    this.checkIsAssignableType(method.objectType, type, enode.loc, "assign", true);
-                    enode.type = method;
-                } else {
-                    throw new TypeError("Unknown field or method " + name + " in " + objectType.toString(), enode.name.loc);                    
+                    this.checkAreBoxesAvailable(enode.type, scope, enode.loc, true);
                 }
                 break;
-            }
+            }            
             case ":":
             {
-                this.checkExpression(enode.lhs, scope);
-                let index1 = 0;
-                let index2 = 0;
-                let indicesAreNumbers = 0;
+                this.checkBoxesInExpression(enode.lhs, scope);
                 if (enode.parameters[0]) {
-                    this.checkExpression(enode.parameters[0], scope);
-                    this.checkIsIntNumber(enode.parameters[0]);
-                    if (enode.parameters[0].op == "int") {
-                        index1 = parseInt(enode.parameters[0].value);
-                        indicesAreNumbers++;                 
-                    }
+                    this.checkBoxesInExpression(enode.parameters[0], scope);
                 }
                 if (enode.parameters[1]) {
-                    this.checkExpression(enode.parameters[1], scope);
-                    this.checkIsIntNumber(enode.parameters[1]);
-                    if (enode.parameters[1].op == "int") {
-                        index2 = parseInt(enode.parameters[1].value);   
-                        indicesAreNumbers++;                     
-                    }
-                }
-                if (indicesAreNumbers == 2 && index1 > index2) {
-                    throw new TypeError("Index out of range", enode.rhs.loc);
-                }
-                let isConst = this.isConst(enode.lhs.type);
-                let t: Type = this.stripType(enode.lhs.type);
-                let elementType = this.checkIsIndexable(enode.lhs, index1);
-                if (t instanceof ArrayType) {
-                    this.checkIsAddressable(enode.lhs, scope, false);
-                    this.checkIsIndexable(enode.lhs, index2, true);
-                    enode.type = new SliceType(t, "strong");
-                } else if (t instanceof UnsafePointerType) {
-                    enode.type = new SliceType(enode.lhs.type as (ArrayType | RestrictedType), "reference");
-                    if (isConst) {
-                        enode.type = this.applyConst(enode.type, enode.loc);
-                    }
-                } else if (this.isMap(t)) {
-                    throw new TypeError("Ranges are not supported on maps", enode.loc);
-                } else {
-                    // For slices the type remains the same
-                    enode.type = enode.lhs.type;
+                    this.checkBoxesInExpression(enode.parameters[1], scope);
                 }
                 break;
             }
+            /*
             case "[":
             {
                 this.checkExpression(enode.lhs, scope);
@@ -6018,51 +5842,29 @@ export class TypeChecker {
                 // enode.type = this.createType(enode, scope);
                 enode.type = this.instantiateTemplateFunctionFromNode(enode, scope).type;
                 break;
+                */
             case "tuple":
-                let types: Array<Type> = [];
                 for(let p of enode.parameters) {
-                    this.checkExpression(p, scope);
-                    types.push(p.type);
-                }
-                let t = new TupleLiteralType(types);
-                enode.type = t;
-                if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope, "variable");
-                    this.unifyLiterals(ct, enode, enode.loc);
+                    this.checkBoxesInExpression(p, scope);
                 }
                 break;
             case "array":
             {
-                let types: Array<Type> = [];
                 for(let p of enode.parameters) {
-                    this.checkExpression(p, scope);
-                    types.push(p.type);
-                }
-                let t = new ArrayLiteralType(types);
-                enode.type = t;
-                if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope, "variable");
-                    this.unifyLiterals(ct, enode, enode.loc);
+                    this.checkBoxesInExpression(p, scope);
                 }
                 break;
             }
             case "object":
             {
-                let types = new Map<string, Type>();
                 if (enode.parameters) {
                     for(let p of enode.parameters) {
-                        this.checkExpression(p.lhs, scope);
-                        types.set(p.name.value, p.lhs.type);
+                        this.checkBoxesInExpression(p.lhs, scope);
                     }
-                }
-                let t = new ObjectLiteralType(types);
-                enode.type = t;
-                if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope, "variable");
-                    this.unifyLiterals(ct, enode, enode.loc);
                 }
                 break;
             }
+            /*
             case "=>":
             {
                 let f = new Function();
@@ -6128,99 +5930,18 @@ export class TypeChecker {
                 }
                 break;
             }
+            */
             case "is":
             {
-                this.checkExpression(enode.lhs, scope);
-                let t = this.createType(enode.rhs, scope, "variable");
-                enode.rhs.type = t
-                if (this.isOrType(enode.lhs.type)) {
-                    let ot = this.stripType(enode.lhs.type) as OrType;
-                    let found = false;
-                    for(var option of ot.types) {
-                        if (this.checkTypeEquality(option, t, enode.loc, false)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        throw new TypeError("Type " + t.toString() + " is not part of " + ot.toString(), enode.rhs.loc);
-                    }
-                } else {
-                    this.checkIsInterface(enode.lhs);                
-                    if (this.isInterface(t)) {
-                        throw new TypeError("Interface cannot be contained by another interface", enode.loc);
-                    }
-                }
-                enode.type = this.t_bool;
+                this.checkBoxesInExpression(enode.lhs, scope);
                 break;
             }
             case "typeCast":
             {
-                let t = this.createType(enode.lhs, scope, "variable");
-                this.checkExpression(enode.rhs, scope);
-                let right = RestrictedType.strip(enode.rhs.type);
-                // TODO: Casts remove restrictions
-                if ((t == this.t_float || t == this.t_double) && this.isIntNumber(right)) {
-                    // Ints can be converted to floats
-                    enode.type = t;
-                } else if (this.isIntNumber(t) && (right == this.t_float || right == this.t_double)) {
-                    // Floats can be converted to ints
-                    enode.type = t;
-                } else if (t == this.t_float && right == this.t_double) {
-                    // Doubles can be converted to floats
-                    enode.type = t;
-                } else if (t == this.t_double && right == this.t_float) {
-                    // Floats can be converted to doubles
-                    enode.type = t;
-                } else if (t == this.t_rune && this.isUInt32Number(right)) {
-                    // Ints can be converted to floats
-                    enode.type = t;
-                } else if (this.isUInt32Number(t) && right == this.t_rune) {
-                    // Floats can be converted to ints
-                    enode.type = t;
-                } else if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
-                    // Unsafe pointers can be converted to 32-bit integers
-                    enode.type = t;
-                } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || this.isString(right) || this.isInt32Number(right))) {
-                    // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
-                    enode.type = t;
-                } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.isIntNumber(right)) && t != right) {
-                    // bool and all integers can be converted into each other
-                    enode.type = t;
-                } else if (this.isString(t) && right instanceof UnsafePointerType) {
-                    // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
-                    enode.type = t;
-                } else if (this.isString(t) && right instanceof SliceType && right.getElementType() == this.t_byte) {
-                    // A slice of bytes can be converted to a string by copying it by copying it.
-                    // Restrictions are irrelevant.
-                    enode.type = t;
-                } else if (t instanceof SliceType && t.getElementType() == this.t_byte && this.isString(right)) {
-                    // A string can be casted into a sequence of bytes by copying it
-                    enode.type = t;
-                } else if (this.isComplexOrType(right)) {
-                    let ok = false;
-                    for(let ot of (right as OrType).types) {
-                        if (this.checkIsAssignableType(t, ot, enode.loc, "assign", false)) {
-                            enode.type = t;
-                            ok = true;
-                            break;
-                        }
-                    }
-                    if (!ok) {
-                        throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
-                    }
-                } else if (this.checkIsAssignableType(t, right, enode.loc, "assign", false)) {
-                    // null can be casted, especially when it is assigned to interface{}
-                    if (right != this.t_null) {
-                        throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
-                    }
-                    enode.type = t;
-                } else {
-                    throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
-//                    throw "TODO: conversion not possible or not implemented";
-                }
+                this.checkBoxesInExpression(enode.rhs, scope);
                 break;
             }
+            /*
             case "take":
                 this.checkExpression(enode.lhs, scope);
                 this.checkIsMutable(enode.lhs, scope);
@@ -6230,19 +5951,109 @@ export class TypeChecker {
                 }
                 enode.type = enode.lhs.type;
                 break;
-            case "ellipsisId":
-                throw new TypeError("'...' is not allowed in this context", enode.loc);
-            case "optionalId":
-                throw new TypeError("'?' is not allowed in this context", enode.loc);
-                */
+            */
             default:
                 throw "Implementation error " + enode.op;
         }    
     }
 
-    private injectVariableBoxes(t: Type, mode: "variable" | "parameter"): Type {
+    private checkAreBoxesAvailable(t: Type, scope: Scope, loc: Location, doThrow: boolean): boolean {
         if (t instanceof RestrictedType) {
-            let e = this.injectVariableBoxes(t.elementType, mode);
+            if (t.boxes) {
+                for(let b of t.boxes) {
+                    if (!this.checkIsBoxAvailable(b, scope, loc, doThrow)) {
+                        return false;
+                    }
+                }
+            }
+            return this.checkAreBoxesAvailable(t.elementType, scope, loc, doThrow);
+        } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
+            return true;
+        } else if (t instanceof UnsafePointerType) {
+            return this.checkAreBoxesAvailable(t.elementType, scope, loc, doThrow);
+        } else if (t instanceof PointerType) {
+            return this.checkAreBoxesAvailable(t.elementType, scope, loc, doThrow);
+        } else if (t instanceof SliceType) {
+            return this.checkAreBoxesAvailable(t.arrayType, scope, loc, doThrow);
+        } else if (t instanceof MapType) {
+            if (!this.checkAreBoxesAvailable(t.keyType, scope, loc, doThrow)) {
+                return false;
+            }
+            return this.checkAreBoxesAvailable(t.valueType, scope, loc, doThrow);
+        } else if (t instanceof ArrayType) {
+            return this.checkAreBoxesAvailable(t.elementType, scope, loc, doThrow);
+        } else if (t instanceof TupleType) {
+            for(let e of t.types) {
+                if (!this.checkAreBoxesAvailable(e, scope, loc, doThrow)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        throw "Implementation error";
+    }
+
+    private checkIsBoxAvailable(box: Box, scope: Scope, loc: Location, doThrow: boolean): boolean {
+        return this.checkIsBoxAvailableIntern(box, scope, loc, doThrow, new Set<VariableBox>());
+    }
+
+    private checkIsBoxAvailableIntern(box: Box, scope: Scope, loc: Location, doThrow: boolean, checked: Set<VariableBox>): boolean {
+        if (box instanceof VariableBox) {
+            if (checked.has(box)) {
+                return true;
+            }
+            if (!scope.isElementAvailable(box.element)) {
+                if (doThrow) {
+                    throw new TypeError("The variable " + box.element.name + " is not available at this place", loc);
+                }
+                return false;
+            }
+            let r = scope.resolveVariableBox(box);
+            if (!r) {
+                throw "Internal error";
+            }
+            checked.add(box);
+            for(let taint of r.taints) {
+                try {
+                    let ok = this.checkIsBoxAvailableIntern(taint.box, scope, loc, doThrow, checked);
+                    if (!ok) {
+                        return false;
+                    }
+                } catch(e) {
+                    if (e instanceof TypeError) {
+                        throw new TypeError("The variable " + box.element.name + " is not available at this place, because it was tainted by an unavailable variable at " + JSON.stringify(taint.loc) + ". " + e.message, loc)
+                    }
+                }
+            }
+            return true;
+        } else if (box instanceof PlaceholderBox) {
+            let r = scope.resolveVariableBox(box.varBox);
+            if (!r) {
+                throw "Implementation error";
+            }
+            if (r.placeholder.version != box.version) {
+                throw new TypeError("The variable " + box.varBox.element.name + " is not available at this place", loc);
+            }
+            try {
+                if (!this.checkIsBoxAvailableIntern(box.varBox, scope, loc, doThrow, checked)) {
+                    return false;
+                }
+            } catch(e) {
+                if (e instanceof TypeError) {
+                    throw new TypeError("The variable " + box.varBox.element.name + " is not available at this place, because it was tainted by an unavailable variable at " + JSON.stringify(e.location) + ". " + e.message, loc)
+                }            
+            }
+        }
+        return true;
+    }
+
+    private injectVariableBoxes(e: ScopeElement, mode: "variable" | "parameter") {
+        e.type = this.makeBox(this.injectVariableBoxesIntern(e, e.type, mode), [new VariableBox(e)], e.loc);
+    }
+
+    private injectVariableBoxesIntern(element: ScopeElement, t: Type, mode: "variable" | "parameter"): Type {
+        if (t instanceof RestrictedType) {
+            let e = this.injectVariableBoxesIntern(element, t.elementType, mode);
             if (e == t.elementType) {
                 return t;
             }            
@@ -6250,7 +6061,7 @@ export class TypeChecker {
         } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
             return t;
         } else if (t instanceof UnsafePointerType) {
-            let e = this.injectVariableBoxes(t.elementType, mode);
+            let e = this.injectVariableBoxesIntern(element, t.elementType, mode);
             if (e == t.elementType) {
                 return t;
             }            
@@ -6258,46 +6069,56 @@ export class TypeChecker {
         } else if (t instanceof PointerType) {
             let e = t.elementType;
             let isConst = false;
-            let hasBoxes = false;
+            let boxes: Array<Box>;
             if (e instanceof RestrictedType) {
                 isConst = e.isConst;
-                hasBoxes = !!(e.boxes);
+                boxes = e.boxes;
                 e = e.elementType;
             } 
-            let newe = this.injectVariableBoxes(e, mode);
-            if (newe == e && !hasBoxes) {
+            let newe = this.injectVariableBoxesIntern(element, e, mode);
+            if (newe == e && boxes) {
                 return t;
             }
             if (isConst) {
                 newe = this.makeConst(newe, t.loc);
+            }
+            if (boxes) {
+                newe = this.makeBox(newe, boxes, element.loc);
+            } else {
+                newe = this.makeBox(newe, [new VariableBox(element)], element.loc);
             }
             return new PointerType(newe, t.mode);
         } else if (t instanceof SliceType) {
             let e = t.arrayType;
             let isConst = false;
-            let hasBoxes = false;
+            let boxes: Array<Box>;
             if (e instanceof RestrictedType) {
                 isConst = e.isConst;
-                hasBoxes = !!(e.boxes);
+                boxes = e.boxes;
                 e = e.elementType as ArrayType;
             } 
-            let newe = this.injectVariableBoxes(e, mode);
-            if (newe == e && !hasBoxes) {
+            let newe = this.injectVariableBoxesIntern(element, e, mode) as ArrayType | RestrictedType;
+            if (newe == e && boxes) {
                 return t;
             }
             if (isConst) {
-                newe = this.makeConst(newe, t.loc);
+                newe = this.makeConst(newe, t.loc) as ArrayType | RestrictedType;
             }
-            return new PointerType(newe, t.mode);            
+            if (boxes) {
+                newe = this.makeBox(newe, boxes, element.loc) as ArrayType | RestrictedType;
+            } else {
+                newe = this.makeBox(newe, [new VariableBox(element)], element.loc) as ArrayType | RestrictedType;
+            }
+            return new SliceType(newe, t.mode);
         } else if (t instanceof MapType) {
-            let k = this.injectVariableBoxes(t.keyType, mode);
-            let v = this.injectVariableBoxes(t.valueType, mode);
+            let k = this.injectVariableBoxesIntern(element, t.keyType, mode);
+            let v = this.injectVariableBoxesIntern(element, t.valueType, mode);
             if (k == t.keyType && v == t.valueType) {
                 return t;
             }            
             return new MapType(k, v);
         } else if (t instanceof ArrayType) {
-            let e = this.injectVariableBoxes(t.elementType, mode);
+            let e = this.injectVariableBoxesIntern(element, t.elementType, mode);
             if (e == t.elementType) {
                 return t;
             }            
@@ -6306,7 +6127,7 @@ export class TypeChecker {
             let types: Array<Type> = [];
             let ok = true;
             for(let e of t.types) {
-                let newe = this.injectVariableBoxes(e, mode);
+                let newe = this.injectVariableBoxesIntern(element, e, mode);
                 types.push(newe);
                 if (newe != e) {
                     ok = false;
