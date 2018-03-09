@@ -192,22 +192,50 @@ export class Scope {
     }
 
     public makeElementUnavailable(element: ScopeElement) {
-        if (!this.availableElements) {
+/*        if (!this.availableElements) {
             this.availableElements = new Map<ScopeElement, number>();
         }
-        this.availableElements.set(element, 0);
+        this.availableElements.set(element, transitive ? -1 : 0);
+        */
+        if (!this.varBoxes) {
+            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
+        }
+
+        let t = element.type;
+        if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+            throw "Implementation error";
+        }
+
+        let r = this.varBoxes.get(t.boxes[0] as VariableBox);
+        if (r) {
+            r.isAvailable = false;
+        }
     }
 
     public makeElementAvailable(element: ScopeElement) {
-        if (!this.availableElements) {
+/*        if (!this.availableElements) {
             this.availableElements = new Map<ScopeElement, number>();
         }
-        this.availableElements.set(element, Scope.counter++);
+        this.availableElements.set(element, Scope.counter++);*/
+        if (!this.varBoxes) {
+            this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
+        }
+
+        let t = element.type;
+        if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+            throw "Implementation error";
+        }
+
+        let r = this.varBoxes.get(t.boxes[0] as VariableBox);
+        if (r) {
+            r.isAvailable = false;
+        }
     }
 
     /**
      * Returns 0 if the element is not available
      */
+    /*
     public isElementAvailable(element: ScopeElement): number {
         if (this.availableElements && this.availableElements.has(element)) {
             return this.availableElements.get(element);
@@ -217,7 +245,9 @@ export class Scope {
         }
         return 0;
     }
+    */
 
+    /*
     public mergeAvaiableElements(merge: Scope, mode: "optional" | "sequence") {
         if (merge.availableElements) {
             if (!this.availableElements) {
@@ -225,14 +255,14 @@ export class Scope {
             }
             for(let v of merge.availableElements.entries()) {
                 let a: number = this.isElementAvailable(v[0]);
-                if (a != 0 && a == v[1]) {
+                if (a >= 0 && a == v[1]) {
                     throw "Implementation error";
                 }
                 if (mode == "optional") {
-                    if (a != 0 && v[1] != 0) {
+                    if (a > 0 && v[1] > 0) {
                         this.availableElements.set(v[0], Scope.counter++);
-                    } else if (a != 0 && v[1] == 0) {
-                        this.availableElements.set(v[0], 0);
+                    } else if (a > 0 && v[1] <= 0) {
+                        this.availableElements.set(v[0], v[1]);
                     }
                 } else if (mode == "sequence") {
                     this.availableElements.set(v[0], v[1]);                        
@@ -242,6 +272,7 @@ export class Scope {
             }
         }
     }
+    */
 
     public resolveVariableBox(varBox: VariableBox): ResolvedVariableBox | null {
         if (this.varBoxes) {
@@ -260,11 +291,7 @@ export class Scope {
         if (!this.varBoxes) {
             this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
         }
-        let a = this.isElementAvailable(varBox.element);
-        if (!a) {
-            throw "Implementation error";
-        }
-        let s = new ResolvedVariableBox(varBox, a);
+        let s = new ResolvedVariableBox();
         this.varBoxes.set(varBox, s);
         if (taints) {
             s.addTaints(taints);
@@ -281,24 +308,20 @@ export class Scope {
             return;
         }
 
-        let p: ResolvedVariableBox = null;
+        let r: ResolvedVariableBox = null;
         if (this.parent) {
-            p = this.parent.resolveVariableBox(varBox);
+            r = this.parent.resolveVariableBox(varBox);
         }
-        if (!p) {
-            let a = this.isElementAvailable(varBox.element);
-            if (!a) {
-                throw "Implementation error";
-            }
-            s = new ResolvedVariableBox(varBox, a);        
+        if (!r) {
+            s = new ResolvedVariableBox();        
             s.addTaints(taints);
             this.varBoxes.set(varBox, s);
             return;
         }
 
-        s = new ResolvedVariableBox(varBox, p.placeholder.version);
-        s.addTaints(p.taints);
-        s.addTaints(taints);
+        let r2 = new ResolvedVariableBox();
+        r2.addTaints(r.taints);
+        r2.addTaints(taints);
         this.varBoxes.set(varBox, s);
     }
 
@@ -983,12 +1006,12 @@ export class Box {
 }
 
 export class VariableBox extends Box {
-    constructor(element: ScopeElement) {
+    constructor(/*element: ScopeElement*/) {
         super();
-        this.element = element;
+//        this.element = element;
     }
 
-    public element: ScopeElement;
+//    public element: ScopeElement;
 }
 
 export class Taint {
@@ -1001,11 +1024,7 @@ export class Taint {
     public box: Box;
 }
 
-export class ResolvedVariableBox {
-    constructor(varBox: VariableBox, version: number) {
-        this.placeholder = new PlaceholderBox(varBox, version);
-    }
-
+export class ResolvedVariableBox extends Box {
     public addTaints(taints: Array<Taint> | Taint) {
         if (taints instanceof Taint) {
             this.taints.push(taints);
@@ -1022,68 +1041,8 @@ export class ResolvedVariableBox {
         }
     }
     
-    public placeholder: PlaceholderBox;
     public taints: Array<Taint> = [];
-}
-
-
-export class PlaceholderBox extends Box {
-    constructor(varBox: VariableBox, version: number) {
-        super();
-        this.varBox = varBox;
-        this.version = version;
-    }
-
-    /*
-    public addBox(boxes: Array<Box> | Box) {
-        if (boxes instanceof Box) {
-            if (!this.hasBox(boxes)) {
-                this.boxes.push(boxes);
-            }
-        } else {
-            for(let b of boxes) {
-                if (!this.hasBox(b)) {
-                    this.boxes.push(b);
-                }
-            }
-        }
-    }
-
-    public hasBox(box: Box): boolean {
-        for(let b of this.boxes) {
-            if (b == box) {
-                return true;
-            }
-            if (b instanceof PlaceholderBox) {
-                if (b.hasBox(box)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public isAvailable(scope: Scope): boolean {
-        if (scope.isElementAvailable(this.element) != this.version) {
-            return false;
-        }
-        for(let b of this.boxes) {
-            if (b instanceof PlaceholderBox) {
-                if (!b.isAvailable(scope)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    public merge(b: PlaceholderBox) {
-        throw "TODO"
-    }
-    */
-
-    public version: number;
-    public varBox: VariableBox;
+    public isAvailable: boolean = true;
 }
 
 export type Restrictions = {
@@ -4086,6 +4045,7 @@ export class TypeChecker {
             if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams, false)) {
                 return false;
             }
+            node.type = this.makeBox(node.type, [new VariableBox()], node.loc);
             node.type = new PointerType(node.type, t.mode);
             return true;
         }
@@ -4094,6 +4054,7 @@ export class TypeChecker {
             if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams, false)) {
                 return false;
             }
+            node.type = this.makeBox(node.type, [new VariableBox()], node.loc);
             node.type = new SliceType(node.type as ArrayType, t.mode);
             return true;
         }
@@ -4187,6 +4148,7 @@ export class TypeChecker {
                             if (!this.checkIsAssignableNode(t.valueType, pnode.lhs, doThrow)) {
                                 return false;
                             }
+                            pnode.type = t.keyType;
                         }
                     }
                     node.type = t;
@@ -4203,6 +4165,7 @@ export class TypeChecker {
                             if (!field) {
                                 throw new TypeError("Unknown field " + pnode.name.value + " in " + t.toString(), pnode.name.loc);
                             }
+                            pnode.type = field.type;
                             if (!this.checkIsAssignableNode(field.type, pnode.lhs, doThrow)) {
                                 return false;
                             }
@@ -5263,7 +5226,7 @@ export class TypeChecker {
                 throw "Implementation error";
             }
             f.scope.makeElementAvailable(p);
-            this.taintAssignment(f.scope, p.loc, p.type, null, null, false);
+            this.taintAssignment(f.scope, p.loc, p.type, null, null);
         }
         for(let snode of f.node.statements) {
             this.checkBoxesInStatement(snode, f.scope);
@@ -5281,10 +5244,12 @@ export class TypeChecker {
                 } else {
                     if (snode.lhs.op == "id") {
                         let e = scope.resolveElement(snode.lhs.value);
+                        // Variable is not yet initialized, therefore make it unavailable
                         scope.makeElementUnavailable(e);
                     } else if (snode.lhs.op == "tuple") {
                         for (let p of snode.lhs.parameters) {
                             let e = scope.resolveElement(p.lhs.value);
+                            // Variable is not yet initialized, therefore make it unavailable
                             scope.makeElementUnavailable(e);
                         }
                     } else {
@@ -5530,14 +5495,20 @@ export class TypeChecker {
     private checkBoxesInAssignment(snode: Node, scope: Scope) {
         this.checkBoxesInExpression(snode.rhs, scope);
         if (snode.lhs.op == "id") {
-            this.checkBoxesInSingleAssignment(snode.lhs, snode.rhs, snode.rhs.type, scope);
+            let element = scope.resolveElement(snode.lhs.value);
+            if (!element) {
+                throw "Implementation error";
+            }
+            scope.makeElementAvailable(element);
+            this.checkBoxesInSingleAssignment(snode.lhs.type, snode.rhs, scope, snode.loc);
         } else if (snode.lhs.op == "tuple") {
             let t = this.stripType(snode.rhs.type);
             if (!(t instanceof TupleType)) {
                 throw "Implementation error";
             }
             for (let i = 0; i < snode.lhs.parameters.length; i++) {
-                this.checkBoxesInSingleAssignment(snode.lhs.parameters[i], snode.rhs, t.types[i], scope);
+                this.checkBoxesInSingleAssignment(snode.lhs.parameters[i].type, snode.rhs, scope, snode.loc);
+                throw "TODO: RHS used multiple times";
             }
         } else {
             throw "TODO: Implementation error";
@@ -5545,30 +5516,29 @@ export class TypeChecker {
 
     }
 
-    private checkBoxesInSingleAssignment(vnode: Node, enode: Node, t: Type, scope: Scope) {
-        this.checkAreBoxesAvailable(t, scope, vnode.loc, true);
-        let element = scope.resolveElement(vnode.value);
-        if (!element) {
-            throw "Implementation error";
-        }
-        scope.makeElementAvailable(element);
+    private checkBoxesInSingleAssignment(ltype: Type, rnode: Node, scope: Scope, loc: Location) {
+        this.checkAreBoxesAvailable(rnode.type, scope, loc, true);
         
-        let r = this.stripType(t);
-        let l = this.stripType(vnode.type);
+        let r = this.stripType(rnode.type);
+        let l = this.stripType(ltype);
         if (l instanceof PointerType && (l.mode == "strong" || l.mode == "unique") && r instanceof PointerType && (r.mode == "strong" || r.mode == "unique")) {
-            console.log("ASS*", vnode.value)
-            this.taintAssignment(scope, enode.loc, vnode.type, r, null, true);
-            switch(enode.op) {
+            // console.log("ASS*", lnode.value)
+            this.taintAssignment(scope, rnode.loc, ltype, r, null);
+            switch(rnode.op) {
                 case "id":
-                    let relement = scope.resolveElement(enode.value);
+                    let relement = scope.resolveElement(rnode.value);
                     if (!relement) {
                         throw "Implementation error";
                     }
-                    console.log("Unavail", relement.name);
-                    scope.makeElementUnavailable(relement);
+                    if (l.mode == "unique") {
+                        throw "TODO";
+                    } else {
+                        console.log("Unavail element", relement.name);
+                        scope.makeElementUnavailable(relement);
+                    }
                     break;
                 case ".":
-                    throw new TypeError("Passing a strong pointer from an object requires the take operator", enode.loc);
+                    throw new TypeError("Passing a strong pointer from an object requires the take operator", rnode.loc);
                 case "object":
                 case "array":
                 case "tuple":
@@ -5577,34 +5547,32 @@ export class TypeChecker {
                     throw "TODO take"
             }
         } else {
-            console.log("ASS", vnode.value)
-            this.taintAssignment(scope, enode.loc, vnode.type, r, null, false);            
+            // console.log("ASS", lnode.value)
+            this.taintAssignment(scope, rnode.loc, ltype, r, null);            
         }
     }
 
-    private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>, transfer: boolean): void {
+    private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>): void {
         if (vtype instanceof RestrictedType) {
             if (vtype.boxes && vtype.boxes.length == 1 && vtype.boxes[0] instanceof VariableBox) {
                 let varBox = vtype.boxes[0] as VariableBox;
+//                let r = scope.resolveVariableBox(varBox);
+//                if (!r) {
+//                    throw "Implementation error";
+//                }
                 if (etype instanceof RestrictedType) {
                     if (etype.boxes && etype.boxes.length != 0) {
                         taints = [];
                         for(let b of etype.boxes) {
                             if (b instanceof VariableBox) {
-                                let version = scope.isElementAvailable(b.element);
-                                if (!version) {
-                                    throw "Implementation error: Element " + b.element.name + " is not available at this place";
+                                let r2 = scope.resolveVariableBox(b);
+                                if (!r2) {
+                                    throw "Implementation error";
                                 }
-                                if (transfer) {
-                                    let r = scope.resolveVariableBox(b);
-                                    if (!r) {
-                                        throw "Implementation error";
-                                    }
-                                    taints = taints.concat(r.taints);
-                                } else {
-                                    b = new PlaceholderBox(b, version);
-                                    taints.push(new Taint(b, loc));
+                                if (!r2.isAvailable) {
+                                    throw "Implementation error: Element is not available at this place";
                                 }
+                                taints.push(new Taint(r2, loc));
                             } else {
                                 taints.push(new Taint(b, loc));
                             }
@@ -5616,27 +5584,27 @@ export class TypeChecker {
             if (etype instanceof RestrictedType) {
                 etype = etype.elementType;
             }
-            this.taintAssignment(scope, loc, vtype.elementType, etype, taints, transfer);
+            this.taintAssignment(scope, loc, vtype.elementType, etype, taints);
             return;
         } else if (vtype instanceof BasicType || vtype instanceof InterfaceType || vtype instanceof StructType || vtype instanceof FunctionType) {
             return;
         } else if (vtype instanceof PointerType) {
             if (etype instanceof PointerType || etype instanceof UnsafePointerType) {
-                this.taintAssignment(scope, loc, vtype.elementType, etype.elementType, taints, transfer);
+                this.taintAssignment(scope, loc, vtype.elementType, etype.elementType, taints);
                 return;
             }
             if (etype == this.t_null || etype == null) {
-                this.taintAssignment(scope, loc, vtype.elementType, null, null, transfer);
+                this.taintAssignment(scope, loc, vtype.elementType, null, null);
                 return;
             }
             throw "Implementation error";
         } else if (vtype instanceof UnsafePointerType) {
             if (etype instanceof PointerType || etype instanceof UnsafePointerType) {
-                this.taintAssignment(scope, loc, vtype.elementType, etype.elementType, taints, transfer);
+                this.taintAssignment(scope, loc, vtype.elementType, etype.elementType, taints);
                 return;
             }
             if (etype == this.t_null || etype == null) {
-                this.taintAssignment(scope, loc, vtype.elementType, null, null, transfer);
+                this.taintAssignment(scope, loc, vtype.elementType, null, null);
                 return;
             }
             throw "Implementation error";            
@@ -5847,19 +5815,28 @@ export class TypeChecker {
                 for(let p of enode.parameters) {
                     this.checkBoxesInExpression(p, scope);
                 }
-                break;
+                throw "TODO"
+                // break;
             case "array":
             {
                 for(let p of enode.parameters) {
                     this.checkBoxesInExpression(p, scope);
                 }
-                break;
+                throw "TODO"
+                // break;
             }
             case "object":
             {
                 if (enode.parameters) {
                     for(let p of enode.parameters) {
                         this.checkBoxesInExpression(p.lhs, scope);
+                        this.checkBoxesInSingleAssignment(p.type, p.lhs, scope, enode.loc);
+                    }
+                }
+                if (this.isSafePointer(enode.type)) {
+                    let p = this.stripType(enode.type) as PointerType;
+                    if (p.elementType instanceof RestrictedType && p.elementType.boxes && p.elementType.boxes.length == 1 && p.elementType.boxes[0] instanceof VariableBox) {
+                        scope.setTaint(p.elementType.boxes[0] as VariableBox, null);
                     }
                 }
                 break;
@@ -5994,61 +5971,42 @@ export class TypeChecker {
     }
 
     private checkIsBoxAvailable(box: Box, scope: Scope, loc: Location, doThrow: boolean): boolean {
-        return this.checkIsBoxAvailableIntern(box, scope, loc, doThrow, new Set<VariableBox>());
+        return this.checkIsBoxAvailableIntern(box, scope, loc, doThrow, new Set<ResolvedVariableBox>());
     }
 
-    private checkIsBoxAvailableIntern(box: Box, scope: Scope, loc: Location, doThrow: boolean, checked: Set<VariableBox>): boolean {
+    private checkIsBoxAvailableIntern(box: Box, scope: Scope, loc: Location, doThrow: boolean, checked: Set<ResolvedVariableBox>): boolean {
         if (box instanceof VariableBox) {
-            if (checked.has(box)) {
-                return true;
-            }
-            if (!scope.isElementAvailable(box.element)) {
-                if (doThrow) {
-                    throw new TypeError("The variable " + box.element.name + " is not available at this place", loc);
-                }
-                return false;
-            }
             let r = scope.resolveVariableBox(box);
             if (!r) {
                 throw "Internal error";
             }
-            checked.add(box);
-            for(let taint of r.taints) {
-                try {
-                    let ok = this.checkIsBoxAvailableIntern(taint.box, scope, loc, doThrow, checked);
-                    if (!ok) {
-                        return false;
-                    }
-                } catch(e) {
-                    if (e instanceof TypeError) {
-                        throw new TypeError("The variable " + box.element.name + " is not available at this place, because it was tainted by an unavailable variable at " + JSON.stringify(taint.loc) + ". " + e.message, loc)
-                    }
+            if (!r.isAvailable) {
+                if (doThrow) {
+                    throw new TypeError("The variable is not available at this place", loc);
                 }
+                return false;
             }
-            return true;
-        } else if (box instanceof PlaceholderBox) {
-            let r = scope.resolveVariableBox(box.varBox);
-            if (!r) {
-                throw "Implementation error";
+            return this.checkIsBoxAvailableIntern(r, scope, loc, doThrow, checked);
+        } else if (box instanceof ResolvedVariableBox) {
+            if (checked.has(box)) {
+                return true;
             }
-            if (r.placeholder.version != box.version) {
-                throw new TypeError("The variable " + box.varBox.element.name + " is not available at this place", loc);
+            checked.add(box);
+            if (!box.isAvailable) {
+                throw new TypeError("The variable is not available at this place", loc);
             }
-            try {
-                if (!this.checkIsBoxAvailableIntern(box.varBox, scope, loc, doThrow, checked)) {
+            for(let taint of box.taints) {
+                let ok = this.checkIsBoxAvailableIntern(taint.box, scope, loc, doThrow, checked);
+                if (!ok) {
                     return false;
                 }
-            } catch(e) {
-                if (e instanceof TypeError) {
-                    throw new TypeError("The variable " + box.varBox.element.name + " is not available at this place, because it was tainted by an unavailable variable at " + JSON.stringify(e.location) + ". " + e.message, loc)
-                }            
             }
         }
         return true;
     }
 
     private injectVariableBoxes(e: ScopeElement, mode: "variable" | "parameter") {
-        e.type = this.makeBox(this.injectVariableBoxesIntern(e, e.type, mode), [new VariableBox(e)], e.loc);
+        e.type = this.makeBox(this.injectVariableBoxesIntern(e, e.type, mode), [new VariableBox()], e.loc);
     }
 
     private injectVariableBoxesIntern(element: ScopeElement, t: Type, mode: "variable" | "parameter"): Type {
@@ -6085,7 +6043,7 @@ export class TypeChecker {
             if (boxes) {
                 newe = this.makeBox(newe, boxes, element.loc);
             } else {
-                newe = this.makeBox(newe, [new VariableBox(element)], element.loc);
+                newe = this.makeBox(newe, [new VariableBox()], element.loc);
             }
             return new PointerType(newe, t.mode);
         } else if (t instanceof SliceType) {
@@ -6107,7 +6065,7 @@ export class TypeChecker {
             if (boxes) {
                 newe = this.makeBox(newe, boxes, element.loc) as ArrayType | RestrictedType;
             } else {
-                newe = this.makeBox(newe, [new VariableBox(element)], element.loc) as ArrayType | RestrictedType;
+                newe = this.makeBox(newe, [new VariableBox()], element.loc) as ArrayType | RestrictedType;
             }
             return new SliceType(newe, t.mode);
         } else if (t instanceof MapType) {

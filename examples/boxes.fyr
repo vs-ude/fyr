@@ -4,13 +4,13 @@ type Point struct {
 }
 
 type Widget struct {
-    sibling &Widget
+    sibling *Widget
 }
 
 func main(param box *Point) {
     var a int = 1;
-    var b = a;
-    var ptr = &a;
+    var b int = a;
+    var ptr &int = &a;
 
 //    var p *Point = {x: 1, y: 2}
     a = param.x
@@ -20,12 +20,23 @@ func main(param box *Point) {
     a = r.x    
     var ptr2 &*Point = &p
     var p2 *Point = p
-//    a = r.x
+    // Must err because p is not initialized here
+//    a = p.x
+    a = r.x
     a = p2.x
     var r2 &Point = p2
     a = r2.x
-//    p.x = 5
+    // Must err because p is not initialized here
+//     p.x = 5
+    // Must err because ptr2 points to a location that is not initialized
 //    var ptr3 = ptr2
     p = {x: 1, y: 2}
     a = p.x
+    // Must err because ptr2 points to a location that was not initialized when ptr2 was created
+//    var ptr3 = ptr2
+
+    var w2 *Widget = {sibling: null};
+    var w1 *Widget = {sibling: w2};
+    // Must err, because w2 is not accessible
+//    w2 == w1
 }
