@@ -7,7 +7,16 @@ type Widget struct {
     sibling *Widget
 }
 
-func main(param box *Point) {
+type PointTuple struct {
+    a *Point
+    b *Point
+}
+
+type PointRef struct {
+    p weak *Point
+}
+
+func main(param box *Point, param2 box *Point) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -39,4 +48,16 @@ func main(param box *Point) {
     var w1 *Widget = {sibling: w2};
     // Must err, because w2 is not accessible
 //    w2 == w1
+
+    var up1 ^Point = {x: 1, y: 2}
+//    var up2 ^Point = param2
+    var up3 ^Point = p2
+
+    var r3 weak *Point = up3
+
+    var pt *PointTuple = {a: up1, b: up3}
+    var upt ^PointTuple = pt
+
+    var pr *PointRef = {p: r3}
+    var upr ^PointRef = pr
 }
