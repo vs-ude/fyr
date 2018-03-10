@@ -5443,14 +5443,19 @@ export class TypeChecker {
                 throw "Implementation error";
             }
             scope.makeElementAvailable(element);
-            this.checkBoxesInSingleAssignment(snode.lhs.type, snode.rhs, scope, snode.loc);
+            this.checkBoxesInSingleAssignment(scope.getVariableBox(element), snode.lhs.type, snode.rhs, scope, snode.loc, false);
         } else if (snode.lhs.op == "tuple") {
             let t = this.stripType(snode.rhs.type);
             if (!(t instanceof TupleType)) {
                 throw "Implementation error";
             }
             for (let i = 0; i < snode.lhs.parameters.length; i++) {
-                this.checkBoxesInSingleAssignment(snode.lhs.parameters[i].type, snode.rhs, scope, snode.loc);
+                let element = scope.resolveElement(snode.lhs.parameters[i].value);
+                if (!element) {
+                    throw "Implementation error";
+                }
+                scope.makeElementAvailable(element);
+                this.checkBoxesInSingleAssignment(scope.getVariableBox(element), snode.lhs.parameters[i].type, snode.rhs, scope, snode.loc, false);
                 throw "TODO: RHS used multiple times";
             }
         } else {
@@ -5459,14 +5464,18 @@ export class TypeChecker {
 
     }
 
-    private checkBoxesInSingleAssignment(ltype: Type, rnode: Node, scope: Scope, loc: Location) {
+    private checkBoxesInSingleAssignment(lbox: VariableBox, ltype: Type, rnode: Node, scope: Scope, loc: Location, joinBoxes: boolean) {
         this.checkAreBoxesAvailable(rnode.type, scope, loc, true);
         
         let r = this.stripType(rnode.type);
         let l = this.stripType(ltype);
-        if (l instanceof PointerType && (l.mode == "strong" || l.mode == "unique") && r instanceof PointerType && (r.mode == "strong" || r.mode == "unique")) {
-            if (l.mode == "unique") {
-                // this.joinVirtualBoxes(rnode.t)
+        if (l instanceof PointerType) {
+            if (l.mode == "unique" && r instanceof PointerType && r.mode != "unique") {
+                joinBoxes = true;
+            }
+            if (joinBoxes && r instanceof PointerType) {
+                let lrbox = scope.resolveVariableBox(lbox);
+                this.joinBoxes(lrbox, r.elementType);
             }
             // console.log("ASS*", lnode.value)
             this.taintAssignment(scope, rnode.loc, l, r, null);
@@ -5478,24 +5487,43 @@ export class TypeChecker {
                     }
                     if (l.mode == "unique") {
                         throw "TODO";
-                    } else {
+                    } else if (l.mode == "strong") {
                         console.log("Unavail element", relement.name);
                         scope.makeElementUnavailable(relement);
                     }
                     break;
                 case ".":
-                    throw new TypeError("Passing a strong pointer from an object requires the take operator", rnode.loc);
+                    if (l.mode == "unique" || l.mode == "strong") {
+                        throw new TypeError("Passing a strong or unique pointer from an object requires the take operator", rnode.loc);
+                    }
+                    break;
+                    case "null":
+                    break;
+                case "bool":
+                case "str":
+                case "rune":
+                case "int":
+                case "float":
                 case "object":
                 case "array":
                 case "tuple":
+                case "null":
+                case "unary&":
+                case "(":
                     break;
                 default:
-                    throw "TODO take"
+                    throw "TODO take" + rnode.op
             }
+        } else if (l instanceof SliceType) {
+            throw "TODO"
         } else {
             // console.log("ASS", lnode.value)
-            this.taintAssignment(scope, rnode.loc, ltype, r, null);            
+            this.taintAssignment(scope, rnode.loc, l, r, null);            
         }
+    }
+
+    private joinBoxes(box: ResolvedVariableBox, t: Type) {
+        // TODO
     }
 
     private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>): void {
@@ -5773,19 +5801,35 @@ export class TypeChecker {
             }
             case "object":
             {
-                if (enode.parameters) {
-                    for(let p of enode.parameters) {
-                        this.checkBoxesInExpression(p.lhs, scope);
-                        this.checkBoxesInSingleAssignment(p.type, p.lhs, scope, enode.loc);
-                        // TODO: join boxes
-                    }
+                let t = enode.type;
+                if (this.isSafePointer(enode.type)) {
+                    let p = this.stripType(enode.type) as PointerType;
+                    t = p.elementType;
                 }
+                if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+                    throw "Implementation error";
+                }
+                let varBox = t.boxes[0] as VariableBox;
+                scope.setTaint(varBox, null);
+                t = this.stripType(t);
+                if (t instanceof StructType) {
+                    let r = scope.resolveVariableBox(varBox);
+                    if (enode.parameters) {
+                        for(let p of enode.parameters) {
+                            this.checkBoxesInExpression(p.lhs, scope);
+                            this.checkBoxesInSingleAssignment(varBox, p.type, p.lhs, scope, enode.loc, true);
+                        }
+                    }
+                } else if (t instanceof MapType) {
+                    throw "TODO";
+                }
+                /*
                 if (this.isSafePointer(enode.type)) {
                     let p = this.stripType(enode.type) as PointerType;
                     if (p.elementType instanceof RestrictedType && p.elementType.boxes && p.elementType.boxes.length == 1 && p.elementType.boxes[0] instanceof VariableBox) {
                         scope.setTaint(p.elementType.boxes[0] as VariableBox, null);
                     }
-                }
+                }*/
                 break;
             }
             /*
