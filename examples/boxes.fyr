@@ -26,6 +26,8 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    var p *Point = {x: 1, y: 2}
     a = param.x
     var p *Point = param
+    // Must err, because p is extern because of param
+//    var fuck ^Point = p
     a = p.x
     p.x = 5
     var r &Point = p
@@ -57,6 +59,7 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    var up2 ^Point = param2
     // Must err, because p2 is extern because of param
 //    var up3 ^Point = p2
+    // Works, because p was reassigned a pointer to something that is not extern
     var up4 ^Point = p
 
     var r4 weak *Point = up4
@@ -71,8 +74,8 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
     var pr2 *PointRef = {p: param2}
 //    var pr2 *PointRef = {}
 //    pr2.p = param2
-    // Must err, because pr2 is joind with param p2 and can therefore not be joined with param3.
-//    pr2.p2 = param3
+    // !!Must err, because pr2 is joind with param p2 and can therefore not be joined with param3.
+    pr2.p2 = param3
     // Must err, because param2 and p2 can not be joined
 //    var prx *PointRef = {p: param2, p: param3}
 
