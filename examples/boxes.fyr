@@ -14,9 +14,11 @@ type PointTuple struct {
 
 type PointRef struct {
     p weak *Point
+    p2 weak *Point
+    r weak *PointRef
 }
 
-func main(param box *Point, param2 box *Point) {
+func main(param box *Point, param2 box *Point, param3 box *Point) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -25,6 +27,7 @@ func main(param box *Point, param2 box *Point) {
     a = param.x
     var p *Point = param
     a = p.x
+    p.x = 5
     var r &Point = p
     a = r.x    
     var ptr2 &*Point = &p
@@ -36,7 +39,7 @@ func main(param box *Point, param2 box *Point) {
     var r2 &Point = p2
     a = r2.x
     // Must err because p is not initialized here
-//     p.x = 5
+//    p.x = 5
     // Must err because ptr2 points to a location that is not initialized
 //    var ptr3 = ptr2
     p = {x: 1, y: 2}
@@ -50,14 +53,42 @@ func main(param box *Point, param2 box *Point) {
 //    w2 == w1
 
     var up1 ^Point = {x: 1, y: 2}
+    // Must err, because param2 is extern
 //    var up2 ^Point = param2
-    var up3 ^Point = p2
+    // Must err, because p2 is extern because of param
+//    var up3 ^Point = p2
+    var up4 ^Point = p
 
-    var r3 weak *Point = up3
+    var r4 weak *Point = up4
 
-    var pt *PointTuple = {a: up1, b: up3}
+    var pt *PointTuple = {a: up1, b: up4}
     var upt ^PointTuple = pt
 
-    var pr *PointRef = {p: r3}
+    var pr *PointRef = {p: r4}
     var upr ^PointRef = pr
+
+    // Works. Forces pr2 and param2 into the same box
+    var pr2 *PointRef = {p: param2}
+//    var pr2 *PointRef = {}
+//    pr2.p = param2
+    // Must err, because pr2 is joind with param p2 and can therefore not be joined with param3.
+//    pr2.p2 = param3
+    // Must err, because param2 and p2 can not be joined
+//    var prx *PointRef = {p: param2, p: param3}
+
+    var pr4 ^PointRef = {}
+    var pr3 ^PointRef = {}
+    //!! Must err, becaise it violates the isolation between pr3 and pr4
+    pr3.r = pr4
+}
+
+func merge(w1 *Widget, w2 *Widget) {
+    // Works, because everything belongs to the same box
+    w1.sibling = w2
+}
+
+func merge2(w1 box *Widget, w2 box *Widget) {
+    // Works, because everything belongs to the same box
+    // TODO: Expected VariableBox where Box is
+    // w1.sibling = w2
 }

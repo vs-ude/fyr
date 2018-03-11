@@ -49,7 +49,8 @@ export class Function implements ScopeElement {
     constructor() {
         this.scope = new Scope(null);
         this.scope.func = this;
-        this.box = new Box();
+        // TODO: Should be extern!
+        this.box = new Box(false);
     }
 
     public get isImported(): boolean {
@@ -116,8 +117,7 @@ export class Scope {
         this.parent = parent;
         this.elements = new Map<string, ScopeElement>();
         this.types = new Map<string, Type>();
-        this.scopeBox = new Box();
-        this.scopeBox.isExtern = true;
+        this.scopeBox = new Box(true);
     }
 
     public resolveElement(name: string): ScopeElement {
@@ -888,7 +888,8 @@ export class MapType extends Type {
 }
 
 export class Box {
-    constructor() {
+    constructor(isExtern: boolean) {
+        this._isExtern = isExtern;
         this.name = "$unnamed" + Box.counter++;
     }
 
@@ -898,7 +899,7 @@ export class Box {
      * All other boxes are owned (directly or indirectly) by variables on the
      * current function's stack frame.
      */
-    public isExtern: boolean = false;
+    private _isExtern: boolean = false;
     /**
      * joinedBox pointing to 'this' means that the group has not yet joined any other box.
      * So it can either join another box or stay a box by itself.
@@ -910,6 +911,10 @@ export class Box {
      */
 //    scope: Scope | null;
 //    private _isFrozen: boolean;
+
+    public isExtern(): boolean {
+        return this._isExtern;
+    }
 
     public canonical(): Box {
         let t: Box = this;
@@ -925,17 +930,13 @@ export class Box {
         if (b1 == b2) {
             return true;
         }
-        if (/*b1.isExtern &&*/ b2.isExtern) {
+        if (b2.isExtern()) {
             if (doThrow) {
                 throw new TypeError("Two boxes cannot be merged", loc);
             }
             return false;
         }
-        if (b1.isExtern) {
-            b2.joinedBox = b1;
-        } else {
-            b1.joinedBox = b2;
-        }
+        b2.joinedBox = b1;
         return true;
     }
 
@@ -951,12 +952,10 @@ export class Box {
 }
 
 export class VariableBox extends Box {
-    constructor(/*element: ScopeElement*/) {
-        super();
-//        this.element = element;
+    constructor() {
+        super(false);
     }
 
-//    public element: ScopeElement;
 }
 
 export class Taint {
@@ -970,6 +969,32 @@ export class Taint {
 }
 
 export class ResolvedVariableBox extends Box {
+    constructor() {
+        super(false);
+    }
+
+    public isExtern(): boolean {
+        if (super.isExtern()) {
+            return true;        
+        }
+        if (ResolvedVariableBox.callDepth == 0) {
+            ResolvedVariableBox.cycleCounter++;
+        } else {
+            if (this.lastVisitedInCycle === ResolvedVariableBox.cycleCounter) {
+                return false;
+            }
+        }
+        this.lastVisitedInCycle = ResolvedVariableBox.cycleCounter;
+        ResolvedVariableBox.callDepth++;
+        for(let t of this.taints) {
+            if (t.box.isExtern()) {
+                return true;
+            }
+        }
+        ResolvedVariableBox.callDepth--;
+        return false;
+    }
+
     public addTaints(taints: Array<Taint> | Taint) {
         if (taints instanceof Taint) {
             this.taints.push(taints);
@@ -988,6 +1013,10 @@ export class ResolvedVariableBox extends Box {
     
     public taints: Array<Taint> = [];
     public isAvailable: boolean = true;
+
+    private lastVisitedInCycle: number;
+    private static cycleCounter = 0;
+    private static callDepth = 0;
 }
 
 export type Restrictions = {
@@ -1371,7 +1400,7 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         this.t_any = new BasicType("any");
-        this.t_string = new SliceType(new RestrictedType(new ArrayType(this.t_byte, -1), {isConst: true, boxes: [new Box()]}), "unique");
+        this.t_string = new SliceType(new RestrictedType(new ArrayType(this.t_byte, -1), {isConst: true, boxes: [new Box(true)]}), "unique");
         this.t_string.name = "string";        
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
@@ -1395,7 +1424,7 @@ export class TypeChecker {
         this.builtin_cap.name = "cap";
         this.builtin_cap.returnType = this.t_int;
 
-        this.globalBox = new Box();
+        this.globalBox = new Box(true);
     }
 
     public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" = "default"): Type {
@@ -1445,23 +1474,18 @@ export class TypeChecker {
                 if (mode != "parameter") {
                     throw new TypeError("Named boxes must not be used in this type definition", tnode.loc);
                 }
-                if (this.isUnique(c)) {
-                    throw new TypeError("Named boxes on unique pointers are not allowed", tnode.loc);
-                }
                 boxes = [];
                 for(let b of tnode.parameters) {
                     let box = scope.lookupNamedBox(b.value);
                     if (!box) {
-                        box = new Box();
+                        box = new Box(true);
                         box.name = b.value;
-                        box.isExtern = true;
                         scope.registerNamedBox(box.name, box, tnode.loc);
                     }
                     boxes.push(box);
                 }
             } else {
-                let box = new Box();
-                box.isExtern = true;
+                let box = new Box(true);
                 boxes = [box];
             }
             if (this.isSafePointer(c)) {
@@ -5445,7 +5469,7 @@ export class TypeChecker {
                 throw "Implementation error";
             }
             scope.makeElementAvailable(element);
-            this.checkBoxesInSingleAssignment(scope.getVariableBox(element), snode.lhs.type, snode.rhs, scope, snode.loc, false);
+            this.checkBoxesInSingleAssignment(scope.getVariableBox(element), snode.lhs.type, snode.rhs, scope, snode.loc, "no");
         } else if (snode.lhs.op == "tuple") {
             let t = this.stripType(snode.rhs.type);
             if (!(t instanceof TupleType)) {
@@ -5457,27 +5481,42 @@ export class TypeChecker {
                     throw "Implementation error";
                 }
                 scope.makeElementAvailable(element);
-                this.checkBoxesInSingleAssignment(scope.getVariableBox(element), snode.lhs.parameters[i].type, snode.rhs, scope, snode.loc, false);
+                this.checkBoxesInSingleAssignment(scope.getVariableBox(element), snode.lhs.parameters[i].type, snode.rhs, scope, snode.loc, "no");
                 throw "TODO: RHS used multiple times";
             }
+        } else if (snode.lhs.op == ".") {
+            this.checkBoxesInExpression(snode.lhs, scope);
+            let ptr = this.stripType(snode.lhs.lhs.type);
+            if (ptr instanceof UnsafePointerType) {
+                return;
+            }
+            if (!(ptr instanceof PointerType)) {
+                throw "Implementation error";
+            }
+            let t = ptr.elementType;
+            if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+                throw "Implementation error";
+            }
+            this.checkBoxesInSingleAssignment(t.boxes[0] as VariableBox, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
+        } else if (snode.lhs.op == "[") {
+            throw "TODO";
         } else {
-            throw "TODO: Implementation error";
+            throw "Implementation error";
         }
-
     }
 
-    private checkBoxesInSingleAssignment(lbox: VariableBox, ltype: Type, rnode: Node, scope: Scope, loc: Location, joinBoxes: boolean) {
+    private checkBoxesInSingleAssignment(lbox: VariableBox, ltype: Type, rnode: Node, scope: Scope, loc: Location, joinBoxes: "no" | "unique" | "strong") {
         this.checkAreBoxesAvailable(rnode.type, scope, loc, true);
         
         let r = this.stripType(rnode.type);
         let l = this.stripType(ltype);
         if (l instanceof PointerType) {
             if (l.mode == "unique" && r instanceof PointerType && r.mode != "unique") {
-                joinBoxes = true;
+                joinBoxes = "unique";
             }
-            if (joinBoxes && r instanceof PointerType) {
+            if (joinBoxes != "no" && r instanceof PointerType) {
                 let lrbox = scope.resolveVariableBox(lbox);
-                this.joinBoxesOfType(lrbox, r.elementType, scope, loc, true);
+                this.joinBoxesOfType(lrbox, r.elementType, scope, loc, true, joinBoxes);
             }
             // console.log("ASS*", lnode.value)
             this.taintAssignment(scope, rnode.loc, l, r, null);
@@ -5522,13 +5561,13 @@ export class TypeChecker {
         }
     }
 
-    private joinBoxesOfType(box: ResolvedVariableBox, t: Type, scope: Scope, loc: Location, doThrow: boolean): boolean {
+    private joinBoxesOfType(box: ResolvedVariableBox, t: Type, scope: Scope, loc: Location, doThrow: boolean, mode: "strong" | "unique"): boolean {
         let joined = new Set<Box>();
         joined.add(box);
-        return this.joinBoxesOfTypeIntern(box, t, scope, loc, doThrow, joined);
+        return !!this.joinBoxesOfTypeIntern(box, t, scope, loc, doThrow, joined, mode);
     }
 
-    private joinBoxesOfTypeIntern(box: ResolvedVariableBox, t: Type, scope: Scope, loc: Location, doThrow: boolean, joined: Set<Box>): boolean {
+    private joinBoxesOfTypeIntern(box: Box, t: Type, scope: Scope, loc: Location, doThrow: boolean, joined: Set<Box>, mode: "strong" | "unique"): Box {
         if (t instanceof RestrictedType) {
             if (t.boxes) {
                 for(let b of t.boxes) {
@@ -5538,48 +5577,57 @@ export class TypeChecker {
                     }
                     joined.add(b);
                     if (b instanceof VariableBox) {
-                        this.joinBoxesIntern(box, b, scope, loc, doThrow, joined)
-                    } else {
+                        box = this.joinBoxesIntern(box, b, scope, loc, doThrow, joined, mode);
+                        if (!box) {
+                            return null;
+                        }
+                    } else {                        
+                        if (b.canonical().isExtern() && !box.canonical().isExtern() && mode == "strong") {
+                            let tmp = box;
+                            box = b;
+                            b = tmp;
+                        }
                         if (!box.join(b, loc, doThrow)) {
-                            return false;
+                            return null;
                         }
                     }
                 }
             }
-            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined);
+            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined, mode);
         } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
-            return true;
+            return box;
         } else if (t instanceof UnsafePointerType) {
-            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined);
+            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined, mode);
         } else if (t instanceof PointerType) {
             if (t.mode == "unique") {
-                return true;
+                return box;
             }
-            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined);
+            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined, mode);
         } else if (t instanceof SliceType) {
             if (t.mode == "unique") {
-                return true;
+                return box;
             }
-            return this.joinBoxesOfTypeIntern(box, t.arrayType, scope, loc, doThrow, joined);
+            return this.joinBoxesOfTypeIntern(box, t.arrayType, scope, loc, doThrow, joined, mode);
         } else if (t instanceof MapType) {
-            if (!this.joinBoxesOfTypeIntern(box, t.keyType, scope, loc, doThrow, joined)) {
-                return false;
+            if (!this.joinBoxesOfTypeIntern(box, t.keyType, scope, loc, doThrow, joined, mode)) {
+                return box;
             }
-            return this.joinBoxesOfTypeIntern(box, t.valueType, scope, loc, doThrow, joined);
+            return this.joinBoxesOfTypeIntern(box, t.valueType, scope, loc, doThrow, joined, mode);
         } else if (t instanceof ArrayType) {
-            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined);
+            return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow, joined, mode);
         } else if (t instanceof TupleType) {
             for(let p of t.types) {
-                if (!this.joinBoxesOfTypeIntern(box, p, scope, loc, doThrow, joined)) {
-                    return false;
+                box = this.joinBoxesOfTypeIntern(box, p, scope, loc, doThrow, joined, mode);
+                if (!box) {
+                    return null;
                 }
             }
-            return true;
+            return box;
         }
         throw "Implementation error";
     }
 
-    private joinBoxesIntern(box: ResolvedVariableBox, joinBox: VariableBox, scope: Scope, loc: Location, doThrow: boolean, joined: Set<Box>): boolean {
+    private joinBoxesIntern(box: Box, joinBox: VariableBox, scope: Scope, loc: Location, doThrow: boolean, joined: Set<Box>, mode: "strong" | "unique"): Box {
         let r = scope.resolveVariableBox(joinBox);
         if (!r) {
             throw "Implementation error";
@@ -5591,12 +5639,17 @@ export class TypeChecker {
             }
             if (joined.has(b)) {
                 continue;
-            }
+            }            
+            if (b.canonical().isExtern() && !box.canonical().isExtern() && mode == "strong") {
+                let tmp = box;
+                box = b;
+                b = tmp;
+            }            
             if (!box.join(b, loc, doThrow)) {
-                return false;
+                return null;
             }
         }
-        return true;
+        return box;
     }
 
     private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>): void {
@@ -5619,9 +5672,9 @@ export class TypeChecker {
                                 if (!r2.isAvailable) {
                                     throw "Implementation error: Element is not available at this place";
                                 }
-                                taints.push(new Taint(r2, loc));
+                                taints.push(new Taint(r2.canonical(), loc));
                             } else {
-                                taints.push(new Taint(b, loc));
+                                taints.push(new Taint(b.canonical(), loc));
                             }
                         }
                     }
@@ -5889,7 +5942,7 @@ export class TypeChecker {
                     if (enode.parameters) {
                         for(let p of enode.parameters) {
                             this.checkBoxesInExpression(p.lhs, scope);
-                            this.checkBoxesInSingleAssignment(varBox, p.type, p.lhs, scope, enode.loc, true);
+                            this.checkBoxesInSingleAssignment(varBox, p.type, p.lhs, scope, enode.loc, "strong");
                         }
                     }
                 } else if (t instanceof MapType) {
