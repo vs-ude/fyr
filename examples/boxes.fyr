@@ -75,7 +75,7 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    var pr2 *PointRef = {}
 //    pr2.p = param2
     // !!Must err, because pr2 is joind with param p2 and can therefore not be joined with param3.
-    pr2.p2 = param3
+//    pr2.p2 = param3
     // Must err, because param2 and p2 can not be joined
 //    var prx *PointRef = {p: param2, p: param3}
 
