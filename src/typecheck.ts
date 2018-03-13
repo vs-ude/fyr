@@ -6185,7 +6185,7 @@ export class TypeChecker {
             if (!r) {
                 throw "Internal error";
             }
-            return this.checkIsBoxAvailableIntern(r, scope, loc, doThrow, new Set<ResolvedVariableBox>());
+            return this.checkIsBoxAvailableIntern(r.canonical(), scope, loc, doThrow, new Set<ResolvedVariableBox>());
         }
         return true;
     }
