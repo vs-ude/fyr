@@ -5675,23 +5675,14 @@ export class TypeChecker {
         
         let r = this.stripType(rnode.type);
         let l = this.stripType(ltype);
+        let taints: Array<Taint> = [];
         if (l instanceof PointerType) {
             if (l.mode == "unique" && r instanceof PointerType && r.mode != "unique") {
                 joinBoxes = "unique";
             }
             if (joinBoxes != "no" && r instanceof PointerType) {
-                if (rnode.value == "p") {
-                    console.log("p: ", rnode.type);
-                    console.log("p: ", r.elementType);
-                }
                 let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
-                if (rnode.value == "p") {
-                    console.log("p: ", relementType);
-                }
                 let joinedRightBox = this.joinBoxesOfType(relementType, scope, loc, true);
-                if (rnode.value == "p") {
-                    console.log("p: ", joinedRightBox);
-                }
                 if (joinBoxes == "unique" && joinedRightBox.isExtern()) {
                     throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
@@ -5703,14 +5694,28 @@ export class TypeChecker {
                 }
                 let joinLeftBoxResolved: Box = scope.resolveVariableBox(joinLeftBox);
                 if (joinLeftBoxResolved) {
-                    if (joinedRightBox.isExtern()) {
-                        joinedRightBox.join(joinLeftBoxResolved, loc, true);
-                    } else {
-                        joinLeftBoxResolved.join(joinedRightBox, loc, true);
+                    joinLeftBoxResolved.join(joinedRightBox, loc, true);
+                } else {
+                    console.log("NEW TAINT", loc.start.line);
+                    console.log(joinedRightBox);
+                    taints.push(new Taint(joinedRightBox, loc));
+                }
+            } else if (r instanceof PointerType) {
+                let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
+                if (relementType instanceof RestrictedType && relementType.boxes && relementType.boxes.length != 0) {
+                    console.log("No Join, but TAINT", loc.start.line);
+                    for(let b of relementType.boxes) {
+                        if (b instanceof VariableBox) {
+                            b = scope.resolveVariableBox(b);
+                            if (!b) {
+                                throw "Implementation error";
+                            }
+                        }
+                        taints.push(new Taint(b, loc));
                     }
                 }
             }
-            this.taintAssignment(scope, rnode.loc, l, r, null);
+            this.taintAssignment(scope, rnode.loc, l, r, taints);
             // console.log("ASS*", lnode.value)
             switch(rnode.op) {
                 case "id":
@@ -5754,6 +5759,7 @@ export class TypeChecker {
                                 scope.makeElementUnavailable(relement);
                             }                                    
                         }
+                        /*
                         let t = this.stripType(rnode.type);
                         if ((t instanceof PointerType)) {
                             t = t.elementType;
@@ -5762,6 +5768,7 @@ export class TypeChecker {
                         } else {
                             throw "Implementation error";
                         }
+                        */
 /*                        if (t instanceof RestrictedType && t.boxes && t.boxes.length == 1 && t.boxes[0] instanceof VariableBox) {
                             console.log("Tainting")
                             scope.setTaint(t.boxes[0], null);
@@ -5793,7 +5800,7 @@ export class TypeChecker {
                         }
                     }
                     if (!box) {
-                        box = b.preJoin(loc, doThrow);
+                        box = b.canonical().preJoin(loc, doThrow);
                     } else {
                         box = box.join(b, loc, doThrow);
                     }

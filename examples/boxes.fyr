@@ -20,7 +20,12 @@ type PointRef struct {
     u ^Point
 }
 
-func main(param box *Point, param2 box *Point, param3 box *Point) {
+type Link struct {
+    next *Link
+    value *Point
+}
+
+func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Point) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -31,8 +36,6 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
     // Must err, becuase p is tainteed by param which is extern
 //    var fuck ^Point = p
 
-    // Must err, because p is extern because of param
-//    var fuck ^Point = p
     a = p.x
     p.x = 5
     var r &Point = p
@@ -48,11 +51,11 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
     // Must err because p is not initialized here
 //    p.x = 5
     // Must err because ptr2 points to a location that is not initialized
-//    var ptr3 = ptr2
+//    var ptr4 &*Point = ptr2
     p = {x: 1, y: 2}
     a = p.x
     // Must not err because ptr2 points to a location that is now initialized again
-    var ptr3 = ptr2
+    var ptr3 &*Point = ptr2
 
     var w2 *Widget = {sibling: null}
     var w1 *Widget = {sibling: w2}
@@ -60,7 +63,7 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    w2 == w1
 
     // Must err, because the take operator is missing
-//    var w3 *Widget = w1.sibling;
+//    var w4 *Widget = w1.sibling;
     var w3 *Widget = take(w1.sibling)
 
     var up1 ^Point = {x: 1, y: 2}
@@ -89,10 +92,28 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    var prx *PointRef = {p: param2, p: param3}
 
     var u5 ^Point = take(pr2.u)
-    //!! Must err, because pr2 is tainted by param2 which is extern
+    // Must err, because pr2 is tainted by param2 which is extern
 //    var u6 ^Point = take(pr2.p3)
     // Must err, because pr2 is tainted by param2 which is extern
 //    var u7 ^PointRef = pr2
+
+    var link1 *Link = {}
+    var link2 *Link = {value: param4}
+    var link4 *Link = {}
+    link1.next = link2
+    // Must err, because link2 is tainted by param which is extern
+//    var extlink ^Link = link1
+    // Must err because take is missing
+//    var extlink0 ^Link = link4.next
+    // Must err, because link2 is tainted by param which is extern
+//    var extlink1 ^Link = take(link1.next)
+    // Must err, because link2 is tainted by param which is extern
+//    var extlink1 ^Link = take(link1.next.next)
+    // Must err, because link2 is tainted by param which is extern
+//    var extlink2 ^Link = link2
+    var link3 *Link = take(link1.next)
+    // Must err, because link2 is tainted by param which is extern
+//    var extlink3 ^Link = link3
 
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
