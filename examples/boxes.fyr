@@ -28,6 +28,9 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    var p *Point = {x: 1, y: 2}
     a = param.x
     var p *Point = param
+    // Must err, becuase p is tainteed by param which is extern
+//    var fuck ^Point = p
+
     // Must err, because p is extern because of param
 //    var fuck ^Point = p
     a = p.x
@@ -63,7 +66,7 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
     var up1 ^Point = {x: 1, y: 2}
     // Must err, because param2 is extern
 //    var up2 ^Point = param2
-    // Must err, because p2 is extern because of param
+    // Must err, because p2 is extern because of param 
 //    var up3 ^Point = p2
     // Works, because p was reassigned a pointer to something that is not extern
     var up4 ^Point = p
@@ -86,8 +89,10 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    var prx *PointRef = {p: param2, p: param3}
 
     var u5 ^Point = take(pr2.u)
+    //!! Must err, because pr2 is tainted by param2 which is extern
+//    var u6 ^Point = take(pr2.p3)
     // Must err, because pr2 is tainted by param2 which is extern
-    var u6 ^Point = take(pr2.p3)
+//    var u7 ^PointRef = pr2
 
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}

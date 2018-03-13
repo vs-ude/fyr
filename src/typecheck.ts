@@ -5255,6 +5255,24 @@ export class TypeChecker {
         return null;
     }
 
+    public pointerElementTypeWithBoxes(t: Type, loc: Location): Type {
+        let r: RestrictedType;
+        if (t instanceof RestrictedType) {
+            r = t;
+            t = t.elementType;
+        }
+        if (!(t instanceof PointerType)) {
+            throw "Implementation error";
+        }
+        if (t.elementType instanceof RestrictedType && t.elementType.boxes && t.elementType.boxes.length != 0) {
+            return t.elementType;
+        }
+        if (!r || !r.boxes || r.boxes.length == 0) {
+            return t.elementType;
+        }
+        return this.makeBox(t.elementType, r.boxes, loc);
+    }
+
     public pointerElementType(t: Type): Type {
         t = RestrictedType.strip(t);
         if (t instanceof PointerType || t instanceof UnsafePointerType) {
@@ -5662,7 +5680,18 @@ export class TypeChecker {
                 joinBoxes = "unique";
             }
             if (joinBoxes != "no" && r instanceof PointerType) {
-                let joinedRightBox = this.joinBoxesOfType(r.elementType, scope, loc, true);
+                if (rnode.value == "p") {
+                    console.log("p: ", rnode.type);
+                    console.log("p: ", r.elementType);
+                }
+                let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
+                if (rnode.value == "p") {
+                    console.log("p: ", relementType);
+                }
+                let joinedRightBox = this.joinBoxesOfType(relementType, scope, loc, true);
+                if (rnode.value == "p") {
+                    console.log("p: ", joinedRightBox);
+                }
                 if (joinBoxes == "unique" && joinedRightBox.isExtern()) {
                     throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
@@ -5690,7 +5719,7 @@ export class TypeChecker {
                         throw "Implementation error";
                     }
                     if (l.mode == "strong" || l.mode == "unique") {
-                        console.log("Unavail element", relement.name);
+                        console.log("Unavail element", relement.name, loc.start.line);
                         scope.makeElementUnavailable(relement);
                     }
                     break;
@@ -5699,7 +5728,7 @@ export class TypeChecker {
                         throw new TypeError("Passing a strong or unique pointer from an object requires the take operator", rnode.loc);
                     }
                     break;
-                    case "null":
+                case "null":
                     break;
                 case "bool":
                 case "str":
@@ -5721,7 +5750,7 @@ export class TypeChecker {
                                 throw "Implementation error";
                             }
                             if (l.mode == "strong" || l.mode == "unique") {
-                                console.log("Unavail element", relement.name);
+                                console.log("Unavail element", relement.name, loc.start.line);
                                 scope.makeElementUnavailable(relement);
                             }                                    
                         }
@@ -5764,8 +5793,7 @@ export class TypeChecker {
                         }
                     }
                     if (!box) {
-                        box = b;
-                        box.preJoin(loc, doThrow);
+                        box = b.preJoin(loc, doThrow);
                     } else {
                         box = box.join(b, loc, doThrow);
                     }
@@ -5805,35 +5833,6 @@ export class TypeChecker {
         }
         throw "Implementation error";
     }
-
-    /*
-    private joinBoxesIntern(box: Box, joinBox: ResolvedVariableBox, scope: Scope, loc: Location, doThrow: boolean, joined: Set<Box>, mode: "strong" | "unique"): boolean {
-        for(let t of joinBox.taints) {
-            let b = t.box.canonical();
-            if (b instanceof VariableBox) {
-                throw "Implementation error";
-            }
-            if (joined.has(b)) {
-                continue;
-            }          
-            joined.add(b);  
-            if (b instanceof ResolvedVariableBox) {
-                if (!this.joinBoxesIntern(b, b, scope, loc, doThrow, joined, mode)) {
-                    return false;
-                }
-            }
-            if (b.canonical().isExtern() && !box.canonical().isExtern()) {
-                let tmp = box;
-                box = b;
-                b = tmp;
-            }            
-            if (!box.join(b, loc, doThrow)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    */
 
     private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>): void {
         if (vtype instanceof RestrictedType) {
