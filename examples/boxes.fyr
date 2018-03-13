@@ -117,7 +117,7 @@ func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Po
 
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
-    //!! Must err, becaise it violates the isolation between pr3 and pr4
+    //!! Must err, because it violates the isolation between pr3 and pr4
     pr3.r = pr4
 }
 
@@ -127,7 +127,11 @@ func merge(w1 *Widget, w2 *Widget) {
 }
 
 func merge2(w1 box *Widget, w2 box *Widget) {
-    // Works, because everything belongs to the same box
-    // TODO: Expected VariableBox where Box is
+    // Must err, because w1 and w2 belong to different boxes that cannot be joined
     // w1.sibling = w2
+}
+
+func merge3(w1 box *Widget, w2 *Widget) {
+    //!! Must err, because w1 and w2 belong to different boxes that cannot be joined
+    w1.sibling = w2
 }

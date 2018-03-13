@@ -50,8 +50,7 @@ export class Function implements ScopeElement {
     constructor() {
         this.scope = new Scope(null);
         this.scope.func = this;
-        // TODO: Should be extern!
-        this.box = new Box(false);
+        this.box = new Box(true);
     }
 
     public get isImported(): boolean {
@@ -5651,18 +5650,14 @@ export class TypeChecker {
             }
         } else if (snode.lhs.op == ".") {
             this.checkBoxesInExpression(snode.lhs, scope);
-            let ptr = this.stripType(snode.lhs.lhs.type);
-            if (ptr instanceof UnsafePointerType) {
+            if (this.isUnsafePointer(snode.lhs.lhs.type)) {
                 return;
             }
-            if (!(ptr instanceof PointerType)) {
+            let t = this.pointerElementTypeWithBoxes(snode.lhs.lhs.type, snode.lhs.loc);
+            if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || (!(t.boxes[0] instanceof VariableBox) && !(t.boxes[0] instanceof Box))) {
                 throw "Implementation error";
             }
-            let t = ptr.elementType;
-            if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
-                throw "Implementation error";
-            }
-            this.checkBoxesInSingleAssignment(t.boxes[0] as VariableBox, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
+            this.checkBoxesInSingleAssignment(t.boxes[0], snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
         } else if (snode.lhs.op == "[") {
             throw "TODO";
         } else {
@@ -5670,7 +5665,7 @@ export class TypeChecker {
         }
     }
 
-    private checkBoxesInSingleAssignment(joinLeftBox: VariableBox, ltype: Type, rnode: Node, scope: Scope, loc: Location, joinBoxes: "no" | "unique" | "strong") {
+    private checkBoxesInSingleAssignment(joinLeftBox: Box, ltype: Type, rnode: Node, scope: Scope, loc: Location, joinBoxes: "no" | "unique" | "strong") {
         this.checkAreBoxesAvailable(rnode.op == "take" ? rnode.lhs.type : rnode.type, scope, loc, true);
         
         let r = this.stripType(rnode.type);
@@ -5687,12 +5682,12 @@ export class TypeChecker {
                     throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
                 if (!joinLeftBox) {
-                    if (!(l.elementType instanceof RestrictedType) || !l.elementType.boxes || l.elementType.boxes.length != 1 || !(l.elementType.boxes[0] instanceof VariableBox)) {
+                    if (!(l.elementType instanceof RestrictedType) || !l.elementType.boxes || l.elementType.boxes.length != 1) {
                         throw "Implementation error: Expected a VariableBox"
                     }
-                    joinLeftBox = l.elementType.boxes[0] as VariableBox;
+                    joinLeftBox = l.elementType.boxes[0];
                 }
-                let joinLeftBoxResolved: Box = scope.resolveVariableBox(joinLeftBox);
+                let joinLeftBoxResolved: Box = joinLeftBox instanceof VariableBox ? scope.resolveVariableBox(joinLeftBox) : joinLeftBox;
                 if (joinLeftBoxResolved) {
                     joinLeftBoxResolved.join(joinedRightBox, loc, true);
                 } else {
