@@ -15,7 +15,9 @@ type PointTuple struct {
 type PointRef struct {
     p weak *Point
     p2 weak *Point
+    p3 *Point
     r weak *PointRef
+    u ^Point
 }
 
 func main(param box *Point, param2 box *Point, param3 box *Point) {
@@ -49,10 +51,14 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
     // Must not err because ptr2 points to a location that is now initialized again
     var ptr3 = ptr2
 
-    var w2 *Widget = {sibling: null};
-    var w1 *Widget = {sibling: w2};
+    var w2 *Widget = {sibling: null}
+    var w1 *Widget = {sibling: w2}
     // Must err, because w2 is not accessible
 //    w2 == w1
+
+    // Must err, because the take operator is missing
+//    var w3 *Widget = w1.sibling;
+    var w3 *Widget = take(w1.sibling)
 
     var up1 ^Point = {x: 1, y: 2}
     // Must err, because param2 is extern
@@ -78,6 +84,10 @@ func main(param box *Point, param2 box *Point, param3 box *Point) {
 //    pr2.p2 = param3
     // Must err, because param2 and p2 can not be joined
 //    var prx *PointRef = {p: param2, p: param3}
+
+    var u5 ^Point = take(pr2.u)
+    // Must err, because pr2 is tainted by param2 which is extern
+    var u6 ^Point = take(pr2.p3)
 
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
