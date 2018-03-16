@@ -5699,14 +5699,11 @@ export class TypeChecker {
                 if (joinLeftBoxResolved) {
                     joinLeftBoxResolved.join(joinedRightBox, loc, true);
                 } else {
-                    console.log("NEW TAINT", loc.start.line);
-                    console.log(joinedRightBox);
                     taints.push(new Taint(joinedRightBox, loc));
                 }
             } else if (r instanceof PointerType) {
                 let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
                 if (relementType instanceof RestrictedType && relementType.boxes && relementType.boxes.length != 0) {
-                    console.log("No Join, but TAINT", loc.start.line);
                     for(let b of relementType.boxes) {
                         if (b instanceof VariableBox) {
                             b = scope.resolveVariableBox(b);
@@ -5719,7 +5716,6 @@ export class TypeChecker {
                 }
             }
             this.taintAssignment(scope, rnode.loc, l, r, taints);
-            // console.log("ASS*", lnode.value)
             switch(rnode.op) {
                 case "id":
                     let relement = scope.resolveElement(rnode.value);
@@ -5727,7 +5723,6 @@ export class TypeChecker {
                         throw "Implementation error";
                     }
                     if (l.mode == "strong" || l.mode == "unique") {
-                        console.log("Unavail element", relement.name, loc.start.line);
                         scope.makeElementUnavailable(relement);
                     }
                     break;
@@ -5758,24 +5753,9 @@ export class TypeChecker {
                                 throw "Implementation error";
                             }
                             if (l.mode == "strong" || l.mode == "unique") {
-                                console.log("Unavail element", relement.name, loc.start.line);
                                 scope.makeElementUnavailable(relement);
                             }                                    
                         }
-                        /*
-                        let t = this.stripType(rnode.type);
-                        if ((t instanceof PointerType)) {
-                            t = t.elementType;
-                        } else if (t instanceof SliceType) {
-                            t = t.arrayType;
-                        } else {
-                            throw "Implementation error";
-                        }
-                        */
-/*                        if (t instanceof RestrictedType && t.boxes && t.boxes.length == 1 && t.boxes[0] instanceof VariableBox) {
-                            console.log("Tainting")
-                            scope.setTaint(t.boxes[0], null);
-                        } */
                         break;
                     }
                 default:
