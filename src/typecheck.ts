@@ -1557,8 +1557,7 @@ export class TypeChecker {
                 for(let b of tnode.parameters) {
                     let box = scope.lookupNamedBox(b.value);
                     if (!box) {
-                        box = new Box(true);
-                        box.name = b.value;
+                        box = new Box(true, b.value);
                         scope.registerNamedBox(box.name, box, tnode.loc);
                     }
                     boxes.push(box);
@@ -2192,7 +2191,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope.parent, "parameter");
+                p.type = this.createType(pnode, f.scope, "parameter");
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -5416,32 +5415,23 @@ export class TypeChecker {
                 break;
             case "=":
                 this.checkBoxesInAssignment(snode, scope);
-                break;
-            /*
-            case "return":
+                break;            
+            case "return": {
                 let f = scope.envelopingFunction();
                 if (!f) {
-                    throw new TypeError("'return' outside of function body", snode.loc);                    
+                    throw "Implementation error";
                 }
-                if (!snode.lhs) {
-                    if (f.type.returnType != this.t_void && !f.namedReturnTypes) {
-                        throw new TypeError("Mismatch in return type", snode.loc);
-                    }
-                } else {
-                    this.checkExpression(snode.lhs, scope);
-                    this.checkIsAssignableNode(f.type.returnType, snode.lhs);
+                if (snode.lhs) {
+                    this.checkBoxesInExpression(snode.lhs, scope);
+                    throw "TODO"
                 }
                 break;
+            }
             case "break":
-                if (!scope.isInForLoop()) {
-                    throw new TypeError("'break' outside of loop", snode.loc);
-                }
                 break;
             case "continue":
-                if (!scope.isInForLoop()) {
-                    throw new TypeError("'continue' outside of loop", snode.loc);
-                }
                 break;
+                /*
             case "if":
                 let s = new Scope(scope);
                 snode.scope = s;
@@ -5870,7 +5860,7 @@ export class TypeChecker {
                 if (vb instanceof VariableBox) {
                     scope.setTaint(vb, taints);
                 } else {
-//                    console.log("Joining in taint: ", loc.start.line)
+                    console.log("Joining in taint: ", loc.start.line)
                     if (!taints || taints.length == 0) {
                         throw "Implementation error";
                     }

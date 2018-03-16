@@ -134,11 +134,14 @@ func merge2(w1 box *Widget, w2 box *Widget) {
 //    w1 = w2
 }
 
-func merge3(w1 box *Widget, w2 *Widget) {
+func merge3(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
 //    w1.sibling = w2
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
 //    w1 = w2
     // Works, because {} can be joined with the box of w1
     w1 = {}
+    r1 = w1
+    r2 = w2
+    return
 }
