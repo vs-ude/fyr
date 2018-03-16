@@ -5370,20 +5370,9 @@ export class TypeChecker {
         }
         
         for(let pt of f.type.parameters) {
-//            let p = f.scope.resolveElement(pt.name);
-//            if (!p) {
-//                throw "Implementation error";
-//            }
             f.scope.makeElementAvailable(pt);
-//            this.taintAssignment(f.scope, p.loc, p.type, null, null);
         }
-        /*
-        if (f.namedReturnTypes) {
-            for(let r of f.namedReturnTypes) {
-                f.scope.makeElementAvailable(r);
-            }
-        }
-        */
+
         for(let snode of f.node.statements) {
             this.checkBoxesInStatement(snode, f.scope);
         }
@@ -5392,7 +5381,9 @@ export class TypeChecker {
     private checkBoxesInStatement(snode: Node, scope: Scope): Array<Scope> | null {
         switch (snode.op) {
             case "comment":
+            case "yield":
                 break;
+            case "var_in":
             case "var":
             case "const":
                 if (snode.rhs) {
@@ -5413,6 +5404,18 @@ export class TypeChecker {
                     }    
                 }
                 break;
+            case "in":
+            case "+=":                                             
+            case "*=":
+            case "/=":
+            case "-=":
+            case "<<=":
+            case ">>=":
+            case "%=":
+            case "&=":
+            case "&^=":
+            case "|=":
+            case "^=":    
             case "=":
                 this.checkBoxesInAssignment(snode, scope);
                 break;            
@@ -5485,145 +5488,6 @@ export class TypeChecker {
                     this.checkStatement(st, forScope);
                 }
                 break;
-            case "var":
-            case "const":
-                if (!snode.rhs) {
-                    if (snode.op == "const") {
-                        throw "Implementation error: const without initialization"
-                    }
-                    if (snode.lhs.op == "id") {
-                        let v = this.createVar(snode.lhs, scope, true);
-                    } else if (snode.lhs.op == "tuple") {
-                        for (let p of snode.lhs.parameters) {
-                            let v = this.createVar(p, scope, true);
-                        }
-                    } else {
-                        throw "TODO: Implementation error"
-                    }
-                } else {
-                    this.checkExpression(snode.rhs, scope);
-                    this.checkVarAssignment(snode.op == "const", scope, snode.lhs, snode.rhs.type, snode.rhs);
-                }
-                break;
-            case "=":
-                this.checkExpression(snode.rhs, scope);
-                this.checkAssignment(scope, snode.lhs, snode.rhs.type, snode.rhs);
-                break;                
-            case "+=":                                             
-            case "*=":
-            case "/=":
-            case "-=":
-                this.checkExpression(snode.lhs, scope);
-                this.checkIsMutable(snode.lhs, scope);
-                this.checkExpression(snode.rhs, scope);
-                if (snode.op == "+=" && this.isString(snode.lhs.type)) {
-                    this.checkIsString(snode.rhs);
-                } else if (this.isUnsafePointer(snode.lhs.type)) {
-                    if (snode.op == "*=" || snode.op == "/=") {
-                        throw new TypeError("'" + snode.op + "' is an invalid operation on pointers", snode.loc);
-                    }
-                    this.checkIsInt32Number(snode.rhs);
-                } else {
-                    this.checkIsNumber(snode.lhs);
-                    this.checkIsNumber(snode.rhs);
-                    if (snode.rhs.op == "int" || snode.rhs.op == "float") {
-                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
-                    } else {
-                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc, "assign", true);
-                    }
-                }
-                break;                
-            case "<<=":
-            case ">>=":
-            case "%=":
-            case "&=":
-            case "&^=":
-            case "|=":
-            case "^=":
-                this.checkExpression(snode.lhs, scope);
-                this.checkIsMutable(snode.lhs, scope);
-                this.checkExpression(snode.rhs, scope);
-                if (this.isUnsafePointer(snode.lhs.type)) {
-                    if (snode.op == "%=") {
-                        throw new TypeError("'%=' is an invalid operation on pointers", snode.loc);
-                    }
-                    if (snode.rhs.op == "int") {
-                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
-                    } else {
-                        this.checkIsAssignableType(this.t_int, snode.rhs.type, snode.loc, "assign", true);
-                    }
-                } else {
-                    this.checkIsIntNumber(snode.lhs);
-                    this.checkIsIntNumber(snode.rhs);
-                    if (snode.rhs.op == "int" || snode.rhs.op == "float") {
-                        this.unifyLiterals(snode.lhs.type, snode.rhs, snode.loc);
-                    } else {
-                        this.checkIsAssignableType(snode.lhs.type, snode.rhs.type, snode.loc, "assign", true);
-                    }
-                }
-                break;
-            case "in":
-                this.checkExpression(snode.rhs, scope);
-                let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
-                if (snode.lhs.op == "tuple") {
-//                    if (snode.lhs.parameters[0].op != "id" || snode.lhs.parameters[0].value != "_") {
-                    if (snode.lhs.parameters[0].value != "_") {
-                        this.checkExpression(snode.lhs.parameters[0], scope);
-                        this.checkIsMutable(snode.lhs.parameters[0], scope);
-                        this.checkIsAssignableType(snode.lhs.parameters[0].type, tindex1, snode.loc, "assign", true);
-                    } 
-                    if (snode.lhs.parameters[1].value != "_") {
-                        this.checkExpression(snode.lhs.parameters[1], scope);
-                        this.checkIsMutable(snode.lhs.parameters[1], scope);
-                        this.checkIsAssignableType(snode.lhs.parameters[1].type, tindex2, snode.loc, "assign", true);
-                    }
-                } else {
-                    if (snode.lhs.value != "_") {
-                        this.checkExpression(snode.lhs, scope);
-                        this.checkIsMutable(snode.lhs, scope);
-                        this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc, "assign", true);
-                    }
-                }
-                break;
-            case "var_in":
-            {
-                this.checkExpression(snode.rhs, scope);
-                let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
-                if (snode.lhs.op == "tuple") {
-                    if (snode.lhs.parameters[0].value != "_") {
-                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
-                        if (v1.type) {
-                            this.checkIsAssignableType(v1.type, tindex1, snode.loc, "assign", true);
-                        } else {
-                            v1.type = tindex1
-                        }
-                    }
-                    if (snode.lhs.parameters[1].value != "_") {
-                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
-                        if (v2.type) {
-                            this.checkIsAssignableType(v2.type, tindex2, snode.loc, "assign", true);
-                        } else {
-                            v2.type = tindex2;
-                        }
-                    }
-                } else {
-                    let v = this.createVar(snode.lhs, scope, false);
-                    if (v.type) {
-                        this.checkIsAssignableType(v.type, tindex1, snode.loc, "assign", true);
-                    } else {
-                        v.type = tindex1;
-                    }
-                }
-                break;
-            }
-            case "yield":
-            {
-                let f = scope.envelopingFunction();
-                if (f.type.callingConvention != "fyrCoroutine") {
-                    throw new TypeError("yield is only allowed in async function", snode.loc);
-                }
-                break;
-            }
             case "spawn":
             {
                 this.checkExpression(snode.rhs, scope);
