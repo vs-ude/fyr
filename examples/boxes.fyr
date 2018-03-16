@@ -121,17 +121,24 @@ func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Po
     pr3.r = pr4
 }
 
-func merge(w1 *Widget, w2 *Widget) {
+func merge(w1 *Widget, w2 *Widget, w3 *Widget) {
     // Works, because everything belongs to the same box
     w1.sibling = w2
+    w1 = w3
 }
 
 func merge2(w1 box *Widget, w2 box *Widget) {
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
 //    w1.sibling = w2
+    // Must err, because w1 and w2 belong to different boxes
+//    w1 = w2
 }
 
 func merge3(w1 box *Widget, w2 *Widget) {
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
 //    w1.sibling = w2
+    // Must err, because w1 and w2 belong to different boxes that cannot be joined
+//    w1 = w2
+    // Works, because {} can be joined with the box of w1
+    w1 = {}
 }

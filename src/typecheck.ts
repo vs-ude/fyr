@@ -59,7 +59,7 @@ export class Function implements ScopeElement {
 
     public name: string;
     public type: FunctionType;
-    public namedReturnTypes: boolean;
+    public namedReturnTypes: null | Array<Variable>;
     // The scope containing FunctionParameters and local Variables of the function.
     public scope: Scope;
     public box: Box;
@@ -2217,8 +2217,11 @@ export class TypeChecker {
                         v.type = (f.type.returnType as TupleType).types[i];
                         this.injectVariableBoxes(v, f.box);
                         f.scope.registerElement(v.name, v);
-                        f.namedReturnTypes = true;
-                        (f.type.returnType as TupleType)[i] = v.type;
+                        if (!f.namedReturnTypes) {
+                            f.namedReturnTypes = [];
+                        }
+                        f.namedReturnTypes.push(v);
+                        (f.type.returnType as TupleType).types[i] = v.type;
                     }
                 }
             } else {
@@ -2439,7 +2442,10 @@ export class TypeChecker {
                         v.type = (f.type.returnType as TupleType).types[i];
                         this.injectVariableBoxes(v, f.box);
                         f.scope.registerElement(v.name, v);
-                        f.namedReturnTypes = true;
+                        if (!f.namedReturnTypes) {
+                            f.namedReturnTypes = [];
+                        }
+                        f.namedReturnTypes.push(v);
                         (f.type.returnType as TupleType).types[i] = v.type;
                     }
                 }
@@ -3881,7 +3887,10 @@ export class TypeChecker {
                                 v.type = (f.type.returnType as TupleType).types[i];
                                 this.injectVariableBoxes(v, f.box);
                                 f.scope.registerElement(v.name, v);
-                                f.namedReturnTypes = true;
+                                if (!f.namedReturnTypes) {
+                                    f.namedReturnTypes = [];
+                                }
+                                f.namedReturnTypes = [v];
                             }
                         }
                     }
@@ -5360,15 +5369,22 @@ export class TypeChecker {
         if (!f.node.statements) {
             return;
         }
-
+        
         for(let pt of f.type.parameters) {
-            let p = f.scope.resolveElement(pt.name);
-            if (!p) {
-                throw "Implementation error";
-            }
-            f.scope.makeElementAvailable(p);
-            this.taintAssignment(f.scope, p.loc, p.type, null, null);
+//            let p = f.scope.resolveElement(pt.name);
+//            if (!p) {
+//                throw "Implementation error";
+//            }
+            f.scope.makeElementAvailable(pt);
+//            this.taintAssignment(f.scope, p.loc, p.type, null, null);
         }
+        /*
+        if (f.namedReturnTypes) {
+            for(let r of f.namedReturnTypes) {
+                f.scope.makeElementAvailable(r);
+            }
+        }
+        */
         for(let snode of f.node.statements) {
             this.checkBoxesInStatement(snode, f.scope);
         }
@@ -5846,29 +5862,23 @@ export class TypeChecker {
                 }
                 etype = etype.elementType;
             }
-            if (vtype.boxes) {
-                let hasBox = false;
-                let hasVariableBox = false;
-                for(let b of vtype.boxes) {
-                    if (b instanceof VariableBox) {
-                        if (hasVariableBox) {
-                            throw "Implementation error";
-                        }
-                        //                let r = scope.resolveVariableBox(varBox);
-                        //                if (!r) {
-                        //                    throw "Implementation error";
-                        //                }
-                        scope.setTaint(b, taints);
-                        hasVariableBox = true;
-                    } else {
-                        hasBox = true;
-                        if (hasVariableBox) {
-                            throw "Implementation error";
-                        }
-                    }
+            if (vtype.boxes && vtype.boxes.length != 0) {
+                if (vtype.boxes.length != 1) {
+                    throw "Implementation error";
                 }
-                if (hasBox && taints && taints.length ) {
-                    throw "TODO";
+                let vb = vtype.boxes[0];
+                if (vb instanceof VariableBox) {
+                    scope.setTaint(vb, taints);
+                } else {
+//                    console.log("Joining in taint: ", loc.start.line)
+                    if (!taints || taints.length == 0) {
+                        throw "Implementation error";
+                    }
+                    let j = taints[0].box;
+                    for(let i = 1; i < taints.length; i++) {
+                        j = j.join(taints[i].box, loc, true);
+                    }
+                    vb.join(j, loc, true);
                 }
             }
             this.taintAssignment(scope, loc, vtype.elementType, etype, taints);
