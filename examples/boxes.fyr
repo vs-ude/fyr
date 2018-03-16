@@ -145,3 +145,13 @@ func merge3(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
     r2 = w2
     return
 }
+
+func merge4(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
+    // Must err, because of different boxes
+//    return w2, w1
+    return w1, w2
+}
+
+func test5(w *Widget) *Widget {
+    return w
+}

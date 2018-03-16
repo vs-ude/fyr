@@ -5422,8 +5422,15 @@ export class TypeChecker {
                     throw "Implementation error";
                 }
                 if (snode.lhs) {
-                    this.checkBoxesInExpression(snode.lhs, scope);
-                    throw "TODO"
+                    if (f.namedReturnTypes) {
+                        for(let i = 0; i < f.namedReturnTypes.length; i++) {
+                            this.checkBoxesInExpression(snode.lhs.parameters[i], scope);
+                            this.checkBoxesInSingleAssignment(null, f.namedReturnTypes[i].type, snode.lhs.parameters[i], scope, snode.loc, "no");
+                        }
+                    } else {
+                        this.checkBoxesInExpression(snode.lhs, scope);
+                        this.checkBoxesInSingleAssignment(null, f.type.returnType, snode.lhs, scope, snode.loc, "no");
+                    }
                 }
                 break;
             }
