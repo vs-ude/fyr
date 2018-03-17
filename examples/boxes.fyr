@@ -161,7 +161,7 @@ type SliceStruct struct {
     p *Point
 }
 
-func sliceTest(p box []int) {
+func sliceTest(p box []int, p1 box *Point, p2 box *Point) {
     var s1 []int = [1, 2, 3]
     var s2 ^[]int = [4, 5, 6, 7]
     var s3 ^[]int = s1
@@ -182,4 +182,7 @@ func sliceTest(p box []int) {
 
     var s8 []*Point = [{x:1, y: 2}, {x:3, y:4}]
     var a1 [2]*Point = [{x:1, y: 2}, {x:3, y:4}]
+    var s9 []*Point = [p1, p2]
+    // Must err, because s9 cannot be joined because of p1 and p2
+//    var s10 ^[]*Point = s9
 }

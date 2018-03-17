@@ -6056,7 +6056,7 @@ export class TypeChecker {
                 let at = this.stripType(t) as ArrayType;
                 for(let p of enode.parameters) {
                     this.checkBoxesInExpression(p, scope);
-                    this.checkBoxesInSingleAssignment(varBox, at.elementType, p, scope, enode.loc, "strong");
+                    this.checkBoxesInSingleAssignment(varBox, at.elementType, p, scope, enode.loc, "no");
                 }
                 break;
             }
