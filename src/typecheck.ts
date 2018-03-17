@@ -3708,6 +3708,7 @@ export class TypeChecker {
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let isConst = this.isConst(enode.lhs.type);
+                let boxes = this.getBoxes(enode.lhs.type);
                 let t: Type = this.stripType(enode.lhs.type);
                 if (t instanceof TupleType) {
                     this.checkIsIntNumber(enode.rhs);
@@ -3723,6 +3724,9 @@ export class TypeChecker {
                         index = parseInt(enode.rhs.value);
                     }
                     enode.type = this.checkIsIndexable(enode.lhs, index);
+                    if (boxes && boxes.length != 0) {
+                        enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                    }
                 } else if (this.isMap(t)) {
                     isConst = isConst || this.isConst((t as PointerType).elementType);
                     if (enode.rhs.isUnifyableLiteral()) {
@@ -3731,13 +3735,26 @@ export class TypeChecker {
                         this.checkIsAssignableType(this.mapKeyType(t), enode.rhs.type, enode.rhs.loc, "assign", true);
                     }
                     enode.type = this.mapValueType(t);
+                    if (boxes && boxes.length != 0) {
+                        enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                    }
                 } else if (t instanceof SliceType) {
                     enode.type = t.getElementType();
                     isConst = isConst || this.isConst(t.arrayType);
+                    let boxes2 = this.getBoxes(t.arrayType);
+                    if (boxes2) {
+                        boxes = boxes2;
+                    }
+                    if (boxes && boxes.length != 0) {
+                        enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                    }
                 } else if (t instanceof UnsafePointerType) {
                     enode.type = t.elementType;
                 } else {
                     throw new TypeError("[] operator is not allowed on " + enode.lhs.type.toString(), enode.loc);
+                }
+                if (this.isUnique(enode.type)) {
+                    enode.type = this.applyBox(enode.type, [new Box(false)], enode.loc);
                 }
                 if (isConst) {
                     enode.type = this.applyConst(enode.type, enode.loc);
@@ -3809,9 +3826,11 @@ export class TypeChecker {
             case "array":
             {
                 let types: Array<Type> = [];
-                for(let p of enode.parameters) {
-                    this.checkExpression(p, scope);
-                    types.push(p.type);
+                if (enode.parameters) {
+                    for(let p of enode.parameters) {
+                        this.checkExpression(p, scope);
+                        types.push(p.type);
+                    }
                 }
                 let t = new ArrayLiteralType(types);
                 enode.type = t;
@@ -4190,12 +4209,18 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between string and " + t.toString(), loc);   
             case "array":
                 if (t instanceof ArrayType) {
-                    if (node.parameters.length != t.size && t.size != -1) {
-                        throw new TypeError("Mismatch in array size", node.loc);                                                
+                    if (t.size != -1) {
+                        if (t.size == 0 && (!node.parameters || node.parameters.length == 0)) {
+                            // Ok
+                        } else if (!node.parameters || node.parameters.length != t.size) {
+                            throw new TypeError("Mismatch in array size", node.loc);                                                
+                        }
                     }
-                    for(let pnode of node.parameters) {
-                        if (!this.checkIsAssignableNode(t.elementType, pnode, doThrow)) {
-                            return false;
+                    if (node.parameters) {
+                        for(let pnode of node.parameters) {
+                            if (!this.checkIsAssignableNode(t.elementType, pnode, doThrow)) {
+                                return false;
+                            }
                         }
                     }
                     node.type = this.makeBox(t, [new VariableBox()], node.loc);
@@ -5270,6 +5295,24 @@ export class TypeChecker {
         return null;
     }
 
+    public arrayElementTypeWithBoxes(t: Type, loc: Location): Type {
+        let r: RestrictedType;
+        if (t instanceof RestrictedType) {
+            r = t;
+            t = t.elementType;
+        }
+        if (!(t instanceof ArrayType)) {
+            throw "Implementation error";
+        }
+        if (t.elementType instanceof RestrictedType && t.elementType.boxes && t.elementType.boxes.length != 0) {
+            return t.elementType;
+        }
+        if (!r || !r.boxes || r.boxes.length == 0) {
+            return t.elementType;
+        }
+        return this.makeBox(t.elementType, r.boxes, loc);
+    }
+
     public sliceArrayTypeWithBoxes(t: Type, loc: Location): Type {
         let r: RestrictedType;
         if (t instanceof RestrictedType) {
@@ -5305,6 +5348,7 @@ export class TypeChecker {
         }
         return this.makeBox(t.elementType, r.boxes, loc);
     }
+
 
     public pointerElementType(t: Type): Type {
         t = RestrictedType.strip(t);
@@ -5562,7 +5606,16 @@ export class TypeChecker {
             }
             this.checkBoxesInSingleAssignment(t.boxes[0], snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
         } else if (snode.lhs.op == "[") {
-            throw "TODO";
+            this.checkBoxesInExpression(snode.lhs, scope);
+            let t = snode.lhs.lhs.type;
+            if (this.isSlice(t)) {
+                t = this.sliceArrayTypeWithBoxes(t, snode.lhs.loc);
+            }
+            t = this.arrayElementTypeWithBoxes(t, snode.lhs.loc);
+            if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || (!(t.boxes[0] instanceof VariableBox) && !(t.boxes[0] instanceof Box))) {
+                throw "Implementation error";
+            }
+            this.checkBoxesInSingleAssignment(t.boxes[0], snode.lhs.type, snode.rhs, scope, snode.loc, "no");
         } else {
             throw "Implementation error";
         }
@@ -5962,9 +6015,6 @@ export class TypeChecker {
                     break;
                 }
                 this.checkBoxesInExpression(enode.lhs, scope);
-                /* if (type instanceof PointerType || type instanceof UnsafePointerType) {
-                    this.checkAreBoxesAvailable(enode.type, scope, enode.loc, true);
-                } */
                 break;
             }            
             case ":":
@@ -6054,9 +6104,13 @@ export class TypeChecker {
                 let varBox = t.boxes[0] as VariableBox;
                 scope.setTaint(varBox, null);
                 let at = this.stripType(t) as ArrayType;
-                for(let p of enode.parameters) {
-                    this.checkBoxesInExpression(p, scope);
-                    this.checkBoxesInSingleAssignment(varBox, at.elementType, p, scope, enode.loc, "no");
+                if (enode.parameters) {
+                    for(let p of enode.parameters) {
+                        this.checkBoxesInExpression(p, scope);
+                        this.checkBoxesInSingleAssignment(varBox, at.elementType, p, scope, enode.loc, "no");
+                    }
+                } else {
+                    this.taintAssignment(scope, enode.loc, this.stripType(enode.type), null, null);
                 }
                 break;
             }

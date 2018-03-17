@@ -23,9 +23,10 @@ type PointRef struct {
 type Link struct {
     next *Link
     value *Point
+    parallel ^Link
 }
 
-func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Point) {
+func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Point, param5 box *Point, param6 box *Point) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -99,7 +100,6 @@ func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Po
 
     var link1 *Link = {}
     var link2 *Link = {value: param4}
-    var link4 *Link = {}
     link1.next = link2
     // Must err, because link2 is tainted by param which is extern
 //    var extlink ^Link = link1
@@ -114,7 +114,11 @@ func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Po
     var link3 *Link = take(link1.next)
     // Must err, because link2 is tainted by param which is extern
 //    var extlink3 ^Link = link3
-
+    var link4 *Link = {value: param5}
+    // Must err, because link4 cannot join param5 and param6
+//    link4.next.next.next = {value: param6}
+    //!! Must err, because param6 cannot be isolated
+    link4.parallel.next = {value: param6}
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
     //!! Must err, because it violates the isolation between pr3 and pr4
@@ -161,7 +165,7 @@ type SliceStruct struct {
     p *Point
 }
 
-func sliceTest(p box []int, p1 box *Point, p2 box *Point) {
+func sliceTest(p box []int, p1 box *Point, p2 box *Point, p3 box *Point, p4 box *Point, ps1 []*Point, ps2 []&Point) {
     var s1 []int = [1, 2, 3]
     var s2 ^[]int = [4, 5, 6, 7]
     var s3 ^[]int = s1
@@ -185,4 +189,21 @@ func sliceTest(p box []int, p1 box *Point, p2 box *Point) {
     var s9 []*Point = [p1, p2]
     // Must err, because s9 cannot be joined because of p1 and p2
 //    var s10 ^[]*Point = s9
+
+    var s11 []*Point = []
+    s11[0] = p3
+    s11[1] = p4
+    // Must err, because p3 and p4 cannot be joined into one box
+//    ps1 = s11
+    ps1 = s8
+    
+    var s12 []&Point = []
+    var lp Point = {}
+    s12[0] = &lp
+    // Must err, because s12 holds a reference to a local variable
+//    ps2 = s12
+
+    var s13 []&Point
+    //!! Must err, because s13 is not available here
+    s13[0] = &lp
 }
