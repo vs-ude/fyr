@@ -4128,7 +4128,7 @@ export class TypeChecker {
             if (!this.unifyLiterals(t.elementType, node, loc, doThrow, templateParams, false)) {
                 return false;
             }
-            node.type = this.makeBox(node.type, [new VariableBox()], node.loc);
+//            node.type = this.makeBox(node.type, [new VariableBox()], node.loc);
             node.type = new PointerType(node.type, t.mode);
             return true;
         }
@@ -4137,8 +4137,8 @@ export class TypeChecker {
             if (!this.unifyLiterals(t.arrayType, node, loc, doThrow, templateParams, false)) {
                 return false;
             }
-            let r = this.makeBox(node.type, [new VariableBox()], node.loc);
-            node.type = new SliceType(r, t.mode);
+//            let r = this.makeBox(node.type, [new VariableBox()], node.loc);
+            node.type = new SliceType(node.type as ArrayType | RestrictedType, t.mode);
             return true;
         }
 
@@ -4198,7 +4198,7 @@ export class TypeChecker {
                             return false;
                         }
                     }
-                    node.type = t;
+                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
                     return true;
                 }
                 if (!doThrow) {
@@ -4216,7 +4216,7 @@ export class TypeChecker {
                             return false;
                         }
                     }
-                    node.type = t;
+                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
                     return true;                    
                 }
                 if (!doThrow) {
@@ -4234,11 +4234,11 @@ export class TypeChecker {
                             pnode.type = t.keyType;
                         }
                     }
-                    node.type = t;
+                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
                     return true;
                 } else if (t instanceof MapType && (!node.parameters || node.parameters.length == 0)) {
                     // An empty map, e.g. "{}"
-                    node.type = t;
+                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
                     return true;
                 } else if (t instanceof StructType) {
                     // A struct initialization
@@ -4254,7 +4254,7 @@ export class TypeChecker {
                             }
                         }
                     }
-                    node.type = t;
+                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
                     return true;
                 }
                 if (!doThrow) {
