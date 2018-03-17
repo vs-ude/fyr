@@ -155,3 +155,30 @@ func merge4(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
 func test5(w *Widget) *Widget {
     return w
 }
+
+type SliceStruct struct {
+    s []int
+    p *Point
+}
+
+func sliceTest(p box []int) {
+    var s1 []int = [1, 2, 3]
+    var s2 ^[]int = [4, 5, 6, 7]
+    var s3 ^[]int = s1
+    // Must err, because s1 is no longer available
+//    var s4 []int = s1
+    // Must err, because p is external
+//    var s5 ^[]int = p
+    var s6 []int = p
+    p = s6
+    p = s3
+    var ss1 *SliceStruct = {s: [1, 2, 3]}
+    var ss2 *SliceStruct = {}
+    var s7 []int = [1, 2, 3]
+    ss2.s = s7
+    ss2.p = {x: 1, y: 2}
+    ss2.s = [1, 2, 3]
+    ss2.s = p
+
+    var s8 []*Point = [{x:1, y: 2}, {x:3, y:4}]
+}
