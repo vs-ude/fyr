@@ -204,6 +204,6 @@ func sliceTest(p box []int, p1 box *Point, p2 box *Point, p3 box *Point, p4 box 
 //    ps2 = s12
 
     var s13 []&Point
-    //!! Must err, because s13 is not available here
-    s13[0] = &lp
+    // Must err, because s13 is not available here
+//    s13[0] = &lp
 }

@@ -198,6 +198,13 @@ export class Scope {
         let r = this.resolveVariableBox(varBox);
         if (r) {
             r.isAvailable = false;
+        } else {
+            if (!this.varBoxes) {
+                this.varBoxes = new Map<VariableBox, ResolvedVariableBox>();
+            }
+            let s = new ResolvedVariableBox();
+            s.isAvailable = false;
+            this.varBoxes.set(varBox, s);                
         }
     }
 
@@ -5480,6 +5487,7 @@ export class TypeChecker {
             case "^=":    
             case "=":
                 this.checkBoxesInAssignment(snode, scope);
+                this.checkAreBoxesAvailable(snode.lhs.type, scope, snode.lhs.loc, true);
                 break;            
             case "return": {
                 let f = scope.envelopingFunction();
