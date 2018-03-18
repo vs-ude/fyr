@@ -383,7 +383,7 @@ export class CodeGenerator {
                 }
                 break;                
             }
-            case "const":
+            case "let":
             case "var":
             {
                 if (snode.rhs) { // Assignment of an expression value?

@@ -2539,7 +2539,7 @@ export class TypeChecker {
                     let v = this.createVar(snode.lhs, scope, false, false, true);
                     v.node = snode;
                     globalVariables.push(v);
-                } else if (snode.op == "const") {
+                } else if (snode.op == "let") {
                     let v = this.createVar(snode.lhs, scope, false, true, true);
                     v.node = snode;
                     globalVariables.push(v);
@@ -3129,10 +3129,10 @@ export class TypeChecker {
                 this.checkStatements(snode.statements, forScope);
                 return "fallthrough";
             case "var":
-            case "const":
+            case "let":
                 if (!snode.rhs) {
-                    if (snode.op == "const") {
-                        throw "Implementation error: const without initialization"
+                    if (snode.op == "let") {
+                        throw "Implementation error: let without initialization"
                     }
                     if (snode.lhs.op == "id") {
                         let v = this.createVar(snode.lhs, scope, true);
@@ -3147,7 +3147,7 @@ export class TypeChecker {
                     }
                 } else {
                     this.checkExpression(snode.rhs, scope);
-                    this.checkVarAssignment(snode.op == "const", scope, snode.lhs, snode.rhs.type, snode.rhs);
+                    this.checkVarAssignment(snode.op == "let", scope, snode.lhs, snode.rhs.type, snode.rhs);
                 }
                 break;
             case "=":
@@ -3231,6 +3231,7 @@ export class TypeChecker {
                 }
                 break;
             case "var_in":
+            case "let_in":
             {
                 this.checkExpression(snode.rhs, scope);
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
@@ -5452,9 +5453,10 @@ export class TypeChecker {
             case "comment":
             case "yield":
                 break;
+            case "let_in":
             case "var_in":
             case "var":
-            case "const":
+            case "let":
                 if (snode.rhs) {
                     this.checkBoxesInAssignment(snode, scope);
                 } else {

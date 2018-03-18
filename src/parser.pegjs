@@ -2,14 +2,14 @@
     var ast = require("./ast");
 
     function isAssignment(n) {
-        if (n.op == "=" || n.op == "var_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "const") {
+        if (n.op == "=" || n.op == "var_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "let") {
             return true;
         }
         return false;
     }
 
     function isKeyword(n) {
-        if (n == "map" || n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "let" || n == "map" || n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -29,7 +29,7 @@ file
             if (x.op == "var" && x.lhs.op != "id") {
                 error("Illegal variable definition for global variables", x.loc);
             }
-            if (x.op == "func" || x.op == "export_func" || x.op == "asyncFunc" || x.op == "typedef" || x.op == "var" || x.op == "const") {
+            if (x.op == "func" || x.op == "export_func" || x.op == "asyncFunc" || x.op == "typedef" || x.op == "var" || x.op == "let") {
                 if (i > 0 && (m[i-1] instanceof Array)) {
                     x.comments = m[i-1];
                 }
@@ -577,15 +577,15 @@ assignKeyIdentifier
     }
 
 varStatement
-  = o:("var" / "const") [ \t]+ i:varIdentifierList a:(("=" / "in ") [ \t\n]* expression)? {
+  = o:("var" / "let") [ \t]+ i:varIdentifierList a:(("=" / "in ") [ \t\n]* expression)? {
         if (i.length > 1) {
             i = new ast.Node({loc: fl(location()), op: "tuple", parameters: i});
         } else {
             i = i[0];
         }
         if (!a) {
-            if (o == "const") {
-                expected("assignment following 'const'", o.loc);
+            if (o == "let") {
+                expected("assignment following 'let'", o.loc);
             }
             return new ast.Node({loc: fl(location()), op: "var", lhs: i});
         }
