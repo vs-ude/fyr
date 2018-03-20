@@ -125,10 +125,11 @@ func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Po
     pr3.r = pr4
 }
 
-func merge(w1 *Widget, w2 *Widget, w3 *Widget) {
-    // Works, because everything belongs to the same box
-    w1.sibling = w2
-    w1 = w3
+func merge(w1 *Widget, w2 *Widget) {
+    // Must err, because w1 and w2 belong to different boxes that cannot be joined
+//    w1.sibling = w2
+    // Must err, because w1 and w2 belong to different boxes
+//    w1 = w2
 }
 
 func merge2(w1 box *Widget, w2 box *Widget) {
@@ -146,17 +147,18 @@ func merge3(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
     // Works, because {} can be joined with the box of w1
     w1 = {}
     r1 = w1
-    r2 = w2
+    // Must err, because w2 and r2 belong to different boxes
+//    r2 = w2
     return
 }
 
-func merge4(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
+func merge4(w1 box(a) *Widget, w2 box(b) *Widget) (r1 box(a) *Widget, r2 box(b) *Widget) {
     // Must err, because of different boxes
 //    return w2, w1
     return w1, w2
 }
 
-func test5(w *Widget) *Widget {
+func test5(w box(a) *Widget) box(a) *Widget {
     return w
 }
 
@@ -222,4 +224,17 @@ func boxesTest2(arr []boxes *Point, s *SliceStruct) {
     var arr2 []*Point = arr
     // Must err, because box(a,b) cannot be joined with box(a)
 //    s.p = take(arr2[0])
+}
+
+func links(l1 *Link, l2 *Link, l3 box(a) *Link, l4 box(a) *Link) {
+    // Must err, because both links are from different boxes
+//    l1.next = l2
+    l3.next = l4
+}
+
+func points(p1 const &Point, p2 const &Point) {
+    var a1 Point = {}
+    var a2 *Point = {}
+    // Must work, because argument belong to different groups by default
+//!!    points(&a1, a2)
 }

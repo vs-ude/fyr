@@ -50,7 +50,6 @@ export class Function implements ScopeElement {
     constructor() {
         this.scope = new Scope(null);
         this.scope.func = this;
-        this.box = new Box(true);
     }
 
     public get isImported(): boolean {
@@ -62,7 +61,6 @@ export class Function implements ScopeElement {
     public namedReturnTypes: null | Array<Variable>;
     // The scope containing FunctionParameters and local Variables of the function.
     public scope: Scope;
-    public box: Box;
     public node: Node;
     public loc: Location;
     public importFromModule: string;
@@ -2211,7 +2209,7 @@ export class TypeChecker {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
                 this.checkVariableType(p.type, pnode.loc);
-                this.injectVariableBoxes(p, f.box);
+                this.injectVariableBoxes(p, new Box(true));
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2229,7 +2227,7 @@ export class TypeChecker {
                         v.loc = pnode.loc;
                         v.name = pnode.name.value;
                         v.type = (f.type.returnType as TupleType).types[i];
-                        this.injectVariableBoxes(v, f.box);
+                        this.injectVariableBoxes(v, new Box(true));
                         f.scope.registerElement(v.name, v);
                         if (!f.namedReturnTypes) {
                             f.namedReturnTypes = [];
@@ -2239,7 +2237,7 @@ export class TypeChecker {
                     }
                 }
             } else {
-                f.type.returnType = this.injectVariableBoxesInType(f.type.returnType, f.box, fnode.rhs.loc);
+                f.type.returnType = this.injectVariableBoxesInType(f.type.returnType, new Box(true), fnode.rhs.loc);
             }
             this.checkVariableType(f.type.returnType, fnode.rhs.loc);
         } else {
@@ -2435,7 +2433,7 @@ export class TypeChecker {
                 p.name = "p" + i.toString();
                 i++;
                 p.type = this.createType(pnode, f.scope, "parameter");
-                this.injectVariableBoxes(p, f.box);
+                this.injectVariableBoxes(p, new Box(true));
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2454,7 +2452,7 @@ export class TypeChecker {
                         i++;
                         v.name = pnode.name.value;
                         v.type = (f.type.returnType as TupleType).types[i];
-                        this.injectVariableBoxes(v, f.box);
+                        this.injectVariableBoxes(v, new Box(true));
                         f.scope.registerElement(v.name, v);
                         if (!f.namedReturnTypes) {
                             f.namedReturnTypes = [];
@@ -2464,7 +2462,7 @@ export class TypeChecker {
                     }
                 }
             } else {
-                f.type.returnType = this.injectVariableBoxesInType(f.type.returnType, f.box, f.loc);                
+                f.type.returnType = this.injectVariableBoxesInType(f.type.returnType, new Box(true), f.loc);                
             }
         } else {
             f.type.returnType = this.t_void;
@@ -3899,7 +3897,7 @@ export class TypeChecker {
                             }
                         }
                         p.type = this.createType(pnode, enode.scope, "parameter");
-                        this.injectVariableBoxes(p, f.box);
+                        this.injectVariableBoxes(p, new Box(true));
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                         }
@@ -3919,7 +3917,7 @@ export class TypeChecker {
                                 v.loc = pnode.loc;
                                 v.name = pnode.name.value;
                                 v.type = (f.type.returnType as TupleType).types[i];
-                                this.injectVariableBoxes(v, f.box);
+                                this.injectVariableBoxes(v, new Box(true));
                                 f.scope.registerElement(v.name, v);
                                 if (!f.namedReturnTypes) {
                                     f.namedReturnTypes = [];
