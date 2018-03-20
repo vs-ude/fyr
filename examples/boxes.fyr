@@ -26,7 +26,7 @@ type Link struct {
     parallel ^Link
 }
 
-func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Point, param5 box *Point, param6 box *Point) {
+func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Point, param6 *Point) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -34,7 +34,7 @@ func main(param box *Point, param2 box *Point, param3 box *Point, param4 box *Po
 //    var p *Point = {x: 1, y: 2}
     a = param.x
     var p *Point = param
-    // Must err, becuase p is tainteed by param which is extern
+    // Must err, because p is tainted by param which is extern
 //    var fuck ^Point = p
 
     a = p.x
@@ -167,7 +167,7 @@ type SliceStruct struct {
     p *Point
 }
 
-func sliceTest(p box []int, p1 box *Point, p2 box *Point, p3 box *Point, p4 box *Point, ps1 []*Point, ps2 []&Point) {
+func sliceTest(p []int, p1 *Point, p2 *Point, p3 *Point, p4 *Point, ps1 []*Point, ps2 []&Point) {
     var s1 []int = [1, 2, 3]
     var s2 ^[]int = [4, 5, 6, 7]
     var s3 ^[]int = s1
