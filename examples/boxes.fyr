@@ -207,3 +207,19 @@ func sliceTest(p box []int, p1 box *Point, p2 box *Point, p3 box *Point, p4 box 
     // Must err, because s13 is not available here
 //    s13[0] = &lp
 }
+
+func boxesTest(arr []box(a,b) *Point, s box(a) *SliceStruct) {
+    // Must err, because box(a,b) cannot be joined with box(a)
+//    s.p = take(arr[0])
+    var arr2 []*Point = arr
+    // Must err, because box(a,b) cannot be joined with box(a)
+//    s.p = take(arr2[0])
+}
+
+func boxesTest2(arr []boxes *Point, s *SliceStruct) {
+    // Must err, because box(a,b) cannot be joined with box(a)
+//    s.p = take(arr[0])
+    var arr2 []*Point = arr
+    // Must err, because box(a,b) cannot be joined with box(a)
+//    s.p = take(arr2[0])
+}

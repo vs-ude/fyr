@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "let" || n == "map" || n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "boxes" || n == "let" || n == "map" || n == "take" || n == "weak" || n == "box" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -246,6 +246,12 @@ primitiveType
     }
   / "box" n:([ \t]* "(" [ \t]* identifierList [ \t]* ")" )? [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n ? n[3] : null});
+    }
+  / "boxes" [ \t]+ t:primitiveType {
+        let n = [];
+        n.push(new ast.Node({loc: fl(location()), op: "id", value: "$1"}));
+        n.push(new ast.Node({loc: fl(location()), op: "id", value: "$2"}));
+        return new ast.Node({loc: fl(location()), op: "boxType", rhs: t, parameters: n});
     }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});

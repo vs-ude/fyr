@@ -1573,6 +1573,14 @@ export class TypeChecker {
                 let box = new Box(true);
                 boxes = [box];
             }
+            if (boxes.length > 1) {
+                let b = new ResolvedVariableBox();
+                for(let c of boxes) {
+                    b.addTaints(new Taint(c, tnode.loc));
+                }
+                boxes = [b];
+                console.log("boxes", tnode.loc.start.line);
+            }
             if (this.isSafePointer(c)) {
                 let ptr = RestrictedType.strip(c) as PointerType;
                 ptr.elementType = this.makeBox(ptr.elementType, boxes, tnode.loc);
@@ -5638,6 +5646,7 @@ export class TypeChecker {
         let l = this.stripType(ltype);
         let taints: Array<Taint> = null;
         let pointerMode : "no" | "unique" | "strong" | "reference" | "weak" = "no";
+        let isConst = this.isConst(ltype);
         if (l instanceof PointerType) {
             pointerMode = l.mode;
             if (l.mode == "unique" && r instanceof PointerType && r.mode != "unique") {
@@ -5736,12 +5745,13 @@ export class TypeChecker {
                     if (!relement) {
                         throw "Implementation error";
                     }
-                    if (pointerMode == "strong" || pointerMode == "unique") {
+                    if (pointerMode == "strong" || (pointerMode == "unique" && !isConst)) {
                         scope.makeElementUnavailable(relement);
                     }
                     break;
                 case ".":
-                    if (pointerMode == "unique" || pointerMode == "strong") {
+                case "[":
+                    if (pointerMode == "unique" || (pointerMode == "strong" && !isConst)) {
                         throw new TypeError("Passing a strong or unique pointer from an object requires the take operator", rnode.loc);
                     }
                     break;
@@ -6363,7 +6373,7 @@ export class TypeChecker {
             if (boxes) {
                 newe = this.makeBox(newe, boxes, loc) as ArrayType | RestrictedType;
             } else {
-                newe = this.makeBox(newe, [new VariableBox()], loc) as ArrayType | RestrictedType;
+                newe = this.makeBox(newe, [defaultBox ? defaultBox : new VariableBox()], loc) as ArrayType | RestrictedType;
             }
             return new SliceType(newe, t.mode);
         } else if (t instanceof MapType) {
