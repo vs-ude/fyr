@@ -304,7 +304,16 @@ primitiveType
     }
 
 boxTypes
-  = b:boxType* {
+  = "::" [ \t]* {
+      let n = [];
+      n.push(new ast.Node({loc: fl(location()), op: "id", value: "$1"}));
+      n.push(new ast.Node({loc: fl(location()), op: "id", value: "$2"}));
+      return new ast.Node({loc: fl(location()), op: "boxType", rhs: null, parameters: n});
+  }
+  / ":" [ \t]* {
+      return new ast.Node({loc: fl(location()), op: "boxType", rhs: null, parameters: []});
+  }
+  / b:boxType* {
       if (b && b.length > 0) {
           return new ast.Node({loc: fl(location()), op: "boxType", rhs: null, parameters: b});
       }
@@ -315,12 +324,6 @@ boxType
   = i:identifier [ \t]* ":" [ \t]* {      
       return i;
     }
-  / "::" [ \t]* {
-      return new ast.Node({loc: fl(location()), op: "id", value: "::"});
-  }
-  / ":" [ \t]* {
-      return new ast.Node({loc: fl(location()), op: "id", value: ":"});
-  }
 
 memberObjectType
   = "const" [ \t]+ t:memberObjectType3 {
