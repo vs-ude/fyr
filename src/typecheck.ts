@@ -806,9 +806,7 @@ export class PointerType extends Type {
         }
         let op;
         if (RestrictedType.strip(this.elementType) instanceof MapType) {
-            if (this.mode == "weak") {
-                op = "weak ";
-            } else if (this.mode == "reference") {
+            if (this.mode == "reference") {
                 op = "&";
             } else if (this.mode == "unique") {
                 op = "^";
@@ -818,9 +816,7 @@ export class PointerType extends Type {
                 throw "Implementation error";
             }
         } else {
-            if (this.mode == "weak") {
-                op = "weak *";
-            } else if (this.mode == "reference") {
+            if (this.mode == "reference") {
                 op = "&";
             } else if (this.mode == "unique") {
                 op = "^";
@@ -1181,7 +1177,7 @@ export class RestrictedType extends Type {
     public boxes?: Array<Box>;
 }
 
-export type PointerMode = "unique" | "strong" | "weak" | "reference";
+export type PointerMode = "unique" | "strong" | "reference";
 
 export class ArrayType extends Type {
     constructor(elementType: Type, size: number) {
@@ -1243,8 +1239,6 @@ export class SliceType extends Type {
         let mode = "";
         if (this.mode == "reference") {
             mode = "&";
-        } else if (this.mode == "weak") {
-            mode = "weak ";
         }
         return mode + "[]" + this.array().elementType.toString();
     }
@@ -1541,9 +1535,6 @@ export class TypeChecker {
             }
             // TODO: Map
             return this.makeConst(c, tnode.loc)
-        } else if (tnode.op == "weakType") {
-            let c = this.createType(tnode.rhs, scope, mode);
-            return this.makeWeak(c, tnode.loc);
         } else if (tnode.op == "boxType") {
             if (mode == "variable") {
                 throw new TypeError("'box' must not be used in variable type definitions", tnode.loc);
@@ -4406,7 +4397,6 @@ export class TypeChecker {
         } else if (to instanceof PointerType && from instanceof PointerType) {
             if (to.mode == from.mode || (mode == "assign" &&
                 (to.mode == "reference" ||
-                (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
                 (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
                 (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))))) {
                 if (this.checkIsAssignableType(to.elementType, from.elementType, loc, mode == "assign" ? "pointer" : "equal", false, toRestrictions, fromRestrictions, templateParams)) {
@@ -4441,7 +4431,6 @@ export class TypeChecker {
         } else if (to instanceof SliceType && from instanceof SliceType) {
             if (to.mode == from.mode || (mode == "assign" && 
                 (to.mode == "reference" ||
-                (to.mode == "weak" && (from.mode == "weak" || from.mode == "strong" || from.mode == "unique")) ||
                 (to.mode == "strong" && (from.mode == "strong" || from.mode == "unique")) ||
                 (to.mode == "unique" && (from.mode == "strong" || from.mode == "unique"))))) {
                 if (this.checkIsAssignableType(to.arrayType, from.arrayType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
@@ -5094,19 +5083,6 @@ export class TypeChecker {
         return t instanceof StructType || t instanceof TupleType || t instanceof ArrayType;
     }
 
-    public isWeak(t: Type): boolean {
-        if (t instanceof RestrictedType) {
-            t = t.elementType;
-        }
-        if (t instanceof PointerType && t.mode == "weak") {
-            return true;
-        }
-        if (t instanceof SliceType && t.mode == "weak") {
-            return true;
-        }
-        return false;
-    }
-
     public isStrong(t: Type): boolean {
         if (t instanceof RestrictedType) {
             t = t.elementType;
@@ -5275,18 +5251,6 @@ export class TypeChecker {
             return new RestrictedType(t.elementType, {isConst: t.isConst, boxes: boxes});
         }
         return new RestrictedType(t, {isConst: false, boxes: boxes});
-    }
-
-    public makeWeak(t: Type, loc: Location): Type {
-        if (!this.isSafePointer(t) && !this.isSlice(t)) {
-            throw new TypeError("The keyword 'weak' can only be used on pointers, interfaces and slices", loc);
-        }
-        let p = RestrictedType.strip(t) as PointerType | SliceType;
-        if (p.mode != "strong") {
-            throw new TypeError("The keyword 'weak' must not be used together with '&' or '^", loc);
-        }
-        p.mode = "weak";
-        return t;
     }
 
     public getBoxes(t: Type): Array<Box> | null {
@@ -5630,7 +5594,7 @@ export class TypeChecker {
         let r = this.stripType(rnode.type);
         let l = this.stripType(ltype);
         let taints: Array<Taint> = null;
-        let pointerMode : "no" | "unique" | "strong" | "reference" | "weak" = "no";
+        let pointerMode : "no" | "unique" | "strong" | "reference" = "no";
         let isConst = this.isConst(ltype);
         if (l instanceof PointerType) {
             pointerMode = l.mode;

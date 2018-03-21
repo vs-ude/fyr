@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "let" || n == "map" || n == "take" || n == "weak" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "let" || n == "map" || n == "take" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -280,9 +280,6 @@ primitiveType
     }
   / "const" [ \t]+ t:primitiveType {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
-    }
-  / "weak" [ \t]+ t:primitiveType {
-        return new ast.Node({loc: fl(location()), op: "weakType", rhs: t})
     }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});

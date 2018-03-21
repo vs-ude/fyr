@@ -13,10 +13,10 @@ type PointTuple struct {
 }
 
 type PointRef struct {
-    p weak *Point
-    p2 weak *Point
+    p &Point
+    p2 &Point
     p3 *Point
-    r weak *PointRef
+    r &PointRef
     u ^Point
 }
 
@@ -75,7 +75,7 @@ func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Poi
     // Works, because p was reassigned a pointer to something that is not extern
     var up4 ^Point = p
 
-    var r4 weak *Point = up4
+    var r4 &Point = up4
 
     var pt *PointTuple = {a: up1, b: up4}
     var upt ^PointTuple = pt
