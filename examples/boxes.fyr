@@ -132,14 +132,14 @@ func merge(w1 *Widget, w2 *Widget) {
 //    w1 = w2
 }
 
-func merge2(w1 box *Widget, w2 box *Widget) {
+func merge2(w1 *:Widget, w2 *:Widget) {
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
 //    w1.sibling = w2
     // Must err, because w1 and w2 belong to different boxes
 //    w1 = w2
 }
 
-func merge3(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
+func merge3(w1 *a:Widget, w2 *Widget) (r1 *a:Widget, r2 *Widget) {
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
 //    w1.sibling = w2
     // Must err, because w1 and w2 belong to different boxes that cannot be joined
@@ -152,13 +152,13 @@ func merge3(w1 box(a) *Widget, w2 *Widget) (r1 box(a) *Widget, r2 *Widget) {
     return
 }
 
-func merge4(w1 box(a) *Widget, w2 box(b) *Widget) (r1 box(a) *Widget, r2 box(b) *Widget) {
+func merge4(w1 *a:Widget, w2 *b:Widget) (r1 *a:Widget, r2 *b:Widget) {
     // Must err, because of different boxes
 //    return w2, w1
     return w1, w2
 }
 
-func test5(w box(a) *Widget) box(a) *Widget {
+func test5(w *a:Widget) *a:Widget {
     return w
 }
 
@@ -210,7 +210,7 @@ func sliceTest(p []int, p1 *Point, p2 *Point, p3 *Point, p4 *Point, ps1 []*Point
 //    s13[0] = &lp
 }
 
-func boxesTest(arr []box(a,b) *Point, s box(a) *SliceStruct) {
+func boxesTest(arr []*a:b:Point, s *a:SliceStruct) {
     // Must err, because box(a,b) cannot be joined with box(a)
 //    s.p = take(arr[0])
     var arr2 []*Point = arr
@@ -218,7 +218,7 @@ func boxesTest(arr []box(a,b) *Point, s box(a) *SliceStruct) {
 //    s.p = take(arr2[0])
 }
 
-func boxesTest2(arr []boxes *Point, s *SliceStruct) {
+func boxesTest2(arr []*::Point, s *SliceStruct) {
     // Must err, because box(a,b) cannot be joined with box(a)
 //    s.p = take(arr[0])
     var arr2 []*Point = arr
@@ -226,7 +226,7 @@ func boxesTest2(arr []boxes *Point, s *SliceStruct) {
 //    s.p = take(arr2[0])
 }
 
-func links(l1 *Link, l2 *Link, l3 box(a) *Link, l4 box(a) *Link) {
+func links(l1 *Link, l2 *Link, l3 *a:Link, l4 *a:Link) {
     // Must err, because both links are from different boxes
 //    l1.next = l2
     l3.next = l4

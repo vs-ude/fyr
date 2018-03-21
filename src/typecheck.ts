@@ -1550,7 +1550,7 @@ export class TypeChecker {
             }
             let c = this.createType(tnode.rhs, scope, mode);
             if (this.isUnique(c)) {
-                throw new TypeError("'box' must not be used together with the '^' operator", tnode.loc);
+                throw "Implementation error";
             }
             // A named box?
             let boxes: Array<Box>;
@@ -1579,17 +1579,7 @@ export class TypeChecker {
                 boxes = [b];
                 console.log("boxes", tnode.loc.start.line);
             }
-            if (this.isSafePointer(c)) {
-                let ptr = RestrictedType.strip(c) as PointerType;
-                ptr.elementType = this.makeBox(ptr.elementType, boxes, tnode.loc);
-                return c;
-            } else if (this.isSlice(c)) {
-                let ptr = RestrictedType.strip(c) as SliceType;
-                ptr.arrayType = this.makeBox(ptr.arrayType, boxes, tnode.loc);
-                return c;
-            }
-            throw new TypeError("The keyword 'box' can only be used on pointer-like types (excluding unsafe pointers)", tnode.loc);
-            // TODO: Map
+            return this.makeBox(c, boxes, tnode.loc);
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
             return new PointerType(t, "strong");
@@ -1602,9 +1592,9 @@ export class TypeChecker {
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
             return new UnsafePointerType(t);
-        } else if (tnode.op == "sliceType") {
+        } else if (tnode.op == "sliceType") {            
             let t = this.createType(tnode.rhs, scope, mode);
-            let s = new SliceType(new ArrayType(t, -1), "strong");
+            let s = new SliceType(t as ArrayType | RestrictedType, "strong");
             if (tnode.value == "^[]") {
                 s.mode = "unique";
             } else if (tnode.value == "&[]") {
@@ -1620,6 +1610,9 @@ export class TypeChecker {
             let t = new TupleType(types);
             return t;
         } else if (tnode.op == "arrayType") {
+            if (tnode.lhs === null) {
+                return new ArrayType(this.createType(tnode.rhs, scope, mode), -1);                
+            }
             this.checkExpression(tnode.lhs, scope);
             if (tnode.lhs.op != "int") {
                 throw new TypeError("Expected a constant number for array size", tnode.lhs.loc);
@@ -1664,13 +1657,7 @@ export class TypeChecker {
             if (!this.isIntNumber(k) && !this.isString(k) && !this.isSafePointer(k) && !this.isUnsafePointer(k)) {
                 throw new TypeError("Map keys must be integers, strings, or pointers", tnode.loc);
             }
-            let p = new PointerType(new MapType(k, v), "strong");
-            if (tnode.value == "&map") {
-                p.mode = "reference";
-            } else if (tnode.value == "^map") {
-                p.mode = "unique";
-            }
-            return p;
+            return new MapType(k, v);
         } else if (tnode.op == "genericType") {
             let baset = scope.resolveType(tnode.lhs.value);
             if (!baset) {
