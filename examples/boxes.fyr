@@ -24,9 +24,10 @@ type Link struct {
     next *Link
     value *Point
     parallel ^Link
+    pos Point
 }
 
-func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Point, param6 *Point) {
+func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Point, param6 *Point, pl1 *Link) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -101,28 +102,47 @@ func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Poi
     var link1 *Link = {}
     var link2 *Link = {value: param4}
     link1.next = link2
+    // Must err, because link2 is no longer available
+//    link2
     // Must err, because link2 is tainted by param which is extern
 //    var extlink ^Link = link1
-    // Must err because take is missing
-//    var extlink0 ^Link = link4.next
-    // Must err, because link2 is tainted by param which is extern
+    // Must err, because link1 is tainted by param which is extern
+//    var extlink0 ^Link = link1.next
+    // Must err, because link1 is tainted by param which is extern
 //    var extlink1 ^Link = take(link1.next)
-    // Must err, because link2 is tainted by param which is extern
+    // Must err, because link1 is tainted by param which is extern
 //    var extlink1 ^Link = take(link1.next.next)
     // Must err, because link2 is tainted by param which is extern
-//    var extlink2 ^Link = link2
+//    var extlink2 ^Link = link1
     var link3 *Link = take(link1.next)
     // Must err, because link2 is tainted by param which is extern
 //    var extlink3 ^Link = link3
     var link4 *Link = {value: param5}
     // Must err, because link4 cannot join param5 and param6
 //    link4.next.next.next = {value: param6}
-    //!! Must err, because param6 cannot be isolated
+    link4.parallel = {}
+    // Must err, because pl1 cannot be isolated
+//    link4.parallel = pl1
+    //!! Must err, because param6 cannot be isolated    
     link4.parallel.next = {value: param6}
+    var link6 *Link = {}
+    var extlink3 ^Link = take(link6.next)
+    //!! Must err, because link6 is no longer available
+    link6
+    var r1 &Link = link4.next
+    //!! Must err, because accessing a pointer inside of an isolate would violate the isolation
+    var r3 &Link = link4.parallel.next
+    //!! Must err, because link5 could still be pointed to by objects in the 'parallel' isolation
+    var link5 *Link = take(link4.parallel.next)
+    // Works, because the result of the expression is being copied and therefore the isolation is ok after the expression evaluated.
+    var p5 Point = link4.parallel.pos
+    //!! Must err, because taking the address of a value inside of an isolate would violate the isolation
+    var r5 &Point = &link4.parallel.pos
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
     //!! Must err, because it violates the isolation between pr3 and pr4
     pr3.r = pr4
+    pr4.r
 }
 
 func merge(w1 *Widget, w2 *Widget) {
