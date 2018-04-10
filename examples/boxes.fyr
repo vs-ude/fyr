@@ -18,6 +18,7 @@ type PointRef struct {
     p3 *Point
     r &PointRef
     u ^Point
+    pos Point
 }
 
 type Link struct {
@@ -130,19 +131,22 @@ func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Poi
     //!! Must err, because link6 is no longer available
     link6
     var r1 &Link = link4.next
-    //!! Must err, because accessing a pointer inside of an isolate would violate the isolation
-    var r3 &Link = link4.parallel.next
-    //!! Must err, because link5 could still be pointed to by objects in the 'parallel' isolation
-    var link5 *Link = take(link4.parallel.next)
+    // Must err, because accessing a pointer inside of an isolate would violate the isolation
+//    var r3 &Link = link4.parallel.next
+    // Must err, because link5 could still be pointed to by objects in the 'parallel' isolation
+//    var link5 *Link = take(link4.parallel.next)
     // Works, because the result of the expression is being copied and therefore the isolation is ok after the expression evaluated.
     var p5 Point = link4.parallel.pos
-    //!! Must err, because taking the address of a value inside of an isolate would violate the isolation
-    var r5 &Point = &link4.parallel.pos
+    // Must err, because taking the address of a value inside of an isolate would violate the isolation
+//    var r5 &Point = &link4.parallel.pos
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
     //!! Must err, because it violates the isolation between pr3 and pr4
     pr3.r = pr4
-    pr4.r
+    // Must err, because accessing a pointer inside an isolate (pr4) violates this isolation
+//    pr4.r
+    // Works, because this expression returns a value and not a pointer
+    pr4.pos
 }
 
 func merge(w1 *Widget, w2 *Widget) {

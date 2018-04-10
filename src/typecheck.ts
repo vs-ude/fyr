@@ -1460,6 +1460,15 @@ export class PackageType extends Type {
 
 export type ScopeExit = "return" | "outerScope" | "fallthrough";
 
+enum BoxCheckFlags {
+    None = 0,
+    AllowIsolates = 1,
+    ForbidIsolates = 2,
+    IsolatesMask = 3,
+    NotIsolateMask = 255 - ForbidIsolates - AllowIsolates,
+    NoSideEffects = 4,    
+}
+
 export class TypeChecker {
     constructor() {
         this.t_bool = new BasicType("bool");
@@ -5456,11 +5465,11 @@ export class TypeChecker {
                 if (snode.lhs) {
                     if (f.namedReturnTypes) {
                         for(let i = 0; i < f.namedReturnTypes.length; i++) {
-                            this.checkBoxesInExpression(snode.lhs.parameters[i], scope);
+                            this.checkBoxesInExpression(snode.lhs.parameters[i], scope, BoxCheckFlags.None);
                             this.checkBoxesInSingleAssignment(null, f.namedReturnTypes[i].type, snode.lhs.parameters[i], scope, snode.loc, "no");
                         }
                     } else {
-                        this.checkBoxesInExpression(snode.lhs, scope);
+                        this.checkBoxesInExpression(snode.lhs, scope, BoxCheckFlags.None);
                         this.checkBoxesInSingleAssignment(null, f.type.returnType, snode.lhs, scope, snode.loc, "no");
                     }
                 }
@@ -5533,14 +5542,14 @@ export class TypeChecker {
             }
             */
             default:
-                this.checkBoxesInExpression(snode, scope);
+                this.checkBoxesInExpression(snode, scope, BoxCheckFlags.None);
         }
 
         return null;
     }
 
     private checkBoxesInAssignment(snode: Node, scope: Scope) {
-        this.checkBoxesInExpression(snode.rhs, scope);
+        this.checkBoxesInExpression(snode.rhs, scope, BoxCheckFlags.None);
         if (snode.lhs.op == "id") {
             let element = scope.resolveElement(snode.lhs.value);
             if (!element) {
@@ -5563,7 +5572,7 @@ export class TypeChecker {
                 throw "TODO: RHS used multiple times";
             }
         } else if (snode.lhs.op == ".") {
-            this.checkBoxesInExpression(snode.lhs, scope);
+            this.checkBoxesInExpression(snode.lhs, scope, BoxCheckFlags.AllowIsolates);
             if (this.isUnsafePointer(snode.lhs.lhs.type)) {
                 return;
             }
@@ -5573,7 +5582,7 @@ export class TypeChecker {
             }
             this.checkBoxesInSingleAssignment(t.boxes[0], snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
         } else if (snode.lhs.op == "[") {
-            this.checkBoxesInExpression(snode.lhs, scope);
+            this.checkBoxesInExpression(snode.lhs, scope, BoxCheckFlags.AllowIsolates);
             let t = snode.lhs.lhs.type;
             if (this.isSlice(t)) {
                 t = this.sliceArrayTypeWithBoxes(t, snode.lhs.loc);
@@ -5912,8 +5921,15 @@ export class TypeChecker {
         }
         throw "Implementation error";
     }
-
-    private checkBoxesInExpression(enode: Node, scope: Scope) {
+    
+    private checkBoxesInExpression(enode: Node, scope: Scope, flags: BoxCheckFlags) {
+        if ((flags & BoxCheckFlags.IsolatesMask) == 0) {
+            if (this.checkIsPointer(enode, false)) {
+                flags |= BoxCheckFlags.ForbidIsolates;
+            } else {
+                flags |= BoxCheckFlags.AllowIsolates;
+            }
+        }
         switch (enode.op) {
             case "null":
                 break;
@@ -5937,22 +5953,22 @@ export class TypeChecker {
                 break;                
             case "++":
             case "--":
-                this.checkBoxesInExpression(enode.lhs, scope);
+                this.checkBoxesInExpression(enode.lhs, scope, flags);
                 break;
             case "unary-":
             case "unary+":
             case "unary^":
             case "unary!":
-                this.checkBoxesInExpression(enode.rhs, scope);
+                this.checkBoxesInExpression(enode.rhs, scope, flags);
                 break;                
             case "unary*":
             {
-                this.checkBoxesInExpression(enode.rhs, scope);
+                this.checkBoxesInExpression(enode.rhs, scope, flags);
                 break;
             }
             case "unary&":
             {
-                this.checkBoxesInExpression(enode.rhs, scope);
+                this.checkBoxesInExpression(enode.rhs, scope, flags);
                 break;
             }            
             case "+":                                             
@@ -5974,8 +5990,8 @@ export class TypeChecker {
             case ">>":
             case "==":
             case "!=":
-                this.checkBoxesInExpression(enode.lhs, scope);
-                this.checkBoxesInExpression(enode.rhs, scope);
+                this.checkBoxesInExpression(enode.lhs, scope, flags);
+                this.checkBoxesInExpression(enode.rhs, scope, flags);
                 break;                
             case ".":
             {
@@ -5983,24 +5999,33 @@ export class TypeChecker {
                 if (type instanceof PackageType) {
                     break;
                 }
-                this.checkBoxesInExpression(enode.lhs, scope);
+                this.checkBoxesInExpression(enode.lhs, scope, flags);
+                if (this.isUnique(enode.lhs.type) && (flags & BoxCheckFlags.ForbidIsolates) != 0) {
+                    throw new TypeError("Accessing a member in an isolate is not allowed", enode.loc);
+                }
                 break;
             }            
             case ":":
             {
-                this.checkBoxesInExpression(enode.lhs, scope);
+                this.checkBoxesInExpression(enode.lhs, scope, flags);
                 if (enode.parameters[0]) {
-                    this.checkBoxesInExpression(enode.parameters[0], scope);
+                    this.checkBoxesInExpression(enode.parameters[0], scope, (flags | BoxCheckFlags.NoSideEffects) & BoxCheckFlags.NotIsolateMask);
                 }
                 if (enode.parameters[1]) {
-                    this.checkBoxesInExpression(enode.parameters[1], scope);
+                    this.checkBoxesInExpression(enode.parameters[1], scope, (flags | BoxCheckFlags.NoSideEffects) & BoxCheckFlags.NotIsolateMask);
+                }
+                if (this.isUnique(enode.lhs.type) && (flags & BoxCheckFlags.ForbidIsolates) != 0) {
+                    throw new TypeError("Accessing a member in an isolate is not allowed", enode.loc);
                 }
                 break;
             }            
             case "[":
             {
-                this.checkBoxesInExpression(enode.lhs, scope);
-                this.checkBoxesInExpression(enode.rhs, scope);
+                this.checkBoxesInExpression(enode.lhs, scope, flags);
+                this.checkBoxesInExpression(enode.rhs, scope, (flags | BoxCheckFlags.NoSideEffects) & BoxCheckFlags.NotIsolateMask);
+                if (this.isUnique(enode.lhs.type) && (flags & BoxCheckFlags.ForbidIsolates) != 0) {
+                    throw new TypeError("Accessing a member in an isolate is not allowed", enode.loc);
+                }
                 break;
             }
             /*
@@ -6056,7 +6081,7 @@ export class TypeChecker {
                 */
             case "tuple":
                 for(let p of enode.parameters) {
-                    this.checkBoxesInExpression(p, scope);
+                    this.checkBoxesInExpression(p, scope, flags & BoxCheckFlags.NotIsolateMask);
                 }
                 throw "TODO"
                 // break;
@@ -6075,7 +6100,7 @@ export class TypeChecker {
                 let at = this.stripType(t) as ArrayType;
                 if (enode.parameters) {
                     for(let p of enode.parameters) {
-                        this.checkBoxesInExpression(p, scope);
+                        this.checkBoxesInExpression(p, scope, flags & BoxCheckFlags.NotIsolateMask);
                         this.checkBoxesInSingleAssignment(varBox, at.elementType, p, scope, enode.loc, "no");
                     }
                 } else {
@@ -6100,7 +6125,7 @@ export class TypeChecker {
 //                    let r = scope.resolveVariableBox(varBox);
                     if (enode.parameters) {
                         for(let p of enode.parameters) {
-                            this.checkBoxesInExpression(p.lhs, scope);
+                            this.checkBoxesInExpression(p.lhs, scope, flags & BoxCheckFlags.NotIsolateMask);
                             this.checkBoxesInSingleAssignment(varBox, p.type, p.lhs, scope, enode.loc, "strong");
                         }
                     }
@@ -6178,16 +6203,19 @@ export class TypeChecker {
             */
             case "is":
             {
-                this.checkBoxesInExpression(enode.lhs, scope);
+                this.checkBoxesInExpression(enode.lhs, scope, flags);
                 break;
             }
             case "typeCast":
             {
-                this.checkBoxesInExpression(enode.rhs, scope);
+                this.checkBoxesInExpression(enode.rhs, scope, flags);
                 break;
             }            
             case "take":
-                this.checkBoxesInExpression(enode.lhs, scope);
+                if ((flags & BoxCheckFlags.NoSideEffects) != 0) {
+                    throw new TypeError("Expression with side effects is not allowed in this place", enode.loc);
+                }
+                this.checkBoxesInExpression(enode.lhs, scope, flags | BoxCheckFlags.ForbidIsolates);
                 break;
             default:
                 throw "Implementation error " + enode.op;
