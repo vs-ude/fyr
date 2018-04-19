@@ -219,10 +219,10 @@ export class Scope {
 
     public getVariableBox(element: ScopeElement): VariableBox {
         let t = element.type;
-        if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+        if (!(t instanceof RestrictedType) || !(t.box instanceof VariableBox)) {
             throw "Implementation error";
         }
-        return t.boxes[0] as VariableBox;
+        return t.box as VariableBox;
     }
 
     public resolveVariableBox(varBox: VariableBox): ResolvedVariableBox | null {
@@ -840,6 +840,9 @@ export class PointerType extends Type {
     }
 
     public elementType: Type;
+    /**
+     * Determines whether the pointer is an owning pointer, a reference, or a unique pointer.
+     */
     public mode: PointerMode;
 }
 
@@ -890,7 +893,7 @@ export class MapType extends Type {
 
 export class Box {
     constructor(isExtern: boolean, name?: string) {
-        this._isExtern = isExtern;
+        this.isExtern = isExtern;
         if (name) {
             this.name = name;
         } else {
@@ -904,12 +907,12 @@ export class Box {
      * All other boxes are owned (directly or indirectly) by variables on the
      * current function's stack frame.
      */
-    private _isExtern: boolean;
+    public isExtern: boolean;
     /**
-     * joinedBox pointing to 'this' means that the group has not yet joined any other box.
-     * So it can either join another box or stay a box by itself.
+     * If set, isExtern is true, too.
      */
-//    public joinedBox: Box;
+    public isPossiblyStack: boolean;
+
     public name: string;
     /**
      * scope is not null for variables which are located on the stack.
@@ -917,9 +920,6 @@ export class Box {
 //    scope: Scope | null;
 //    private _isFrozen: boolean;
 
-    public isExtern(): boolean {
-        return this._isExtern;
-    }
 
     public canonical(): Box {
         let t: Box = this;
@@ -933,6 +933,7 @@ export class Box {
     }
 
     public preJoin(loc: Location, doThrow: boolean): Box {
+        // TODO: Fehlt hier ein ! ???
         if (this._canonical) {
             throw "Implementation error";
         }
@@ -944,11 +945,13 @@ export class Box {
         b1 = b1.preJoin(loc, doThrow);
         let b2 = box.canonical();
         b2 = b2.preJoin(loc, doThrow);
+        // No join necessary?
         if (b1 == b2) {
             return b1;
         }
-        if (b2.isExtern()) {
-            if (b1.isExtern()) {
+        // Determine the new canonical box
+        if (b2.isExtern) {
+            if (b1.isExtern) {
                 if (doThrow) {
                     throw new TypeError("Two boxes cannot be merged", loc);
                 }
@@ -1043,30 +1046,6 @@ export class ResolvedVariableBox extends Box {
         return box;
     }
 
-    /*
-    public isExtern(): boolean {
-        if (super.isExtern()) {
-            return true;        
-        }
-        if (ResolvedVariableBox.callDepth == 0) {
-            ResolvedVariableBox.cycleCounter++;
-        } else {
-            if (this.lastVisitedInCycle === ResolvedVariableBox.cycleCounter) {
-                return false;
-            }
-        }
-        this.lastVisitedInCycle = ResolvedVariableBox.cycleCounter;
-        ResolvedVariableBox.callDepth++;
-        for(let t of this.taints) {
-            if (t.box.isExtern()) {
-                return true;
-            }
-        }
-        ResolvedVariableBox.callDepth--;
-        return false;
-    }    
-    */
-
     public addTaints(taints: Array<Taint> | Taint) {
         if (taints instanceof Taint) {
             this.taints.push(taints);
@@ -1093,15 +1072,11 @@ export class ResolvedVariableBox extends Box {
     
     public taints: Array<Taint> = [];
     public isAvailable: boolean = true;
-
-//    private lastVisitedInCycle: number;
-//    private static cycleCounter = 0;
-//    private static callDepth = 0;
 }
 
 export type Restrictions = {
     isConst?: boolean;
-    boxes?: Array<Box>;
+    box?: Box;
 }
 
 export function combineRestrictions(r1: Restrictions, r2: Restrictions): Restrictions {
@@ -1113,7 +1088,7 @@ export function combineRestrictions(r1: Restrictions, r2: Restrictions): Restric
     }
     return {
         isConst: r1.isConst || r2.isConst,
-        boxes: r1.boxes ? r1.boxes : r2.boxes
+        box: r1.box ? r1.box : r2.box
     };
 }
 
@@ -1124,10 +1099,10 @@ export class RestrictedType extends Type {
         this.elementType = elementType;
         if (r) {
             this.isConst = r.isConst;
-            this.boxes = r.boxes;
+            this.box = r.box;
         } else {
             this.isConst = false;
-            this.boxes = null;
+            this.box = null;
         }
     }
 
@@ -1174,7 +1149,7 @@ export class RestrictedType extends Type {
     
     public elementType: Type;
     public isConst?: boolean;
-    public boxes?: Array<Box>;
+    public box?: Box;
 }
 
 export type PointerMode = "unique" | "strong" | "reference";
@@ -1487,7 +1462,7 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         this.t_any = new BasicType("any");
-        this.t_string = new SliceType(new RestrictedType(new ArrayType(this.t_byte, -1), {isConst: true, boxes: [new Box(true)]}), "unique");
+        this.t_string = new SliceType(new RestrictedType(new ArrayType(this.t_byte, -1), {isConst: true, box: new Box(true)}), "unique");
         this.t_string.name = "string";        
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
@@ -1497,7 +1472,7 @@ export class TypeChecker {
         let toError = new FunctionType();
         toError.name = "toError";
         toError.returnType = this.t_string;
-        toError.objectType = new RestrictedType(this.t_error, {isConst: true, boxes: null});
+        toError.objectType = new RestrictedType(this.t_error, {isConst: true, box: null});
         this.t_error.methods.set("toError", toError);
         this.ifaces.push(this.t_error);
 
@@ -1553,33 +1528,20 @@ export class TypeChecker {
                 throw "Implementation error";
             }
             // A named box?
-            let boxes: Array<Box>;
-            if (tnode.parameters && tnode.parameters.length > 0) {
+            let box: Box;
+            if (tnode.name) {
                 if (mode != "parameter") {
                     throw new TypeError("Named boxes must not be used in this type definition", tnode.loc);
                 }
-                boxes = [];
-                for(let b of tnode.parameters) {
-                    let box = scope.lookupNamedBox(b.value);
-                    if (!box) {
-                        box = new Box(true, b.value);
-                        scope.registerNamedBox(box.name, box, tnode.loc);
-                    }
-                    boxes.push(box);
+                box = scope.lookupNamedBox(tnode.name.value);
+                if (!box) {
+                    box = new Box(true, tnode.name.value);
+                    scope.registerNamedBox(box.name, box, tnode.loc);
                 }
             } else {
-                let box = new Box(true);
-                boxes = [box];
+                box = new Box(true);
             }
-            if (boxes.length > 1) {
-                let b = new ResolvedVariableBox();
-                for(let c of boxes) {
-                    b.addTaints(new Taint(c, tnode.loc));
-                }
-                boxes = [b];
-                console.log("boxes", tnode.loc.start.line);
-            }
-            return this.makeBox(c, boxes, tnode.loc);
+            return this.makeBox(c, box, tnode.loc);
         } else if (tnode.op == "pointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
             return new PointerType(t, "strong");
@@ -2650,7 +2612,7 @@ export class TypeChecker {
                     if (!v.type) {
                         v.type = new TupleType(rtypeStripped.types.slice(i));
                         if (isConst) {
-                            v.type = new RestrictedType(v.type, {isConst: true, boxes: null});
+                            v.type = new RestrictedType(v.type, {isConst: true, box: null});
                         }
                     } else {
                         let lt = RestrictedType.strip(v.type);
@@ -3612,12 +3574,12 @@ export class TypeChecker {
                 }
                 let objectType = type;
                 let isConst = this.isConst(enode.lhs.type);
-                let boxes = this.getBoxes(enode.lhs.type);
+                let box = this.getBox(enode.lhs.type);
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
                     isConst = this.isConst(type.elementType);
-                    let boxes2 = this.getBoxes(type.elementType);
-                    if (boxes2) {
-                        boxes = boxes2;
+                    let box2 = this.getBox(type.elementType);
+                    if (box2) {
+                        box = box2;
                     }
                     objectType = this.stripType(type.elementType);
                 } else if (type instanceof StructType) {
@@ -3630,11 +3592,11 @@ export class TypeChecker {
                     let field = objectType.field(name);
                     if (field) {
                         enode.type = field.type;
-                        if (boxes && boxes.length != 0) {
-                            enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                        if (box) {
+                            enode.type = this.makeBox(enode.type, box, enode.loc);
                         }
                         if (this.isUnique(enode.type)) {
-                            enode.type = this.applyBox(enode.type, [new Box(false)], enode.loc);
+                            enode.type = this.applyBox(enode.type, new Box(false), enode.loc);
                         }
                         if (isConst) {
                             enode.type = this.applyConst(enode.type, enode.loc);
@@ -3709,7 +3671,7 @@ export class TypeChecker {
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let isConst = this.isConst(enode.lhs.type);
-                let boxes = this.getBoxes(enode.lhs.type);
+                let box = this.getBox(enode.lhs.type);
                 let t: Type = this.stripType(enode.lhs.type);
                 if (t instanceof TupleType) {
                     this.checkIsIntNumber(enode.rhs);
@@ -3725,8 +3687,8 @@ export class TypeChecker {
                         index = parseInt(enode.rhs.value);
                     }
                     enode.type = this.checkIsIndexable(enode.lhs, index);
-                    if (boxes && boxes.length != 0) {
-                        enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                    if (box) {
+                        enode.type = this.makeBox(enode.type, box, enode.loc);
                     }
                 } else if (this.isMap(t)) {
                     isConst = isConst || this.isConst((t as PointerType).elementType);
@@ -3736,18 +3698,22 @@ export class TypeChecker {
                         this.checkIsAssignableType(this.mapKeyType(t), enode.rhs.type, enode.rhs.loc, "assign", true);
                     }
                     enode.type = this.mapValueType(t);
-                    if (boxes && boxes.length != 0) {
-                        enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                    if (box) {
+                        enode.type = this.makeBox(enode.type, box, enode.loc);
                     }
                 } else if (t instanceof SliceType) {
                     enode.type = t.getElementType();
                     isConst = isConst || this.isConst(t.arrayType);
-                    let boxes2 = this.getBoxes(t.arrayType);
-                    if (boxes2) {
-                        boxes = boxes2;
+                    let box2 = this.getBox(t.arrayType);
+                    if (box2) {
+                        box = box2;
                     }
-                    if (boxes && boxes.length != 0) {
-                        enode.type = this.makeBox(enode.type, boxes, enode.loc);
+                    let box3 = this.getBox(enode.type);
+                    if (box3) {
+                        box = box3;
+                    }
+                    if (box) {
+                        enode.type = this.makeBox(enode.type, box, enode.loc);
                     }
                 } else if (t instanceof UnsafePointerType) {
                     enode.type = t.elementType;
@@ -3755,7 +3721,7 @@ export class TypeChecker {
                     throw new TypeError("[] operator is not allowed on " + enode.lhs.type.toString(), enode.loc);
                 }
                 if (this.isUnique(enode.type)) {
-                    enode.type = this.applyBox(enode.type, [new Box(false)], enode.loc);
+                    enode.type = this.applyBox(enode.type, new Box(false), enode.loc);
                 }
                 if (isConst) {
                     enode.type = this.applyConst(enode.type, enode.loc);
@@ -4224,7 +4190,7 @@ export class TypeChecker {
                             }
                         }
                     }
-                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
+                    node.type = this.makeBox(t, new VariableBox(), node.loc);
                     return true;
                 }
                 if (!doThrow) {
@@ -4242,7 +4208,7 @@ export class TypeChecker {
                             return false;
                         }
                     }
-                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
+                    node.type = this.makeBox(t, new VariableBox(), node.loc);
                     return true;                    
                 }
                 if (!doThrow) {
@@ -4260,11 +4226,11 @@ export class TypeChecker {
                             pnode.type = t.keyType;
                         }
                     }
-                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
+                    node.type = this.makeBox(t, new VariableBox(), node.loc);
                     return true;
                 } else if (t instanceof MapType && (!node.parameters || node.parameters.length == 0)) {
                     // An empty map, e.g. "{}"
-                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
+                    node.type = this.makeBox(t, new VariableBox(), node.loc);
                     return true;
                 } else if (t instanceof StructType) {
                     // A struct initialization
@@ -4280,7 +4246,7 @@ export class TypeChecker {
                             }
                         }
                     }
-                    node.type = this.makeBox(t, [new VariableBox()], node.loc);
+                    node.type = this.makeBox(t, new VariableBox(), node.loc);
                     return true;
                 }
                 if (!doThrow) {
@@ -4314,10 +4280,10 @@ export class TypeChecker {
     // Checks whether the type 'from' can be assigned to the type 'to'.
     public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equal" | "pointer", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
-            toRestrictions = {isConst: false, boxes: null}
+            toRestrictions = {isConst: false, box: null}
         }
         if (fromRestrictions == null) {
-            fromRestrictions = {isConst: false, boxes: null}
+            fromRestrictions = {isConst: false, box: null}
         }
         
         // Determine const
@@ -4984,7 +4950,7 @@ export class TypeChecker {
     
     public isStringLike(t: Type): boolean {
         // A string is a frozen slice of bytes
-        return t instanceof RestrictedType && t.boxes.length > 0 && t.isConst && t.elementType instanceof SliceType && t.elementType.mode == "strong" && t.elementType.getElementType() == this.t_byte;
+        return t instanceof RestrictedType && t.box && t.isConst && t.elementType instanceof SliceType && t.elementType.mode == "strong" && t.elementType.getElementType() == this.t_byte;
     }
 
     public isOrType(t: Type): boolean {
@@ -5217,22 +5183,22 @@ export class TypeChecker {
             if (t.isConst) {
                 return t;
             }
-            return new RestrictedType(t.elementType, {isConst: true, boxes: t.boxes});
+            return new RestrictedType(t.elementType, {isConst: true, box: t.box});
         }
 //        if (this.isPrimitive(t)) {
 //            return t;
 //        }
-        return new RestrictedType(t, {isConst: true, boxes: null});
+        return new RestrictedType(t, {isConst: true, box: null});
     }
 
-    public applyBox(t: Type, boxes: Array<Box>, loc: Location): Type {
+    public applyBox(t: Type, box: Box, loc: Location): Type {
         if (this.isSafePointer(t)) {                                    
             let r: RestrictedType;
             if (t instanceof RestrictedType) {
                 r = t;
                 t = t.elementType;
             }
-            t = new PointerType(this.makeBox((t as PointerType).elementType, boxes, loc), (t as PointerType).mode);
+            t = new PointerType(this.makeBox((t as PointerType).elementType, box, loc), (t as PointerType).mode);
             if (r) {
                 t =  new RestrictedType(t, r);
             }
@@ -5243,7 +5209,7 @@ export class TypeChecker {
                 r = t;
                 t = t.elementType;
             }
-            t = new SliceType(this.makeBox((t as SliceType).arrayType, boxes, loc) as ArrayType | RestrictedType, (t as SliceType).mode);
+            t = new SliceType(this.makeBox((t as SliceType).arrayType, box, loc) as ArrayType | RestrictedType, (t as SliceType).mode);
             if (r) {
                 t =  new RestrictedType(t, r);
             }
@@ -5252,19 +5218,19 @@ export class TypeChecker {
         throw "Implementation error";
     }
 
-    public makeBox(t: Type, boxes: Array<Box>, loc: Location): RestrictedType {
+    public makeBox(t: Type, box: Box, loc: Location): RestrictedType {
         if (t instanceof RestrictedType) {
-            if (t.boxes) {
+            if (t.box) {
                 throw "Implementation error";
             }
-            return new RestrictedType(t.elementType, {isConst: t.isConst, boxes: boxes});
+            return new RestrictedType(t.elementType, {isConst: t.isConst, box: box});
         }
-        return new RestrictedType(t, {isConst: false, boxes: boxes});
+        return new RestrictedType(t, {isConst: false, box: box});
     }
 
-    public getBoxes(t: Type): Array<Box> | null {
+    public getBox(t: Type): Box | null {
         if (t instanceof RestrictedType) {
-            return t.boxes;
+            return t.box;
         }
         return null;
     }
@@ -5278,13 +5244,13 @@ export class TypeChecker {
         if (!(t instanceof ArrayType)) {
             throw "Implementation error";
         }
-        if (t.elementType instanceof RestrictedType && t.elementType.boxes && t.elementType.boxes.length != 0) {
+        if (t.elementType instanceof RestrictedType && t.elementType.box) {
             return t.elementType;
         }
-        if (!r || !r.boxes || r.boxes.length == 0) {
+        if (!r || !r.box) {
             return t.elementType;
         }
-        return this.makeBox(t.elementType, r.boxes, loc);
+        return this.makeBox(t.elementType, r.box, loc);
     }
 
     public sliceArrayTypeWithBoxes(t: Type, loc: Location): Type {
@@ -5296,13 +5262,13 @@ export class TypeChecker {
         if (!(t instanceof SliceType)) {
             throw "Implementation error";
         }
-        if (t.arrayType instanceof RestrictedType && t.arrayType.boxes && t.arrayType.boxes.length != 0) {
+        if (t.arrayType instanceof RestrictedType && t.arrayType.box) {
             return t.arrayType;
         }
-        if (!r || !r.boxes || r.boxes.length == 0) {
+        if (!r || !r.box) {
             return t.arrayType;
         }
-        return this.makeBox(t.arrayType, r.boxes, loc);
+        return this.makeBox(t.arrayType, r.box, loc);
     }
 
     public pointerElementTypeWithBoxes(t: Type, loc: Location): Type {
@@ -5314,13 +5280,13 @@ export class TypeChecker {
         if (!(t instanceof PointerType)) {
             throw "Implementation error";
         }
-        if (t.elementType instanceof RestrictedType && t.elementType.boxes && t.elementType.boxes.length != 0) {
+        if (t.elementType instanceof RestrictedType && t.elementType.box) {
             return t.elementType;
         }
-        if (!r || !r.boxes || r.boxes.length == 0) {
+        if (!r || !r.box) {
             return t.elementType;
         }
-        return this.makeBox(t.elementType, r.boxes, loc);
+        return this.makeBox(t.elementType, r.box, loc);
     }
 
 
@@ -5577,10 +5543,10 @@ export class TypeChecker {
                 return;
             }
             let t = this.pointerElementTypeWithBoxes(snode.lhs.lhs.type, snode.lhs.loc);
-            if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || (!(t.boxes[0] instanceof VariableBox) && !(t.boxes[0] instanceof Box))) {
+            if (!(t instanceof RestrictedType) || (!(t.box instanceof VariableBox) && !(t.box instanceof Box))) {
                 throw "Implementation error";
             }
-            this.checkBoxesInSingleAssignment(t.boxes[0], snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
+            this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
         } else if (snode.lhs.op == "[") {
             this.checkBoxesInExpression(snode.lhs, scope, BoxCheckFlags.AllowIsolates);
             let t = snode.lhs.lhs.type;
@@ -5588,17 +5554,17 @@ export class TypeChecker {
                 t = this.sliceArrayTypeWithBoxes(t, snode.lhs.loc);
             }
             t = this.arrayElementTypeWithBoxes(t, snode.lhs.loc);
-            if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || (!(t.boxes[0] instanceof VariableBox) && !(t.boxes[0] instanceof Box))) {
+            if (!(t instanceof RestrictedType) || (!(t.box instanceof VariableBox) && !(t.box instanceof Box))) {
                 throw "Implementation error";
             }
-            this.checkBoxesInSingleAssignment(t.boxes[0], snode.lhs.type, snode.rhs, scope, snode.loc, "no");
+            this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, "no");
         } else {
             throw "Implementation error";
         }
     }
 
     private checkBoxesInSingleAssignment(joinLeftBox: Box, ltype: Type, rnode: Node, scope: Scope, loc: Location, joinBoxes: "no" | "unique" | "strong") {
-        this.checkAreBoxesAvailable(rnode.op == "take" ? rnode.lhs.type : rnode.type, scope, loc, true);
+        this.checkAreBoxesAvailable(rnode.type, scope, loc, true);
         
         let r = this.stripType(rnode.type);
         let l = this.stripType(ltype);
@@ -5613,14 +5579,14 @@ export class TypeChecker {
             if (joinBoxes != "no" && r instanceof PointerType) {
                 let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
                 let joinedRightBox = this.joinBoxesOfType(relementType, scope, loc, true);
-                if (joinBoxes == "unique" && joinedRightBox.isExtern()) {
+                if (joinBoxes == "unique" && joinedRightBox.isExtern) {
                     throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
                 if (!joinLeftBox) {
-                    if (!(l.elementType instanceof RestrictedType) || !l.elementType.boxes || l.elementType.boxes.length != 1) {
+                    if (!(l.elementType instanceof RestrictedType) || !l.elementType.box) {
                         throw "Implementation error: Expected a VariableBox"
                     }
-                    joinLeftBox = l.elementType.boxes[0];
+                    joinLeftBox = l.elementType.box;
                 }
                 let joinLeftBoxResolved: Box = joinLeftBox instanceof VariableBox ? scope.resolveVariableBox(joinLeftBox) : joinLeftBox;
                 if (joinLeftBoxResolved) {
@@ -5633,19 +5599,18 @@ export class TypeChecker {
                 }
             } else if (r instanceof PointerType) {
                 let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
-                if (relementType instanceof RestrictedType && relementType.boxes && relementType.boxes.length != 0) {
-                    for(let b of relementType.boxes) {
-                        if (b instanceof VariableBox) {
-                            b = scope.resolveVariableBox(b);
-                            if (!b) {
-                                throw "Implementation error";
-                            }
+                if (relementType instanceof RestrictedType && relementType.box) {
+                    let b = relementType.box;
+                    if (b instanceof VariableBox) {
+                        b = scope.resolveVariableBox(b);
+                        if (!b) {
+                            throw "Implementation error";
                         }
-                        if (!taints) {
-                            taints = [];
-                        }
-                        taints.push(new Taint(b, loc));
                     }
+                    if (!taints) {
+                        taints = [];
+                    }
+                    taints.push(new Taint(b, loc));
                 }
             }
         } else if (l instanceof SliceType) {
@@ -5659,14 +5624,14 @@ export class TypeChecker {
             if (joinBoxes != "no") {
                 let relementType = this.sliceArrayTypeWithBoxes(rnode.type, loc);
                 let joinedRightBox = this.joinBoxesOfType(relementType, scope, loc, true);
-                if (joinBoxes == "unique" && joinedRightBox.isExtern()) {
+                if (joinBoxes == "unique" && joinedRightBox.isExtern) {
                     throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
                 if (!joinLeftBox) {
-                    if (!(l.arrayType instanceof RestrictedType) || !l.arrayType.boxes || l.arrayType.boxes.length != 1) {
+                    if (!(l.arrayType instanceof RestrictedType) || !l.arrayType.box) {
                         throw "Implementation error: Expected a VariableBox"
                     }
-                    joinLeftBox = l.arrayType.boxes[0];
+                    joinLeftBox = l.arrayType.box;
                 }
                 let joinLeftBoxResolved: Box = joinLeftBox instanceof VariableBox ? scope.resolveVariableBox(joinLeftBox) : joinLeftBox;
                 if (joinLeftBoxResolved) {
@@ -5679,19 +5644,18 @@ export class TypeChecker {
                 }
             } else {
                 let relementType = this.sliceArrayTypeWithBoxes(rnode.type, loc);
-                if (relementType instanceof RestrictedType && relementType.boxes && relementType.boxes.length != 0) {
-                    for(let b of relementType.boxes) {
-                        if (b instanceof VariableBox) {
-                            b = scope.resolveVariableBox(b);
-                            if (!b) {
-                                throw "Implementation error";
-                            }
+                if (relementType instanceof RestrictedType && relementType.box) {
+                    let b = relementType.box;
+                    if (b instanceof VariableBox) {
+                        b = scope.resolveVariableBox(b);
+                        if (!b) {
+                            throw "Implementation error";
                         }
-                        if (!taints) {
-                            taints = [];
-                        }
-                        taints.push(new Taint(b, loc));
                     }
+                    if (!taints) {
+                        taints = [];
+                    }
+                    taints.push(new Taint(b, loc));
                 }
             }
         }
@@ -5754,19 +5718,18 @@ export class TypeChecker {
 
     private joinBoxesOfTypeIntern(box: Box | null, t: Type, scope: Scope, loc: Location, doThrow: boolean): Box {
         if (t instanceof RestrictedType) {
-            if (t.boxes) {
-                for(let b of t.boxes) {
-                    if (b instanceof VariableBox) {
-                        b = scope.resolveVariableBox(b);
-                        if (!b) {
-                            throw "Implementation error";
-                        }
+            if (t.box) {
+                let b = t.box;
+                if (b instanceof VariableBox) {
+                    b = scope.resolveVariableBox(b);
+                    if (!b) {
+                        throw "Implementation error";
                     }
-                    if (!box) {
-                        box = b.canonical().preJoin(loc, doThrow);
-                    } else {
-                        box = box.join(b, loc, doThrow);
-                    }
+                }
+                if (!box) {
+                    box = b.canonical().preJoin(loc, doThrow);
+                } else {
+                    box = box.join(b, loc, doThrow);
                 }
             }
             return this.joinBoxesOfTypeIntern(box, t.elementType, scope, loc, doThrow);
@@ -5806,36 +5769,32 @@ export class TypeChecker {
 
     private taintAssignment(scope: Scope, loc: Location, vtype: Type, etype: Type, taints: Array<Taint>): void {
         if (etype instanceof RestrictedType) {
-            if (etype.boxes && etype.boxes.length != 0) {
+            if (etype.box) {
                 taints = [];
-                for(let b of etype.boxes) {
-                    if (b instanceof VariableBox) {
-                        let r2 = scope.resolveVariableBox(b);
-                        if (!r2) {
-                            throw "Implementation error";
-                        }
-                        if (!r2.isAvailable) {
-                            throw "Implementation error: Element is not available at this place";
-                        }
-                        taints.push(new Taint(r2.canonical(), loc));
-                    } else {
-                        taints.push(new Taint(b.canonical(), loc));
+                let b = etype.box;
+                if (b instanceof VariableBox) {
+                    let r2 = scope.resolveVariableBox(b);
+                    if (!r2) {
+                        throw "Implementation error";
                     }
+                    if (!r2.isAvailable) {
+                        throw "Implementation error: Element is not available at this place";
+                    }
+                    taints.push(new Taint(r2.canonical(), loc));
+                } else {
+                    taints.push(new Taint(b.canonical(), loc));
                 }
             }
             etype = etype.elementType;
         }
 
         if (vtype instanceof RestrictedType) {
-            if (vtype.boxes && vtype.boxes.length != 0) {
-                if (vtype.boxes.length != 1) {
-                    throw "Implementation error";
-                }
-                let vb = vtype.boxes[0];
+            if (vtype.box) {
+                let vb = vtype.box;
                 if (vb instanceof VariableBox) {
                     scope.setTaint(vb, taints);
                 } else {
-                    console.log("Joining in taint: ", loc.start.line)
+//                    console.log("Joining in taint: ", loc.start.line)
                     if (!taints || taints.length == 0) {
                         throw "Implementation error";
                     }
@@ -6092,10 +6051,10 @@ export class TypeChecker {
                     let p = this.stripType(enode.type) as SliceType;
                     t = p.arrayType;
                 }
-                if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+                if (!(t instanceof RestrictedType) || !(t.box instanceof VariableBox)) {
                     throw "Implementation error";
                 }
-                let varBox = t.boxes[0] as VariableBox;
+                let varBox = t.box as VariableBox;
                 scope.setTaint(varBox, null);
                 let at = this.stripType(t) as ArrayType;
                 if (enode.parameters) {
@@ -6115,10 +6074,10 @@ export class TypeChecker {
                     let p = this.stripType(enode.type) as PointerType;
                     t = p.elementType;
                 }
-                if (!(t instanceof RestrictedType) || !t.boxes || t.boxes.length != 1 || !(t.boxes[0] instanceof VariableBox)) {
+                if (!(t instanceof RestrictedType) || !(t.box instanceof VariableBox)) {
                     throw "Implementation error";
                 }
-                let varBox = t.boxes[0] as VariableBox;
+                let varBox = t.box as VariableBox;
                 scope.setTaint(varBox, null);
                 t = this.stripType(t);
                 if (t instanceof StructType) {
@@ -6224,11 +6183,9 @@ export class TypeChecker {
 
     private checkAreBoxesAvailable(t: Type, scope: Scope, loc: Location, doThrow: boolean): boolean {
         if (t instanceof RestrictedType) {
-            if (t.boxes) {
-                for(let b of t.boxes) {
-                    if (!this.checkIsBoxAvailable(b, scope, loc, doThrow)) {
-                        return false;
-                    }
+            if (t.box) {
+                if (!this.checkIsBoxAvailable(t.box, scope, loc, doThrow)) {
+                    return false;
                 }
             }
             return this.checkAreBoxesAvailable(t.elementType, scope, loc, doThrow);
@@ -6291,7 +6248,7 @@ export class TypeChecker {
     }
 
     private injectVariableBoxes(e: ScopeElement, defaultBox: Box | null) {
-        e.type = this.makeBox(this.injectVariableBoxesInType(e.type, defaultBox, e.loc), [new VariableBox()], e.loc);
+        e.type = this.makeBox(this.injectVariableBoxesInType(e.type, defaultBox, e.loc), new VariableBox(), e.loc);
     }
 
     private injectVariableBoxesInType(t: Type, defaultBox: Box | null, loc: Location): Type {
@@ -6300,7 +6257,7 @@ export class TypeChecker {
             if (e == t.elementType) {
                 return t;
             }            
-            return new RestrictedType(e, {isConst: t.isConst, boxes: t.boxes});
+            return new RestrictedType(e, {isConst: t.isConst, box: t.box});
         } else if (t instanceof BasicType || t instanceof InterfaceType || t instanceof StructType || t instanceof FunctionType) {
             return t;
         } else if (t instanceof UnsafePointerType) {
@@ -6312,45 +6269,45 @@ export class TypeChecker {
         } else if (t instanceof PointerType) {
             let e = t.elementType;
             let isConst = false;
-            let boxes: Array<Box>;
+            let box: Box;
             if (e instanceof RestrictedType) {
                 isConst = e.isConst;
-                boxes = e.boxes;
+                box = e.box;
                 e = e.elementType;
             } 
-            let newe = this.injectVariableBoxesInType(e, defaultBox, loc);
-            if (newe == e && boxes) {
+            let newe = this.injectVariableBoxesInType(e, box ? box : defaultBox, loc);
+            if (newe == e && box) {
                 return t;
             }
             if (isConst) {
                 newe = this.makeConst(newe, t.loc);
             }
-            if (boxes) {
-                newe = this.makeBox(newe, boxes, loc);
+            if (box) {
+                newe = this.makeBox(newe, box, loc);
             } else {
-                newe = this.makeBox(newe, [defaultBox ? defaultBox : new VariableBox()], loc);
+                newe = this.makeBox(newe, defaultBox ? defaultBox : new VariableBox(), loc);
             }
             return new PointerType(newe, t.mode);
         } else if (t instanceof SliceType) {
             let e = t.arrayType;
             let isConst = false;
-            let boxes: Array<Box>;
+            let box: Box;
             if (e instanceof RestrictedType) {
                 isConst = e.isConst;
-                boxes = e.boxes;
+                box = e.box;
                 e = e.elementType as ArrayType;
             } 
-            let newe = this.injectVariableBoxesInType(e, defaultBox, loc) as ArrayType | RestrictedType;
-            if (newe == e && boxes) {
+            let newe = this.injectVariableBoxesInType(e, box ? box : defaultBox, loc) as ArrayType | RestrictedType;
+            if (newe == e && box) {
                 return t;
             }
             if (isConst) {
                 newe = this.makeConst(newe, t.loc) as ArrayType | RestrictedType;
             }
-            if (boxes) {
-                newe = this.makeBox(newe, boxes, loc) as ArrayType | RestrictedType;
+            if (box) {
+                newe = this.makeBox(newe, box, loc) as ArrayType | RestrictedType;
             } else {
-                newe = this.makeBox(newe, [defaultBox ? defaultBox : new VariableBox()], loc) as ArrayType | RestrictedType;
+                newe = this.makeBox(newe, defaultBox ? defaultBox : new VariableBox(), loc) as ArrayType | RestrictedType;
             }
             return new SliceType(newe, t.mode);
         } else if (t instanceof MapType) {

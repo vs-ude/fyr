@@ -1,0 +1,12 @@
+type Point struct {
+    x int
+    y int
+}
+
+type SliceStruct struct {
+    p *Point
+}
+
+func boxesTest(arr []*a:Point, s *a:SliceStruct) {
+    s.p = take(arr[0])
+}

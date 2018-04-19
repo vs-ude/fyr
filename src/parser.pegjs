@@ -301,18 +301,12 @@ primitiveType
     }
 
 boxTypes
-  = "::" [ \t]* {
-      let n = [];
-      n.push(new ast.Node({loc: fl(location()), op: "id", value: "$1"}));
-      n.push(new ast.Node({loc: fl(location()), op: "id", value: "$2"}));
-      return new ast.Node({loc: fl(location()), op: "boxType", rhs: null, parameters: n});
+  = ":" [ \t]* {
+      return new ast.Node({loc: fl(location()), op: "boxType", name: null, rhs: null});
   }
-  / ":" [ \t]* {
-      return new ast.Node({loc: fl(location()), op: "boxType", rhs: null, parameters: []});
-  }
-  / b:boxType* {
-      if (b && b.length > 0) {
-          return new ast.Node({loc: fl(location()), op: "boxType", rhs: null, parameters: b});
+  / b:boxType? {
+      if (b) {
+          return new ast.Node({loc: fl(location()), op: "boxType", name: b, rhs: null});
       }
       return null;
   }

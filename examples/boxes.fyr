@@ -234,20 +234,12 @@ func sliceTest(p []int, p1 *Point, p2 *Point, p3 *Point, p4 *Point, ps1 []*Point
 //    s13[0] = &lp
 }
 
-func boxesTest(arr []*a:b:Point, s *a:SliceStruct) {
-    // Must err, because box(a,b) cannot be joined with box(a)
-//    s.p = take(arr[0])
+func boxesTest(arr []*a:Point, s *a:SliceStruct) {
+//!!!!    s.p = take(arr[0])
     var arr2 []*Point = arr
-    // Must err, because box(a,b) cannot be joined with box(a)
-//    s.p = take(arr2[0])
-}
-
-func boxesTest2(arr []*::Point, s *SliceStruct) {
-    // Must err, because box(a,b) cannot be joined with box(a)
-//    s.p = take(arr[0])
-    var arr2 []*Point = arr
-    // Must err, because box(a,b) cannot be joined with box(a)
-//    s.p = take(arr2[0])
+    s.p = take(arr2[0])
+    arr2[0] = take(s.p)
+    s.p = {}
 }
 
 func links(l1 *Link, l2 *Link, l3 *a:Link, l4 *a:Link) {
@@ -261,4 +253,13 @@ func points(p1 const &Point, p2 const &Point) {
     var a2 *Point = {}
     // Must work, because argument belong to different groups by default
 //!!    points(&a1, a2)
+}
+
+func refTest(r1 &Point, r2 &:Point) {
+    var pr PointRef = {}
+    // Must err, because volatile references (r1) must not be assigned to non-volatile ones
+//!!!    pr.p = r1
+    // Must work, because r2 is not volatile
+//    pr.p = {}
+//    pr.p3 = {}
 }
