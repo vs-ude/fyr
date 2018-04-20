@@ -28,7 +28,7 @@ type Link struct {
     pos Point
 }
 
-func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Point, param6 *Point, pl1 *Link) {
+func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Point, param6 *Point, pl1 *Link, param7 *Point) {
     var a int = 1;
     var b int = a;
     var ptr &int = &a;
@@ -141,8 +141,13 @@ func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Poi
 //    var r5 &Point = &link4.parallel.pos
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
-    //!! Must err, because it violates the isolation between pr3 and pr4
+    // Works, because uniqueness remains
     pr3.r = pr4
+    pr3.r = {}
+    //!!! Must err, because param7 is extern and cannot be used inside something that is unique
+    pr3.r = {p3: param7}
+    // Must err, because param7 is extern and cannot be used inside something that is unique
+    var pp5 ^Point = param7
     // Must err, because accessing a pointer inside an isolate (pr4) violates this isolation
 //    pr4.r
     // Works, because this expression returns a value and not a pointer
