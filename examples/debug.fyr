@@ -7,6 +7,15 @@ type SliceStruct struct {
     p *Point
 }
 
-func boxesTest(arr []*a:Point, s *a:SliceStruct) {
-    s.p = take(arr[0])
+func test(p1 *:Point, p2 *:Point) {
+    var s SliceStruct = {}
+    s.p = {}
+    s.p = p1
+    // Must err, because s is joined with p1 already and cannot be joined with p2
+//    s.p = p2
+    s = {}
+    // Must err, because s is joined with p1 already and cannot be joined with p2. Reassigning makes no difference here.
+//    s.p = p2
+    var s2 SliceStruct = {}
+    s2.p = p2
 }

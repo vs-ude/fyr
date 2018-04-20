@@ -255,11 +255,15 @@ func points(p1 const &Point, p2 const &Point) {
 //!!    points(&a1, a2)
 }
 
-func refTest(r1 &Point, r2 &:Point) {
-    var pr PointRef = {}
-    // Must err, because volatile references (r1) must not be assigned to non-volatile ones
-//!!!    pr.p = r1
-    // Must work, because r2 is not volatile
-//    pr.p = {}
-//    pr.p3 = {}
+func test(p1 *:Point, p2 *:Point) {
+    var s SliceStruct = {}
+    s.p = {}
+    s.p = p1
+    // Must err, because s is joined with p1 already and cannot be joined with p2
+//    s.p = p2
+    s = {}
+    // Must err, because s is joined with p1 already and cannot be joined with p2. Reassigning makes no difference here.
+//    s.p = p2
+    var s2 SliceStruct = {}
+    s2.p = p2
 }

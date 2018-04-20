@@ -115,7 +115,7 @@ export class Scope {
         this.parent = parent;
         this.elements = new Map<string, ScopeElement>();
         this.types = new Map<string, Type>();
-        this.scopeBox = new Box(true);
+        this.scopeBox = new Box(false, "$stack");
     }
 
     public resolveElement(name: string): ScopeElement {
@@ -211,9 +211,9 @@ export class Scope {
         let r = this.resolveVariableBox(varBox);
         if (r) {
             r.isAvailable = true;
-            r.setTaints(new Taint(this.scopeBox, element.loc));
+            r.setTaints(new Taint(new Box(false), element.loc));
         } else {
-            this.setTaint(varBox, new Taint(this.scopeBox, element.loc));
+            this.setTaint(varBox, new Taint(new Box(false), element.loc));
         }
     }
 
@@ -908,10 +908,6 @@ export class Box {
      * current function's stack frame.
      */
     public isExtern: boolean;
-    /**
-     * If set, isExtern is true, too.
-     */
-    public isPossiblyStack: boolean;
 
     public name: string;
     /**
@@ -1587,7 +1583,7 @@ export class TypeChecker {
                 t.callingConvention = "fyrCoroutine";
             }
             t.loc = tnode.loc;
-            let box = new Box(true)
+//            let box = new Box(true)
             if (tnode.parameters) {
                 for(let pnode of tnode.parameters) {
                     var p = new FunctionParameter();
@@ -1596,7 +1592,7 @@ export class TypeChecker {
                         pnode = pnode.lhs;
                     }
                     p.type = this.createType(pnode, scope, "parameter");
-                    this.injectVariableBoxes(p, box);
+                    this.injectVariableBoxesInElement(p, new Box(true));
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
@@ -1607,7 +1603,7 @@ export class TypeChecker {
             }
             if (tnode.rhs) {
                 t.returnType = this.createType(tnode.rhs, scope, "parameter");
-                t.returnType = this.injectVariableBoxesInType(t.returnType, box, t.loc);
+                t.returnType = this.injectVariableBoxesInType(t.returnType, new Box(true), t.loc);
                 this.checkVariableType(t.returnType, tnode.rhs.loc);
             } else {
                 t.returnType = this.t_void;
@@ -2158,7 +2154,7 @@ export class TypeChecker {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
                 this.checkVariableType(p.type, pnode.loc);
-                this.injectVariableBoxes(p, new Box(true));
+                this.injectVariableBoxesInElement(p, new Box(true));
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2176,7 +2172,7 @@ export class TypeChecker {
                         v.loc = pnode.loc;
                         v.name = pnode.name.value;
                         v.type = (f.type.returnType as TupleType).types[i];
-                        this.injectVariableBoxes(v, new Box(true));
+                        this.injectVariableBoxesInElement(v, new Box(true));
                         f.scope.registerElement(v.name, v);
                         if (!f.namedReturnTypes) {
                             f.namedReturnTypes = [];
@@ -2224,7 +2220,7 @@ export class TypeChecker {
             if (isConst) {
                 v.type = this.makeConst(v.type, vnode.loc);
             }
-            this.injectVariableBoxes(v, null);
+            this.injectVariableBoxesInElement(v, null);
             this.checkVariableType(v.type, vnode.loc);
         }
         if (v.name != "_") {
@@ -2382,7 +2378,7 @@ export class TypeChecker {
                 p.name = "p" + i.toString();
                 i++;
                 p.type = this.createType(pnode, f.scope, "parameter");
-                this.injectVariableBoxes(p, new Box(true));
+                this.injectVariableBoxesInElement(p, new Box(true));
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2401,7 +2397,7 @@ export class TypeChecker {
                         i++;
                         v.name = pnode.name.value;
                         v.type = (f.type.returnType as TupleType).types[i];
-                        this.injectVariableBoxes(v, new Box(true));
+                        this.injectVariableBoxesInElement(v, new Box(true));
                         f.scope.registerElement(v.name, v);
                         if (!f.namedReturnTypes) {
                             f.namedReturnTypes = [];
@@ -3850,7 +3846,7 @@ export class TypeChecker {
                             }
                         }
                         p.type = this.createType(pnode, enode.scope, "parameter");
-                        this.injectVariableBoxes(p, new Box(true));
+                        this.injectVariableBoxesInElement(p, new Box(true));
                         if (p.ellipsis && !(p.type instanceof SliceType)) {
                             throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                         }
@@ -3870,7 +3866,7 @@ export class TypeChecker {
                                 v.loc = pnode.loc;
                                 v.name = pnode.name.value;
                                 v.type = (f.type.returnType as TupleType).types[i];
-                                this.injectVariableBoxes(v, new Box(true));
+                                this.injectVariableBoxesInElement(v, new Box(true));
                                 f.scope.registerElement(v.name, v);
                                 if (!f.namedReturnTypes) {
                                     f.namedReturnTypes = [];
@@ -5521,6 +5517,7 @@ export class TypeChecker {
             if (!element) {
                 throw "Implementation error";
             }
+            // console.log("Making available", element.name, this.getBox(element.type).name);
             scope.makeElementAvailable(element);
             this.checkBoxesInSingleAssignment(/*scope.getVariableBox(element)*/null, snode.lhs.type, snode.rhs, scope, snode.loc, "no");
         } else if (snode.lhs.op == "tuple") {
@@ -5542,11 +5539,30 @@ export class TypeChecker {
             if (this.isUnsafePointer(snode.lhs.lhs.type)) {
                 return;
             }
-            let t = this.pointerElementTypeWithBoxes(snode.lhs.lhs.type, snode.lhs.loc);
-            if (!(t instanceof RestrictedType) || (!(t.box instanceof VariableBox) && !(t.box instanceof Box))) {
-                throw "Implementation error";
+            if (this.isSafePointer(snode.lhs.lhs.type)) {
+                let t = this.pointerElementTypeWithBoxes(snode.lhs.lhs.type, snode.lhs.loc);
+                if (!(t instanceof RestrictedType) || (!(t.box instanceof VariableBox) && !(t.box instanceof Box))) {
+                    throw "Implementation error";
+                }
+                this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
+            } else {
+                if (!this.isStruct(snode.lhs.lhs.type)) {
+                    throw "Implementation error";
+                }
+                // console.log("STRUCT", snode.lhs.lhs.type);
+                let box = this.getBox(snode.lhs.lhs.type);
+                if (!box) {
+                    throw "Implementation error";
+                }
+                if (box instanceof VariableBox) {
+                    let resolved = scope.resolveVariableBox(box);
+                    if (!resolved) {
+                        throw "Implementation error";
+                    }
+                    box = resolved;
+                }
+                this.checkBoxesInSingleAssignment(box, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
             }
-            this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
         } else if (snode.lhs.op == "[") {
             this.checkBoxesInExpression(snode.lhs, scope, BoxCheckFlags.AllowIsolates);
             let t = snode.lhs.lhs.type;
@@ -6247,8 +6263,8 @@ export class TypeChecker {
         return true;
     }
 
-    private injectVariableBoxes(e: ScopeElement, defaultBox: Box | null) {
-        e.type = this.makeBox(this.injectVariableBoxesInType(e.type, defaultBox, e.loc), new VariableBox(), e.loc);
+    private injectVariableBoxesInElement(e: ScopeElement, pointerBox: Box | null) {
+        e.type = this.makeBox(this.injectVariableBoxesInType(e.type, pointerBox, e.loc), new VariableBox(), e.loc);
     }
 
     private injectVariableBoxesInType(t: Type, defaultBox: Box | null, loc: Location): Type {
