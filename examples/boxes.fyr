@@ -235,7 +235,7 @@ func sliceTest(p []int, p1 *Point, p2 *Point, p3 *Point, p4 *Point, ps1 []*Point
 }
 
 func boxesTest(arr []*a:Point, s *a:SliceStruct) {
-//!!!!    s.p = take(arr[0])
+    s.p = take(arr[0])
     var arr2 []*Point = arr
     s.p = take(arr2[0])
     arr2[0] = take(s.p)
@@ -266,4 +266,20 @@ func test(p1 *:Point, p2 *:Point) {
 //    s.p = p2
     var s2 SliceStruct = {}
     s2.p = p2
+}
+
+func test2(r1 &Point, r2&a:Point) &a:Point {
+    // Must err, r1 and a cannot be joined    
+//    return r1
+    return r2
+}
+
+func test3(r1 &Point) &Point {
+    // Must err, r1 and anonymous box cannot be joined    
+//    return r1
+    var p Point = {}
+    // Must work, however when the stack is cleared, the reference is null.
+    // Thus, the returned value is always null.
+    // Should be flagged with a warning, since it is most likely a programming error.
+    return &p
 }
