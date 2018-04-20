@@ -5392,11 +5392,13 @@ export class TypeChecker {
                         let e = scope.resolveElement(snode.lhs.value);
                         // Variable is not yet initialized, therefore make it unavailable
                         scope.makeElementUnavailable(e);
+                        console.log("Unavailable", e.name);
                     } else if (snode.lhs.op == "tuple") {
                         for (let p of snode.lhs.parameters) {
                             let e = scope.resolveElement(p.lhs.value);
                             // Variable is not yet initialized, therefore make it unavailable
                             scope.makeElementUnavailable(e);
+                            console.log("Unavailable", e.name);
                         }
                     } else {
                         throw "TODO: Implementation error";
@@ -5557,6 +5559,7 @@ export class TypeChecker {
                 if (!(t instanceof RestrictedType) || (!(t.box instanceof VariableBox) && !(t.box instanceof Box))) {
                     throw "Implementation error";
                 }
+                console.log("LINE", snode.loc.start.line, this.isUniqueInExpression(snode.lhs));
                 this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, this.isUniqueInExpression(snode.lhs) ? "unique" : "strong");
             } else {
                 if (!this.isStruct(snode.lhs.lhs.type)) {
@@ -5609,7 +5612,7 @@ export class TypeChecker {
                 let relementType = this.pointerElementTypeWithBoxes(rnode.type, loc);
                 let joinedRightBox = this.joinBoxesOfType(relementType, scope, loc, true);
                 if (joinBoxes == "unique" && joinedRightBox.isExtern) {
-                    throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
+                    throw new TypeError("Cannot assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
                 if (!joinLeftBox) {
                     if (!(l.elementType instanceof RestrictedType) || !l.elementType.box) {
@@ -5654,7 +5657,7 @@ export class TypeChecker {
                 let relementType = this.sliceArrayTypeWithBoxes(rnode.type, loc);
                 let joinedRightBox = this.joinBoxesOfType(relementType, scope, loc, true);
                 if (joinBoxes == "unique" && joinedRightBox.isExtern) {
-                    throw new TypeError("Cann assign to unique pointer because expression refers to data not controlled by the local function", loc);
+                    throw new TypeError("Cannot assign to unique pointer because expression refers to data not controlled by the local function", loc);
                 }
                 if (!joinLeftBox) {
                     if (!(l.arrayType instanceof RestrictedType) || !l.arrayType.box) {
@@ -5689,14 +5692,17 @@ export class TypeChecker {
             }
         }
         this.taintAssignment(scope, rnode.loc, l, r, taints);
+        // A pointer has been assigned?
         if (pointerMode != "no") {
             switch(rnode.op) {
                 case "id":
+                    console.log("r unavail", rnode.loc.start.line, pointerMode, isConst)
                     let relement = scope.resolveElement(rnode.value);
                     if (!relement) {
                         throw "Implementation error";
                     }
                     if (pointerMode == "strong" || (pointerMode == "unique" && !isConst)) {
+                        console.log("Unavailable", relement.name);
                         scope.makeElementUnavailable(relement);
                     }
                     break;
@@ -5728,6 +5734,7 @@ export class TypeChecker {
                                 throw "Implementation error";
                             }
                             if (pointerMode == "strong" || pointerMode == "unique") {
+                                console.log("Unavailable", relement.name);
                                 scope.makeElementUnavailable(relement);
                             }                                    
                         }

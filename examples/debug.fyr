@@ -7,15 +7,29 @@ type SliceStruct struct {
     p *Point
 }
 
-func test(p1 *:Point, p2 *:Point) {
-    var s SliceStruct = {}
-    s.p = {}
-    s.p = p1
-    // Must err, because s is joined with p1 already and cannot be joined with p2
-//    s.p = p2
-    s = {}
-    // Must err, because s is joined with p1 already and cannot be joined with p2. Reassigning makes no difference here.
-//    s.p = p2
-    var s2 SliceStruct = {}
-    s2.p = p2
+type Link struct {
+    next *Link
+    value *Point
+    parallel ^Link
+    pos Point
+}
+
+type PointRef struct {
+    p &Point
+    p2 &Point
+    p3 *Point
+    r &PointRef
+    u ^Point
+    pos Point
+}
+
+func test() {
+    var pr4 ^PointRef = {}
+    var pr3 ^PointRef = {}
+    pr3.r = pr4
+//    var pr5 &PointRef = pr3
+//    var pr6 ^PointRef = pr3
+//    pr5
+    //!!! Must err, because pr4 is no longer available
+    var p Point = pr4.pos
 }

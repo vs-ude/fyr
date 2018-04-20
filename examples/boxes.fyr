@@ -129,7 +129,7 @@ func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Poi
     var link6 *Link = {}
     var extlink3 ^Link = take(link6.next)
     //!!! Must err, because link6 is no longer available
-    link6
+    var link7 *Link = link6
     var r1 &Link = link4.next
     // Must err, because accessing a pointer inside of an isolate would violate the isolation
 //    var r3 &Link = link4.parallel.next
@@ -141,15 +141,17 @@ func main(param *Point, param2 *Point, param3 *Point, param4 *Point, param5 *Poi
 //    var r5 &Point = &link4.parallel.pos
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
+    // Must err, because accessing a pointer inside an isolate (pr4) violates this isolation
+//    pr4.r
     // Works, because uniqueness remains
     pr3.r = pr4
+    //!!! Must err, because pr4 is no longer available
+    pr4
     pr3.r = {}
     // Must err, because param7 is extern and cannot be used inside something that is unique
 //    pr3.r = {p3: param7}
     // Must err, because param7 is extern and cannot be used inside something that is unique
 //    var pp5 ^Point = param7
-    // Must err, because accessing a pointer inside an isolate (pr4) violates this isolation
-//    pr4.r
     // Works, because this expression returns a value and not a pointer
     pr4.pos
 }
