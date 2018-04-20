@@ -5510,6 +5510,19 @@ export class TypeChecker {
         return null;
     }
 
+    private isUniqueInExpression(enode: Node): boolean {
+        if (this.isUnique(enode.type)) {
+            return true;
+        }
+        switch (enode.op) {
+            case ".":
+                return this.isUniqueInExpression(enode.lhs);
+            case "[":
+                return this.isUniqueInExpression(enode.lhs);
+        }
+        return false;
+    }
+
     private checkBoxesInAssignment(snode: Node, scope: Scope) {
         this.checkBoxesInExpression(snode.rhs, scope, BoxCheckFlags.None);
         if (snode.lhs.op == "id") {
@@ -5544,7 +5557,7 @@ export class TypeChecker {
                 if (!(t instanceof RestrictedType) || (!(t.box instanceof VariableBox) && !(t.box instanceof Box))) {
                     throw "Implementation error";
                 }
-                this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, "strong");
+                this.checkBoxesInSingleAssignment(t.box, snode.lhs.type, snode.rhs, scope, snode.loc, this.isUniqueInExpression(snode.lhs) ? "unique" : "strong");
             } else {
                 if (!this.isStruct(snode.lhs.lhs.type)) {
                     throw "Implementation error";
