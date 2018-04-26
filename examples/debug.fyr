@@ -21,7 +21,7 @@ type PointRef struct {
     pos Point
 }
 
-func test(param1 *PointRef, :b param2 *PointRef) *PointRef {
+func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *PointRef) *PointRef {
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
     pr3.ref = pr4
@@ -64,5 +64,10 @@ func test(param1 *PointRef, :b param2 *PointRef) *PointRef {
 //    pr11.ptr = param2
     // Must err
 //    return param2
-    return pr11
+    // Must err
+//    param3.ptr = param4
+    param3.unique = pr11
+    // Must err
+//    return param1
+    return {}
 }
