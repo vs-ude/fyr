@@ -64,4 +64,5 @@ func test(param1 *PointRef, :b param2 *PointRef) *PointRef {
 //    pr11.ptr = param2
     // Must err
 //    return param2
+    return pr11
 }

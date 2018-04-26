@@ -5383,17 +5383,14 @@ export class TypeChecker {
     }
 
     private checkGroupsInSingleAssignment(ltype: Type, lnode: Node | Group, rnode: Node | Group, scope: Scope, loc: Location) {
-        console.log("===========================")
         let rightGroup: Group;
         if (rnode instanceof Node) {
             let isPointer = this.isSafePointer(rnode.type) || this.isSlice(rnode.type);
             let flags = (isPointer && !TypeChecker.isUnique(rnode.type)) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
             rightGroup = this.checkGroupsInExpression(rnode, scope, flags);
-            console.log("RIGHT", rightGroup)
         } else {
             rightGroup = rnode;
         }
-        console.log("-----")
         let leftGroup = lnode instanceof Node ? this.checkGroupsInExpression(lnode, scope, GroupCheckFlags.AllowIsolates | GroupCheckFlags.AllowUnavailableVariable) : lnode as Group;
 
         // Assigning a value type? -> Nothing to do
@@ -5407,7 +5404,6 @@ export class TypeChecker {
         let rhsIsTakeExpr = rnode instanceof Node && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
 
         if (!rightGroup) {
-            console.log("Null on right");
             rightGroup = new Group(false);
         }
 
@@ -5448,14 +5444,12 @@ export class TypeChecker {
             scope.setGroup(lhsVariable, rightGroup);
         } else {
             if (!leftGroup) {
-                console.log("Assign into an isolate");
                 // Check that the RHS group is unbound
                 if (rightGroup.isBound) {
                     throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
                 }
                 // Make the RHS group unavailable
                 rightGroup.makeUnavailable();
-                console.log(rightGroup.isAvailable(), scope.resolveGroup(scope.resolveElement("pr4")).isAvailable());
             } else {
                 // Test whether LHS and RHS are equal or one of LHS or RHS are unbound
                 if (leftGroup != rightGroup && leftGroup.isBound && rightGroup.isBound) {
@@ -5505,7 +5499,6 @@ export class TypeChecker {
                         throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
                     }
                 }
-                console.log(enode.value, g);
                 return g;         
             case "++":
             case "--":
@@ -5560,10 +5553,8 @@ export class TypeChecker {
                 }
                 let g = this.checkGroupsInExpression(enode.lhs, scope, flags);
                 if (TypeChecker.isUnique(enode.type)) {
-                    console.log("NULL", enode.loc.start.line);
                     return null;
                 }
-                console.log("Member", g)
                 return g;
             }            
             case ":":
