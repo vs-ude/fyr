@@ -78,7 +78,7 @@ importWasm
     }
 
 importElement
-  = "func" [ \t]+ n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:type? [ \t]* "\n" [ \t]* {
+  = "func" [ \t]+ n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:returnType? [ \t]* "\n" [ \t]* {
       return new ast.Node({loc: fl(location()), op: "funcType", parameters: t, rhs: f, name: n});
     }
 
@@ -122,25 +122,34 @@ parameters
     }
 
 parameter
-  = n:identifier [ \t]* t:type {
+  = g:group? n:identifier [ \t]* t:type {
       t.name = n;
+      t.groupName = g;
       return t;
     }
-  / "..." [ \t]* n:identifier [ \t]* t:type {
+  / "..." [ \t]* g:group? n:identifier [ \t]* t:type {
       t.name = n;
       return new ast.Node({loc: fl(location()), op: "ellipsisParam", lhs: t});
     }
 
 funcTypeParameters
-  = p:type r:([ \t]* "," [ \t\n]* type)* [ \t]* {
+  = g:group? p:type r:([ \t]* "," [ \t\n]* group? type)* [ \t]* {
+      p.groupName = g;
       if (r) {
         let result = [p];
         for(let x of r) {
-          result.push(x[3]);
+            let p2 = x[4];
+            p2.groupName = x[3];
+          result.push(p2);
         }
         return result;
       }
       return [p];
+    }
+
+group
+  = ":" n:identifier [ \t]+ {
+      return n
     }
 
 genericParameters
@@ -190,55 +199,31 @@ andType
     }
 
 primitiveType
-  = "[]" [ \t]* b:boxTypes t:primitiveType {
+  = "[]" [ \t]* t:primitiveType {
       let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
-      if (b) {
-          b.rhs = a;
-          a = b;
-      }
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "[]"});
     }
-  / "^[]" [ \t]* b:boxTypes t:primitiveType {
+  / "^[]" [ \t]* t:primitiveType {
       let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
-      if (b) {
-          b.rhs = a;
-          a = b;
-      }
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "^[]"});
     }
-  / "&[]" [ \t]* b:boxTypes t:primitiveType {
+  / "&[]" [ \t]* t:primitiveType {
       let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
-      if (b) {
-          b.rhs = a;
-          a = b;
-      }
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "&[]"});
     }
   / "[" [ \t]* e:expression? "]" [ \t]* t:primitiveType {
     return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
     }
-  / "map" [ \t]* b:boxTypes "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+  / "map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
         let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
-        if (b) {
-            b.rhs = m;
-            m = b;
-        }
         return new ast.Node({loc: fl(location()), op: "pointerType", rhs: m});
     }
-  / "^map" [ \t]* b:boxTypes "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+  / "^map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
         let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
-        if (b) {
-            b.rhs = m;
-            m = b;
-        }
         return new ast.Node({loc: fl(location()), op: "uniquePointerType", rhs: m});
     }
-  / "&map" [ \t]* b:boxTypes "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+  / "&map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
         let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
-        if (b) {
-            b.rhs = m;
-            m = b;
-        }
         return new ast.Node({loc: fl(location()), op: "referenceType", rhs: m});
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
@@ -247,30 +232,20 @@ primitiveType
       }
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
     }
-  / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:type? {
+  / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:returnType? {
       if (e) {
         t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
       }
       return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t, rhs: f});      
     }
-  / "*" [ \t]* b:boxTypes t:primitiveType {
-      let a = new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
-      if (b) {
-          b.rhs = a.rhs;
-          a.rhs = b;
-      }
-      return a;
+  / "*" [ \t]* t:primitiveType {
+      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
   / "#" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "unsafePointerType", rhs: t});
     }
-  / "&" [ \t]* b:boxTypes t:primitiveType {
-      let a = new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
-      if (b) {
-          b.rhs = a.rhs;
-          a.rhs = b;
-      }
-      return a;      
+  / "&" [ \t]* t:primitiveType {
+      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
     }
   / "^" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "uniquePointerType", rhs: t});
@@ -300,22 +275,6 @@ primitiveType
       return i;
     }
 
-boxTypes
-  = ":" [ \t]* {
-      return new ast.Node({loc: fl(location()), op: "boxType", name: null, rhs: null});
-  }
-  / b:boxType? {
-      if (b) {
-          return new ast.Node({loc: fl(location()), op: "boxType", name: b, rhs: null});
-      }
-      return null;
-  }
-
-boxType
-  = i:identifier [ \t]* ":" [ \t]* {      
-      return i;
-    }
-
 memberObjectType
   = "const" [ \t]+ t:memberObjectType3 {
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
@@ -325,21 +284,11 @@ memberObjectType
    }
     
 memberObjectType3
-  = "&" [ \t]* b:boxTypes t:memberObjectType4 {
-      let a = new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
-      if (b) {
-          b.rhs = a.rhs;
-          a.rhs = b;
-      }
-      return a;      
+  = "&" [ \t]* t:memberObjectType4 {
+      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
     }
-  / "*" [ \t]* b:boxTypes t:memberObjectType4 {
-      let a = new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
-      if (b) {
-          b.rhs = a.rhs;
-          a.rhs = b;
-      }
-      return a;      
+  / "*" [ \t]* t:memberObjectType4 {
+      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
 
 memberObjectType4
@@ -385,23 +334,13 @@ ifaceObjectType
    }
     
 ifaceObjectType3
-  = "&" b:boxTypes {
+  = "&" {
       let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
-      let a = new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
-      if (b) {
-          b.rhs = a.rhs;
-          a.rhs = b;
-      }
-      return a;
+      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
     }
-  / "*" b:boxTypes {
+  / "*" {
       let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
-      let a = new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
-      if (b) {
-          b.rhs = a.rhs;
-          a.rhs = b;
-      }
-      return a;
+      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
     }
 
 namedType
@@ -412,15 +351,21 @@ namedType
   / t:type { return t; }
 
 returnType
-  = t:type { return t; }
-  / "(" [ \t\n]* t:namedType r:([ \t]* "," [ \t\n]* namedType)* [ \t]* ")" {
+  = g:group? t:type {
+      t.groupName = g;
+      return t;
+    }
+  / "(" [ \t\n]* g:group? t:namedType r:([ \t]* "," [ \t\n]* group? namedType)* [ \t]* ")" {
+      t.groupName = g;
       let result = [t];
       if (r) {
         for(let x of r) {
-          if (!!t.name != !!x[3].name) {
+          let p = x[4];
+          p.groupName = x[3];
+          if (!!t.name != !!p.name) {
               error("mixing of named and unnamed return parameters", fl(location()));
           }
-          result.push(x[3]);
+          result.push(p);
         }
       }
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: result});

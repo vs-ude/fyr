@@ -24,6 +24,7 @@ export type NodeConfig = {
     readonly elseBranch?: Node;
     readonly parameters?: Array<Node>;
     readonly genericParameters?: Array<Node>;
+    readonly groupName?: Node;
 }
 
 export type LocationPoint = {
@@ -38,7 +39,7 @@ export type Location = {
     file: string;
 }
 
-export type NodeOp = "let_in" | "let" | "take" | "mapType" | "asyncFuncType" | "asyncFunc" | "spawn" | "is" | "rune" | "export_func" | "module" | "file" | "typeCast" | "typedef" | "structField" | "structType" | "interfaceType" | "yield" | "uniquePointerType" | "unsafePointerType" | "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "ellipsisParam" | "genericType" | "genericInstance" | "unary..." | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "var" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | ":" | "(" | "import" | "importWasm" | "identifierList" | "referenceType" | "constType" | "boxType" | "implements" | "extends";
+export type NodeOp = "let_in" | "let" | "take" | "mapType" | "asyncFuncType" | "asyncFunc" | "spawn" | "is" | "rune" | "export_func" | "module" | "file" | "typeCast" | "typedef" | "structField" | "structType" | "interfaceType" | "yield" | "uniquePointerType" | "unsafePointerType" | "ellipsisAssign" | "optionalAssign" | "optionalKeyValue" | "ellipsisParam" | "genericType" | "genericInstance" | "unary..." | "unary+" | "unary-" | "unary!" | "unary^" | "unary&" | "unary*" | "optionalId" | "ellipsisId" | "str" | "=>" | "basicType" | "+" | "-" | "*" | "/" | "&" | "|" | "%" | "^" | "&^" | "in" | "var_in" | "var" | "<<" | ">>" | "if" | "else" | "for" | "func" | "as" | "||" | "&&" | "=" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "*=" | "+=" | "-=" | "/=" | "%=" | "&=" | "&^=" | "<<=" | ">>=" | "|=" | "^=" | "?" | "..." | "!" | "id" | "str" | "bool" | "object" | "array" | "keyValue" | "orType" | "andType" | "tuple" | "arrayType" | "sliceType" | "tupleType" | "pointerType" | "funcType" | "comment" | "break" | "continue" | "return" | "++" | "--" | ";;" | "null" | "float" | "int" | "." | "[" | ":" | "(" | "import" | "importWasm" | "identifierList" | "referenceType" | "constType" | "implements" | "extends";
 
 export class Node {
     constructor(config?: NodeConfig) {
@@ -81,6 +82,9 @@ export class Node {
             }
             if (config.genericParameters !== undefined) {
                 this.genericParameters = config.genericParameters;
+            }
+            if (config.groupName !== undefined) {
+                this.groupName = config.groupName;
             }
         }
     }
@@ -179,6 +183,7 @@ export class Node {
                 n.genericParameters.push(s.clone());
             }
         }
+        n.groupName = this.groupName ? this.groupName.clone() : null;
         return n;
     }
 
@@ -195,6 +200,7 @@ export class Node {
     public elseBranch: Node;
     public parameters: Array<Node>;
     public genericParameters: Array<Node>;
+    public groupName: Node;
     public type: Type;
     public nspace: string;
     public scope: Scope;

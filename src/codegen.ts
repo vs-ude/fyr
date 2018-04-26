@@ -308,7 +308,7 @@ export class CodeGenerator {
             }
         }
         // Declare result
-        if (f.namedReturnTypes) {
+        if (f.namedReturnVariables) {
             for(let name of f.scope.elements.keys()) {
                 let e = f.scope.elements.get(name);
                 if (e instanceof Variable && e.isResult) {
@@ -932,7 +932,7 @@ export class CodeGenerator {
             }
             case "return":
                 if (!snode.lhs) {
-                    if (f.namedReturnTypes) {
+                    if (f.namedReturnVariables) {
                         let args: Array<ssa.Variable | string | number> = [];
                         for(let key of f.scope.elements.keys()) {
                             let v = f.scope.elements.get(key);
