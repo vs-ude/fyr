@@ -3017,12 +3017,22 @@ export class TypeChecker {
                 } else {
                     this.checkExpression(snode.rhs, scope);
                     this.checkVarAssignment(snode.op == "let", scope, snode.lhs, snode.rhs.type, snode.rhs);
+                    if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
+                        if (snode.rhs.op != "id" && snode.rhs.op != "take" && snode.rhs.op != "array" && snode.rhs.op != "object") {
+                            throw new TypeError("Right hand side of assignment must be wrapped in take()", snode.rhs.loc);
+                        }
+                    }
                 }
                 break;
             case "=":
                 this.checkExpression(snode.rhs, scope);
                 this.checkAssignment(scope, snode.lhs, snode.rhs.type, snode.rhs);
-                break;                
+                if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
+                    if (snode.rhs.op != "id" && snode.rhs.op != "take" && snode.rhs.op != "array" && snode.rhs.op != "object") {
+                        throw new TypeError("Right hand side of assignment must be wrapped in take()", snode.rhs.loc);
+                    }
+                }
+            break;                
             case "+=":                                             
             case "*=":
             case "/=":
