@@ -886,6 +886,12 @@ export class Group {
             return b1;
         }        
         
+        if (b1 instanceof TupleGroup || b2 instanceof TupleGroup) {
+            if (doThrow) {
+                throw new TypeError("Groups of tuples cannot be unified", loc);
+            }
+        }
+
         if (b2.isBound && b1.isBound) {
             if (enforceUnification) {
                 if (doThrow) {
@@ -975,6 +981,7 @@ export class Group {
         this._isAvailable = false;
     }
 
+    /*
     public isUnifyable(): boolean {
         if (this.joinedGroups) {
             for (let g of this.joinedGroups) {
@@ -985,6 +992,7 @@ export class Group {
         }
         return true;
     }
+    */
 
     public joinedGroups: Set<Group>;
 
@@ -1000,6 +1008,34 @@ export class Group {
         this.canonical()._isFrozen = true;
     }
     */
+}
+
+export class TupleGroup extends Group {
+    constructor(isBound: boolean, name?: string) {
+        super(isBound, name);
+    }
+
+    public isAvailable(): boolean {
+        if (!super.isAvailable()) {
+            return false;
+        }
+        for(let g of this.groups) {
+            if (!g.isAvailable()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /*
+    public isUnifyable(): boolean {
+        if (!super.isUnifyable()) {
+            return false;
+        }
+    }
+    */
+
+    public groups: Array<Group> = [];
 }
 
 export class Taint {
@@ -3679,6 +3715,7 @@ export class TypeChecker {
                 enode.type = this.instantiateTemplateFunctionFromNode(enode, scope).type;
                 break;
             case "tuple":
+            {
                 let types: Array<Type> = [];
                 for(let p of enode.parameters) {
                     this.checkExpression(p, scope);
@@ -3691,6 +3728,7 @@ export class TypeChecker {
                     this.unifyLiterals(ct, enode, scope, enode.loc);
                 }
                 break;
+            }
             case "array":
             {
                 let types: Array<Type> = [];
@@ -5383,12 +5421,15 @@ export class TypeChecker {
             this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, snode.rhs, scope, snode.loc);
         } else if (snode.lhs.op == "tuple") {
             let t = this.stripType(snode.rhs.type);
-            if (!(t instanceof TupleType)) {
-                throw "Implementation error";
-            }
-            for (let i = 0; i < snode.lhs.parameters.length; i++) {
-                this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], snode.rhs, scope, snode.loc);
-                throw "TODO: RHS used multiple times";
+            if (snode.rhs.op == "tuple") {
+                for(let i = 0; i < snode.rhs.parameters.length; i++) {
+                    this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], snode.rhs.parameters[i], scope, snode.loc);                    
+                }
+            } else {
+                let g = this.checkGroupsInExpression(snode.rhs, scope, GroupCheckFlags.AllowIsolates);
+                for (let i = 0; i < snode.lhs.parameters.length; i++) {
+                    this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], g instanceof TupleGroup ? g.groups[i] : g, scope, snode.loc);
+                }
             }
         } else if (snode.lhs.op == ".") {
             if (this.isUnsafePointer(snode.lhs.lhs.type)) {
@@ -5491,7 +5532,7 @@ export class TypeChecker {
         }
     }
     
-    private checkGroupsInExpression(enode: Node, scope: Scope, flags: GroupCheckFlags) {
+    private checkGroupsInExpression(enode: Node, scope: Scope, flags: GroupCheckFlags): Group {
         let origFlags = flags;
         /*
         if ((flags & GroupCheckFlags.IsolatesMask) == 0) {

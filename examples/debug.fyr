@@ -86,3 +86,9 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
 
     return {}
 }
+
+func tupleTest(param1 *Link, :b param2 *Link) {
+    var x *Link, y *Link = (param2, param1)
+    // Must err, because x and y belong to different groups that cannot be joined
+//    x.sibling = y
+}
