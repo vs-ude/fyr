@@ -39,6 +39,7 @@ export class ImportedPackage implements ScopeElement {
 export class Variable implements ScopeElement {
     // Variable is the named return variable of a function, e.g. "count" or "error" in "func foo() (count int, err error) { }"
     public isResult: boolean = false;
+    public isGlobal: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
@@ -2126,6 +2127,7 @@ export class TypeChecker {
         let v = new Variable();
         v.loc = vnode.loc;
         v.name = vnode.value;
+        v.isGlobal = isGlobal;
         if (!vnode.rhs) {
             if (needType) {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
@@ -2436,6 +2438,13 @@ export class TypeChecker {
 
         // Check variable assignments
         for(let v of globalVariables) {
+            // Unique global pointers are subject to their own group.
+            // All other global variables belong to the same group.
+            if (TypeChecker.isUnique(v.type)) {
+                scope.setGroup(v, new Group(true, v.name));                
+            } else {
+                scope.setGroup(v, this.globalGroup);
+            }
             this.checkGlobalVariable(v, scope);
         }
 
@@ -3921,6 +3930,13 @@ export class TypeChecker {
             } else {
                 this.checkIsAssignableNode(v.type, v.node.rhs, scope);
             }
+
+            if (this.isSafePointer(v.node.rhs.type) || this.isSlice(v.node.rhs.type)) {
+                if (v.node.rhs.op != "id" && v.node.rhs.op != "take" && v.node.rhs.op != "array" && v.node.rhs.op != "object") {
+                    throw new TypeError("Right hand side of assignment must be wrapped in take()", v.node.rhs.loc);
+                }
+            }
+            this.checkGroupsInSingleAssignment(v.type, scope.resolveGroup(v), v.node.rhs, scope, v.loc);
         }
     }
 
@@ -5412,13 +5428,17 @@ export class TypeChecker {
         let lhsIsVariable = lnode instanceof Node ? lnode.op == "id" : false;
         let rhsIsVariable = rnode instanceof Node && (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id"));
         let rhsIsTakeExpr = rnode instanceof Node && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
+        let lhsVariable: ScopeElement = null;
+        if (lhsIsVariable) {
+            lhsVariable = scope.resolveElement((lnode as Node).value);
+        }
 
         if (!rightGroup) {
             rightGroup = new Group(false);
         }
 
-        if (lhsIsVariable) {
-            let lhsVariable = scope.resolveElement((lnode as Node).value);
+        // The if-clause is true when assigning to a variable that is not global
+        if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
             if (this.isStrong(l)) {
                 if (rhsIsVariable) {
                     // Make the RHS variable unavailable

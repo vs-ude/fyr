@@ -12,6 +12,7 @@ type Link struct {
     value *Point
     parallel ^Link
     pos Point
+    sibling &Link
 }
 
 type PointRef struct {
@@ -20,6 +21,12 @@ type PointRef struct {
     unique ^PointRef
     pos Point
 }
+
+var link1 *Link
+var link2 *Link
+// Must err, because link3 is in a different group
+// var link3 ^Link = take(link1.next)
+var link3 ^Link = {}
 
 func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *PointRef) *PointRef {
     var pr4 ^PointRef = {}
@@ -69,5 +76,13 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     param3.unique = pr11
     // Must err
 //    return param1
+
+    link1 = {}
+    link2 = {}
+    link1.sibling = link2
+    link2.sibling = link1
+    // Must err, because link3 is unique and therefore in a different group
+//    link3.sibling = link1
+
     return {}
 }
