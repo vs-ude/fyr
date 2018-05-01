@@ -868,6 +868,10 @@ export class Group {
         return t;
     }
 
+    public preJoin(loc: Location, doThrow: boolean): Group {
+        return this;
+    }
+
     public static join(group1: Group | null, group2: Group | null, enforceUnification: boolean, loc: Location, doThrow: boolean): Group {
         if (!group1) {
             if (!group2) {
@@ -921,6 +925,9 @@ export class Group {
             b2.joinedGroups = null;
             return c;
         }
+
+        b1 = b1.preJoin(loc, doThrow);
+        b2 = b2.preJoin(loc, doThrow);
 
         if (b2.isBound) {
             let tmp = b1;
@@ -1013,6 +1020,14 @@ export class Group {
 export class TupleGroup extends Group {
     constructor(isBound: boolean, name?: string) {
         super(isBound, name);
+    }
+
+    public preJoin(loc: Location, doThrow: boolean): Group {
+        let g: Group = null;
+        for (let tg of this.groups) {
+            g = g ? Group.join(g, tg, true, loc, doThrow) : tg;
+        }
+        return g;
     }
 
     public isAvailable(): boolean {
@@ -5460,20 +5475,23 @@ export class TypeChecker {
         }
         let leftGroup = lnode instanceof Node ? this.checkGroupsInExpression(lnode, scope, GroupCheckFlags.AllowIsolates | GroupCheckFlags.AllowUnavailableVariable) : lnode as Group;
 
-        // Assigning a value type? -> Nothing to do
-        let l = this.stripType(ltype);
-        if (!(l instanceof PointerType) && !(l instanceof SliceType)) {
-            return;
-        }
-
         let lhsIsVariable = lnode instanceof Node ? lnode.op == "id" : false;
-        let rhsIsVariable = rnode instanceof Node && (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id"));
-        let rhsIsTakeExpr = rnode instanceof Node && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
         let lhsVariable: ScopeElement = null;
         if (lhsIsVariable) {
             lhsVariable = scope.resolveElement((lnode as Node).value);
         }
 
+        // Assigning a value type? -> Nothing to do
+        let l = this.stripType(ltype);
+        if (!(l instanceof PointerType) && !(l instanceof SliceType)) {
+            if (lhsVariable) {
+                scope.setGroup(lhsVariable, new Group(false, lhsVariable.name));
+            }
+            return;
+        }
+
+        let rhsIsVariable = rnode instanceof Node && (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id"));
+        let rhsIsTakeExpr = rnode instanceof Node && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
         if (!rightGroup) {
             rightGroup = new Group(false);
         }

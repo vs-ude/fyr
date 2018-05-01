@@ -22,73 +22,8 @@ type PointRef struct {
     pos Point
 }
 
-var link1 *Link
-var link2 *Link
-// Must err, because link3 is in a different group
-// var link3 ^Link = take(link1.next)
-var link3 ^Link = {}
-
-func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *PointRef) *PointRef {
-    var pr4 ^PointRef = {}
-    var pr3 ^PointRef = {}
-    pr3.ref = pr4
-    var pr5 &PointRef = pr3
-    var pr6 ^PointRef = pr3
-    pr5
-    pr6
-    // Must err, because pr3 has been assigned to pr6
-//    pr3
-    // Must work, because pr4 and pr3 are now entagled
-    pr4
-    // Works, because pr4 was only assigne to a &ptr and pos is a value
-    var p Point = pr4.pos
-    // Works, because pr7 is now bound to pr4
-    var pr7 *PointRef = take(pr4.ptr)
-    // Must err, because we access the inside of a Pointer
-//    var pr8 *PointRef = take(pr4.unique.ptr)
-    // Works, because we access an isolate inside an isolate
-    var pr9 *PointRef = take(pr4.unique.unique)
-    var pr10 ^PointRef = {}
-    var ref10 &PointRef = pr10
-    pr4.unique = pr10
-    // Must err, because pr10 variable is no longer available
-//    pr10
-    // Must err, because the group of pr10 is no longer available
-//    ref10
-    pr4.unique = take(pr4.unique.unique)
-    // Must err
-//    pr4.unique = take(pr4.unique.ptr)
-    pr4.unique = take(pr4.ptr)
-    // Must err, because pr3, pr4 and pr6 are entangled
-//    pr6
-    // Must err, because pr4 and everything it points to became unavailable above
-//    pr4
-    // Must err, because param1 is bound
-//    pr4 = param1
-    var pr11 ^PointRef = {}
-    pr11.ptr = param1
-    // Must err
-//    pr11.ptr = param2
-    // Must err
-//    return param2
-    // Must err
-//    param3.ptr = param4
-    param3.unique = pr11
-    // Must err
-//    return param1
-
-    link1 = {}
-    link2 = {}
-    link1.sibling = link2
-    link2.sibling = link1
-    // Must err, because link3 is unique and therefore in a different group
-//    link3.sibling = link1
-
-    return {}
-}
-
-func tupleTest(param1 *Link, :b param2 *Link) {
-    var x *Link, y *Link = (param2, param1)
-    // Must err, because x and y belong to different groups that cannot be joined
-//    x.sibling = y
+func tupleTest() {
+//    var funky *Link = {}
+    var tuple (*Link, *Link) = ({}, {})
+    tuple
 }
