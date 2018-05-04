@@ -3083,21 +3083,21 @@ export class TypeChecker {
                 } else {
                     this.checkExpression(snode.rhs, scope);
                     this.checkVarAssignment(snode.op == "let", scope, snode.lhs, snode.rhs.type, snode.rhs);
-                    if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
+                    /* if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
                         if (snode.rhs.op != "id" && snode.rhs.op != "take" && snode.rhs.op != "array" && snode.rhs.op != "object") {
                             throw new TypeError("Right hand side of assignment must be wrapped in take()", snode.rhs.loc);
                         }
-                    }
+                    }*/
                 }
                 break;
             case "=":
                 this.checkExpression(snode.rhs, scope);
                 this.checkAssignment(scope, snode.lhs, snode.rhs.type, snode.rhs);
-                if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
+                /*if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
                     if (snode.rhs.op != "id" && snode.rhs.op != "take" && snode.rhs.op != "array" && snode.rhs.op != "object") {
                         throw new TypeError("Right hand side of assignment must be wrapped in take()", snode.rhs.loc);
                     }
-                }
+                }*/
             break;                
             case "+=":                                             
             case "*=":
@@ -3985,12 +3985,13 @@ export class TypeChecker {
             } else {
                 this.checkIsAssignableNode(v.type, v.node.rhs, scope);
             }
-
+            /*
             if (this.isSafePointer(v.node.rhs.type) || this.isSlice(v.node.rhs.type)) {
                 if (v.node.rhs.op != "id" && v.node.rhs.op != "take" && v.node.rhs.op != "array" && v.node.rhs.op != "object") {
                     throw new TypeError("Right hand side of assignment must be wrapped in take()", v.node.rhs.loc);
                 }
             }
+            */
             this.checkGroupsInSingleAssignment(v.type, scope.resolveGroup(v), null, v.node.rhs, false, scope, v.loc);
         }
     }
@@ -5593,6 +5594,9 @@ export class TypeChecker {
             // Set the group of the LHS variable with the RHS group
             scope.setGroup(lhsVariable, rightGroup);
         } else {
+            if (TypeChecker.hasStrongOrUniquePointers(ltype) && !rhsIsVariable && !rhsIsTakeExpr) {
+                throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
+            }
             if (!leftGroup) {
                 // Check that the RHS group is unbound
                 if (rightGroup.kind == GroupKind.Bound) {
