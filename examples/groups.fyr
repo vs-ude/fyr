@@ -20,6 +20,7 @@ type PointRef struct {
     ref &PointRef
     unique ^PointRef
     pos Point
+    tuple (*PointRef, *PointRef)
 }
 
 var link1 *Link
@@ -93,4 +94,10 @@ func tupleTest(param1 *Link, :b param2 *Link) {
 //    x.sibling = y
     var tuple (*Link, *Link) = ({}, {})
     var a, b = tuple
+    // Must err, because tuple is no longer available
+//    tuple
+    var pr *PointRef = {}
+    // Must err, because take is missing
+//    var tuple2 = pr.tuple
+    var tuple2 = take(pr.tuple)
 }

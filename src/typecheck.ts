@@ -3956,10 +3956,6 @@ export class TypeChecker {
                     default:
                         throw new TypeError("take() can only be applied on variables, object fields or slice/array elements", enode.lhs.loc);
                 }
-                let takeType = RestrictedType.strip(enode.lhs.type);
-                if ((!(takeType instanceof PointerType) && !(takeType instanceof SliceType)) || takeType.mode == "reference") {
-                    throw new TypeError("take() can only be applied to non-reference pointer types", enode.lhs.loc);
-                }
                 enode.type = enode.lhs.type;
                 break;
             case "ellipsisId":
@@ -3989,7 +3985,7 @@ export class TypeChecker {
                     throw new TypeError("Right hand side of assignment must be wrapped in take()", v.node.rhs.loc);
                 }
             }
-            this.checkGroupsInSingleAssignment(v.type, scope.resolveGroup(v), v.node.rhs, scope, v.loc);
+            this.checkGroupsInSingleAssignment(v.type, scope.resolveGroup(v), null, v.node.rhs, false, scope, v.loc);
         }
     }
 
@@ -5116,6 +5112,34 @@ export class TypeChecker {
         return (t instanceof PointerType);
     }
     
+    public static hasStrongOrUniquePointers(t: Type): boolean {
+        t = RestrictedType.strip(t);
+        if ((t instanceof PointerType || t instanceof SliceType) && (t.mode == "strong" || t.mode == "unique")) {
+            return true;
+        }
+        if (t instanceof TupleType) {
+            for(let p of t.types) {
+                if (this.hasStrongOrUniquePointers(p)) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (t instanceof ArrayType) {
+            return this.hasStrongOrUniquePointers(t.elementType);
+        } else if (t instanceof StructType) {
+            for(let f of t.fields) {
+                if (this.hasStrongOrUniquePointers(f.type)) {
+                    return true;
+                }
+            }
+            if (t.extends && this.hasStrongOrUniquePointers(t.extends)) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
     /**
      * A pure value contains no pointers and can be copied byte by byte.
      */
@@ -5349,11 +5373,11 @@ export class TypeChecker {
                     if (f.namedReturnVariables) {
                         for(let i = 0; i < f.namedReturnVariables.length; i++) {
                             let group = scope.resolveGroup(f.namedReturnVariables[i]);
-                            this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, snode.lhs.parameters[i], scope, snode.loc);
+                            this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, null, snode.lhs.parameters[i], false, scope, snode.loc);
                         }
                     } else {
                         let group = scope.resolveGroup(f.unnamedReturnVariable);
-                        this.checkGroupsInSingleAssignment(f.type.returnType, group, snode.lhs, scope, snode.loc);
+                        this.checkGroupsInSingleAssignment(f.type.returnType, group, null, snode.lhs, false, scope, snode.loc);
                     }
                 }
                 break;
@@ -5433,17 +5457,17 @@ export class TypeChecker {
 
     private checkGroupsInAssignment(snode: Node, scope: Scope) {
         if (snode.lhs.op == "id") {
-            this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, snode.rhs, scope, snode.loc);
+            this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
         } else if (snode.lhs.op == "tuple") {
             let t = this.stripType(snode.rhs.type);
             if (snode.rhs.op == "tuple") {
                 for(let i = 0; i < snode.rhs.parameters.length; i++) {
-                    this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], snode.rhs.parameters[i], scope, snode.loc);                    
+                    this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], null, snode.rhs.parameters[i], false, scope, snode.loc);                    
                 }
             } else {
                 let g = this.checkGroupsInExpression(snode.rhs, scope, GroupCheckFlags.AllowIsolates);
                 for (let i = 0; i < snode.lhs.parameters.length; i++) {
-                    this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], g instanceof TupleGroup ? g.groups[i] : g, scope, snode.loc);
+                    this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], g instanceof TupleGroup ? g.groups[i] : g, snode.rhs, i+1 < snode.lhs.parameters.length, scope, snode.loc);
                 }
             }
         } else if (snode.lhs.op == ".") {
@@ -5451,27 +5475,27 @@ export class TypeChecker {
                 return;
             }
             if (this.isSafePointer(snode.lhs.lhs.type) || this.isStruct(snode.lhs.lhs.type)) {
-                this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, snode.rhs, scope, snode.loc);
+                this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
             } else {
                 throw "Implementation error";
             }
         } else if (snode.lhs.op == "[") {
-            this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, snode.rhs, scope, snode.loc);
+            this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
         } else if (snode.lhs.op == "unary*") {
-            this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, snode.rhs, scope, snode.loc);
+            this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
         } else {
             throw "Implementation error";
         }
     }
 
-    private checkGroupsInSingleAssignment(ltype: Type, lnode: Node | Group, rnode: Node | Group, scope: Scope, loc: Location) {
-        let rightGroup: Group;
-        if (rnode instanceof Node) {
-            let isPointer = this.isSafePointer(rnode.type) || this.isSlice(rnode.type);
+    private checkGroupsInSingleAssignment(ltype: Type, lnode: Node | Group, rightGroup: Group, rnode: Node, rnodeReuse: boolean, scope: Scope, loc: Location) {
+        if (!rnode && !rightGroup) {
+            throw "Implementation error";
+        }
+        if (!rightGroup) {
+            let isPointer = !this.isPrimitive(rnode.type);
             let flags = (isPointer && !TypeChecker.isUnique(rnode.type)) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
             rightGroup = this.checkGroupsInExpression(rnode, scope, flags);
-        } else {
-            rightGroup = rnode;
         }
         let leftGroup = lnode instanceof Node ? this.checkGroupsInExpression(lnode, scope, GroupCheckFlags.AllowIsolates | GroupCheckFlags.AllowUnavailableVariable) : lnode as Group;
 
@@ -5482,52 +5506,51 @@ export class TypeChecker {
         }
 
         // Assigning a value type? -> Nothing to do
-        let l = this.stripType(ltype);
-        if (!(l instanceof PointerType) && !(l instanceof SliceType)) {
+        if (this.isPureValue(ltype)) {
             if (lhsVariable) {
                 scope.setGroup(lhsVariable, new Group(false, lhsVariable.name));
             }
             return;
         }
 
-        let rhsIsVariable = rnode instanceof Node && (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id"));
-        let rhsIsTakeExpr = rnode instanceof Node && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
+        let rhsIsVariable = rnode && (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id"));
+        let rhsIsTakeExpr = rnode && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
         if (!rightGroup) {
             rightGroup = new Group(false);
         }
 
         // The if-clause is true when assigning to a variable that is not global
         if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
-            if (this.isStrong(l)) {
-                if (rhsIsVariable) {
-                    // Make the RHS variable unavailable
-                    let rn = rnode as Node;
-                    let rhsVariable = scope.resolveElement(rn.op == "id" ? rn.value : rn.lhs.value);
-                    scope.setGroup(rhsVariable, null);
-                } else if (rhsIsTakeExpr) {
-                    // Nothing special todo
-                } else {
-                    throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
-                }
-            } else if (TypeChecker.isUnique(l)) {
+            if (TypeChecker.isUnique(ltype)) {
                 if (rhsIsVariable) {
                     // Check that the RHS group is unbound
                     if (rightGroup.isBound) {
                         throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
                     }
                     // Make the RHS variable unavailable
-                    let rn = rnode as Node;
-                    let rhsVariable = scope.resolveElement(rn.op == "id" ? rn.value : rn.lhs.value);
-                    scope.setGroup(rhsVariable, null);
+                    if (!rnodeReuse) {
+                        let rhsVariable = scope.resolveElement(rnode.op == "id" ? rnode.value : rnode.lhs.value);
+                        scope.setGroup(rhsVariable, null);
+                    }
                 } else if (rhsIsTakeExpr) {
                     // Nothing special todo
                 } else {
                     throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
                 }
-            } else if (TypeChecker.isReference(l)) {
-                // Nothing special todo
+            } else if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
+                if (rhsIsVariable) {
+                    // Make the RHS variable unavailable
+                    if (!rnodeReuse) {
+                        let rhsVariable = scope.resolveElement(rnode.op == "id" ? rnode.value : rnode.lhs.value);
+                        scope.setGroup(rhsVariable, null);
+                    }
+                } else if (rhsIsTakeExpr) {
+                    // Nothing special todo
+                } else {
+                    throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
+                }
             } else {
-                throw "Implementation error";
+                // Nothing special todo, because there are only references, hence no ownership transfer
             }
             // Set the group of the LHS variable with the RHS group
             scope.setGroup(lhsVariable, rightGroup);
