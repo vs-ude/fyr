@@ -500,7 +500,7 @@ export class FunctionType extends Type {
     }
 
     public createGroups(): Map<string, Group> {
-        let defaultGroup = new Group(true);
+        let defaultGroup = new Group(GroupKind.Bound);
         let groups = new Map<string, Group>();
         let groupNames = new Map<string, Group>();
         for (let p of this.parameters) {
@@ -510,13 +510,13 @@ export class FunctionType extends Type {
                 }
                 let g = groupNames.get(p.type.groupName);
                 if (!g) {
-                    g = new Group(true);
+                    g = new Group(GroupKind.Bound);
                     groupNames.set(p.type.groupName, g);
                 }
                 groups.set(p.name, g);
             } else {
                 if (TypeChecker.isReference(p.type)) {
-                    groups.set(p.name, new Group(true));
+                    groups.set(p.name, new Group(GroupKind.Bound));
                 } else {
                     groups.set(p.name, defaultGroup);
                 }
@@ -532,7 +532,7 @@ export class FunctionType extends Type {
                         }    
                         let g = groupNames.get(t.groupName);
                         if (!g) {
-                            g = new Group(true);
+                            g = new Group(GroupKind.Bound);
                             groupNames.set(t.groupName, g);
                         }
                         groups.set(t.name, g);
@@ -547,7 +547,7 @@ export class FunctionType extends Type {
                     }    
                     let g = groupNames.get(this.returnType.groupName);
                     if (!g) {
-                        g = new Group(true);
+                        g = new Group(GroupKind.Bound);
                         groupNames.set(this.returnType.groupName, g);
                     }
                     groups.set("return", g);
@@ -842,9 +842,15 @@ export class MapType extends Type {
     public valueType: Type;
 }
 
+export enum GroupKind {
+    Free = 0,
+    Isolated = 1,
+    Bound = 2
+}
+
 export class Group {
-    constructor(isBound: boolean, name?: string) {
-        this.isBound = isBound;
+    constructor(kind: GroupKind, name?: string) {
+        this.kind = kind;
         if (name) {
             this.name = name;
         } else {
@@ -853,7 +859,7 @@ export class Group {
     }
 
     private static counter = 1;
-    public isBound: boolean = false;
+    public kind: GroupKind;
 
     public name: string;
 
@@ -875,7 +881,7 @@ export class Group {
     public static join(group1: Group | null, group2: Group | null, enforceUnification: boolean, loc: Location, doThrow: boolean): Group {
         if (!group1) {
             if (!group2) {
-                return new Group(false);
+                return new Group(GroupKind.Free);
             }
             return group2;
         }
@@ -896,14 +902,14 @@ export class Group {
             }
         }
 
-        if (b2.isBound && b1.isBound) {
+        if ((b1.kind == GroupKind.Bound && b2.kind != GroupKind.Free) || (b2.kind == GroupKind.Bound && b1!.kind != GroupKind.Free)) {
             if (enforceUnification) {
                 if (doThrow) {
                     throw new TypeError("Groups cannot be unified", loc);
                 }
                 return null;
             }
-            let c = new Group(true);
+            let c = new Group(GroupKind.Bound);
             c.joinedGroups = new Set<Group>();
             c.joinedGroups.add(b1);
             c.joinedGroups.add(b2);
@@ -929,7 +935,7 @@ export class Group {
         b1 = b1.preJoin(loc, doThrow);
         b2 = b2.preJoin(loc, doThrow);
 
-        if (b2.isBound) {
+        if (b2.kind != GroupKind.Free) {
             let tmp = b1;
             b1 = b2;
             b2 = tmp;
@@ -1018,8 +1024,8 @@ export class Group {
 }
 
 export class TupleGroup extends Group {
-    constructor(isBound: boolean, name?: string) {
-        super(isBound, name);
+    constructor(kind: GroupKind, name?: string) {
+        super(kind, name);
     }
 
     public preJoin(loc: Location, doThrow: boolean): Group {
@@ -1463,7 +1469,7 @@ export class TypeChecker {
         this.builtin_cap.name = "cap";
         this.builtin_cap.returnType = this.t_int;
 
-        this.globalGroup = new Group(true, "$global");
+        this.globalGroup = new Group(GroupKind.Bound, "$global");
     }
 
     public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" = "default"): Type {
@@ -2492,7 +2498,7 @@ export class TypeChecker {
             // Unique global pointers are subject to their own group.
             // All other global variables belong to the same group.
             if (TypeChecker.isUnique(v.type)) {
-                scope.setGroup(v, new Group(true, v.name));                
+                scope.setGroup(v, new Group(GroupKind.Isolated, v.name));                
             } else {
                 scope.setGroup(v, this.globalGroup);
             }
@@ -5140,6 +5146,34 @@ export class TypeChecker {
         return false;
     }
 
+    public static hasReferenceOrStrongPointers(t: Type): boolean {
+        t = RestrictedType.strip(t);
+        if ((t instanceof PointerType || t instanceof SliceType) && (t.mode == "strong" || t.mode == "reference")) {
+            return true;
+        }
+        if (t instanceof TupleType) {
+            for(let p of t.types) {
+                if (this.hasStrongOrUniquePointers(p)) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (t instanceof ArrayType) {
+            return this.hasStrongOrUniquePointers(t.elementType);
+        } else if (t instanceof StructType) {
+            for(let f of t.fields) {
+                if (this.hasStrongOrUniquePointers(f.type)) {
+                    return true;
+                }
+            }
+            if (t.extends && this.hasStrongOrUniquePointers(t.extends)) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
     /**
      * A pure value contains no pointers and can be copied byte by byte.
      */
@@ -5489,12 +5523,12 @@ export class TypeChecker {
     }
 
     private checkGroupsInSingleAssignment(ltype: Type, lnode: Node | Group, rightGroup: Group, rnode: Node, rnodeReuse: boolean, scope: Scope, loc: Location) {
-        if (!rnode && !rightGroup) {
+        if (!rnode) {
             throw "Implementation error";
         }
         if (!rightGroup) {
-            let isPointer = !this.isPrimitive(rnode.type);
-            let flags = (isPointer && !TypeChecker.isUnique(rnode.type)) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
+            // let isPointer = !this.isPureValue(rnode.type);
+            let flags = TypeChecker.hasReferenceOrStrongPointers(rnode.type) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
             rightGroup = this.checkGroupsInExpression(rnode, scope, flags);
         }
         let leftGroup = lnode instanceof Node ? this.checkGroupsInExpression(lnode, scope, GroupCheckFlags.AllowIsolates | GroupCheckFlags.AllowUnavailableVariable) : lnode as Group;
@@ -5508,23 +5542,27 @@ export class TypeChecker {
         // Assigning a value type? -> Nothing to do
         if (this.isPureValue(ltype)) {
             if (lhsVariable) {
-                scope.setGroup(lhsVariable, new Group(false, lhsVariable.name));
+                scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
             }
             return;
         }
 
-        let rhsIsVariable = rnode && (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id"));
-        let rhsIsTakeExpr = rnode && ((rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(");
+        let rhsIsVariable = rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id");
+        let rhsIsTakeExpr = (rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(" || rnode.op == "null";
+        // The right hand side is an isolate and therefore the group is null
         if (!rightGroup) {
-            rightGroup = new Group(false);
+            if (TypeChecker.hasReferenceOrStrongPointers(rnode.type)) {
+                throw "Implementation error";
+            }
+            rightGroup = new Group(GroupKind.Free);
         }
 
         // The if-clause is true when assigning to a variable that is not global
         if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
             if (TypeChecker.isUnique(ltype)) {
                 if (rhsIsVariable) {
-                    // Check that the RHS group is unbound
-                    if (rightGroup.isBound) {
+                    // Check that the RHS group is unbound, because the RHS is not neccessarily an isolate
+                    if (rightGroup.kind == GroupKind.Bound) {
                         throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
                     }
                     // Make the RHS variable unavailable
@@ -5557,16 +5595,16 @@ export class TypeChecker {
         } else {
             if (!leftGroup) {
                 // Check that the RHS group is unbound
-                if (rightGroup.isBound) {
+                if (rightGroup.kind == GroupKind.Bound) {
                     throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
                 }
                 // Make the RHS group unavailable
                 rightGroup.makeUnavailable();
             } else {
                 // Test whether LHS and RHS are equal or one of LHS or RHS are unbound
-                if (leftGroup != rightGroup && leftGroup.isBound && rightGroup.isBound) {
-                    throw new TypeError("Two distinct bound groups cannot be merged", loc);
-                }
+                // if (leftGroup != rightGroup && leftGroup.isBound && rightGroup.isBound) {
+                //    throw new TypeError("Two distinct bound groups cannot be merged", loc);
+                //}
                 // Join RHS and LHS
                 Group.join(leftGroup, rightGroup, true, loc, true);
             }
@@ -5588,7 +5626,7 @@ export class TypeChecker {
 
         switch (enode.op) {
             case "null":
-                break;
+                return new Group(GroupKind.Free);
             case "bool":
                 break;
             case "str":
@@ -5757,6 +5795,9 @@ export class TypeChecker {
                         group = Group.join(group, g, true, enode.loc, true);
                     }
                 }
+                if (!group) {
+                    return new Group(GroupKind.Free);
+                }
                 return group;
             }
             case "array":
@@ -5776,6 +5817,9 @@ export class TypeChecker {
                             group = Group.join(group, g, true, enode.loc, true);
                         }                            
                     }
+                }
+                if (!group) {
+                    return new Group(GroupKind.Free);
                 }
                 return group;
             }
@@ -5800,6 +5844,9 @@ export class TypeChecker {
                     }
                 } else if (t instanceof MapType) {
                     throw "TODO";
+                }
+                if (!group) {
+                    return new Group(GroupKind.Free);
                 }
                 return group;
             }

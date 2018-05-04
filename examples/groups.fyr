@@ -67,7 +67,8 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     // Must err, because param1 is bound
 //    pr4 = param1
     var pr11 ^PointRef = {}
-    pr11.ptr = param1
+    // Must err, because param1 is bound
+//    pr11.ptr = param1
     // Must err
 //    pr11.ptr = param2
     // Must err
@@ -85,6 +86,14 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     // Must err, because link3 is unique and therefore in a different group
 //    link3.sibling = link1
 
+    var pr12 ^PointRef = {}
+    // Must err
+//    var pr13 = take(pr12.unique.ptr)
+    var pr13 = take(pr12.unique.unique)
+    // Must work, because pr13 is free
+    pr13.ptr = param4
+    var pr14 *PointRef = {}
+// TODO    var pr15 &PointRef = pr14.unique.unique
     return {}
 }
 
