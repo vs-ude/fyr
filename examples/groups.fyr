@@ -93,7 +93,8 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     // Must work, because pr13 is free
     pr13.ptr = param4
     var pr14 *PointRef = {}
-// TODO    var pr15 &PointRef = pr14.unique.unique
+    // Must err
+//    var pr15 &PointRef = pr14.unique.unique
     return {}
 }
 

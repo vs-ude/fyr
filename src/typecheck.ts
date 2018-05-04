@@ -5550,8 +5550,12 @@ export class TypeChecker {
 
         let rhsIsVariable = rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id");
         let rhsIsTakeExpr = (rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(" || rnode.op == "null";
-        // The right hand side is an isolate and therefore the group is null
+        // The right hand side is an expression that evaluates to an isolate, and therefore the group is null
         if (!rightGroup) {
+            // The isolate must be taken, even when assigned to a reference
+            if (!rhsIsVariable && !rhsIsTakeExpr) {
+                throw new TypeError("Assignment of an expression that evaluates to an isolate is only allowed via a variable or take expression", loc);
+            }
             if (TypeChecker.hasReferenceOrStrongPointers(rnode.type)) {
                 throw "Implementation error";
             }
@@ -5574,7 +5578,7 @@ export class TypeChecker {
                 } else if (rhsIsTakeExpr) {
                     // Nothing special todo
                 } else {
-                    throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
+                    throw new TypeError("Assignment to an owning pointer is only allowed from a variable or take expression", loc);
                 }
             } else if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
                 if (rhsIsVariable) {
@@ -5586,7 +5590,7 @@ export class TypeChecker {
                 } else if (rhsIsTakeExpr) {
                     // Nothing special todo
                 } else {
-                    throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
+                    throw new TypeError("Assignment to an owning pointer is only allowed from a variable or take expression", loc);
                 }
             } else {
                 // Nothing special todo, because there are only references, hence no ownership transfer
@@ -5595,7 +5599,7 @@ export class TypeChecker {
             scope.setGroup(lhsVariable, rightGroup);
         } else {
             if (TypeChecker.hasStrongOrUniquePointers(ltype) && !rhsIsVariable && !rhsIsTakeExpr) {
-                throw new TypeError("Assignment to a strong pointer is only allowed from a variable or take expression", loc);
+                throw new TypeError("Assignment to an ownding pointer is only allowed from a variable or take expression", loc);
             }
             if (!leftGroup) {
                 // Check that the RHS group is unbound
