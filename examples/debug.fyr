@@ -38,5 +38,16 @@ func funcTest2() {
 func doIt(l1 *Link, l2 *Link) ^Link {
     // Must err
 //    return l1
-    return {}
+    var v1 *Link
+    var v2 ^Link
+    v1, v2 = tupleMe()
+    // Must err
+//    return v1
+    return v2
+//    var v3 ^Link = doIt(null, null)
+//    return v3
+}
+
+func tupleMe() (*Link, ^Link) {
+    return {}, {}
 }

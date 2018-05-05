@@ -537,7 +537,11 @@ export class FunctionType extends Type {
                         }
                         groups.set(t.name, g);
                     } else {
-                        groups.set(t.name, defaultGroup);
+                        if (TypeChecker.isUnique(t)) {
+                            groups.set(t.name, new Group(GroupKind.Isolated));
+                        } else {
+                            groups.set(t.name, defaultGroup);
+                        }
                     }                                            
                 }
             } else {
@@ -552,7 +556,11 @@ export class FunctionType extends Type {
                     }
                     groups.set("return", g);
                 } else {
-                    groups.set("return", defaultGroup);
+                    if (TypeChecker.isUnique(this.returnType)) {
+                        groups.set("return", new Group(GroupKind.Isolated));
+                    } else {
+                        groups.set("return", defaultGroup);
+                    }
                 }                    
             }
         }
@@ -5501,7 +5509,8 @@ export class TypeChecker {
                     this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], null, snode.rhs.parameters[i], false, scope, snode.loc);                    
                 }
             } else {
-                let g = this.checkGroupsInExpression(snode.rhs, scope, GroupCheckFlags.AllowIsolates);
+                let flags = TypeChecker.hasReferenceOrStrongPointers(snode.rhs.type) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
+                let g = this.checkGroupsInExpression(snode.rhs, scope, flags);
                 for (let i = 0; i < snode.lhs.parameters.length; i++) {
                     this.checkGroupsInSingleAssignment(snode.lhs.parameters[i].type, snode.lhs.parameters[i], g instanceof TupleGroup ? g.groups[i] : g, snode.rhs, i+1 < snode.lhs.parameters.length, scope, snode.loc);
                 }
@@ -5966,14 +5975,17 @@ export class TypeChecker {
                     name = "default";
                 }
                 let g: Group;
-                if (groups.has(name)) {
-                    return groups.get(name);
-                }
-                let kind = GroupKind.Free;
-                if (TypeChecker.hasReferenceOrStrongPointers(t)) {
-                    kind = GroupKind.Bound;
-                } else if (TypeChecker.isUnique(t)) {
-                    kind = GroupKind.Isolated;
+                if (TypeChecker.isUnique(t)) {
+                    g = new Group(GroupKind.Isolated);
+                } else if (groups.has(name)) {
+                    g = groups.get(name);
+                } else {
+                    let kind = GroupKind.Free;
+                    if (TypeChecker.hasReferenceOrStrongPointers(t)) {
+                        kind = GroupKind.Bound;
+                    }
+                    g = new Group(kind);
+                    groups.set(name, g);
                 }
                 tupleg.groups.push(g);   
             }
