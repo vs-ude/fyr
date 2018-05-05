@@ -2175,6 +2175,7 @@ export class TypeChecker {
             registerScope.registerElement(this.qualifiedTypeName(structType) + "." + f.name, f);
         } else {
             registerScope.registerElement(f.name, f);
+            registerScope.setGroup(f, new Group(GroupKind.Free));
         }
 
         return f;
@@ -5562,45 +5563,33 @@ export class TypeChecker {
             rightGroup = new Group(GroupKind.Free);
         }
 
-        // The if-clause is true when assigning to a variable that is not global
-        if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
-            if (TypeChecker.isUnique(ltype)) {
-                if (rhsIsVariable) {
-                    // Check that the RHS group is unbound, because the RHS is not neccessarily an isolate
-                    if (rightGroup.kind == GroupKind.Bound) {
-                        throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
-                    }
-                    // Make the RHS variable unavailable
-                    if (!rnodeReuse) {
-                        let rhsVariable = scope.resolveElement(rnode.op == "id" ? rnode.value : rnode.lhs.value);
-                        scope.setGroup(rhsVariable, null);
-                    }
-                } else if (rhsIsTakeExpr) {
-                    // Nothing special todo
-                } else {
-                    throw new TypeError("Assignment to an owning pointer is only allowed from a variable or take expression", loc);
+        if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
+            if (rhsIsVariable) {
+                // Make the RHS variable unavailable
+                if (!rnodeReuse) {
+                    let rhsVariable = scope.resolveElement(rnode.op == "id" ? rnode.value : rnode.lhs.value);
+                    scope.setGroup(rhsVariable, null);
                 }
-            } else if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
-                if (rhsIsVariable) {
-                    // Make the RHS variable unavailable
-                    if (!rnodeReuse) {
-                        let rhsVariable = scope.resolveElement(rnode.op == "id" ? rnode.value : rnode.lhs.value);
-                        scope.setGroup(rhsVariable, null);
-                    }
-                } else if (rhsIsTakeExpr) {
-                    // Nothing special todo
-                } else {
-                    throw new TypeError("Assignment to an owning pointer is only allowed from a variable or take expression", loc);
-                }
+            } else if (rhsIsTakeExpr) {
+                // Nothing special todo
             } else {
-                // Nothing special todo, because there are only references, hence no ownership transfer
+                throw new TypeError("Assignment to an ownding pointer is only allowed from a variable or take expression", loc);
             }
+        }
+
+        if (TypeChecker.isUnique(ltype)) {
+            // Check that the RHS group is unbound, because the RHS is not neccessarily an isolate
+            if (rightGroup.kind == GroupKind.Bound) {
+                throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
+            }
+        }
+
+        // The if-clause is true when assigning to a variable that is not global.
+        // The purpose of ignoring global is that setGroup should not be executed on a global variable.
+        if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
             // Set the group of the LHS variable with the RHS group
             scope.setGroup(lhsVariable, rightGroup);
         } else {
-            if (TypeChecker.hasStrongOrUniquePointers(ltype) && !rhsIsVariable && !rhsIsTakeExpr) {
-                throw new TypeError("Assignment to an ownding pointer is only allowed from a variable or take expression", loc);
-            }
             if (!leftGroup) {
                 // Check that the RHS group is unbound
                 if (rightGroup.kind == GroupKind.Bound) {
@@ -5671,7 +5660,7 @@ export class TypeChecker {
                 if (TypeChecker.isUnique(enode.rhs.type) && (flags & GroupCheckFlags.ForbidIsolates) != 0) {
                     throw new TypeError("Accessing a member in an isolate is not allowed", enode.loc);
                 }
-                return this.checkGroupsInExpression(enode.rhs, scope, flags & GroupCheckFlags.ForbidIsolates);
+                return this.checkGroupsInExpression(enode.rhs, scope, flags | GroupCheckFlags.ForbidIsolates);
             }
             case "unary*":
             {
@@ -5747,51 +5736,23 @@ export class TypeChecker {
                 }
                 return g;
             }
-            /*
             case "(":
             {
-                this.checkExpression(enode.lhs, scope);
-                if (enode.parameters) {
-                    for(let pnode of enode.parameters) {
-                        if (pnode.op == "unary...") {
-                            this.checkExpression(pnode.rhs, scope);
-                        } else {
-                            this.checkExpression(pnode, scope);
-                        }
-                    }
+                let g = this.checkGroupsInExpression(enode.lhs, scope, flags | GroupCheckFlags.ForbidIsolates);
+                if (!g) {
+                    throw "Implementation error";                    
+                }
+                // When calling a non-member function, the default group is determined by the first parameter.
+                if (enode.lhs.op == "id") {
+                    g = null;
                 }
                 let t = this.stripType(enode.lhs.type);
-                if (t instanceof TemplateType) {
-                    let result = this.checkTemplateFunctionArguments(t, enode.parameters, scope, enode.loc);
-                    let types: Array<Type> = [];
-                    for(let i = 0; i < t.templateParameterNames.length; i++) {
-                        let tt = result.get(t.templateParameterNames[i]);
-                        types.push(tt);
-                    }
-                    let f = this.instantiateTemplateFunction(t, types, enode.loc);
-                    enode.type = f.type.returnType;
-                    enode.lhs.type = f.type;
-                } else if (t instanceof PolymorphFunctionType) {
-                    var ok = false;
-                    for(let it of t.instances) {
-                        if (this.checkFunctionArguments(it, enode.parameters, scope, enode.loc, false)) {
-                            ok = true;
-                            enode.lhs.type = it;
-                            enode.type = it.returnType;
-                            break;
-                        }                        
-                    }
-                    if (!ok) {
-                        throw new TypeError("Parameters match no instance of the polymorphic function " + t.name, enode.loc);
-                    }
-                } else if (t instanceof FunctionType) {
-                    this.checkFunctionArguments(t, enode.parameters, scope, enode.loc);                    
-                    enode.type = t.returnType;
-                } else {
-                    throw new TypeError("Expression is not a function", enode.loc);
+                if (!(t instanceof FunctionType)) {
+                    throw "Implementation error";
                 }
-                break;
+                return this.checkGroupsInFunctionArguments(t, g, enode.parameters, scope, enode.loc);
             }
+            /*
             case "genericInstance":
                 this.checkExpression(enode.lhs, scope);
                 // enode.type = this.createType(enode, scope);
@@ -5951,6 +5912,91 @@ export class TypeChecker {
         }    
         return null;
     }
+
+    public checkGroupsInFunctionArguments(ft: FunctionType, defaultGroup: Group, args: Array<Node> | null, scope: Scope, loc: Location): Group {
+        let groups: Map<string, Group> = new Map<string, Group>();
+        if (defaultGroup) {
+            groups.set("default", defaultGroup);
+        }
+        if (args) {
+            for(let i = 0; i < args.length; i++) {
+                let rnode: Node;
+                let ltype: Type;
+                let param: FunctionParameter;
+                if (args[i].op == "unary...") {
+                    param = ft.lastParameter();
+                    rnode = args[i].rhs;
+                    ltype = param.type;
+                } else {
+                    if (ft.hasEllipsis() && i >= ft.parameters.length - 1) {
+                        param = ft.lastParameter();
+                        ltype = this.arrayElementType(this.sliceArrayType(param.type as SliceType));
+                    } else {
+                        param = ft.parameters[i];
+                        ltype = param.type;
+                    }
+                    rnode = args[i];
+                }
+                let name = param.type.groupName;
+                if (!name || name == "") {
+                    name = "default";
+                }
+                let g: Group;
+                if (groups.has(name)) {
+                    g = groups.get(name);
+                } else {
+                    g = new Group(GroupKind.Free, param.name);
+                    groups.set(name, g);
+                }
+                this.checkGroupsInSingleAssignment(ltype, g, null, rnode, false, scope, loc);
+            }
+        }
+
+        // Void function?
+        if (!ft.returnType || ft.returnType == this.t_void) {
+            return null;
+        }
+        // The function returns a tuple type?
+        if (ft.returnType instanceof TupleType) {
+            let tupleg = new TupleGroup(GroupKind.Free);
+            for(let i = 0; i < ft.returnType.types.length; i++) {
+                let t = ft.returnType.types[i];
+                let name = t.groupName;
+                if (!name || name == "") {
+                    name = "default";
+                }
+                let g: Group;
+                if (groups.has(name)) {
+                    return groups.get(name);
+                }
+                let kind = GroupKind.Free;
+                if (TypeChecker.hasReferenceOrStrongPointers(t)) {
+                    kind = GroupKind.Bound;
+                } else if (TypeChecker.isUnique(t)) {
+                    kind = GroupKind.Isolated;
+                }
+                tupleg.groups.push(g);   
+            }
+            return tupleg;
+        }
+        // Only one type is returned
+        let name = ft.returnType.groupName;
+        if (!name || name == "") {
+            name = "default";
+        }
+        let g: Group;
+        if (groups.has(name)) {
+            return groups.get(name);
+        }
+        let kind = GroupKind.Free;
+        if (TypeChecker.hasReferenceOrStrongPointers(ft.returnType)) {
+            kind = GroupKind.Bound;
+        } else if (TypeChecker.isUnique(ft.returnType)) {
+            kind = GroupKind.Isolated;
+        }
+        return new Group(kind, "return");
+    }
+
 
     public t_bool: Type;
     public t_float: Type;

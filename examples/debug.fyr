@@ -22,8 +22,21 @@ type PointRef struct {
     pos Point
 }
 
-func tupleTest() {
-//    var funky *Link = {}
-    var tuple (*Link, *Link) = ({}, {})
-    tuple
+func funcTest(param1 *Link) *Link {
+    var funky *Link = {}
+    var r = doIt(funky, param1)
+    return r
+}
+
+func funcTest2() {
+    var l *Link = {}
+    // Must err
+//    doIt(l, l)
+    doIt(l, {})
+}
+
+func doIt(l1 *Link, l2 *Link) ^Link {
+    // Must err
+//    return l1
+    return {}
 }
