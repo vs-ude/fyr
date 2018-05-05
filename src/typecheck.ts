@@ -5665,8 +5665,14 @@ export class TypeChecker {
             case "unary+":
             case "unary^":
             case "unary!":
-            case "unary&":
                 return this.checkGroupsInExpression(enode.rhs, scope, flags);
+            case "unary&":
+            {
+                if (TypeChecker.isUnique(enode.rhs.type) && (flags & GroupCheckFlags.ForbidIsolates) != 0) {
+                    throw new TypeError("Accessing a member in an isolate is not allowed", enode.loc);
+                }
+                return this.checkGroupsInExpression(enode.rhs, scope, flags & GroupCheckFlags.ForbidIsolates);
+            }
             case "unary*":
             {
                 if (TypeChecker.isUnique(enode.rhs.type) && (flags & GroupCheckFlags.ForbidIsolates) != 0) {
