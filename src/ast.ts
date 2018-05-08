@@ -1,4 +1,4 @@
-import {Type, Scope} from "./typecheck"
+import {Type, Scope, ScopeExit} from "./typecheck"
 
 var _currentFile: string;
 
@@ -160,6 +160,7 @@ export class Node {
         n.type = this.type;
         n.nspace = this.nspace;
         n.scope = this.scope;
+        n.scopeExit = this.scopeExit;
         n.lhs = this.lhs ? this.lhs.clone() : null;
         n.rhs = this.rhs ? this.rhs.clone() : null;
         n.name = this.name ? this.name.clone() : null;
@@ -204,4 +205,5 @@ export class Node {
     public type: Type;
     public nspace: string;
     public scope: Scope;
+    public scopeExit: ScopeExit;
 }

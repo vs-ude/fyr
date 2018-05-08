@@ -1422,7 +1422,16 @@ export class PackageType extends Type {
     public types: Map<string, Type> = new Map<string, Type>();
 }
 
-export type ScopeExit = "return" | "outerScope" | "fallthrough";
+export class ScopeExit {
+    public merge(s: ScopeExit) {
+        throw "TODO";
+    }
+    
+    public returns: Array<Scope>;
+    public breaks: Array<Scope>;
+    public continues: Array<Scope>;
+    public fallthrough: Scope | null;
+}
 
 enum GroupCheckFlags {
     None = 0,
@@ -2545,13 +2554,16 @@ export class TypeChecker {
     }
 
     private checkFunctionBody(f: Function) {
-        let scopeExit: ScopeExit = "fallthrough";
+        let scopeExit: ScopeExit;
         if (f.node.statements) {
             scopeExit = this.checkStatements(f.node.statements, f.scope);
+        } else {
+            scopeExit = new ScopeExit();
+            scopeExit.fallthrough = f.scope;
         }
         let needsReturn = !!f.node.rhs;
         if (needsReturn) {
-            if (scopeExit != "return") {
+            if (scopeExit.fallthrough) {
                 throw new TypeError("Missing return at end of function", f.loc);
             }
         }
@@ -2982,11 +2994,12 @@ export class TypeChecker {
     }
 
     private checkStatements(statements: Array<Node>, scope: Scope): ScopeExit {
-        let scopeExit: ScopeExit = "fallthrough";
+        let scopeExit: ScopeExit = new ScopeExit();
+        scopeExit.fallthrough = scope;
         for(let i = 0; i < statements.length; i++) {
             let st = statements[i];
-            scopeExit = this.checkStatement(st, scope);
-            if (scopeExit != "fallthrough") {
+            this.checkStatement(st, scope, scopeExit);
+            if (!scopeExit.fallthrough) {
                 for(let j = i + 1; j < statements.length; j++) {
                     st = statements[j];
                     if (st.op != "comment") {
@@ -2999,7 +3012,7 @@ export class TypeChecker {
         return scopeExit;
     }
 
-    public checkStatement(snode: Node, scope: Scope): ScopeExit {
+    public checkStatement(snode: Node, scope: Scope, scopeExit: ScopeExit): void {
         switch (snode.op) {
             case "comment":
                 break;
@@ -3016,40 +3029,52 @@ export class TypeChecker {
                     this.checkExpression(snode.lhs, scope);
                     this.checkIsAssignableNode(f.type.returnType, snode.lhs, scope);
                 }
-                return "return";
+                if (!scopeExit.returns) scopeExit.returns = [];
+                scopeExit.returns.push(scope);
+                scopeExit.fallthrough = null;
+                return;
             case "break":
                 if (!scope.isInForLoop()) {
                     throw new TypeError("'break' outside of loop", snode.loc);
                 }
-                return "outerScope";
+                if (!scopeExit.breaks) scopeExit.breaks = [];
+                scopeExit.breaks.push(scope);
+                scopeExit.fallthrough = null;
+                return;
             case "continue":
                 if (!scope.isInForLoop()) {
                     throw new TypeError("'continue' outside of loop", snode.loc);
                 }
-                return "outerScope";
+                if (!scopeExit.continues) scopeExit.continues = [];
+                scopeExit.continues.push(scope);
+                scopeExit.fallthrough = null;
+                return;
             case "if":
+            {
                 let s = new Scope(scope);
                 snode.scope = s;
                 if (snode.lhs) {
-                    this.checkStatement(snode.lhs, s);
+                    let initScopeExit = new ScopeExit();
+                    initScopeExit.fallthrough = scope;
+                    this.checkStatement(snode.lhs, s, initScopeExit);
+                    if (initScopeExit.returns || initScopeExit.breaks || initScopeExit.continues) {
+                        throw new TypeError("break, return and continue are not allowed inside the initialization statement of an if clause.", snode.loc);
+                    }
                 }
                 this.checkExpression(snode.condition, s);
                 this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
-                let scopeExit = this.checkStatements(snode.statements, s)
+                snode.scopeExit = this.checkStatements(snode.statements, s);
+                scopeExit.merge(snode.scopeExit);
                 if (snode.elseBranch) {
-                    let scopeExitElse = this.checkStatement(snode.elseBranch, scope);
-                    if (scopeExit == "return" && scopeExitElse == "return") {
-                        return "return";
-                    }
-                    if (scopeExit != "fallthrough" && scopeExitElse != "fallthrough") {
-                        return "outerScope";
-                    }
+                    let s2 = new Scope(scope);
+                    snode.elseBranch.scope = s2;
+                    snode.elseBranch.scopeExit = this.checkStatements(snode.elseBranch.statements, s2);
+                    scopeExit.merge(snode.elseBranch.scopeExit);
                 }
                 return "fallthrough";
+            }
             case "else":
-                let s2 = new Scope(scope);
-                snode.scope = s2;
-                return this.checkStatements(snode.statements, s2);
+                throw "Implementation error";
             case "for":
                 let forScope = new Scope(scope);
                 snode.scope = forScope;
