@@ -68,16 +68,14 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
 //    pr4 = param1
     var pr11 ^PointRef = {}
     // Must err, because param1 is bound
-//    pr11.ptr = param1
+//!!!    pr11.ptr = param1
     // Must err
-//    pr11.ptr = param2
+//!!!    pr11.ptr = param2
     // Must err
 //    return param2
     // Must err
 //    param3.ptr = param4
     param3.unique = pr11
-    // Must err
-//    return param1
 
     link1 = {}
     link2 = {}
@@ -87,15 +85,15 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
 //    link3.sibling = link1
 
     var pr12 ^PointRef = {}
-    // Must err
+    // Must err, because we must not take pointers out of isolates
 //    var pr13 = take(pr12.unique.ptr)
     var pr13 = take(pr12.unique.unique)
     // Must work, because pr13 is free
     pr13.ptr = param4
     var pr14 *PointRef = {}
-    // Must err
+    // Must err, because isolates may only be taken out of isolates, but not referenced
 //    var pr15 &PointRef = pr14.unique.unique
-    return {}
+    return param1
 }
 
 func tupleTest(param1 *Link, :b param2 *Link) {

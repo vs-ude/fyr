@@ -189,36 +189,152 @@ export class Scope {
         this.elementGroups.set(element, group);
     }
 
-    public mergeGroups(scope: Scope): void {
-        console.log("---------------- merge -------------");
-        if (!scope.elementGroups) {
-            return;
+    public makeGroupUnavailable(g: Group) {
+        g = this.resolveCanonicalGroup(g);
+        this.unavailableGroups.add(g);
+    }
+
+    public isGroupAvailable(g: Group): boolean {
+        if (this.unavailableGroups.has(g)) {
+            return false;
         }
-        if (!this.elementGroups) {
-            this.elementGroups = new Map<ScopeElement, Group | null>();
+        let s: Scope = this;
+        while (s.parent) {
+            if (s.unavailableGroups.has(g)) {
+                return false;
+            }
+            s = s.parent;
         }
+        let c = this.resolveCanonicalGroup(g);
+        if (c != g) {
+            if (this.unavailableGroups.has(c)) {
+                return false;
+            }
+            let s: Scope = this;
+            while (s.parent) {
+                if (s.unavailableGroups.has(c)) {
+                    return false;
+                }
+                s = s.parent;
+            }
+        }
+        return true;
+    }
+
+    public resolveCanonicalGroup(g: Group): Group {
+        if (this.canonicalGroups.has(g)) {
+            return this.canonicalGroups.get(g);
+        }
+        if (this.parent) {
+            let p = this.parent.resolveCanonicalGroup(g);
+            if (p) {
+                return p;
+            }
+        }
+        return g;
+    }
+
+    public joinGroups(group1: Group | null, group2: Group | null, loc: Location, doThrow: boolean): Group {
+        if (!group1) {
+            if (!group2) {
+                return new Group(GroupKind.Free);
+            }
+            return group2;
+        }
+        if (!group2) {
+            return group1;
+        }
+
+        let b1 = this.resolveCanonicalGroup(group1);
+        let b2 = this.resolveCanonicalGroup(group2);
+        // No join necessary?
+        if (b1 == b2) {
+            return b1;
+        }        
+
+        b1 = b1.preJoin(this, loc, doThrow);
+        b2 = b2.preJoin(this, loc, doThrow);
+
+        if (b1 instanceof TupleGroup || b2 instanceof TupleGroup) {
+            throw "Implementation error";
+        }
+
+        if ((b1.kind == GroupKind.Bound && b2.kind != GroupKind.Free) || (b2.kind == GroupKind.Bound && b1!.kind != GroupKind.Free)) {
+            if (doThrow) {
+                throw new TypeError("Groups cannot be unified", loc);
+            }
+            return null;
+        }
+
+        if (Group.isLess(b1, b2)) {
+            let tmp = b1;
+            b1 = b2;
+            b2 = tmp;
+        }
+
+        if (!this.isGroupAvailable(b2)) {
+            this.makeGroupUnavailable(b1);
+        }
+        this.canonicalGroups.set(b2, b1);
+        return b1;
+    }
+
+    public mergeScopes(scope: Scope): void {
+//        console.log("---------------- merge -------------");
+        for(let g of scope.unavailableGroups) {
+            this.unavailableGroups.add(g);
+        }
+
+        for(let g of scope.canonicalGroups.keys()) {
+//            console.log("New canonical", g.name);
+            let c1 = this.resolveCanonicalGroup(g);
+            let c2 = scope.resolveCanonicalGroup(g);            
+            if (g == c1) {
+//                console.log("   No prev canonical, set to", c2.name);
+                this.canonicalGroups.set(g, c2);
+            } else if (c1 != c2) {
+//                console.log("   Joining canonicals", c1.name, c2.name);
+                let newg = this.joinGroups(c1, c2, null, false);
+                if (!newg) {
+//                    console.log("     no join");
+                    this.unavailableGroups.add(g);
+                } else {
+//                    console.log("     join success");
+                    this.canonicalGroups.set(g, newg);
+                }
+            }
+        }
+
         for(let e of scope.elementGroups.keys()) {
             if (this.elementGroups.has(e)) {
                 let g1 = this.elementGroups.get(e);
+                if (g1) {
+                    g1 = this.resolveCanonicalGroup(g1);
+                }
                 let g2 = scope.elementGroups.get(e);
+                if (g2) {
+                    g2 = scope.resolveCanonicalGroup(g2);
+                }
                 if (g1 != g2) {
                     if (!g1) {
-                        console.log("Set", e.name);
+//                        console.log("Set", e.name);
                         this.elementGroups.set(e, g2);        
                     } else if (!g2) {
-                        console.log("Set null", e.name);
+//                        console.log("Set null", e.name);
                         this.elementGroups.set(e, null);                                
                     } else {
-                        let newg = Group.join(g1, g2, false, null, false);
+                        let newg = this.joinGroups(g1, g2, null, false);
                         if (!newg) {
-                            throw "Implementation error";
+                            this.elementGroups.set(e, null);
+//                            console.log("Unavailable", e.name);
+                        } else {
+                            this.elementGroups.set(e, newg);
+//                            console.log("Joined", e.name);    
                         }
-                        this.elementGroups.set(e, newg);
-                        console.log("Joined", e.name);    
                     }
                 }
             } else {
-                console.log("Set", e.name);
+//                console.log("Set", e.name);
                 this.elementGroups.set(e, scope.elementGroups.get(e));
             }
         }
@@ -259,6 +375,8 @@ export class Scope {
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
     public types: Map<string, Type>;
+    public canonicalGroups: Map<Group, Group> = new Map<Group, Group>();
+    public unavailableGroups: Set<Group> = new Set<Group>();
     private elementGroups: Map<ScopeElement, Group | null> | null;
     public parent: Scope | null = null;
 
@@ -552,6 +670,8 @@ export class FunctionType extends Type {
             } else {
                 if (TypeChecker.isReference(p.type)) {
                     groups.set(p.name, new Group(GroupKind.Bound));
+                } else if (TypeChecker.isUnique(p.type)) {
+                    groups.set(p.name, new Group(GroupKind.Isolated));
                 } else {
                     groups.set(p.name, defaultGroup);
                 }
@@ -888,7 +1008,7 @@ export class MapType extends Type {
 export enum GroupKind {
     Free = 0,
     Isolated = 1,
-    Bound = 2
+    Bound = 2,
 }
 
 export class Group {
@@ -906,164 +1026,22 @@ export class Group {
 
     public name: string;
 
-    public canonical(): Group {
-        let t: Group = this;
-        if (t._canonical) {
-            t = t._canonical;
-            if (t._canonical) {
-                throw "Implementation error";
-            }
-        }
-        return t;
-    }
-
-    public preJoin(loc: Location, doThrow: boolean): Group {
+    public preJoin(scope: Scope, loc: Location, doThrow: boolean): Group {
         return this;
     }
 
-    public static join(group1: Group | null, group2: Group | null, enforceUnification: boolean, loc: Location, doThrow: boolean): Group {
-        if (!group1) {
-            if (!group2) {
-                return new Group(GroupKind.Free);
-            }
-            return group2;
+    public static isLess(g1: Group, g2: Group) {
+        if (g1.kind < g2.kind) {
+            return true;
         }
-        if (!group2) {
-            return group1;
+        if (g1.kind == g2.kind && g1.counter < g2.counter) {
+            return true;
         }
-
-        let b1 = group1.canonical();
-        let b2 = group2.canonical();
-        // No join necessary?
-        if (b1 == b2) {
-            return b1;
-        }        
-        
-        if (b1 instanceof TupleGroup || b2 instanceof TupleGroup) {
-            if (doThrow) {
-                throw new TypeError("Groups of tuples cannot be unified", loc);
-            }
-        }
-
-        if ((b1.kind == GroupKind.Bound && b2.kind != GroupKind.Free) || (b2.kind == GroupKind.Bound && b1!.kind != GroupKind.Free)) {
-            if (enforceUnification) {
-                if (doThrow) {
-                    throw new TypeError("Groups cannot be unified", loc);
-                }
-                return null;
-            }
-            let c = new Group(GroupKind.Bound);
-            c.joinedGroups = new Set<Group>();
-            c.joinedGroups.add(b1);
-            c.joinedGroups.add(b2);
-            if (b1.joinedGroups) {
-                for (let g of b1.joinedGroups) {
-                    g._canonical = c;
-                    c.joinedGroups.add(g);
-                }
-            }
-            if (b2.joinedGroups) {
-                for (let g of b2.joinedGroups) {
-                    g._canonical = c;
-                    c.joinedGroups.add(g);
-                }
-            }
-            b1._canonical = c;
-            b2._canonical = c;
-            b1.joinedGroups = null;
-            b2.joinedGroups = null;
-            return c;
-        }
-
-        b1 = b1.preJoin(loc, doThrow);
-        b2 = b2.preJoin(loc, doThrow);
-
-        if (b2.kind != GroupKind.Free) {
-            let tmp = b1;
-            b1 = b2;
-            b2 = tmp;
-        }
-        b2._canonical = b1;
-
-        if (!b1.joinedGroups && !b2.joinedGroups) {
-            b1.joinedGroups = new Set<Group>();
-            b1.joinedGroups.add(b2);
-            return b1;
-        }
-        if (!b1.joinedGroups) {
-            b1.joinedGroups = b2.joinedGroups;
-            b2.joinedGroups = null;
-            for(let b of b1.joinedGroups) {
-                if (b.joinedGroups) {
-                    throw "Implementation error";
-                }
-                b._canonical = b1;
-            }
-            b1.joinedGroups.add(b2);
-            return b1;
-        }
-        b1.joinedGroups.add(b2);
-        if (b2.joinedGroups) {
-            for(let b of b2.joinedGroups) {
-                if (b.joinedGroups) {
-                    throw "Implementation error";
-                }
-                if (!b1.joinedGroups.has(b)) {
-                    b._canonical = b1;
-                    b1.joinedGroups.add(b);
-                }
-            }
-            b2.joinedGroups = null;
-        }
-        return b1;
+        return false;
     }
 
-    public isAvailable(): boolean {
-        let g = this.canonical();
-        if (!g._isAvailable) {
-            return false;
-        }
-        if (g.joinedGroups) {
-            for (let g2 of g.joinedGroups) {
-                if (!g2._isAvailable) {
-                    return false;
-                }                
-            }
-        }
-        return true;
-    }
-
-    public makeUnavailable() {
-        this._isAvailable = false;
-    }
-
-    /*
-    public isUnifyable(): boolean {
-        if (this.joinedGroups) {
-            for (let g of this.joinedGroups) {
-                if (!g.isBound) {
-                    return false;
-                }                
-            }
-        }
-        return true;
-    }
-    */
-
-    public joinedGroups: Set<Group>;
-
-    private _canonical: Group;
-    private _isAvailable: boolean = true;
-
-    /*
-    public isFrozen(): boolean {
-        return this.canonical()._isFrozen;
-    }
-
-    public freeze(): void {
-        this.canonical()._isFrozen = true;
-    }
-    */
+    private counter: number = Group.groupCounter++;
+    private static groupCounter = 0;
 }
 
 export class TupleGroup extends Group {
@@ -1071,33 +1049,13 @@ export class TupleGroup extends Group {
         super(kind, name);
     }
 
-    public preJoin(loc: Location, doThrow: boolean): Group {
+    public preJoin(scope: Scope, loc: Location, doThrow: boolean): Group {
         let g: Group = null;
         for (let tg of this.groups) {
-            g = g ? Group.join(g, tg, true, loc, doThrow) : tg;
+            g = g ? scope.joinGroups(g, tg, loc, doThrow) : tg;
         }
         return g;
     }
-
-    public isAvailable(): boolean {
-        if (!super.isAvailable()) {
-            return false;
-        }
-        for(let g of this.groups) {
-            if (!g.isAvailable()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /*
-    public isUnifyable(): boolean {
-        if (!super.isUnifyable()) {
-            return false;
-        }
-    }
-    */
 
     public groups: Array<Group> = [];
 }
@@ -5523,9 +5481,9 @@ export class TypeChecker {
                         this.checkGroupsInStatement(st, snode.elseBranch.scope);
                     }
                 }
-                scope.mergeGroups(snode.scope);
+                scope.mergeScopes(snode.scope);
                 if (snode.elseBranch) {
-                    scope.mergeGroups(snode.elseBranch.scope);
+                    scope.mergeScopes(snode.elseBranch.scope);
                 }
                 break;
                 /*
@@ -5688,14 +5646,14 @@ export class TypeChecker {
                     throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
                 }
                 // Make the RHS group unavailable
-                rightGroup.makeUnavailable();
+                scope.makeGroupUnavailable(rightGroup);
             } else {
                 // Test whether LHS and RHS are equal or one of LHS or RHS are unbound
                 // if (leftGroup != rightGroup && leftGroup.isBound && rightGroup.isBound) {
                 //    throw new TypeError("Two distinct bound groups cannot be merged", loc);
                 //}
                 // Join RHS and LHS
-                Group.join(leftGroup, rightGroup, true, loc, true);
+                scope.joinGroups(leftGroup, rightGroup, loc, true);
             }
         }
     }
@@ -5733,11 +5691,13 @@ export class TypeChecker {
                     throw "Implementation error";
                 }
                 let g = scope.resolveGroup(element);
-                if (!g || !g.isAvailable()) {
+                if (!g || !scope.isGroupAvailable(g)) {
                     if ((origFlags & GroupCheckFlags.AllowUnavailableVariable) == 0) {
                         throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
                     }
+//                    console.log(element.name + " is not available, but do not care");
                 }
+//                console.log("Group of " + element.name + " is " + (g ? g.name : null), scope.unavailableGroups);
                 return g;         
             case "++":
             case "--":
@@ -5859,7 +5819,7 @@ export class TypeChecker {
                     if (!group) {
                         group = g;
                     } else {
-                        group = Group.join(group, g, true, enode.loc, true);
+                        group = scope.joinGroups(group, g, enode.loc, true);
                     }
                 }
                 if (!group) {
@@ -5881,7 +5841,7 @@ export class TypeChecker {
                         if (!group) {
                             group = g;
                         } else {
-                            group = Group.join(group, g, true, enode.loc, true);
+                            group = scope.joinGroups(group, g, enode.loc, true);
                         }                            
                     }
                 }
@@ -5905,7 +5865,7 @@ export class TypeChecker {
                             if (!group) {
                                 group = g;
                             } else {
-                                group = Group.join(group, g, true, enode.loc, true);
+                                group = scope.joinGroups(group, g, enode.loc, true);
                             }                            
                         }
                     }
