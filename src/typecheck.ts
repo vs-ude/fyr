@@ -1424,7 +1424,21 @@ export class PackageType extends Type {
 
 export class ScopeExit {
     public merge(s: ScopeExit) {
-        throw "TODO";
+        if (!this.returns) {
+            this.returns = s.returns;
+        } else {
+            this.returns = this.returns.concat(s.returns);
+        }
+        if (!this.continues) {
+            this.continues = s.continues;
+        } else {
+            this.continues = this.continues.concat(s.continues);
+        }
+        if (!this.breaks) {
+            this.breaks = s.breaks;
+        } else {
+            this.breaks = this.breaks.concat(s.breaks);
+        }
     }
     
     public returns: Array<Scope>;
@@ -2999,23 +3013,18 @@ export class TypeChecker {
         for(let i = 0; i < statements.length; i++) {
             let st = statements[i];
             this.checkStatement(st, scope, scopeExit);
-            if (!scopeExit.fallthrough) {
-                for(let j = i + 1; j < statements.length; j++) {
-                    st = statements[j];
-                    if (st.op != "comment") {
-                        throw new TypeError("Unreachable code", st.loc);
-                    }
-                }
-                break;         
-            }
         }
         return scopeExit;
     }
 
     public checkStatement(snode: Node, scope: Scope, scopeExit: ScopeExit): void {
+        if (snode.op == "comment") {
+            return;
+        }
+        if (!scopeExit.fallthrough) {
+            throw new TypeError("Unreachable code", snode.loc);            
+        }
         switch (snode.op) {
-            case "comment":
-                break;
             case "return":
                 let f = scope.envelopingFunction();
                 if (!f) {
@@ -3070,8 +3079,11 @@ export class TypeChecker {
                     snode.elseBranch.scope = s2;
                     snode.elseBranch.scopeExit = this.checkStatements(snode.elseBranch.statements, s2);
                     scopeExit.merge(snode.elseBranch.scopeExit);
+                    if (!snode.scopeExit.fallthrough && !snode.elseBranch.scopeExit.fallthrough) {
+                        scopeExit.fallthrough = null;
+                    }
                 }
-                return "fallthrough";
+                return;
             }
             case "else":
                 throw "Implementation error";
@@ -3082,21 +3094,31 @@ export class TypeChecker {
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.lhs) {
-                            this.checkStatement(snode.condition.lhs, forScope);
+                            let initScopeExit = new ScopeExit();
+                            initScopeExit.fallthrough = scope;
+                            this.checkStatement(snode.condition.lhs, forScope, initScopeExit);
+                            if (initScopeExit.returns || initScopeExit.breaks || initScopeExit.continues) {
+                                throw new TypeError("break, return and continue are not allowed inside the initialization statement of a for loop.", snode.loc);
+                            }
                         }
                         if (snode.condition.condition) {
                             this.checkExpression(snode.condition.condition, forScope);
                             this.checkIsAssignableType(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
                         }
                         if (snode.condition.rhs) {
-                            this.checkStatement(snode.condition.rhs, forScope);
+                            let loopScopeExit = new ScopeExit();
+                            loopScopeExit.fallthrough = scope;
+                            this.checkStatement(snode.condition.rhs, forScope, loopScopeExit);
+                            if (loopScopeExit.returns || loopScopeExit.breaks || loopScopeExit.continues) {
+                                throw new TypeError("break, return and continue are not allowed inside the loop statement of a for loop.", snode.loc);
+                            }
                         }
                     } else {
-                        this.checkStatement(snode.condition, forScope);
+                        this.checkExpression(snode.condition, forScope);
                     }
                 }
-                this.checkStatements(snode.statements, forScope);
-                return "fallthrough";
+                snode.scopeExit = this.checkStatements(snode.statements, forScope);
+                return;
             case "var":
             case "let":
                 if (!snode.rhs) {
@@ -3269,7 +3291,7 @@ export class TypeChecker {
                     throw new TypeError("Cannot infer type", snode.loc);
                 }
         }
-        return "fallthrough";
+        return;
     }
 
     public checkExpression(enode: Node, scope: Scope) {
@@ -3886,9 +3908,7 @@ export class TypeChecker {
                     v.type = f.type.returnType;
                     f.unnamedReturnVariable = v;                    
                 } else {
-                    for(let s of enode.statements) {
-                        this.checkStatement(s, enode.scope);
-                    }
+                    enode.scopeExit = this.checkStatements(enode.statements, enode.scope);
                 }
                 break;
             }
