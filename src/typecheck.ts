@@ -189,6 +189,26 @@ export class Scope {
         this.elementGroups.set(element, group);
     }
 
+    public mergeGroups(scope: Scope): void {
+        if (!scope.elementGroups) {
+            return;
+        }
+        if (!this.elementGroups) {
+            this.elementGroups = new Map<ScopeElement, Group | null>();
+        }
+        for(let e of scope.elementGroups.keys()) {
+            if (this.elementGroups.has(e)) {
+                let g1 = this.elementGroups.get(e);
+                let g2 = scope.elementGroups.get(e);
+                if (!this.elementGroups.set(e, Group.join(g1, g2, false, null, false))) {
+                    throw "Implementation error";
+                }
+            } else {
+                this.elementGroups.set(e, scope.elementGroups.get(e));
+            }
+        }
+    }
+
     public envelopingFunction(): Function {
         if (this.func) {
             return this.func;
