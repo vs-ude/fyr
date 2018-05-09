@@ -190,6 +190,7 @@ export class Scope {
     }
 
     public mergeGroups(scope: Scope): void {
+        console.log("---------------- merge -------------");
         if (!scope.elementGroups) {
             return;
         }
@@ -200,10 +201,24 @@ export class Scope {
             if (this.elementGroups.has(e)) {
                 let g1 = this.elementGroups.get(e);
                 let g2 = scope.elementGroups.get(e);
-                if (!this.elementGroups.set(e, Group.join(g1, g2, false, null, false))) {
-                    throw "Implementation error";
+                if (g1 != g2) {
+                    if (!g1) {
+                        console.log("Set", e.name);
+                        this.elementGroups.set(e, g2);        
+                    } else if (!g2) {
+                        console.log("Set null", e.name);
+                        this.elementGroups.set(e, null);                                
+                    } else {
+                        let newg = Group.join(g1, g2, false, null, false);
+                        if (!newg) {
+                            throw "Implementation error";
+                        }
+                        this.elementGroups.set(e, newg);
+                        console.log("Joined", e.name);    
+                    }
                 }
             } else {
+                console.log("Set", e.name);
                 this.elementGroups.set(e, scope.elementGroups.get(e));
             }
         }
@@ -5445,7 +5460,7 @@ export class TypeChecker {
         }
     }
     
-    private checkGroupsInStatement(snode: Node, scope: Scope): Array<Scope> | null {
+    private checkGroupsInStatement(snode: Node, scope: Scope): void {
         switch (snode.op) {
             case "comment":
             case "yield":
@@ -5495,22 +5510,25 @@ export class TypeChecker {
                 break;
             case "continue":
                 break;
-                /*
             case "if":
-                let s = new Scope(scope);
-                snode.scope = s;
                 if (snode.lhs) {
-                    this.checkStatement(snode.lhs, s);
+                    this.checkGroupsInStatement(snode.lhs, snode.scope);
                 }
-                this.checkExpression(snode.condition, s);
-                this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
+                this.checkExpression(snode.condition, snode.scope);
                 for(let st of snode.statements) {
-                    this.checkStatement(st, s);
+                    this.checkGroupsInStatement(st, snode.scope);
                 }
                 if (snode.elseBranch) {
-                    this.checkStatement(snode.elseBranch, scope);
+                    for(let st of snode.elseBranch.statements) {
+                        this.checkGroupsInStatement(st, snode.elseBranch.scope);
+                    }
+                }
+                scope.mergeGroups(snode.scope);
+                if (snode.elseBranch) {
+                    scope.mergeGroups(snode.elseBranch.scope);
                 }
                 break;
+                /*
             case "else":
                 let s2 = new Scope(scope);
                 snode.scope = s2;
@@ -5561,7 +5579,7 @@ export class TypeChecker {
                 this.checkGroupsInExpression(snode, scope, GroupCheckFlags.None);
         }
 
-        return null;
+//        return null;
     }
 
     private checkGroupsInAssignment(snode: Node, scope: Scope) {

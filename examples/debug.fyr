@@ -51,3 +51,13 @@ func doIt(l1 *Link, l2 *Link) ^Link {
 func tupleMe() (*Link, ^Link) {
     return {}, {}
 }
+
+func ifTest(:a l1 *Link, :a l2 *Link, :b l3 *Link) {
+    var v1 *Link;
+    if (true) {
+        v1 = l1
+    } else {
+        v1 = l3
+    }
+    l2.next = v1
+}
