@@ -114,3 +114,14 @@ func tupleTest(param1 *Link, `b param2 *Link) {
 //    var tuple3 = pr.tuple
     var tuple2 = take(pr.tuple)
 }
+
+func doIt() {
+    var l *Link = {}
+    l.setNext({})
+    var r &Link = l
+    r.setNext({})
+}
+
+func Link.setNext(n *Link) {
+    this.next = n
+}

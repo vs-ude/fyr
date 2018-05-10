@@ -2069,15 +2069,13 @@ export class TypeChecker {
         let structType: StructType;
         // A member function?
         if (fnode.lhs) {
-            objectType = this.createType(fnode.lhs, parentScope, "parameter");
-            if (!(objectType instanceof PointerType)) {
-                throw new TypeError(objectType.toString() + " is not a pointer", fnode.lhs.loc);
-            }
-            let obj = RestrictedType.strip(objectType.elementType);
-            if (!(obj instanceof StructType) || obj.name == "") {
+            let obj = this.createType(fnode.lhs, parentScope, "parameter");
+            let obj2 = RestrictedType.strip(obj);
+            if (!(obj2 instanceof StructType) || obj2.name == "") {
                 throw new TypeError(obj.toString() + " is not a named struct", fnode.lhs.loc);
             }
-            structType = obj;
+            structType = obj2;
+            objectType = new PointerType(obj, "reference");
         }
         let f: Function | TemplateFunction;
         if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
@@ -2137,7 +2135,7 @@ export class TypeChecker {
         if (objectType) {
             f.type.objectType = objectType;
             let p = new FunctionParameter();
-            p.name = "this";            
+            p.name = "this";                        
             p.loc = fnode.lhs.loc;
             p.type = objectType;
             f.scope.registerElement("this", p);
@@ -5440,6 +5438,18 @@ export class TypeChecker {
                 throw "Implementation error";
             }
             f.scope.setGroup(pt, g);
+        }
+
+        if (f.type.objectType) {
+            let th = f.scope.resolveElement("this");
+            if (!th) {
+                throw "Implementation error";
+            }
+            let g = groups.get("this");
+            if (!g) {
+                throw "Implementation error";
+            }
+            f.scope.setGroup(th, g);
         }
 
         if (f.namedReturnVariables) {

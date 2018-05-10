@@ -279,23 +279,11 @@ primitiveType
     }
 
 memberObjectType
-  = "const" [ \t]+ t:memberObjectType3 {
+  = "const" [ \t]+ t:identifier {
+        t.op = "basicType";
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
     }
-  / m: memberObjectType3 {
-      return m;
-   }
-    
-memberObjectType3
-  = "&" [ \t]* t:memberObjectType4 {
-      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
-    }
-  / "*" [ \t]* t:memberObjectType4 {
-      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
-    }
-
-memberObjectType4
-  = i: identifier {
+  /  i: identifier {
       i.op = "basicType";
       return i;
     }
@@ -329,21 +317,12 @@ interfaceMember
     }
 
 ifaceObjectType
-  = "const" [ \t]+ t:ifaceObjectType3 {
-        return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
-    }
-  / m: ifaceObjectType3 {
-      return m;
-   }
-    
-ifaceObjectType3
-  = "&" {
-      let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
-      return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
-    }
-  / "*" {
-      let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
-      return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
+  = c:"const"? {
+        let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
+        if (c) {
+            return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+        }
+        return t;
     }
 
 namedType
