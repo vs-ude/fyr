@@ -52,6 +52,21 @@ func tupleMe() (*Link, ^Link) {
     return {}, {}
 }
 
+func testUnique(l ^Link) {
+
+}
+
+func testUnique2() {
+    var p *Link = {}
+    var p2 *Link = {}
+    p.next = p2
+    testUnique(p)
+    // Must err
+//    p
+    // Must err
+//    p2
+}
+
 func ifTest(:a l1 *Link, :a l2 *Link, :b l3 *Link) {
     var v1 *Link
     if (true) {

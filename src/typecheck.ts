@@ -5637,6 +5637,10 @@ export class TypeChecker {
         // The if-clause is true when assigning to a variable that is not global.
         // The purpose of ignoring global is that setGroup should not be executed on a global variable.
         if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
+            // When assigning a free group to a ^ptr variable, make sure that the variable has a group of kind Isolated.
+            if (rightGroup.kind == GroupKind.Free && TypeChecker.isUnique(ltype)) {
+                rightGroup = scope.joinGroups(new Group(GroupKind.Isolated), rightGroup, loc, true);
+            }
             // Set the group of the LHS variable with the RHS group
             scope.setGroup(lhsVariable, rightGroup);
         } else {
@@ -5994,7 +5998,9 @@ export class TypeChecker {
                     name = "default";
                 }
                 let g: Group;
-                if (groups.has(name)) {
+                if (TypeChecker.isUnique(ltype)) {
+                    g = null;
+                } else if (groups.has(name)) {
                     g = groups.get(name);
                 } else {
                     g = new Group(GroupKind.Free, param.name);
