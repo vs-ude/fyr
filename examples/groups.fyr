@@ -45,7 +45,7 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     var p Point = pr4.pos
     // Works, because pr7 is now bound to pr4
     var pr7 *PointRef = take(pr4.ptr)
-    // Must err, because we access the inside of a Pointer
+    // Must err, because we access the inside of an isolate
 //    var pr8 *PointRef = take(pr4.unique.ptr)
     // Works, because we access an isolate inside an isolate
     var pr9 *PointRef = take(pr4.unique.unique)
@@ -57,7 +57,7 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     // Must err, because the group of pr10 is no longer available
 //    ref10
     pr4.unique = take(pr4.unique.unique)
-    // Must err
+    // Must err, because we access the inside of an isolate
 //    pr4.unique = take(pr4.unique.ptr)
     pr4.unique = take(pr4.ptr)
     // Must err, because pr3, pr4 and pr6 are entangled
@@ -67,17 +67,16 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     // Must err, because param1 is bound
 //    pr4 = param1
     var pr11 ^PointRef = {}
-    // Must err, because param1 is bound and cannot be joined with an isolated group
-//    pr11.ptr = param1
+    // Works, because pr11 is now bound to param1
+    pr11.ptr = param1
     // Must err, because pr11 is bound to param1, and cannot be bound to param2
 //    pr11.ptr = param2
-    // Must err
-//    return param2
-    // Must err
+    // Must err, because param3 is passed as in its own bound group
 //    param3.ptr = param4
-    param3.unique = pr11
-    var pr8 ^PointRef = {}
-//!!!    param5.ptr = pr8
+    // Must err, because pr11 is not isolated
+//    param3.unique = pr11
+    var pr15 ^PointRef = {}
+    param5.ptr = pr15
 
     link1 = {}
     link2 = {}
@@ -88,13 +87,17 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
 
     var pr12 ^PointRef = {}
     // Must err, because we must not take pointers out of isolates
-//    var pr13 = take(pr12.unique.ptr)
+//    var pr16 = take(pr12.unique.ptr)
     var pr13 = take(pr12.unique.unique)
     // Must work, because pr13 is free
-//!!!    pr13.ptr = param4
+    pr13.ptr = param4
     var pr14 *PointRef = {}
     // Must err, because isolates may only be taken out of isolates, but not referenced
-//    var pr15 &PointRef = pr14.unique.unique
+//    var pr17 &PointRef = pr14.unique.unique
+    // Must err, because param2 belongs to the wrong group
+//    return param2
+    // Must err, because param1 is not available
+//   return param1
     return {}
 }
 
@@ -108,6 +111,6 @@ func tupleTest(param1 *Link, :b param2 *Link) {
 //    tuple
     var pr *PointRef = {}
     // Must err, because take is missing
-//    var tuple2 = pr.tuple
+//    var tuple3 = pr.tuple
     var tuple2 = take(pr.tuple)
 }

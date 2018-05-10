@@ -59,6 +59,15 @@ export class Function implements ScopeElement {
 
     public name: string;
     public type: FunctionType;
+    /**
+     * True, if the function returns a tuple and names have been assigned to all tuple elements.
+     * In this case the function can exit with just "return", i.e. without specifying explicit return values.
+     */
+    public hasNamedReturnVariables: boolean;
+    /**
+     * If the function returns a tuple, this array holds one variable for each element of the array.
+     * If the tuple elements have no name, one is automatically generated.
+     */
     public namedReturnVariables: null | Array<Variable>;
     public unnamedReturnVariable: Variable | null;
     // The scope containing FunctionParameters and local Variables of the function.
@@ -671,7 +680,7 @@ export class FunctionType extends Type {
                 if (TypeChecker.isReference(p.type)) {
                     groups.set(p.name, new Group(GroupKind.Bound));
                 } else if (TypeChecker.isUnique(p.type)) {
-                    groups.set(p.name, new Group(GroupKind.Isolated));
+                    groups.set(p.name, new Group(GroupKind.Free));
                 } else {
                     groups.set(p.name, defaultGroup);
                 }
@@ -680,7 +689,8 @@ export class FunctionType extends Type {
 
         if (this.returnType) {
             if (this.returnType instanceof TupleType) {
-                for(let t of this.returnType.types) {
+                for(let i = 0; i <this.returnType.types.length; i++) {
+                    let t = this.returnType.types[i];
                     if (t.groupName) {
                         if (TypeChecker.isUnique(t)) {
                             throw new TypeError("Unique pointers must not be marked with a group name", t.loc);
@@ -690,12 +700,12 @@ export class FunctionType extends Type {
                             g = new Group(GroupKind.Bound);
                             groupNames.set(t.groupName, g);
                         }
-                        groups.set(t.name, g);
+                        groups.set("return " + i.toString(), g);
                     } else {
                         if (TypeChecker.isUnique(t)) {
-                            groups.set(t.name, new Group(GroupKind.Isolated));
+                            groups.set("return " + i.toString(), new Group(GroupKind.Free));
                         } else {
-                            groups.set(t.name, defaultGroup);
+                            groups.set("return " + i.toString(), defaultGroup);
                         }
                     }                                            
                 }
@@ -712,7 +722,7 @@ export class FunctionType extends Type {
                     groups.set("return", g);
                 } else {
                     if (TypeChecker.isUnique(this.returnType)) {
-                        groups.set("return", new Group(GroupKind.Isolated));
+                        groups.set("return", new Group(GroupKind.Free));
                     } else {
                         groups.set("return", defaultGroup);
                     }
@@ -1007,8 +1017,7 @@ export class MapType extends Type {
 
 export enum GroupKind {
     Free = 0,
-    Isolated = 1,
-    Bound = 2,
+    Bound = 1,
 }
 
 export class Group {
@@ -1038,6 +1047,11 @@ export class Group {
             return true;
         }
         return false;
+    }
+
+    public isBound(scope: Scope): boolean {
+        let g = scope.resolveCanonicalGroup(this);
+        return g.kind == GroupKind.Bound;
     }
 
     private counter: number = Group.groupCounter++;
@@ -2152,28 +2166,40 @@ export class TypeChecker {
                 f.scope.registerElement(p.name, p);
             }
         }
+        f.hasNamedReturnVariables = false;
         // A return type?
         if (fnode.rhs) {
             f.type.returnType = this.createType(fnode.rhs, f.scope, "parameter");
             if (fnode.rhs.op == "tupleType") {
                 for(let i = 0; i < fnode.rhs.parameters.length; i++) {
                     let pnode = fnode.rhs.parameters[i];
-                    if (pnode.name) {
-                        let v = new Variable();
-                        v.isResult = true;
-                        v.loc = pnode.loc;
-                        v.name = pnode.name.value;
-                        v.type = (f.type.returnType as TupleType).types[i];
-                        f.scope.registerElement(v.name, v);
-                        if (!f.namedReturnVariables) {
-                            f.namedReturnVariables = [];
-                        }
-                        f.namedReturnVariables.push(v);
-                        (f.type.returnType as TupleType).types[i] = v.type;
+                    if (i == 0) {
+                        f.hasNamedReturnVariables = !!pnode.name;
+                    } else if ((f.hasNamedReturnVariables && !pnode.name) || (!f.hasNamedReturnVariables && !!pnode.name)) {
+                        throw new TypeError("Either all or no return variables are named", pnode.loc);
                     }
                 }
+            }
+            if (fnode.rhs.op == "tupleType") {
+                for(let i = 0; i < fnode.rhs.parameters.length; i++) {
+                    let pnode = fnode.rhs.parameters[i];
+                    let v = new Variable();
+                    v.isResult = true;
+                    v.loc = pnode.loc;
+                    if (pnode.name) {
+                        v.name = pnode.name.value;
+                    } else {
+                        v.name = "return " + i.toString();
+                    }
+                    v.type = (f.type.returnType as TupleType).types[i];
+                    f.scope.registerElement(v.name, v);
+                    if (!f.namedReturnVariables) {
+                        f.namedReturnVariables = [];
+                    }
+                    f.namedReturnVariables.push(v);
+                    (f.type.returnType as TupleType).types[i] = v.type;
+                }
             } else {
-                f.type.returnType = f.type.returnType;
                 let v = new Variable();
                 v.isResult = true;
                 v.loc = fnode.loc;
@@ -2523,7 +2549,7 @@ export class TypeChecker {
             // Unique global pointers are subject to their own group.
             // All other global variables belong to the same group.
             if (TypeChecker.isUnique(v.type)) {
-                scope.setGroup(v, new Group(GroupKind.Isolated, v.name));                
+                scope.setGroup(v, new Group(GroupKind.Free, v.name));                
             } else {
                 scope.setGroup(v, this.globalGroup);
             }
@@ -3024,7 +3050,7 @@ export class TypeChecker {
                     throw new TypeError("'return' outside of function body", snode.loc);                    
                 }
                 if (!snode.lhs) {
-                    if (f.type.returnType != this.t_void && !f.namedReturnVariables) {
+                    if (f.type.returnType != this.t_void && !f.hasNamedReturnVariables) {
                         throw new TypeError("Mismatch in return type", snode.loc);
                     }
                 } else {
@@ -3867,8 +3893,19 @@ export class TypeChecker {
                         f.scope.registerElement(p.name, p);
                     }
                 }
+                // Return type?
                 if (enode.lhs) {
                     f.type.returnType = this.createType(enode.lhs, f.scope, "parameter");
+                    if (enode.lhs.op == "tupleType") {
+                        for(let i = 0; i < enode.lhs.parameters.length; i++) {
+                            let pnode = enode.lhs.parameters[i];
+                            if (i == 0) {
+                                f.hasNamedReturnVariables = !!pnode.name;
+                            } else if ((f.hasNamedReturnVariables && !pnode.name) || (!f.hasNamedReturnVariables && !!pnode.name)) {
+                                throw new TypeError("Either all or no return variables are named", pnode.loc);
+                            }
+                        }
+                    }                            
                     if (enode.lhs.op == "tupleType") {
                         for(let i = 0; i < enode.lhs.parameters.length; i++) {
                             let pnode = enode.lhs.parameters[i];
@@ -3885,21 +3922,29 @@ export class TypeChecker {
                                 f.namedReturnVariables = [v];
                             }
                         }
+                    } else {
+                        let v = new Variable();
+                        v.isResult = true;
+                        v.loc = enode.loc;
+                        v.name = "return";
+                        v.type = f.type.returnType;
+                        f.unnamedReturnVariable = v;                        
                     }
                 }
+                // Return expression or return statements?
                 if (enode.rhs) {
                     this.checkExpression(enode.rhs, enode.scope);
                     if (!f.type.returnType) {
                         f.type.returnType = enode.rhs.type;
+                        let v = new Variable();
+                        v.isResult = true;
+                        v.loc = enode.loc;
+                        v.name = "return";
+                        v.type = f.type.returnType;
+                        f.unnamedReturnVariable = v;                    
                     } else {
                         this.checkIsAssignableNode(f.type.returnType, enode.rhs, scope);
                     }
-                    let v = new Variable();
-                    v.isResult = true;
-                    v.loc = enode.loc;
-                    v.name = "return";
-                    v.type = f.type.returnType;
-                    f.unnamedReturnVariable = v;                    
                 } else {
                     enode.scopeExit = this.checkStatements(enode.statements, enode.scope);
                 }
@@ -5398,8 +5443,9 @@ export class TypeChecker {
         }
 
         if (f.namedReturnVariables) {
-            for (let r of f.namedReturnVariables) {
-                let g = groups.get(r.name);
+            for (let i = 0; i < f.namedReturnVariables.length; i++) {
+                let r = f.namedReturnVariables[i];
+                let g = groups.get("return " + i.toString());
                 if (!g) {
                     throw "Implementation error";
                 }
@@ -5455,10 +5501,20 @@ export class TypeChecker {
                     if (f.namedReturnVariables) {
                         for(let i = 0; i < f.namedReturnVariables.length; i++) {
                             let group = scope.resolveGroup(f.namedReturnVariables[i]);
+                            if (TypeChecker.isUnique(f.namedReturnVariables[i].type)) {
+                                group = null;
+                            }
                             this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, null, snode.lhs.parameters[i], false, scope, snode.loc);
                         }
                     } else {
+                        if (!f.unnamedReturnVariable) {
+                            console.log(snode.loc.start.line);
+                            throw "Implementation error";
+                        }
                         let group = scope.resolveGroup(f.unnamedReturnVariable);
+                        if (TypeChecker.isUnique(f.unnamedReturnVariable.type)) {
+                            group = null;
+                        }
                         this.checkGroupsInSingleAssignment(f.type.returnType, group, null, snode.lhs, false, scope, snode.loc);
                     }
                 }
@@ -5487,13 +5543,6 @@ export class TypeChecker {
                 }
                 break;
                 /*
-            case "else":
-                let s2 = new Scope(scope);
-                snode.scope = s2;
-                for(let st of snode.statements) {
-                    this.checkStatement(st, s2);
-                }
-                break;       
             case "for":
                 let forScope = new Scope(scope);
                 snode.scope = forScope;
@@ -5623,13 +5672,13 @@ export class TypeChecker {
             } else if (rhsIsTakeExpr) {
                 // Nothing special todo
             } else {
-                throw new TypeError("Assignment to an ownding pointer is only allowed from a variable or take expression", loc);
+                throw new TypeError("Assignment to an owning pointer is only allowed from a variable or take expression", loc);
             }
         }
 
         if (TypeChecker.isUnique(ltype)) {
             // Check that the RHS group is unbound, because the RHS is not neccessarily an isolate
-            if (rightGroup.kind == GroupKind.Bound) {
+            if (rightGroup.isBound(scope)) {
                 throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
             }
         }
@@ -5637,16 +5686,12 @@ export class TypeChecker {
         // The if-clause is true when assigning to a variable that is not global.
         // The purpose of ignoring global is that setGroup should not be executed on a global variable.
         if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
-            // When assigning a free group to a ^ptr variable, make sure that the variable has a group of kind Isolated.
-            if (rightGroup.kind == GroupKind.Free && TypeChecker.isUnique(ltype)) {
-                rightGroup = scope.joinGroups(new Group(GroupKind.Isolated), rightGroup, loc, true);
-            }
             // Set the group of the LHS variable with the RHS group
             scope.setGroup(lhsVariable, rightGroup);
         } else {
             if (!leftGroup) {
                 // Check that the RHS group is unbound
-                if (rightGroup.kind == GroupKind.Bound) {
+                if (rightGroup.isBound(scope)) {
                     throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
                 }
                 // Make the RHS group unavailable
@@ -5700,6 +5745,10 @@ export class TypeChecker {
                         throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
                     }
 //                    console.log(element.name + " is not available, but do not care");
+                }                
+                // Accessing a global isolate is like an expression that evaluates to an isolate. Therefore its Group is null
+                if (element instanceof Variable && element.isGlobal && TypeChecker.isUnique(element.type)) {
+                    return null;
                 }
 //                console.log("Group of " + element.name + " is " + (g ? g.name : null), scope.unavailableGroups);
                 return g;         
@@ -6025,7 +6074,7 @@ export class TypeChecker {
                 }
                 let g: Group;
                 if (TypeChecker.isUnique(t)) {
-                    g = new Group(GroupKind.Isolated);
+                    g = new Group(GroupKind.Free);
                 } else if (groups.has(name)) {
                     g = groups.get(name);
                 } else {
@@ -6046,18 +6095,15 @@ export class TypeChecker {
             name = "default";
         }
         let g: Group;
-        if (groups.has(name)) {
+        if (groups.has(name) && !TypeChecker.isUnique(ft.returnType)) {
             return groups.get(name);
         }
         let kind = GroupKind.Free;
         if (TypeChecker.hasReferenceOrStrongPointers(ft.returnType)) {
             kind = GroupKind.Bound;
-        } else if (TypeChecker.isUnique(ft.returnType)) {
-            kind = GroupKind.Isolated;
         }
         return new Group(kind, "return");
     }
-
 
     public t_bool: Type;
     public t_float: Type;
