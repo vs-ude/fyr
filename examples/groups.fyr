@@ -29,7 +29,7 @@ var link2 *Link
 // var link3 ^Link = take(link1.next)
 var link3 ^Link = {}
 
-func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *PointRef, :c param5 *PointRef) *PointRef {
+func test(param1 *PointRef, `b param2 *PointRef, param3 &PointRef, param4 *PointRef, `c param5 *PointRef) *PointRef {
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
     pr3.ref = pr4
@@ -101,7 +101,7 @@ func test(param1 *PointRef, :b param2 *PointRef, param3 &PointRef, param4 *Point
     return {}
 }
 
-func tupleTest(param1 *Link, :b param2 *Link) {
+func tupleTest(param1 *Link, `b param2 *Link) {
     var x *Link, y *Link = (param2, param1)
     // Must err, because x and y belong to different groups that cannot be joined
 //    x.sibling = y

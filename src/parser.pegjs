@@ -148,9 +148,12 @@ funcTypeParameters
     }
 
 group
-  = ":" n:identifier [ \t]+ {
+  = "`" n:identifier [ \t]+ {
       return n
     }
+  / "`" [ \t]+ {
+      return new ast.Node({loc: fl(location()), op: "id", value: "default"});
+  }
 
 genericParameters
   = "<" [ \t]* t:genericTypeList ">" [ \t]* { return t; }

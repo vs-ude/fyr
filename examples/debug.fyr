@@ -67,7 +67,7 @@ func testUnique2() {
 //    p2
 }
 
-func ifTest(:a l1 *Link, :a l2 *Link, :b l3 *Link) {
+func ifTest(`a l1 *Link, `a l2 *Link, `b l3 *Link) {
     var v1 *Link
     if (true) {
         v1 = l1
@@ -78,7 +78,7 @@ func ifTest(:a l1 *Link, :a l2 *Link, :b l3 *Link) {
 //    l2.next = v1
 }
 
-func ifTest2(:a xl1 *Link, :a xl2 *Link, :b xl3 *Link) {
+func ifTest2(`a xl1 *Link, `a xl2 *Link, `b xl3 *Link) {
     var v2 *Link = {}
     if (true) {
         v2.next = xl1
