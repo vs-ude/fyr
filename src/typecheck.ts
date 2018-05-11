@@ -3762,9 +3762,16 @@ export class TypeChecker {
                     }
                 } else if (this.isMap(t)) {
                     throw new TypeError("Ranges are not supported on maps", enode.loc);
+                } else if (t instanceof SliceType) {
+                    let isTakeExpr = (enode.lhs.op == "take" || enode.lhs.op == "(" || enode.lhs.op == "[" || enode.lhs.op == ":");
+                    if ((t.mode == "unique" || t.mode == "strong") && !isTakeExpr) {
+                        enode.type = new SliceType(t.arrayType, "reference");
+                    } else {
+                        // For slices the type remains the same
+                        enode.type = enode.lhs.type;
+                    }
                 } else {
-                    // For slices the type remains the same
-                    enode.type = enode.lhs.type;
+                    throw "Implementation error";
                 }
                 break;
             }
@@ -5756,8 +5763,22 @@ export class TypeChecker {
             return;
         }
 
-        let rhsIsVariable = rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id");
-        let rhsIsTakeExpr = (rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(" || rnode.op == "null";
+        let rhsVariableName: string;
+        let rhsIsVariable: boolean = false;
+        if (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id")) {
+            rhsIsVariable = true;
+            rhsVariableName = rnode.op == "id" ? rnode.value : rnode.lhs.value;
+        } else if (rnode.op == ":" && (TypeChecker.isUnique(rnode.type) || this.isStrong(rnode.type))) {
+            let r = rnode;
+            while (r.op == ":" || r.op == "take") {
+                r = r.lhs;
+            }
+            if (r.op == "id") {
+                rhsIsVariable = true;
+                rhsVariableName = r.value;
+            }
+        }
+        let rhsIsTakeExpr = (rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(" || rnode.op == "null" || rnode.op == ":";
         // The right hand side is an expression that evaluates to an isolate, and therefore the group is null
         if (!rightGroup) {
             // The isolate must be taken, even when assigned to a reference
@@ -5774,7 +5795,7 @@ export class TypeChecker {
             if (rhsIsVariable) {
                 // Make the RHS variable unavailable
                 if (!rnodeReuse) {
-                    let rhsVariable = scope.resolveElement(rnode.op == "id" ? rnode.value : rnode.lhs.value);
+                    let rhsVariable = scope.resolveElement(rhsVariableName);
                     scope.setGroup(rhsVariable, null);
                 }
             } else if (rhsIsTakeExpr) {
