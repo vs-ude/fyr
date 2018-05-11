@@ -300,9 +300,9 @@ export class CBackend implements backend.Backend {
             case "ptr":
                 return new CType("addr_t");
             case "int":
-                return new CType("unsigned int");
+                return new CType("uint_t");
             case "sint":
-                return new CType("int");
+                return new CType("int_");
         }
     }
 
@@ -320,7 +320,7 @@ export class CBackend implements backend.Backend {
             case "ptr":
                 return new CType("saddr_t");
             case "sint":
-                return new CType("int");
+                return new CType("int_t");
         }
         throw "Implementation error";
     }
@@ -336,7 +336,7 @@ export class CBackend implements backend.Backend {
             case "s64":
                 return new CType("uint64_t");
             case "int":
-                return new CType("unsigned int");
+                return new CType("uint_t");
         }
         throw "Implementation error";
     }
