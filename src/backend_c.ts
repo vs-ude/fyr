@@ -614,11 +614,15 @@ export class CBackend implements backend.Backend {
             size.lExpr = sizeof
             size.rExpr = this.emitExpr("sint", n.args[0]);
             m.args = [size];
-            let e = new CTypeCast();
-            t.code += "*";
-            e.type = t;
+            let e = new CTypeCast();            
+            e.type = new CType("addr_t");
             e.expr = m;
             return e;
+        } else if (n.kind == "free") {
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("free");
+            m.args = [this.emitExpr("addr", n.args[0])];
+            return m;
         }
 
         throw "Implementation error " + n.kind;
