@@ -6,6 +6,8 @@ examples/*.wasm
 examples/*.wast
 examples/*.wat
 examples/*.c
+examples/*.o
+examples/codegen
 tmp/*
 measurements/**/*.wasm
 measurements/**/*.wast
