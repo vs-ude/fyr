@@ -1,7 +1,10 @@
 import {BinaryBuffer} from "./binarybuffer"
 
 export type NodeKind = "spawn" | "spawn_indirect" | "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend";
-export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr";
+export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr" | "int" | "sint";
+
+export var intSize = 8;
+export var ptrSize = 8;
 
 export class StructType {
     public addField(name: string, type: Type | StructType, count: number = 1): number {
@@ -67,14 +70,18 @@ export function alignmentOf(x: Type | StructType): number {
             return 2;
         case "i32":
         case "s32":
-        case "addr":
-        case "ptr":
         case "f32":
             return 4;
+        case "addr":
+        case "ptr":
+            return ptrSize;
         case "i64":
         case "s64":
         case "f64":
             return 8;
+        case "int":
+        case "sint":
+            return intSize;        
     }
 }
 
@@ -95,14 +102,18 @@ export function sizeOf(x: Type | StructType): number {
             return 2;
         case "i32":
         case "s32":
+        case "f32":
+        return 4;
         case "addr":
         case "ptr":
-        case "f32":
-            return 4;
+            return ptrSize;
         case "i64":
         case "s64":
         case "f64":
             return 8;
+        case "int":
+        case "sint":
+            return intSize;
     }
 }
 

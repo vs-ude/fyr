@@ -1460,7 +1460,60 @@ export class CodeGenerator {
             case "object":
             {
                 let t = this.tc.stripType(enode.type);
-                if (t instanceof StructType) {
+                if (t instanceof PointerType) {
+                    t = RestrictedType.strip(t.elementType);
+                    if (t instanceof StructType) {
+                        let st = this.getSSAType(t) as ssa.StructType; // This returns a struct type
+                        let ptr = b.assign(b.tmp("ptr"), "alloc", st, [1]);
+                        let args: Array<string | ssa.Variable | number> = [];
+                        let fieldValues = new Map<string, Node>();
+                        if (enode.parameters) {
+                            for(let p of enode.parameters) {
+                                fieldValues.set(p.name.value, p.lhs);
+                            }
+                        }
+                        for(let i = 0; i < st.fields.length; i++) {
+                            if (!fieldValues.has(st.fields[i][0])) {
+                                args.push(0);
+                            } else {
+                                let p = fieldValues.get(st.fields[i][0]);
+                                let v = this.processExpression(f, scope, p, b, vars, t.fields[i].type);
+                                args.push(v);
+                            }
+                        }
+                        let v = b.assign(b.tmp(), "struct", st, args);
+                        b.assign(b.mem, "store", st, [ptr, 0, v]);
+                        return ptr;
+                    } else if (t instanceof MapType) {
+                        let mapHeadTypeMap = this.backend.getTypeMapper().mapType(this.mapHead);
+                        // TODO: Reuse this type where possible
+                        let entry = new ssa.StructType()
+                        entry.name = "map";
+                        entry.addField("hashNext", "addr")
+                        entry.addField("listNext", "addr")
+                        entry.addField("hash", "i64")
+                        entry.addField("key", "ptr")
+                        entry.addField("value", this.getSSAType(t.valueType));                        
+                        let entryTypeMap = this.backend.getTypeMapper().mapType(entry);
+                        let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
+                        if (enode.parameters) {
+                            for(let p of enode.parameters) {
+                                if (t.keyType != this.tc.t_string) {
+                                    throw "Implementation error";
+                                }
+                                // let off = this.backend.addString(p.name.value);
+                                let str = new ssa.Variable;
+                                str.isConstant = true;
+                                str.constantValue = p.name.value;
+                                str.type = "addr";
+                                let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
+                                let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, str]);
+                                b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
+                            }
+                        }
+                        return m;
+                    }
+                } else if (t instanceof StructType) {
                     let st = this.getSSAType(t) as ssa.StructType; // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     let fieldValues = new Map<string, Node>();
@@ -1483,35 +1536,7 @@ export class CodeGenerator {
                             args.push(v);
                         }
                     }
-                    return b.assign(b.tmp(), "struct", st, args);                
-                } else if (t instanceof MapType) {
-                    let mapHeadTypeMap = this.backend.getTypeMapper().mapType(this.mapHead);
-                    // TODO: Reuse this type where possible
-                    let entry = new ssa.StructType()
-                    entry.name = "map";
-                    entry.addField("hashNext", "addr")
-                    entry.addField("listNext", "addr")
-                    entry.addField("hash", "i64")
-                    entry.addField("key", "ptr")
-                    entry.addField("value", this.getSSAType(t.valueType));                        
-                    let entryTypeMap = this.backend.getTypeMapper().mapType(entry);
-                    let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
-                    if (enode.parameters) {
-                        for(let p of enode.parameters) {
-                            if (t.keyType != this.tc.t_string) {
-                                throw "Implementation error";
-                            }
-                            // let off = this.backend.addString(p.name.value);
-                            let str = new ssa.Variable;
-                            str.isConstant = true;
-                            str.constantValue = p.name.value;
-                            str.type = "addr";
-                            let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
-                            let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, str]);
-                            b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
-                        }
-                    }
-                    return m;
+                    return b.assign(b.tmp(), "struct", st, args);
                 }
                 throw "Implementation error";
             }

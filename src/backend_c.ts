@@ -200,9 +200,9 @@ export class CBackend implements backend.Backend {
             let ct = new CType("struct " + t.name + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
                 let t = this.mapType(c[1]).toString();
                 if (c[2] > 1) {
-                    return t + " " + c[0] + "[" + c[2].toString() + "];\n"
+                    return "    " + t + " " + c[0] + "[" + c[2].toString() + "];\n"
                 }
-                return this.mapType(c[1]).toString() + " " + c[0] + ";\n";
+                return "    " + this.mapType(c[1]).toString() + " " + c[0] + ";\n";
             }).join("") + "}")
             this.module.elements.unshift(ct);
         }
@@ -299,6 +299,10 @@ export class CBackend implements backend.Backend {
             case "addr":
             case "ptr":
                 return new CType("addr_t");
+            case "int":
+                return new CType("unsigned int");
+            case "sint":
+                return new CType("int");
         }
     }
 
@@ -315,6 +319,8 @@ export class CBackend implements backend.Backend {
             case "addr":
             case "ptr":
                 return new CType("saddr_t");
+            case "sint":
+                return new CType("int");
         }
         throw "Implementation error";
     }
@@ -329,6 +335,8 @@ export class CBackend implements backend.Backend {
                 return new CType("uint32_t");
             case "s64":
                 return new CType("uint64_t");
+            case "int":
+                return new CType("unsigned int");
         }
         throw "Implementation error";
     }
@@ -595,7 +603,22 @@ export class CBackend implements backend.Backend {
             e.expr = this.emitExpr(n.type, n.args[0]);
             return e;            
         } else if (n.kind == "alloc") {
-            throw "TODO";
+            let t = this.mapType(n.type);
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("malloc");
+            let sizeof = new CUnary();
+            sizeof.operator = "sizeof";
+            sizeof.expr = new CConst(t.code);
+            let size = new CBinary();            
+            size.operator = "*";            
+            size.lExpr = sizeof
+            size.rExpr = this.emitExpr("sint", n.args[0]);
+            m.args = [size];
+            let e = new CTypeCast();
+            t.code += "*";
+            e.type = t;
+            e.expr = m;
+            return e;
         }
 
         throw "Implementation error " + n.kind;
@@ -910,7 +933,10 @@ export class CReturn extends CNode {
 
 export class CUnary extends CNode {
     public toString(indent: string = ""): string {
-        if (this.precedence() <= this.expr.precedence()) {
+        if (this.operator == "sizeof") {
+            return indent + "sizeof(" + this.expr.toString("") + ")";
+        }
+        if (this.precedence() <= this.expr.precedence()) {            
             return indent + this.operator + (this.expr.toString(""));            
         }
         return indent + this.operator + this.expr.toString("");

@@ -1,0 +1,9 @@
+type List struct {
+    next *List
+    value int
+}
+
+export func main() int {
+    var list *List = {value: 42}    
+    return list.value
+}
