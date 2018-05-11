@@ -88,3 +88,24 @@ func ifTest2(`a xl1 *Link, `a xl2 *Link, `b xl3 *Link) {
     // Must err
 //    xl2.next = v2
 }
+
+func forTest(`a l1 *Link, `a l1b *Link, `b l2 *Link, `c l3 *Link) {
+    var v3 *Link = l1b
+    for(var a = 0; a < 10; a++) {
+        v3.next = l1
+        if (a > 4) {
+            break
+        }
+        l1 = {}
+        var v4 *Link
+        if (a > 4) {
+            v4 = {}
+        } else {
+            v4 = {}
+        }
+        v4.next = l3
+        l3 = null
+    }
+    // Must err, becaise l1 could have been assigned and then break left the loop
+//    l1
+}

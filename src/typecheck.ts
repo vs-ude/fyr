@@ -1,6 +1,7 @@
 import {Node, NodeOp, Location} from "./ast"
 import pkg = require("./pkg");
 import { doesNotThrow } from "assert";
+import { isUndefined } from "util";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -178,8 +179,20 @@ export class Scope {
         this.elements.set(name, element);
     }
 
+    public resetGroups() {
+        if (this.elementGroups.size > 0) {
+            this.elementGroups = new Map<ScopeElement, Group | null>();
+        }
+        if (this.unavailableGroups.size > 0) {
+            this.unavailableGroups = new Set<Group>();
+        }
+        if (this.canonicalGroups.size > 0) {
+            this.canonicalGroups = new Map<Group, Group>();
+        }
+    }
+
     public resolveGroup(element: ScopeElement): Group | null {
-        if (this.elementGroups && this.elementGroups.has(element)) {
+        if (this.elementGroups.has(element)) {
             return this.elementGroups.get(element);
         }
         if (this.parent) {
@@ -192,9 +205,6 @@ export class Scope {
     }
 
     public setGroup(element: ScopeElement, group: Group | null) {
-        if (!this.elementGroups) {
-            this.elementGroups = new Map<ScopeElement, Group | null>();
-        }
         this.elementGroups.set(element, group);
     }
 
@@ -288,63 +298,102 @@ export class Scope {
         return b1;
     }
 
-    public mergeScopes(scope: Scope): void {
-//        console.log("---------------- merge -------------");
+    public mergeScopes(scope: Scope, mode: "conditional" | "subsequent" | "reverted_subsequent"): void {
         for(let g of scope.unavailableGroups) {
             this.unavailableGroups.add(g);
         }
 
         for(let g of scope.canonicalGroups.keys()) {
-//            console.log("New canonical", g.name);
             let c1 = this.resolveCanonicalGroup(g);
             let c2 = scope.resolveCanonicalGroup(g);            
             if (g == c1) {
-//                console.log("   No prev canonical, set to", c2.name);
                 this.canonicalGroups.set(g, c2);
             } else if (c1 != c2) {
-//                console.log("   Joining canonicals", c1.name, c2.name);
                 let newg = this.joinGroups(c1, c2, null, false);
                 if (!newg) {
-//                    console.log("     no join");
                     this.unavailableGroups.add(g);
                 } else {
-//                    console.log("     join success");
                     this.canonicalGroups.set(g, newg);
                 }
             }
         }
 
-        for(let e of scope.elementGroups.keys()) {
-            if (this.elementGroups.has(e)) {
-                let g1 = this.elementGroups.get(e);
-                if (g1) {
-                    g1 = this.resolveCanonicalGroup(g1);
-                }
-                let g2 = scope.elementGroups.get(e);
-                if (g2) {
-                    g2 = scope.resolveCanonicalGroup(g2);
-                }
-                if (g1 != g2) {
-                    if (!g1) {
-//                        console.log("Set", e.name);
-                        this.elementGroups.set(e, g2);        
-                    } else if (!g2) {
-//                        console.log("Set null", e.name);
-                        this.elementGroups.set(e, null);                                
-                    } else {
+        switch (mode) {
+            case "subsequent":
+            {
+                for(let e of scope.elementGroups.keys()) {
+                    let g1 = this.resolveGroup(e);
+                    let g2 = scope.elementGroups.get(e);
+                    // Does the "this" scope have a group for this element? If yes, then both have something -> merge
+                    if (g1) {
+                        g1 = this.resolveCanonicalGroup(g1);
+                        // If the "scope" scope has a null group, the "this" scope gets a null group as well.
+                        if (!g2) {
+                            this.elementGroups.set(e, null);
+                            continue;
+                        }
+                        g2 = scope.resolveCanonicalGroup(g2);
+                        // Groups are different in the "this" scope and the "scope" scope? Then do nothing
+                        if (g1 == g2) {
+                            continue;
+                        }
                         let newg = this.joinGroups(g1, g2, null, false);
                         if (!newg) {
                             this.elementGroups.set(e, null);
-//                            console.log("Unavailable", e.name);
                         } else {
                             this.elementGroups.set(e, newg);
-//                            console.log("Joined", e.name);    
+                        }
+                    } else if (g2) {
+                        // The "this" scope has no group, but the "scope" scope has a non-null group.
+                        // If this is not conditional, the result is a non-null group.
+                        // Otherwise we assume the worst and stick with the non-null group.
+                        this.elementGroups.set(e, g2);
+                    }
+                }
+                break;
+            }
+            case "conditional":
+            {
+                for(let e of scope.elementGroups.keys()) {
+                    let g1 = this.resolveGroup(e);
+                    let g2 = scope.elementGroups.get(e);
+                    // Does the "this" scope have a group for this element? If yes, then both have something -> merge
+                    if (g1) {
+                        g1 = this.resolveCanonicalGroup(g1);
+                        // If the "scope" scope has a null group, the "this" scope gets a null group as well.
+                        if (!g2) {
+                            this.elementGroups.set(e, null);
+                            continue;
+                        }
+                        g2 = scope.resolveCanonicalGroup(g2);
+                        // Groups are different in the "this" scope and the "scope" scope? Then do nothing
+                        if (g1 == g2) {
+                            continue;
+                        }
+                        let newg = this.joinGroups(g1, g2, null, false);
+                        if (!newg) {
+                            this.elementGroups.set(e, null);
+                        } else {
+                            this.elementGroups.set(e, newg);
                         }
                     }
                 }
-            } else {
-//                console.log("Set", e.name);
-                this.elementGroups.set(e, scope.elementGroups.get(e));
+                break;
+            }
+            case "reverted_subsequent":
+            {
+                for(let e of scope.elementGroups.keys()) {
+                    let g1 = this.elementGroups.get(e);
+                    let g2 = scope.elementGroups.get(e);
+                    // Does the "this" scope have a group for this element? If yes, then both have something -> merge
+                    if (g1) {
+                        continue;
+                    } else if (g2) {
+                        this.elementGroups.set(e, g2);
+                    } else {
+                        this.elementGroups.set(e, null);
+                    }
+                }        
             }
         }
     }
@@ -386,7 +435,7 @@ export class Scope {
     public types: Map<string, Type>;
     public canonicalGroups: Map<Group, Group> = new Map<Group, Group>();
     public unavailableGroups: Set<Group> = new Set<Group>();
-    private elementGroups: Map<ScopeElement, Group | null> | null;
+    public elementGroups: Map<ScopeElement, Group | null> = new Map<ScopeElement, Group | null>();
     public parent: Scope | null = null;
 
     private static counter: number = 1;
@@ -1433,17 +1482,17 @@ export class ScopeExit {
     public merge(s: ScopeExit) {
         if (!this.returns) {
             this.returns = s.returns;
-        } else {
+        } else if (s.returns) {
             this.returns = this.returns.concat(s.returns);
         }
         if (!this.continues) {
             this.continues = s.continues;
-        } else {
+        } else if (s.continues) {
             this.continues = this.continues.concat(s.continues);
         }
         if (!this.breaks) {
             this.breaks = s.breaks;
-        } else {
+        } else if (s.breaks) {
             this.breaks = this.breaks.concat(s.breaks);
         }
     }
@@ -3135,6 +3184,7 @@ export class TypeChecker {
                     }
                 }
                 snode.scopeExit = this.checkStatements(snode.statements, forScope);
+                // TODO: Merge returns
                 return;
             case "var":
             case "let":
@@ -5518,7 +5568,6 @@ export class TypeChecker {
                         }
                     } else {
                         if (!f.unnamedReturnVariable) {
-                            console.log(snode.loc.start.line);
                             throw "Implementation error";
                         }
                         let group = scope.resolveGroup(f.unnamedReturnVariable);
@@ -5535,6 +5584,7 @@ export class TypeChecker {
             case "continue":
                 break;
             case "if":
+                snode.scope.resetGroups();
                 if (snode.lhs) {
                     this.checkGroupsInStatement(snode.lhs, snode.scope);
                 }
@@ -5542,41 +5592,89 @@ export class TypeChecker {
                 for(let st of snode.statements) {
                     this.checkGroupsInStatement(st, snode.scope);
                 }
+                if (snode.scopeExit.breaks) {
+                    for (let c of snode.scopeExit.breaks) {
+                        c.mergeScopes(scope, "reverted_subsequent");
+                    }                    
+                }
+                if (snode.scopeExit.continues) {
+                    for (let c of snode.scopeExit.continues) {
+                        c.mergeScopes(scope, "reverted_subsequent");
+                    }                    
+                }
                 if (snode.elseBranch) {
+                    snode.elseBranch.scope.resetGroups();
                     for(let st of snode.elseBranch.statements) {
                         this.checkGroupsInStatement(st, snode.elseBranch.scope);
                     }
+                    if (snode.elseBranch.scopeExit.breaks) {
+                        for (let c of snode.elseBranch.scopeExit.breaks) {
+                            c.mergeScopes(scope, "reverted_subsequent");
+                        }                    
+                    }
+                    if (snode.elseBranch.scopeExit.continues) {
+                        for (let c of snode.elseBranch.scopeExit.continues) {
+                            c.mergeScopes(scope, "reverted_subsequent");
+                        }                    
+                    }
+                    if (snode.scopeExit.fallthrough && snode.elseBranch.scopeExit.fallthrough) {                        
+                        snode.scope.mergeScopes(snode.elseBranch.scope, "conditional");
+                        scope.mergeScopes(snode.scope, "subsequent");
+                    } else if (snode.scopeExit.fallthrough) {
+                        scope.mergeScopes(snode.scope, "conditional");
+                    } else if (snode.elseBranch.scopeExit.fallthrough) {
+                        scope.mergeScopes(snode.elseBranch.scope, "conditional");
+                    }
+                } else if (snode.scopeExit.fallthrough) {
+                    scope.mergeScopes(snode.scope, "conditional");
                 }
-                scope.mergeScopes(snode.scope);
-                if (snode.elseBranch) {
-                    scope.mergeScopes(snode.elseBranch.scope);
-                }
-                break;
-                /*
+                break;                
             case "for":
-                let forScope = new Scope(scope);
-                snode.scope = forScope;
-                forScope.forLoop = true;
+            {
+                snode.scope.resetGroups();
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.lhs) {
-                            this.checkStatement(snode.condition.lhs, forScope);
+                            this.checkGroupsInStatement(snode.condition.lhs, snode.scope);
                         }
                         if (snode.condition.condition) {
-                            this.checkExpression(snode.condition.condition, forScope);
-                            this.checkIsAssignableType(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
+                            this.checkGroupsInExpression(snode.condition.condition, snode.scope, GroupCheckFlags.None);
                         }
                         if (snode.condition.rhs) {
-                            this.checkStatement(snode.condition.rhs, forScope);
+                            this.checkGroupsInStatement(snode.condition.rhs, snode.scope);
                         }
                     } else {
-                        this.checkStatement(snode.condition, forScope);
+                        this.checkGroupsInExpression(snode.condition, snode.scope, GroupCheckFlags.None);
                     }
                 }
                 for(let st of snode.statements) {
-                    this.checkStatement(st, forScope);
+                    this.checkGroupsInStatement(st, snode.scope);
+                }
+                let s = snode.scope;
+                // Join in all "continues"
+                if (snode.scopeExit.continues) {
+                    for (let c of snode.scopeExit.continues) {
+                        snode.scope.mergeScopes(c, "conditional");
+                    }
+                }
+                // Check groups for a second run.
+                // This does either fail (-> TypeError) or le
+                for(let st of snode.statements) {
+                    this.checkGroupsInStatement(st, s);
+                }
+                // Join in all "breaks"
+                if (snode.scopeExit.breaks) {
+                    for (let c of snode.scopeExit.breaks) {
+                        scope.mergeScopes(c, "conditional");
+                    }
+                }
+                // Join in the for scope
+                if (snode.scopeExit.fallthrough) {
+                    scope.mergeScopes(snode.scope, "conditional");
                 }
                 break;
+            }
+                /*
             case "spawn":
             {
                 this.checkExpression(snode.rhs, scope);
