@@ -2666,6 +2666,29 @@ export class CodeGenerator {
         return false;
     }
 
+    private generateTupleDestructor(t: TupleType): backend.Function {
+        let bf = this.typeDestructors.get(t);
+        if (bf) {
+            return bf;
+        }
+        let dtrName = "dtr_" + (this.typeDestructors.size + this.arrayDestructors.size).toString();
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam("addr", "pointer");
+        this.typeDestructors.set(t, bf);
+        let st = this.getSSAType(t) as ssa.StructType;
+        let i = 0;
+        for (let e of t.types) {
+            this.callDestructor(e, pointer, st.fieldOffset("t" + i.toString()), b, true, true);
+            i++;
+        }
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false);
+        return bf;
+    }
+
     private generateStructDestructor(t: StructType): backend.Function {
         let bf = this.typeDestructors.get(t);
         if (bf) {
@@ -2750,6 +2773,13 @@ export class CodeGenerator {
                 throw "Implementation error";
             }
             b.call(null, new ssa.FunctionType(["addr", "int"], null), [dtr.getIndex(), obj, t.size]);
+        } else if (t instanceof TupleType) {
+            let obj: ssa.Variable = pointer;
+            if (offset) {
+                obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+            }
+            let dtr = this.generateTupleDestructor(t);
+            b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
         } else {
             throw "TODO";
         }
