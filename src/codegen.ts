@@ -1262,8 +1262,10 @@ export class CodeGenerator {
             }
             buf.push(0);
         } else if (this.tc.isArray(n.type)) {
-            for(let p of n.parameters) {
-                this.processPureLiteralInternal(p, buf);
+            if (n.parameters) {
+                for(let p of n.parameters) {
+                    this.processPureLiteralInternal(p, buf);
+                }
             }
         } else if (this.tc.isTuple(n.type)) {
             for(let p of n.parameters) {
@@ -1272,11 +1274,13 @@ export class CodeGenerator {
         } else if (this.tc.isStruct(n.type)) {
             for(let f of (this.tc.stripType(n.type) as StructType).fields) {
                 let found = false;
-                for(let p of n.parameters) {
-                    if (p.name.value == f.name) {
-                        this.processPureLiteralInternal(p.lhs, buf);
-                        found = true;
-                        break;
+                if (n.parameters) {
+                    for(let p of n.parameters) {
+                        if (p.name.value == f.name) {
+                            this.processPureLiteralInternal(p.lhs, buf);
+                            found = true;
+                            break;
+                        }
                     }
                 }
                 if (!found) {
@@ -2621,9 +2625,11 @@ export class CodeGenerator {
             case "array":                
             {
                 if (this.tc.isArray(t)) {
-                    for(let p of n.parameters) {
-                        if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
-                            return false;
+                    if (n.parameters) {
+                        for(let p of n.parameters) {
+                            if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
+                                return false;
+                            }
                         }
                     }
                     return true;
@@ -2643,10 +2649,12 @@ export class CodeGenerator {
             case "object":
             {
                 if (this.tc.isStruct(t)) {
-                    for(let p of n.parameters) {
-                        let f = (t as StructType).field(p.name.value);
-                        if (!this.isPureLiteral(f.type, p.lhs)) {
-                            return false;
+                    if (n.parameters) {
+                        for(let p of n.parameters) {
+                            let f = (t as StructType).field(p.name.value);
+                            if (!this.isPureLiteral(f.type, p.lhs)) {
+                                return false;
+                            }
                         }
                     }
                     return true;
