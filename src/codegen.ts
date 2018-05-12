@@ -427,7 +427,7 @@ export class CodeGenerator {
                                 v.isConstant = true;
                                 v.constantValue = (data as ssa.Variable).constantValue;
                             } else {                                
-                                b.assign(v, "copy", v.type, [data]);
+                                b.assign(v, "struct", v.type, (data as ssa.Variable).constantValue as ssa.BinaryData);
                             }
                         } else {    
                             let data = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
@@ -1226,6 +1226,7 @@ export class CodeGenerator {
         v.type = this.getSSAType(n.type);
         v.constantValue = buf;
         v.isConstant = true;
+        console.log("Pure literal", buf)
         return v;
     }
 
@@ -2698,8 +2699,23 @@ export class CodeGenerator {
         bf = this.backend.declareFunction(dtrName);
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
+        let size = b.declareParam("int", "size");
         this.arrayDestructors.set(elementType, bf);
-        throw "TODO";
+
+        let counter = b.assign(b.tmp(), "copy", "int", [0]);
+        let outer = b.block();
+        let loop = b.loop()
+        let cmp = b.assign(b.tmp(), "eq", "int", [counter, size]);
+        b.br_if(cmp, outer);
+        this.callDestructor(elementType, pointer, 0, b, true, true);
+        let st = this.getSSAType(elementType);
+        b.assign(pointer, "add", "addr", [pointer, ssa.sizeOf(st) + ssa.alignedSizeOf(st)]);
+        b.br(loop);
+        b.end();
+        b.end();
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false);
+        return bf;
     }
 
     /**

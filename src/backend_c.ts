@@ -264,13 +264,21 @@ export class CBackend implements backend.Backend {
                 }
                 return new CType("struct " + t.name);
             }
-            return new CType("struct " + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
+            let str = " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
                 let t = this.mapType(c[1]).toString();
                 if (c[2] > 1) {
                     return "    " + t + " field" + i.toString() + "[" + c[2].toString() + "];\n"
                 }
                 return "    " + this.mapType(c[1]).toString() + " field" + i.toString() + ";\n";
-            }).join("") + "}")
+            }).join("") + "}";
+            if (this.anonymousStructs.has(str)) {
+                return new CType("struct " + this.anonymousStructs.get(str));
+            }
+            let name = "ta_struct" + this.anonymousStructs.size.toString();
+            this.anonymousStructs.set(str, name);
+            str = "struct " + name + str;
+            this.module.elements.unshift(new CType(str));
+            return new CType("struct " + name);
         }
         if (t instanceof ssa.FunctionType) {
             throw "TODO"
@@ -849,6 +857,7 @@ export class CBackend implements backend.Backend {
     private varStorage: Map<ssa.Variable, string>;
     private globalStorage: Map<ssa.Variable, string> = new Map<ssa.Variable, string>();
     private namedStructs: Map<string, ssa.StructType> = new Map<string, ssa.StructType>();
+    private anonymousStructs: Map<string, string> = new Map<string, string>();
 }
 
 export class CInclude {

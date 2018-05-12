@@ -4,6 +4,7 @@ type List struct {
 }
 
 export func main() int {
-    var list *List = {value: 42}    
+    var list *List = {value: 42}
+    var arr [2]List = [{}, {}]
     return list.value
 }
