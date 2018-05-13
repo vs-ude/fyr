@@ -2,19 +2,14 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include <stdio.h>
-
 void* fyr_alloc(size_t count, size_t size) {
     int_t* ptr = calloc(count * size + sizeof(int_t), 1);
-    printf("alloc %i \n", (int)ptr);
     *ptr = 1;
     return ++ptr;
 }
 
 void fyr_free(void *ptr) {
-    printf("free1 %i \n", (int)ptr);
     int_t* iptr = ((int_t*)ptr) - 1;
-    printf("free2 %i \n", (int)iptr);
     if (*iptr == 1) {
         // No further references
         free(iptr);

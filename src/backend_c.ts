@@ -871,6 +871,8 @@ export class CInclude {
 export class CModule {
     public toString(): string {
         let str = this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
+        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
+        str += "\n";     
         str += this.elements.map(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) return c.toString(); else return c.toString() + ";"}).join("\n\n");
         return str;
     }
@@ -901,6 +903,10 @@ export class CFunction extends CNode {
         let str = indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
         str += this.body.map(function(c: CNode) { return c.toString(indent + "    ") + ";"}).join("\n");
         return str + "\n" + indent + "}";
+    }
+
+    public declaration(): string {
+        return this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ");";
     }
 
     public name: string;
