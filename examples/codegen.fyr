@@ -7,5 +7,6 @@ export func main() int {
     var list *List = {value: 42}
     var arr [2]List = [{}, {}]
     var tuple (List, List) = ({}, {})
+    var arr2 [2]List = [{value:23, next: {}}, {}]
     return list.value
 }
