@@ -613,7 +613,7 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "alloc") {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
-            m.funcExpr = new CConst("malloc");
+            m.funcExpr = new CConst("calloc");
             let sizeof = new CUnary();
             sizeof.operator = "sizeof";
             sizeof.expr = new CConst(t.code);
