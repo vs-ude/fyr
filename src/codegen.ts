@@ -387,7 +387,7 @@ export class CodeGenerator {
                         this.callDestructor(t.elementType, v, 0, b, false, false);
                     } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
                         let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                        this.callDestructor(t, v, 0, b, false, false);
+                        this.callDestructor(t, obj, 0, b, true, true);
                     }
                 }
             }
@@ -972,24 +972,59 @@ export class CodeGenerator {
                 break;
             }
             case "return":
-                if (!snode.lhs) {
-                    if (f.namedReturnVariables) {
-                        let args: Array<ssa.Variable | string | number> = [];
-                        for(let key of f.scope.elements.keys()) {
-                            let v = f.scope.elements.get(key);
-                            if (v instanceof Variable && v.isResult) {
-                                args.push(vars.get(v));
-                            }
+                if (this.scopeNeedsDestructors(scope)) {
+                    console.log("WITH DESTRUCTOR");
+                    let tmp: ssa.Variable | number;
+                    if (snode.lhs) {
+                        tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
+                    }
+                    let s = scope;
+                    while (s) {
+                        this.freeScopeVariables(b, vars, s);
+                        if (s.forLoop) {
+                            break;
                         }
-                        let t = this.getSSAType(f.type.returnType);
-                        let tmp = b.assign(b.tmp(), "struct", t, args);
-                        b.assign(null, "return", t, [tmp]);
+                        s = s.parent;
+                    }
+                    if (!snode.lhs) {
+                        if (!f.namedReturnVariables) {
+                            let args: Array<ssa.Variable | string | number> = [];
+                            for(let key of f.scope.elements.keys()) {
+                                let v = f.scope.elements.get(key);
+                                if (v instanceof Variable && v.isResult) {
+                                    args.push(vars.get(v));
+                                }
+                            }
+                            let t = this.getSSAType(f.type.returnType);
+                            let tmp = b.assign(b.tmp(), "struct", t, args);
+                            b.assign(null, "return", t, [tmp]);                        
+                        } else {
+                            b.assign(null, "return", null, []);
+                        }
                     } else {
-                        b.assign(null, "return", null, []);
+                        let t = this.getSSAType(f.type.returnType);
+                        b.assign(null, "return", t, [tmp]);                        
                     }
                 } else {
-                    let tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
-                    b.assign(null, "return", this.getSSAType(f.type.returnType), [tmp]);
+                    if (!snode.lhs) {
+                        if (f.namedReturnVariables) {
+                            let args: Array<ssa.Variable | string | number> = [];
+                            for(let key of f.scope.elements.keys()) {
+                                let v = f.scope.elements.get(key);
+                                if (v instanceof Variable && v.isResult) {
+                                    args.push(vars.get(v));
+                                }
+                            }
+                            let t = this.getSSAType(f.type.returnType);
+                            let tmp = b.assign(b.tmp(), "struct", t, args);
+                            b.assign(null, "return", t, [tmp]);
+                        } else {
+                            b.assign(null, "return", null, []);
+                        }
+                    } else {
+                        let tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
+                        b.assign(null, "return", this.getSSAType(f.type.returnType), [tmp]);
+                    }    
                 }
                 break;
             case "yield":
@@ -1237,7 +1272,6 @@ export class CodeGenerator {
         v.type = this.getSSAType(n.type);
         v.constantValue = buf;
         v.isConstant = true;
-        console.log("Pure literal", buf)
         return v;
     }
 
@@ -2835,15 +2869,31 @@ export class CodeGenerator {
             let dtr = this.generateSliceDestructor(t);
             b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
         } else {
-            throw "TODO";
+            throw "Implementation error";
         }
         if (!avoidFree) {
             b.assign(null, "free", null, [pointer]);
-            return;
         }
         if (!avoidNullCheck) {
             b.end();
         }
+    }
+
+    private scopeNeedsDestructors(scope: Scope): boolean {
+        while(scope) {
+            for(let e of scope.elements.values()) {
+                if (e instanceof Variable && !e.isResult) {
+                    if (!this.tc.isPureValue(e.type)) {
+                        return true;
+                    }
+                }
+            }
+            if (scope.forLoop) {
+                break;
+            }
+            scope = scope.parent;
+        }
+        return false;
     }
 
     private optimizer: ssa.Optimizer;

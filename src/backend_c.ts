@@ -617,11 +617,7 @@ export class CBackend implements backend.Backend {
             let sizeof = new CUnary();
             sizeof.operator = "sizeof";
             sizeof.expr = new CConst(t.code);
-            let size = new CBinary();            
-            size.operator = "*";            
-            size.lExpr = sizeof
-            size.rExpr = this.emitExpr("sint", n.args[0]);
-            m.args = [size];
+            m.args = [this.emitExpr("sint", n.args[0]), sizeof];
             let e = new CTypeCast();            
             e.type = new CType("addr_t");
             e.expr = m;
