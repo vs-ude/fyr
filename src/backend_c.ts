@@ -613,7 +613,7 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "alloc") {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
-            m.funcExpr = new CConst("calloc");
+            m.funcExpr = new CConst("fyr_alloc");
             let sizeof = new CUnary();
             sizeof.operator = "sizeof";
             sizeof.expr = new CConst(t.code);
@@ -628,7 +628,7 @@ export class CBackend implements backend.Backend {
             return e;
         } else if (n.kind == "free") {
             let m = new CFunctionCall();
-            m.funcExpr = new CConst("free");
+            m.funcExpr = new CConst("fyr_free");
             m.args = [this.emitExpr("addr", n.args[0])];
             return m;
         }

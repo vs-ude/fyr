@@ -5,7 +5,7 @@ out
 examples/*.wasm
 examples/*.wast
 examples/*.wat
-examples/*.c
+examples/codegen*.c
 examples/*.o
 examples/codegen
 tmp/*
