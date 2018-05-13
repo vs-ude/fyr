@@ -973,7 +973,6 @@ export class CodeGenerator {
             }
             case "return":
                 if (this.scopeNeedsDestructors(scope)) {
-                    console.log("WITH DESTRUCTOR");
                     let tmp: ssa.Variable | number;
                     if (snode.lhs) {
                         tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
@@ -2809,8 +2808,8 @@ export class CodeGenerator {
         b.br_if(cmp, outer);
         this.callDestructor(elementType, pointer, 0, b, true, true);
         let st = this.getSSAType(elementType);
-        b.assign(pointer, "add", "addr", [pointer, ssa.sizeOf(st) + ssa.alignedSizeOf(st)]);
-        b.br(loop);
+        b.assign(pointer, "add", "addr", [pointer, ssa.alignedSizeOf(st)]);
+        b.assign(counter, "add", "addr", [counter, 1]);
         b.end();
         b.end();
         b.end();
