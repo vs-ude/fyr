@@ -109,3 +109,13 @@ func forTest(`a l1 *Link, `a l1b *Link, `b l2 *Link, `c l3 *Link) {
     // Must err, becaise l1 could have been assigned and then break left the loop
 //    l1
 }
+
+func refTest(l &Link) {
+    var l2 Link = {}
+    refTest(&l2)
+    // Must err, because &l2 is a local reference
+//    refTest2(&l2)
+}
+
+func refTest2(`a l3 &Link) {    
+}
