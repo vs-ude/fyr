@@ -5,6 +5,7 @@ import {SystemCalls} from "./pkg"
 import {Wasm32Backend} from "./backend_wasm"
 import {CBackend} from "./backend_c"
 import * as backend from "./backend"
+import { tmpdir } from "os";
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean, emitC: boolean) {
@@ -383,11 +384,13 @@ export class CodeGenerator {
                         throw "Implementation error";
                     }
                     let t = RestrictedType.strip(e.type);
-                    if (t instanceof PointerType) {
-                        this.callDestructor(t.elementType, v, 0, b, false, false);
+                    if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
+                        this.callDestructor(t.elementType, v, 0, b, false, "free");
+                    } else if (t instanceof PointerType && (t.mode == "reference")) {
+                        this.callDestructor(t.elementType, v, 0, b, false, "decref");
                     } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
                         let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                        this.callDestructor(t, obj, 0, b, true, true);
+                        this.callDestructor(t, obj, 0, b, true, "no");
                     }
                 }
             }
@@ -2711,17 +2714,18 @@ export class CodeGenerator {
     }
 
     private generateSliceDestructor(t: SliceType): backend.Function {
-        let bf = this.sliceDestructors.get(t);
+        let tc = this.typecode(t).toString();
+        let bf = this.destructors.get(tc);
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.typeDestructors.size + this.sliceDestructors.size + this.tupleDestructors.size + this.arrayDestructors.size).toString();
+        let dtrName = "dtr_" + (this.destructors.size).toString();
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
-        this.sliceDestructors.set(t, bf);
+        this.destructors.set(tc, bf);
         let st = this.getSSAType(t) as ssa.StructType;
         // Load pointer to the underlying array, which is a size-prefixed array
         let arrPointer = b.assign(b.tmp(), "load", "addr", [pointer, st.fieldOffset("array_ptr")]);
@@ -2743,21 +2747,22 @@ export class CodeGenerator {
     }
 
     private generateTupleDestructor(t: TupleType): backend.Function {
-        let bf = this.tupleDestructors.get(t);
+        let tc = this.typecode(t).toString();
+        let bf = this.destructors.get(tc);
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.typeDestructors.size + this.sliceDestructors.size + this.tupleDestructors.size + this.arrayDestructors.size).toString();
+        let dtrName = "dtr_" + (this.destructors.size).toString();
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
-        this.tupleDestructors.set(t, bf);
+        this.destructors.set(tc, bf);
         let st = this.getSSAType(t) as ssa.StructType;
         let i = 0;
         for (let e of t.types) {
-            this.callDestructor(e, pointer, st.fieldOffset("t" + i.toString()), b, true, true);
+            this.callDestructor(e, pointer, st.fieldOffset("t" + i.toString()), b, true, "no");
             i++;
         }
         b.end();
@@ -2766,20 +2771,21 @@ export class CodeGenerator {
     }
 
     private generateStructDestructor(t: StructType): backend.Function {
-        let bf = this.typeDestructors.get(t);
+        let tc = this.typecode(t).toString();
+        let bf = this.destructors.get(tc);
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.typeDestructors.size + this.sliceDestructors.size + this.tupleDestructors.size + this.arrayDestructors.size).toString() + "_" + t.name;
+        let dtrName = "dtr_" + (this.destructors.size).toString() + "_" + t.name;
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
-        this.typeDestructors.set(t, bf);
+        this.destructors.set(tc, bf);
         let st = this.getSSAType(t) as ssa.StructType;
         for (let f of t.fields) {
-            this.callDestructor(f.type, pointer, st.fieldOffset(f.name), b, true, true);
+            this.callDestructor(f.type, pointer, st.fieldOffset(f.name), b, true, "no");
         }
         b.end();
         this.backend.defineFunction(dtrNode, bf, false);
@@ -2787,26 +2793,27 @@ export class CodeGenerator {
     }
 
     private generateArrayDestructor(t: ArrayType): backend.Function {
+        let tc = this.typecode(t).toString();
         let elementType = RestrictedType.strip(t.elementType);
-        let bf = this.arrayDestructors.get(elementType);
+        let bf = this.destructors.get(tc);
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.typeDestructors.size + this.sliceDestructors.size + this.tupleDestructors.size + this.arrayDestructors.size).toString();
+        let dtrName = "dtr_" + (this.destructors.size).toString();
         let dtrType = new ssa.FunctionType(["addr", "int"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
         let size = b.declareParam("int", "size");
-        this.arrayDestructors.set(elementType, bf);
+        this.destructors.set(tc, bf);
 
         let counter = b.assign(b.tmp(), "copy", "int", [0]);
         let outer = b.block();
         let loop = b.loop()
         let cmp = b.assign(b.tmp(), "eq", "int", [counter, size]);
         b.br_if(cmp, outer);
-        this.callDestructor(elementType, pointer, 0, b, true, true);
+        this.callDestructor(elementType, pointer, 0, b, true, 'no');
         let st = this.getSSAType(elementType);
         b.assign(pointer, "add", "addr", [pointer, ssa.alignedSizeOf(st)]);
         b.assign(counter, "add", "addr", [counter, 1]);
@@ -2817,61 +2824,126 @@ export class CodeGenerator {
         return bf;
     }
 
+    private generateFixedArrayDestructor(t: ArrayType): backend.Function {
+        if (t.size < 0) {
+            throw "Implementation error";
+        }
+        let tc = this.typecode(t).toString() + "//" + t.size.toString();
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+
+        let elementType = RestrictedType.strip(t.elementType);
+        let dtrName = "dtr_fixed" + t.size.toString() + "_" + (this.destructors.size).toString();
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam("addr", "pointer");
+        this.destructors.set(tc, bf);
+        b.call(null, new ssa.FunctionType(["addr", "int"], null), [this.generateArrayDestructor(t).getIndex(), t.size]);
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false);
+        return bf;    
+    }
+
+    private generatePointerDestructor(t: PointerType): backend.Function {
+        let tc = this.typecode(t).toString() + "//pointer";
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+
+        let elementType = RestrictedType.strip(t.elementType);
+        let dtrName = "dtr_" + (this.destructors.size).toString();
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam("addr", "pointer");
+        this.destructors.set(tc, bf);
+        let obj = b.assign(b.tmp(), "load", "addr", [pointer, 0]);
+        if (t.mode == "strong" || t.mode == "unique") {
+            this.callDestructor(t.elementType, obj, 0, b, false, "free");
+        } else if (t.mode == "reference") {
+            this.callDestructor(t.elementType, obj, 0, b, false, "decref");
+        }
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false);
+        return bf;    
+    }
+
     /**
      * pointer is the address of a value and t is the type of the value being pointed to.
      */
-    private callDestructor(typ: Type, pointer: ssa.Variable, offset: number, b: ssa.Builder, avoidNullCheck: boolean, avoidFree: boolean) {
-        if (this.tc.isPureValue(typ)) {
-            return;
-        }
+    private callDestructor(typ: Type, pointer: ssa.Variable, offset: number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref") {
         if (!avoidNullCheck) {
             let cond = b.assign(b.tmp(), "ne", "addr", [pointer, 0]);
             b.ifBlock(cond);
         }
-        let t = RestrictedType.strip(typ);
-        if (t instanceof PointerType) {
-            if (t.mode == "strong" || t.mode == "unique") {
-                let obj = b.assign(b.tmp(), "load", "addr", [pointer, offset]);
-                this.callDestructor(t.elementType, obj, 0, b, false, false);
+        let dtr: backend.Function;
+        let obj = pointer;
+        if (!this.tc.isPureValue(typ)) {
+            let t = RestrictedType.strip(typ);
+            if (t instanceof PointerType) {
+                if (free == "decref") {
+                    if (offset) {
+                        obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+                    }
+                    dtr = this.generatePointerDestructor(t);
+                } else {
+                    let val = b.assign(b.tmp(), "load", "addr", [pointer, offset]);
+                    if (t.mode == "strong" || t.mode == "unique") {
+                        this.callDestructor(t.elementType, val, 0, b, false, "free");
+                    } else if (t.mode == "reference")
+                        this.callDestructor(t.elementType, val, 0, b, false, "decref");
+                }
+            } else if (t instanceof StructType) {
+                if (offset) {
+                    obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+                }
+                dtr = this.generateStructDestructor(t);
+                if (free != "decref") {
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
+                }
+            } else if (t instanceof ArrayType) {
+                if (offset) {
+                    obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+                }
+                if (t.size < 0) {
+                    throw "Implementation error";
+                }
+                if (free == "decref") {
+                    dtr = this.generateFixedArrayDestructor(t);
+                } else {
+                    dtr = this.generateArrayDestructor(t);
+                    b.call(null, new ssa.FunctionType(["addr", "int"], null), [dtr.getIndex(), obj, t.size]);
+                }
+            } else if (t instanceof TupleType) {
+                if (offset) {
+                    obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+                }
+                dtr = this.generateTupleDestructor(t);
+                if (free != "decref") {
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
+                }
+            } else if (t instanceof SliceType) {
+                if (offset) {
+                    obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+                }
+                dtr = this.generateSliceDestructor(t);
+                if (free != "decref") {
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
+                }
             } else {
-                throw "TODO";
-            }
-        } else if (t instanceof StructType) {
-            let obj: ssa.Variable = pointer;
-            if (offset) {
-                obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
-            }
-            let dtr = this.generateStructDestructor(t);
-            b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
-        } else if (t instanceof ArrayType) {
-            let obj: ssa.Variable = pointer;
-            if (offset) {
-                obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
-            }
-            let dtr = this.generateArrayDestructor(t);
-            if (t.size < 0) {
                 throw "Implementation error";
             }
-            b.call(null, new ssa.FunctionType(["addr", "int"], null), [dtr.getIndex(), obj, t.size]);
-        } else if (t instanceof TupleType) {
-            let obj: ssa.Variable = pointer;
-            if (offset) {
-                obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
-            }
-            let dtr = this.generateTupleDestructor(t);
-            b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
-        } else if (t instanceof SliceType) {
-            let obj: ssa.Variable = pointer;
-            if (offset) {
-                obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
-            }
-            let dtr = this.generateSliceDestructor(t);
-            b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
-        } else {
-            throw "Implementation error";
         }
-        if (!avoidFree) {
-            b.assign(null, "free", null, [pointer]);
+        if (free == "free") {
+            b.assign(null, "free", null, [obj]);
+        } else if (free == "decref") {
+            b.assign(null, "decref", null, [obj, dtr ? dtr.getIndex() : -1]);
         }
         if (!avoidNullCheck) {
             b.end();
@@ -2932,9 +3004,6 @@ export class CodeGenerator {
     private interfaceTableIndex: Map<string, number> = new Map<string, number>();
     private interfaceTableLength: number = 0;
     private typeCodeMap: Map<string,number> = new Map<string, number>();
-    private typeDestructors: Map<Type, backend.Function> = new Map<Type, backend.Function>();
-    private arrayDestructors: Map<Type, backend.Function> = new Map<Type, backend.Function>();
-    private tupleDestructors: Map<Type, backend.Function> = new Map<Type, backend.Function>();
-    private sliceDestructors: Map<Type, backend.Function> = new Map<Type, backend.Function>();
+    private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
 }
 

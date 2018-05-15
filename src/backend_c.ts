@@ -627,6 +627,19 @@ export class CBackend implements backend.Backend {
             m.funcExpr = new CConst("fyr_free");
             m.args = [this.emitExpr("addr", n.args[0])];
             return m;
+        } else if (n.kind == "decref") {
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("fyr_decref");
+            if (typeof(n.args[1]) != "number") {
+                throw "Implementation error";
+            }
+            if (n.args[1] === 0) {
+                m.args = [this.emitExpr("addr", n.args[0]), new CConst("0")];
+            } else {
+                let f = this.funcs[n.args[1] as number];
+                m.args = [this.emitExpr("addr", n.args[0]), new CConst(f.func.name)];
+            }
+            return m;
         }
 
         throw "Implementation error " + n.kind;

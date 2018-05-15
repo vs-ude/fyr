@@ -588,7 +588,7 @@ export class StructType extends Type {
             return this.name;
         }
         let str = "struct{";
-        str += this.fields.join(",");
+        str += this.fields.map(function (f: StructField): string { return f.toTypeCodeString(); }).join(",");
         str += "}";
         return str;
     }
@@ -649,6 +649,13 @@ export class StructField {
         return this.name + " " + this.type.toString();
     }
 
+    public toTypeCodeString(): string {
+        if (!this.name) {
+            return this.type.toTypeCodeString();
+        }
+        return this.name;
+    }
+
     public name: string;
     public type: Type;
 }
@@ -685,7 +692,24 @@ export class FunctionType extends Type {
     }
 
     public toTypeCodeString(): string {
-        return this.toString();
+        if (this.name) {
+            if (this.objectType) {
+                return this.objectType.toTypeCodeString() + "." + this.name;
+            }
+            return this.name;
+        }
+        let name = "("
+        for(let p of this.parameters) {
+            if (name != "(") {
+                name += ",";
+            }
+            if (p.ellipsis) {
+                name += "...";
+            }
+            name += p.type.toTypeCodeString();
+        }
+        name += ") => " + this.returnType.toTypeCodeString();
+        return name;
     }
 
     public hasEllipsis(): boolean {
@@ -1006,10 +1030,32 @@ export class PointerType extends Type {
     }
 
     public toTypeCodeString(): string {
-        if (this.mode != "strong") {
-            return this.mode.toString() + "*" + this.elementType.toString();    
+        if (this.name) {
+            return this.name;
         }
-        return "*" + this.elementType.toString();
+        let op;
+        if (RestrictedType.strip(this.elementType) instanceof MapType) {
+            if (this.mode == "reference") {
+                op = "&";
+            } else if (this.mode == "unique") {
+                op = "^";
+            } else if (this.mode == "strong") {
+                op = "";
+            } else {
+                throw "Implementation error";
+            }
+        } else {
+            if (this.mode == "reference") {
+                op = "&";
+            } else if (this.mode == "unique") {
+                op = "^";
+            } else if (this.mode == "strong") {
+                op = "*";
+            } else {
+                throw "Implementation error";
+            }
+        }
+        return op + this.elementType.toTypeCodeString();
     }
 
     public elementType: Type;
@@ -1033,7 +1079,7 @@ export class UnsafePointerType extends Type {
     }
 
     public toTypeCodeString(): string {
-        return "#" + this.elementType.toString();
+        return "#" + this.elementType.toTypeCodeString();
     }
 
     public elementType: Type;
@@ -1057,7 +1103,7 @@ export class MapType extends Type {
         if (this.name) {
             return this.name;
         }
-        return "map[" + this.keyType.toString() + "]" + this.valueType.toString();
+        return "map[" + this.keyType.toTypeCodeString() + "]" + this.valueType.toTypeCodeString();
     }
 
     public keyType: Type;
