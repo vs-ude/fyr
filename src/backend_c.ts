@@ -618,10 +618,7 @@ export class CBackend implements backend.Backend {
             sizeof.operator = "sizeof";
             sizeof.expr = new CConst(t.code);
             m.args = [this.emitExpr("sint", n.args[0]), sizeof];
-            let e = new CTypeCast();            
-            e.type = new CType("addr_t");
-            e.expr = m;
-            return e;
+            return m;
         } else if (n.kind == "free") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_free");
