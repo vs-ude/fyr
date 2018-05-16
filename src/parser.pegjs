@@ -210,9 +210,9 @@ primitiveType
       let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "^[]"});
     }
-  / "&[]" [ \t]* t:primitiveType {
+  / "~[]" [ \t]* t:primitiveType {
       let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
-      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "&[]"});
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "~[]"});
     }
   / "[" [ \t]* e:expression? "]" [ \t]* t:primitiveType {
     return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
@@ -225,7 +225,7 @@ primitiveType
         let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
         return new ast.Node({loc: fl(location()), op: "uniquePointerType", rhs: m});
     }
-  / "&map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+  / "~map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
         let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
         return new ast.Node({loc: fl(location()), op: "referenceType", rhs: m});
     }
@@ -247,8 +247,11 @@ primitiveType
   / "#" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "unsafePointerType", rhs: t});
     }
-  / "&" [ \t]* t:primitiveType {
+  / "~" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "referenceType", rhs: t});
+    }
+  / "&" [ \t]* t:primitiveType {
+      return new ast.Node({loc: fl(location()), op: "localReferenceType", rhs: t});
     }
   / "^" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "uniquePointerType", rhs: t});
@@ -830,8 +833,8 @@ typedLiteral
       l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "^[]"});
       return l;
     }
-  / "&[]" [ \t]* t:type [ \t]* l: array {
-      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "&[]"});
+  / "~[]" [ \t]* t:type [ \t]* l: array {
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "~[]"});
       return l;
     }
   / "[" [ \t]* e:expression? "]" [ \t]* t:type [ \t]* l: array {

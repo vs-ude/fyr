@@ -750,9 +750,7 @@ export class FunctionType extends Type {
                 }
                 groups.set(p.name, g);
             } else {
-                if (TypeChecker.isReference(p.type)) {
-                    groups.set(p.name, new Group(GroupKind.Bound));
-                } else if (TypeChecker.isUnique(p.type)) {
+                if (TypeChecker.isUnique(p.type)) {
                     groups.set(p.name, new Group(GroupKind.Free));
                 } else {
                     groups.set(p.name, defaultGroup);
@@ -1003,8 +1001,10 @@ export class PointerType extends Type {
         }
         let op;
         if (RestrictedType.strip(this.elementType) instanceof MapType) {
-            if (this.mode == "reference" || this.mode == "local_reference") {
+            if (this.mode == "local_reference") {
                 op = "&";
+            } else if (this.mode == "reference") {
+                op = "~";
             } else if (this.mode == "unique") {
                 op = "^";
             } else if (this.mode == "strong") {
@@ -1013,8 +1013,10 @@ export class PointerType extends Type {
                 throw "Implementation error";
             }
         } else {
-            if (this.mode == "reference" || this.mode == "local_reference") {
+            if (this.mode == "local_reference") {
                 op = "&";
+            } else if (this.mode == "reference") {
+                op = "~";
             } else if (this.mode == "unique") {
                 op = "^";
             } else if (this.mode == "strong") {
@@ -1035,8 +1037,10 @@ export class PointerType extends Type {
         }
         let op;
         if (RestrictedType.strip(this.elementType) instanceof MapType) {
-            if (this.mode == "reference" || this.mode == "local_reference") {
+            if (this.mode == "local_reference") {
                 op = "&";
+            } else if (this.mode == "reference") {
+                op = "~";
             } else if (this.mode == "unique") {
                 op = "^";
             } else if (this.mode == "strong") {
@@ -1045,8 +1049,10 @@ export class PointerType extends Type {
                 throw "Implementation error";
             }
         } else {
-            if (this.mode == "reference" || this.mode == "local_reference") {
+            if (this.mode == "local_reference") {
                 op = "&";
+            } else if (this.mode == "reference") {
+                op = "~";
             } else if (this.mode == "unique") {
                 op = "^";
             } else if (this.mode == "strong") {
@@ -1303,8 +1309,12 @@ export class SliceType extends Type {
             return this.name;
         }
         let mode = "";
-        if (this.mode == "reference" || this.mode == "local_reference") {
+        if (this.mode == "local_reference") {
             mode = "&";
+        } else if (this.mode == "reference") {
+            mode = "~";
+        } else if (this.mode == "unique") {
+            mode = "^";
         }
         return mode + "[]" + this.array().elementType.toString();
     }
@@ -1605,7 +1615,7 @@ export class TypeChecker {
         this.globalGroup = new Group(GroupKind.Bound, "$global");
     }
 
-    public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" = "default"): Type {
+    public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" | "parameter_toplevel" = "default"): Type {
         let t = this.createTypeIntern(tnode, scope, mode);
         if (tnode.groupName) {
             t.groupName = tnode.groupName.value;
@@ -1613,7 +1623,11 @@ export class TypeChecker {
         return t;
     }
 
-    private createTypeIntern(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" = "default"): Type {
+    private createTypeIntern(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" | "parameter_toplevel" = "default"): Type {
+        let originalMode = mode;
+        if (mode == "parameter_toplevel") {
+            mode = "parameter";
+        }
         if (tnode.op == "basicType") {
             if (tnode.nspace) {
                 let p = scope.resolveType(tnode.nspace);
@@ -1652,6 +1666,12 @@ export class TypeChecker {
         } else if (tnode.op == "referenceType") {
             let c = this.createType(tnode.rhs, scope, mode);
             return new PointerType(c, "reference");
+        } else if (tnode.op == "localReferenceType") {
+            if (originalMode != "parameter_toplevel") {
+                throw new TypeError("A local reference is not allowed in this place", tnode.loc);
+            }
+            let c = this.createType(tnode.rhs, scope, mode);
+            return new PointerType(c, "local_reference");
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
             return new UnsafePointerType(t);
@@ -1660,7 +1680,7 @@ export class TypeChecker {
             let s = new SliceType(t as ArrayType | RestrictedType, "strong");
             if (tnode.value == "^[]") {
                 s.mode = "unique";
-            } else if (tnode.value == "&[]") {
+            } else if (tnode.value == "~[]") {
                 s.mode = "reference";
             }
             return s;
@@ -2250,7 +2270,7 @@ export class TypeChecker {
                         throw new TypeError("Duplicate parameter name " + p.name, pnode.loc);
                     }
                 }
-                p.type = this.createType(pnode, f.scope, "parameter");
+                p.type = this.createType(pnode, f.scope, "parameter_toplevel");
                 if (p.ellipsis && !(p.type instanceof SliceType)) {
                     throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                 }
@@ -3272,21 +3292,17 @@ export class TypeChecker {
                 } else {
                     this.checkExpression(snode.rhs, scope);
                     this.checkVarAssignment(snode.op == "let", scope, snode.lhs, snode.rhs.type, snode.rhs);
-                    /* if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
-                        if (snode.rhs.op != "id" && snode.rhs.op != "take" && snode.rhs.op != "array" && snode.rhs.op != "object") {
-                            throw new TypeError("Right hand side of assignment must be wrapped in take()", snode.rhs.loc);
-                        }
-                    }*/
+                    if (TypeChecker.hasLocalReference(snode.rhs.type)) {
+                        throw new TypeError("Right hand side of assignment must not be a local reference", snode.rhs.loc);
+                    }
                 }
                 break;
             case "=":
                 this.checkExpression(snode.rhs, scope);
                 this.checkAssignment(scope, snode.lhs, snode.rhs.type, snode.rhs);
-                /*if (this.isSafePointer(snode.rhs.type) || this.isSlice(snode.rhs.type)) {
-                    if (snode.rhs.op != "id" && snode.rhs.op != "take" && snode.rhs.op != "array" && snode.rhs.op != "object") {
-                        throw new TypeError("Right hand side of assignment must be wrapped in take()", snode.rhs.loc);
-                    }
-                }*/
+                if (TypeChecker.hasLocalReference(snode.rhs.type)) {
+                    throw new TypeError("Right hand side of assignment must not be a local reference", snode.rhs.loc);
+                }
             break;                
             case "+=":                                             
             case "*=":
@@ -4016,7 +4032,7 @@ export class TypeChecker {
                 }
                 // Return type?
                 if (enode.lhs) {
-                    f.type.returnType = this.createType(enode.lhs, f.scope, "parameter");
+                    f.type.returnType = this.createType(enode.lhs, f.scope, "parameter_toplevel");
                     if (enode.lhs.op == "tupleType") {
                         for(let i = 0; i < enode.lhs.parameters.length; i++) {
                             let pnode = enode.lhs.parameters[i];
@@ -5396,6 +5412,34 @@ export class TypeChecker {
                 }
             }
             if (t.extends && this.hasReferenceOrStrongPointers(t.extends)) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    public static hasLocalReference(t: Type): boolean {
+        t = RestrictedType.strip(t);
+        if ((t instanceof PointerType || t instanceof SliceType) &&(t.mode == "local_reference")) {
+            return true;
+        }
+        if (t instanceof TupleType) {
+            for(let p of t.types) {
+                if (this.hasLocalReference(p)) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (t instanceof ArrayType) {
+            return this.hasLocalReference(t.elementType);
+        } else if (t instanceof StructType) {
+            for(let f of t.fields) {
+                if (this.hasStrongOrUniquePointers(f.type)) {
+                    return true;
+                }
+            }
+            if (t.extends && this.hasLocalReference(t.extends)) {
                 return true;
             }
             return false;

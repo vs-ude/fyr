@@ -12,12 +12,12 @@ type Link struct {
     value *Point
     parallel ^Link
     pos Point
-    sibling &Link
+    sibling ~Link
 }
 
 type PointRef struct {
     ptr *PointRef
-    ref &PointRef
+    ref ~PointRef
     unique ^PointRef
     pos Point
     tuple (*PointRef, *PointRef)
@@ -29,11 +29,11 @@ var link2 *Link
 // var link3 ^Link = take(link1.next)
 var link3 ^Link = {}
 
-func test(param1 *PointRef, `b param2 *PointRef, param3 &PointRef, param4 *PointRef, `c param5 *PointRef) *PointRef {
+func test(param1 *PointRef, `b param2 *PointRef, param3 ~PointRef, param4 *PointRef, `c param5 *PointRef) *PointRef {
     var pr4 ^PointRef = {}
     var pr3 ^PointRef = {}
     pr3.ref = pr4
-    var pr5 &PointRef = pr3
+    var pr5 ~PointRef = pr3
     var pr6 ^PointRef = pr3
     pr5
     pr6
@@ -41,7 +41,7 @@ func test(param1 *PointRef, `b param2 *PointRef, param3 &PointRef, param4 *Point
 //    pr3
     // Must work, because pr4 and pr3 are now entagled
     pr4
-    // Works, because pr4 was only assigne to a &ptr and pos is a value
+    // Works, because pr4 was only assigne to a ~ptr and pos is a value
     var p Point = pr4.pos
     // Works, because pr7 is now bound to pr4
     var pr7 *PointRef = take(pr4.ptr)
@@ -50,7 +50,7 @@ func test(param1 *PointRef, `b param2 *PointRef, param3 &PointRef, param4 *Point
     // Works, because we access an isolate inside an isolate
     var pr9 *PointRef = take(pr4.unique.unique)
     var pr10 ^PointRef = {}
-    var ref10 &PointRef = pr10
+    var ref10 ~PointRef = pr10
     pr4.unique = pr10
     // Must err, because pr10 variable is no longer available
 //    pr10
@@ -93,7 +93,7 @@ func test(param1 *PointRef, `b param2 *PointRef, param3 &PointRef, param4 *Point
     pr13.ptr = param4
     var pr14 *PointRef = {}
     // Must err, because isolates may only be taken out of isolates, but not referenced
-//    var pr17 &PointRef = pr14.unique.unique
+//    var pr17 ~PointRef = pr14.unique.unique
     // Must err, because param2 belongs to the wrong group
 //    return param2
     // Must err, because param1 is not available
@@ -118,7 +118,7 @@ func tupleTest(param1 *Link, `b param2 *Link) {
 func doIt() {
     var l *Link = {}
     l.setNext({})
-    var r &Link = l
+    var r ~Link = l
     r.setNext({})
 }
 

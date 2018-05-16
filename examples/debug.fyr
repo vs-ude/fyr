@@ -12,12 +12,12 @@ type Link struct {
     value *Point
     parallel ^Link
     pos Point
-    sibling &Link
+    sibling ~Link
 }
 
 type PointRef struct {
     ptr *PointRef
-    ref &PointRef
+    ref ~PointRef
     unique ^PointRef
     pos Point
 }
@@ -117,5 +117,5 @@ func refTest(l &Link) {
 //    refTest2(&l2)
 }
 
-func refTest2(`a l3 &Link) {    
+func refTest2(l3 ~Link) {    
 }
