@@ -1946,16 +1946,19 @@ export class CodeGenerator {
                         if (objType.mode == "local_reference") {
                             return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);    
                         }
-                        let dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("data_ptr")]);
-                        let arrPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
-                        let offset = b.assign(b.tmp(), "sub", "sint", [dataPointer, arrPointer]);
                         let size = ssa.alignedSizeOf(this.getSSAType(objType.getElementType()));
+                        let arrPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
+                        let count = b.assign(b.tmp(), "load", "sint", [arrPointer, -ssa.sizeOf("sint")]);
                         if (size != 1) {
-                            offset = b.assign(b.tmp(), "div", "sint", [offset, size]);
+                            count = b.assign(b.tmp(), "mul", "sint", [count, size]);
                         }
-                        let countPointer = b.assign(b.tmp(), "sub", "addr", [arrPointer, 2 * ssa.sizeOf("int")]);
-                        let count = b.assign(b.tmp(), "load", "sint", [countPointer, 0]);
-                        return b.assign(b.tmp(), "sub", "sint", [count, offset]);
+                        let endPointer = b.assign(b.tmp(), "add", "addr", [arrPointer, count]);
+                        let dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("data_ptr")]);
+                        let diff = b.assign(b.tmp(), "sub", "sint", [endPointer, dataPointer]);
+                        if (size != 1) {
+                            diff = b.assign(b.tmp(), "div", "sint", [diff, size]);
+                        }
+                        return diff;
                     }
                     throw "Implementation error";
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "clone") {
