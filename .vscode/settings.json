@@ -8,5 +8,8 @@
         "**/*.js": { "when": "$(basename).ts"},
         "*.js.map": true
     },
-    "npm.enableScriptExplorer": true
+    "npm.enableScriptExplorer": true,
+    "files.associations": {
+        "stdio.h": "c"
+    }
 }

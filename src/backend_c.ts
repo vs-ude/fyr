@@ -310,7 +310,7 @@ export class CBackend implements backend.Backend {
             case "int":
                 return new CType("uint_t");
             case "sint":
-                return new CType("int_");
+                return new CType("int_t");
         }
     }
 
@@ -614,10 +614,7 @@ export class CBackend implements backend.Backend {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_alloc");
-            let sizeof = new CUnary();
-            sizeof.operator = "sizeof";
-            sizeof.expr = new CConst(t.code);
-            m.args = [this.emitExpr("sint", n.args[0]), sizeof];
+            m.args = [new CConst(ssa.sizeOf(n.type as (ssa.Type | ssa.StructType)).toString())];
             return m;
         } else if (n.kind == "free") {
             let m = new CFunctionCall();
@@ -640,6 +637,17 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "incref") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_incref");
+            m.args = [this.emitExpr("addr", n.args[0])];
+            return m;
+        } else if (n.kind == "alloc_arr") {
+            let t = this.mapType(n.type);
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("fyr_alloc_arr");
+            m.args = [this.emitExpr("sint", n.args[0]), this.emitExpr("sint", n.args[1])];
+            return m;
+        } else if (n.kind == "free_arr") {
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("fyr_free_arr");
             m.args = [this.emitExpr("addr", n.args[0])];
             return m;
         }
