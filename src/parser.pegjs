@@ -214,6 +214,10 @@ primitiveType
       let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
       return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "~[]"});
     }
+  / "&[]" [ \t]* t:primitiveType {
+      let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
+      return new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "&[]"});
+    }
   / "[" [ \t]* e:expression? "]" [ \t]* t:primitiveType {
     return new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: e})
     }
@@ -228,6 +232,10 @@ primitiveType
   / "~map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
         let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
         return new ast.Node({loc: fl(location()), op: "referenceType", rhs: m});
+    }
+  / "&map" [ \t]* "[" [ \t]* k:type [ \t]* "]" [ \t]* v:primitiveType {
+        let m = new ast.Node({loc: fl(location()), op: "mapType", lhs: k, rhs: v});
+        return new ast.Node({loc: fl(location()), op: "localReferenceType", rhs: m});
     }
   / "(" [ \t]* t:typeList [ \t]* ")" {
       if (t.length == 1) {

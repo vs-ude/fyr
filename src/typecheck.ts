@@ -1682,6 +1682,8 @@ export class TypeChecker {
                 s.mode = "unique";
             } else if (tnode.value == "~[]") {
                 s.mode = "reference";
+            } else if (tnode.value == "&[]") {
+                s.mode = "local_reference";
             }
             return s;
         } else if (tnode.op == "tupleType") {
@@ -2271,27 +2273,8 @@ export class TypeChecker {
                     }
                 }
                 p.type = this.createType(pnode, f.scope, "parameter_toplevel");
-                if (p.ellipsis && !(p.type instanceof SliceType)) {
-                    throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
-                }
-                // Reference parameters (without a group) become local_reference parameters
-                if (!p.type.groupName && TypeChecker.isReference(p.type)) {
-                    let t = p.type;
-                    let r: RestrictedType;
-                    if (t instanceof RestrictedType) {
-                        r = t;
-                        t = r.elementType;
-                    }
-                    if (t instanceof SliceType) {
-                        p.type = new SliceType(t.arrayType, "local_reference");
-                    } else if (t instanceof PointerType) {
-                        p.type = new PointerType(t.elementType, "local_reference");
-                    } else {
-                        throw "Implementation error";
-                    }
-                    if (r) {
-                        p.type = new RestrictedType(p.type, r);
-                    }
+                if (p.ellipsis && (!(p.type instanceof SliceType) || p.type.mode != "local_reference")) {
+                    throw new TypeError("Ellipsis parameters must be of a local reference slice type, i.e. &[]", pnode.loc);
                 }
                 this.checkVariableType(p.type, pnode.loc);
                 p.loc = pnode.loc;
@@ -5421,7 +5404,7 @@ export class TypeChecker {
 
     public static hasLocalReference(t: Type): boolean {
         t = RestrictedType.strip(t);
-        if ((t instanceof PointerType || t instanceof SliceType) &&(t.mode == "local_reference")) {
+        if ((t instanceof PointerType || t instanceof SliceType) && (t.mode == "local_reference")) {
             return true;
         }
         if (t instanceof TupleType) {
@@ -5435,7 +5418,7 @@ export class TypeChecker {
             return this.hasLocalReference(t.elementType);
         } else if (t instanceof StructType) {
             for(let f of t.fields) {
-                if (this.hasStrongOrUniquePointers(f.type)) {
+                if (this.hasLocalReference(f.type)) {
                     return true;
                 }
             }
