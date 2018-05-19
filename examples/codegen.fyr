@@ -9,6 +9,7 @@ export func main() int {
     var tuple (List, List) = ({}, {})
     var arr2 [2]List = [{value:23, next: {}}, {}]
     var ref ~List = list
+    arr[1].value = getValue(list)
     return list.value
 }
 

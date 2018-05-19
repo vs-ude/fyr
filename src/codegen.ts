@@ -1068,7 +1068,7 @@ export class CodeGenerator {
                 if (ltype instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, ltype);
                     let index = this.processExpression(f, scope, enode.rhs, b, vars, this.tc.t_int);
-                    let size = ssa.sizeOf(this.getSSAType(ltype.elementType));
+                    let size = ssa.alignedSizeOf(this.getSSAType(ltype.elementType));
                     let index2 = index;
                     if (size > 1) {
                         // TODO: If size is power of 2, shift bits
@@ -1076,7 +1076,7 @@ export class CodeGenerator {
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index2]), 0);
                 } else if (ltype instanceof SliceType) {
-                    let size = ssa.sizeOf(this.getSSAType(ltype.getElementType()));
+                    let size = ssa.alignedSizeOf(this.getSSAType(ltype.getElementType()));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
@@ -1144,7 +1144,7 @@ export class CodeGenerator {
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "ptr", [ptr, index]), 4);
                 } else if (ltype instanceof ArrayType) {
-                    let size = ssa.sizeOf(this.getSSAType(ltype.elementType));
+                    let size = ssa.alignedSizeOf(this.getSSAType(ltype.elementType));
                     let ptr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
                         ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
