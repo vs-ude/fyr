@@ -520,6 +520,7 @@ export class CodeGenerator {
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;
+                                    // TODO: Ownership transfer
                                     let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
                                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                                     if (dest instanceof ssa.Pointer) {
@@ -552,6 +553,7 @@ export class CodeGenerator {
                     }
                     processAssignment(snode.lhs, snode.rhs.type, destinations, 0, ptr);
                 } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
+                    // TODO: Ownership transfer
                     let mtype: MapType = this.tc.stripType(snode.lhs.lhs.type) as MapType;
                     let m = this.processExpression(f, scope, snode.lhs.lhs, b, vars, mtype);
                     let key = this.processExpression(f, scope, snode.lhs.rhs, b, vars, mtype.keyType);
@@ -577,11 +579,26 @@ export class CodeGenerator {
                     } else {
                         data = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     }
+                    if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                        // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
+                        data = b.assign(b.tmp(), "incref", "addr", [data]);
+                    }
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                     if (dest instanceof ssa.Pointer) {
                         b.assign(b.mem, "store", this.getSSAType(snode.lhs.type), [dest.variable, dest.offset, data]);
                     } else {
                         b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [data]);
+                    }
+                    if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                        let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
+                        let arrayPointer: ssa.Variable;
+                        if (dest instanceof ssa.Pointer) {
+                            arrayPointer = b.assign(b.tmp(), "load", "addr", [dest.variable, dest.offset + st.fieldOffset("array_ptr")]);
+                        } else {
+                            let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [dest]);
+                            arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                        }
+                        b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
                 }
                 break;
