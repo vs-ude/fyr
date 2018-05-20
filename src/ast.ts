@@ -10,6 +10,11 @@ export function currentFile(): string {
     return _currentFile;
 }
 
+export enum AstFlags {
+    None = 0,
+    IsTakeExpression = 1
+}
+
 export type NodeConfig = {
     readonly loc: Location;
     readonly op: NodeOp;
@@ -25,6 +30,7 @@ export type NodeConfig = {
     readonly parameters?: Array<Node>;
     readonly genericParameters?: Array<Node>;
     readonly groupName?: Node;
+    readonly flags?: AstFlags;
 }
 
 export type LocationPoint = {
@@ -85,6 +91,9 @@ export class Node {
             }
             if (config.groupName !== undefined) {
                 this.groupName = config.groupName;
+            }
+            if (config.flags !== undefined) {
+                this.flags = config.flags;
             }
         }
     }
@@ -185,6 +194,7 @@ export class Node {
             }
         }
         n.groupName = this.groupName ? this.groupName.clone() : null;
+        n.flags = this.flags;
         return n;
     }
 
@@ -206,4 +216,5 @@ export class Node {
     public nspace: string;
     public scope: Scope;
     public scopeExit: ScopeExit;
+    public flags: AstFlags;
 }

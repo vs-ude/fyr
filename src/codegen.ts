@@ -1,4 +1,4 @@
-import {Location, Node, NodeOp} from "./ast"
+import {Location, Node, NodeOp, AstFlags} from "./ast"
 import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
@@ -430,6 +430,7 @@ export class CodeGenerator {
                     if (snode.lhs.op == "id") {
                         // A single variabe is defined and assigned
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
+                        let t = this.getSSAType(snode.rhs.type);
                         let v = vars.get(element);
                         if ((this.tc.isArray(element.type) || this.tc.isStruct(element.type)) && this.isPureLiteral(element.type, snode.rhs)) {
                             let data = this.processPureLiteral(snode.rhs);
@@ -439,8 +440,20 @@ export class CodeGenerator {
                             } else {                                
                                 b.assign(v, "struct", v.type, (data as ssa.Variable).constantValue as ssa.BinaryData);
                             }
-                        } else {    
-                            let data = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
+                        } else {
+                            let rhs: ssa.Variable | number | ssa.Pointer;
+                            if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression && snode.rhs.op == "take") {
+                                // Skip the take
+                                rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars);
+                            } else {
+                                rhs = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
+                            }
+                            let data: ssa.Variable | number;
+                            if (rhs instanceof ssa.Pointer) {
+                                data = b.assign(b.tmp(), "load", t, [rhs.variable, rhs.offset]);
+                            } else {
+                                data = rhs;
+                            }
                             if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                                 // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                 data = b.assign(b.tmp(), "incref", "addr", [data]);
@@ -448,10 +461,32 @@ export class CodeGenerator {
                             b.assign(v, "copy", v.type, [data]);
                             if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                                 let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
-                                let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                                let arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                                let arrayPointer: ssa.Variable;
+                                if (rhs instanceof ssa.Pointer) {
+                                    arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
+                                } else {
+                                    let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [v]);
+                                    arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                                }
                                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
                             }
+                            if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression) {
+                                // take() happens here
+                                if (rhs instanceof ssa.Variable) {
+                                    if (t instanceof ssa.StructType) {
+                                        b.assign(rhs, "struct", t, this.generateZeroStruct(t));
+                                    } else {
+                                        b.assign(rhs, "copy", t, [0]);                            
+                                    }
+                                } else if (rhs instanceof ssa.Pointer) {
+                                    if (t instanceof ssa.StructType) {
+                                        let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
+                                        b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, tmp]);
+                                    } else {
+                                        b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, 0]);                            
+                                    }                                    
+                                }
+                            }            
                         }
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"

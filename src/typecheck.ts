@@ -1,4 +1,4 @@
-import {Node, NodeOp, Location} from "./ast"
+import {Node, NodeOp, Location, AstFlags} from "./ast"
 import pkg = require("./pkg");
 import { doesNotThrow } from "assert";
 import { isUndefined } from "util";
@@ -5899,6 +5899,7 @@ export class TypeChecker {
         }
 
         if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
+            rnode.flags |= AstFlags.IsTakeExpression;
             if (rhsIsVariable) {
                 // Make the RHS variable unavailable
                 if (!rnodeReuse) {
