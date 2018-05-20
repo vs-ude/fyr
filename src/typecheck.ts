@@ -460,7 +460,7 @@ export abstract class Type {
  * BasicType represents all built-in types.
  */
 export class BasicType extends Type {
-    constructor(name: "void" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune" | "any") {
+    constructor(name: "void" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune" | "any" | "string") {
         super();
         this.name = name;
     }
@@ -1588,8 +1588,7 @@ export class TypeChecker {
         this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
         this.t_any = new BasicType("any");
-        this.t_string = new SliceType(new RestrictedType(new ArrayType(this.t_byte, -1), {isConst: true}), "unique");
-        this.t_string.name = "string";        
+        this.t_string = new BasicType("string");
         this.t_void = new BasicType("void");
         this.t_rune = new BasicType("rune");
         
@@ -5886,7 +5885,7 @@ export class TypeChecker {
                 rhsVariableName = r.value;
             }
         }
-        let rhsIsTakeExpr = !rhsIsVariable && TypeChecker.isTakeExpression(rnode);
+        let rhsIsTakeExpr = TypeChecker.isTakeExpression(rnode);
         // The right hand side is an expression that evaluates to an isolate, and therefore the group is null
         if (!rightGroup) {
             // The isolate must be taken, even when assigned to a reference
@@ -6342,8 +6341,10 @@ export class TypeChecker {
         return new Group(kind, "return");
     }
 
+    // Returns true ff the expression yields ownership of the object it is pointing to.
+    // Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
     public static isTakeExpression(enode: Node): boolean {
-        if (enode.op == "take" || enode.op == "id" || enode.op == "int" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
+        if (enode.op == "take" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
             return true;
         }
         return false;

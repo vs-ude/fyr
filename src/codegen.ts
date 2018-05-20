@@ -441,13 +441,17 @@ export class CodeGenerator {
                             }
                         } else {    
                             let data = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
-                            if (this.tc.isSafePointer(snode.lhs.type) && !TypeChecker.isTakeExpression(snode.rhs) && (TypeChecker.isReference(snode.lhs.type) || TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type))) {
-                                data = b.assign(b.tmp(), "incref", "addr", [data]);
-                            } else if (TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type))) {
-                                // Assigning ^ptr or *ptr to a &ptr means that this is no take expression
+                            if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                                // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                 data = b.assign(b.tmp(), "incref", "addr", [data]);
                             }
                             b.assign(v, "copy", v.type, [data]);
+                            if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                                let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
+                                let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [v]);
+                                let arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                                b.assign(null, "incref_arr", "addr", [arrayPointer]);
+                            }
                         }
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
@@ -2750,6 +2754,13 @@ export class CodeGenerator {
         let st = this.getSSAType(t) as ssa.StructType;
         // Load pointer to the underlying array, which is a size-prefixed array
         let arrPointer = b.assign(b.tmp(), "load", "addr", [pointer, st.fieldOffset("array_ptr")]);
+        if (t.mode == "strong" || t.mode == "unique") {
+            this.callDestructor(t.arrayType, arrPointer, 0, b, false, "free");
+        } else if (t.mode == "reference") {
+            this.callDestructor(t.arrayType, arrPointer, 0, b, false, "decref");
+        }
+
+        /*
         // Check whether this is a null slice
         let cond = b.assign(b.tmp(), "ne", "addr", [arrPointer, 0]);
         b.ifBlock(cond);
@@ -2761,8 +2772,13 @@ export class CodeGenerator {
             let arrDtr = this.generateArrayDestructor(RestrictedType.strip(t.arrayType) as ArrayType);
             b.call(null, new ssa.FunctionType(["addr", "sint"], null), [arrDtr.getIndex(), arrPointer, count]);
         }
-        b.assign(null, "free_arr", "addr", [arrPointer]);
+        if (t.mode == "strong" || t.mode == "unique") {
+            b.assign(null, "free_arr", "addr", [arrPointer]);
+        } else {
+            b.assign(null, "decref_arr", "addr", [arrPointer]);
+        }
         b.end();
+        */
         b.end();
         this.backend.defineFunction(dtrNode, bf, false);
         return bf;
@@ -2846,30 +2862,6 @@ export class CodeGenerator {
         return bf;
     }
 
-    private generateFixedArrayDestructor(t: ArrayType): backend.Function {
-        if (t.size < 0) {
-            throw "Implementation error";
-        }
-        let tc = this.typecode(t).toString() + "//" + t.size.toString();
-        let bf = this.destructors.get(tc);
-        if (bf) {
-            return bf;
-        }
-
-        let elementType = RestrictedType.strip(t.elementType);
-        let dtrName = "dtr_fixed" + t.size.toString() + "_" + (this.destructors.size).toString();
-        let dtrType = new ssa.FunctionType(["addr"], null);
-        let b = new ssa.Builder();
-        bf = this.backend.declareFunction(dtrName);
-        let dtrNode = b.define(dtrName, dtrType);
-        let pointer = b.declareParam("addr", "pointer");
-        this.destructors.set(tc, bf);
-        b.call(null, new ssa.FunctionType(["addr", "sint"], null), [this.generateArrayDestructor(t).getIndex(), t.size]);
-        b.end();
-        this.backend.defineFunction(dtrNode, bf, false);
-        return bf;    
-    }
-
     private generatePointerDestructor(t: PointerType): backend.Function {
         let tc = this.typecode(t).toString() + "//pointer";
         let bf = this.destructors.get(tc);
@@ -2933,14 +2925,13 @@ export class CodeGenerator {
                 if (offset) {
                     obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
                 }
+                let size: number | ssa.Variable = t.size;
                 if (t.size < 0) {
-                    throw "Implementation error";
+                    size = b.assign(b.tmp(), "load", "sint", [obj, -ssa.sizeOf("sint")]);
                 }
-                if (free == "decref") {
-                    dtr = this.generateFixedArrayDestructor(t);
-                } else {
-                    dtr = this.generateArrayDestructor(t);
-                    b.call(null, new ssa.FunctionType(["addr", "sint"], null), [dtr.getIndex(), obj, t.size]);
+                dtr = this.generateArrayDestructor(t);
+                if (free != "decref") {
+                    b.call(null, new ssa.FunctionType(["addr", "sint"], null), [dtr.getIndex(), obj, size]);
                 }
             } else if (t instanceof TupleType) {
                 if (offset) {
