@@ -469,9 +469,9 @@ export class CodeGenerator {
                                     arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
                                 }
                                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
-                            }
-                            if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression) {
-                                // take() happens here
+                            }                            
+                            if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression) {                                
+                                // Fill the RHS with zeros
                                 if (rhs instanceof ssa.Variable) {
                                     if (t instanceof ssa.StructType) {
                                         b.assign(rhs, "struct", t, this.generateZeroStruct(t));
@@ -623,13 +623,22 @@ export class CodeGenerator {
                         b.assign(b.mem, "store", this.getSSAType(mtype.valueType), [dest, 0, value]);
                     }
                 } else {
+                    let t = this.getSSAType(snode.rhs.type) as ssa.StructType;
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
-                    let data: ssa.Variable | number;
+                    let rhs: ssa.Pointer | ssa.Variable | number;
                     if ((this.tc.isArray(snode.lhs.type) || this.tc.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
-                        data = this.processPureLiteral(snode.rhs);
+                        rhs = this.processPureLiteral(snode.rhs);
+                    } else if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression && snode.rhs.op == "take") {
+                        rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars);
                     } else {
-                        data = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
+                        rhs = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     }
+                    let data: ssa.Variable | number;
+                    if (rhs instanceof ssa.Pointer) {
+                        data = b.assign(b.tmp(), "load", t, [rhs.variable, rhs.offset]);
+                    } else {
+                        data = rhs;
+                    }            
                     // Reference counting for pointers
                     if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
@@ -653,6 +662,23 @@ export class CodeGenerator {
                         }
                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
+                    if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression) {                                
+                        // Fill the RHS with zeros
+                        if (rhs instanceof ssa.Variable) {
+                            if (t instanceof ssa.StructType) {
+                                b.assign(rhs, "struct", t, this.generateZeroStruct(t));
+                            } else {
+                                b.assign(rhs, "copy", t, [0]);                            
+                            }
+                        } else if (rhs instanceof ssa.Pointer) {
+                            if (t instanceof ssa.StructType) {
+                                let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
+                                b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, tmp]);
+                            } else {
+                                b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, 0]);                            
+                            }                                    
+                        }
+                    }            
                 }
                 break;
             }

@@ -25,8 +25,10 @@ export func main() int {
     var tuple3 (*List, *List) = ({}, {})
     take(tuple3)
     var list2 *List = list
+    var list3 *List
+    list3 = list2
     var counter = 0
-    return list2.value + slice.len() + slice.cap()
+    return list3.value + slice.len() + slice.cap()
 }
 
 func getValue(list &List) int {
