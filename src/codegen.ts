@@ -504,7 +504,7 @@ export class CodeGenerator {
                             throw "TODO"                        
                         }
                     }
-                    var processAssignment = (node: Node, type: Type, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer) => {
+                    var processAssignment = (node: Node, type: Type, rhsIsTakeExpr: boolean, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer) => {
                         if (node.op == "tuple") {
                             if (!(type instanceof TupleType)) {
                                 throw "Implementation error";
@@ -514,20 +514,36 @@ export class CodeGenerator {
                                 let p = node.parameters[i];
                                 if (p.op == "tuple" || p.op == "array" || p.op == "object") {
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
-                                    destCount = processAssignment(p, type.types[i], destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
+                                    destCount = processAssignment(p, type.types[i], rhsIsTakeExpr, destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
                                 } else {
                                     let etype: ssa.Type | ssa.StructType = stype.fields[i][1];
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;
-                                    // TODO: Ownership transfer
                                     let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
+                                    // Reference counting to pointers
+                                    if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(type) || TypeChecker.isUnique(type) || !rhsIsTakeExpr)) {
+                                        // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
+                                        val = b.assign(b.tmp(), "incref", "addr", [val]);
+                                    }
                                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                                     if (dest instanceof ssa.Pointer) {
                                         b.assign(b.mem, "store", etype, [dest.variable, dest.offset, val]);
                                     } else {
                                         b.assign(dest, "copy", etype, [val]);
                                     }
+                                    // Reference counting for slices
+                                    if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                                        let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
+                                        let arrayPointer: ssa.Variable;
+                                        if (dest instanceof ssa.Pointer) {
+                                            arrayPointer = b.assign(b.tmp(), "load", "addr", [dest.variable, dest.offset + st.fieldOffset("array_ptr")]);
+                                        } else {
+                                            let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [dest]);
+                                            arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                                        }
+                                        b.assign(null, "incref_arr", "addr", [arrayPointer]);
+                                    }                
                                 }
                             }
                         } else if (node.op == "array") {
@@ -551,7 +567,7 @@ export class CodeGenerator {
                     } else {
                         ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [val]), 0);
                     }
-                    processAssignment(snode.lhs, snode.rhs.type, destinations, 0, ptr);
+                    processAssignment(snode.lhs, snode.rhs.type, TypeChecker.isTakeExpression(snode.rhs), destinations, 0, ptr);
                 } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
                     // TODO: Ownership transfer
                     let mtype: MapType = this.tc.stripType(snode.lhs.lhs.type) as MapType;
@@ -579,6 +595,7 @@ export class CodeGenerator {
                     } else {
                         data = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     }
+                    // Reference counting for pointers
                     if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                         data = b.assign(b.tmp(), "incref", "addr", [data]);
@@ -589,6 +606,7 @@ export class CodeGenerator {
                     } else {
                         b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [data]);
                     }
+                    // Reference counting for slices
                     if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                         let arrayPointer: ssa.Variable;
