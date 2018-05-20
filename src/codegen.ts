@@ -497,7 +497,7 @@ export class CodeGenerator {
                     } else {
                         throw "Implementation error"
                     }
-                } else {
+                } /* else {
                     if (snode.lhs.op == "id") {
                         // A single variable is defined and assigned
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
@@ -517,7 +517,7 @@ export class CodeGenerator {
                     } else {
                         throw "Implementation error"
                     }                    
-                }
+                } */
                 return;
             }
             case "=":
