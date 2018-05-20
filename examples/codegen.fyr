@@ -19,6 +19,9 @@ export func main() int {
     var ref4 ~List
     var tuple2 (*List, *List) = ({}, {})
     ref3, ref4 = tuple2
+    var val1 List
+    var val2 List
+    val1, val2 = tuple
     var counter = 0
     return list.value + slice.len() + slice.cap()
 }
