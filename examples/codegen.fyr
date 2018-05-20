@@ -8,7 +8,7 @@ export func main() int {
     var arr [2]List = [{}, {}]
     var tuple (List, List) = ({}, {})
     var arr2 [2]List = [{value:23, next: {}}, {}]
-//    var ref ~List = list
+    var ref ~List = list
     var slice []List = [{}, {}]
     arr[1].value = getValue(list)
     var arr3 [2]*List = [{value: 3}, {value: 5}]

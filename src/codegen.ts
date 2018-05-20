@@ -441,6 +441,12 @@ export class CodeGenerator {
                             }
                         } else {    
                             let data = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
+                            if (this.tc.isSafePointer(snode.lhs.type) && !TypeChecker.isTakeExpression(snode.rhs) && (TypeChecker.isReference(snode.lhs.type) || TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type))) {
+                                data = b.assign(b.tmp(), "incref", "addr", [data]);
+                            } else if (TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type))) {
+                                // Assigning ^ptr or *ptr to a &ptr means that this is no take expression
+                                data = b.assign(b.tmp(), "incref", "addr", [data]);
+                            }
                             b.assign(v, "copy", v.type, [data]);
                         }
                     } else if (snode.lhs.op == "tuple") {

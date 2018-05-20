@@ -3828,7 +3828,7 @@ export class TypeChecker {
                 } else if (this.isMap(t)) {
                     throw new TypeError("Ranges are not supported on maps", enode.loc);
                 } else if (t instanceof SliceType) {
-                    let isTakeExpr = (enode.lhs.op == "take" || enode.lhs.op == "(" || enode.lhs.op == "[" || enode.lhs.op == ":");
+                    let isTakeExpr = TypeChecker.isTakeExpression(enode.lhs);
                     if ((t.mode == "unique" || t.mode == "strong") && !isTakeExpr) {
                         enode.type = new SliceType(t.arrayType, "reference");
                     } else {
@@ -5256,7 +5256,7 @@ export class TypeChecker {
         return t instanceof StructType || t instanceof TupleType || t instanceof ArrayType;
     }
 
-    public isStrong(t: Type): boolean {
+    public static isStrong(t: Type): boolean {
         if (t instanceof RestrictedType) {
             t = t.elementType;
         }
@@ -5876,7 +5876,7 @@ export class TypeChecker {
         if (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id")) {
             rhsIsVariable = true;
             rhsVariableName = rnode.op == "id" ? rnode.value : rnode.lhs.value;
-        } else if (rnode.op == ":" && (TypeChecker.isUnique(rnode.type) || this.isStrong(rnode.type))) {
+        } else if (rnode.op == ":" && (TypeChecker.isUnique(rnode.type) || TypeChecker.isStrong(rnode.type))) {
             let r = rnode;
             while (r.op == ":" || r.op == "take") {
                 r = r.lhs;
@@ -5886,7 +5886,7 @@ export class TypeChecker {
                 rhsVariableName = r.value;
             }
         }
-        let rhsIsTakeExpr = (rnode.op == "take" && !rhsIsVariable) || rnode.op == "tuple" || rnode.op == "array" || rnode.op == "object" || rnode.op == "(" || rnode.op == "null" || rnode.op == ":";
+        let rhsIsTakeExpr = !rhsIsVariable && TypeChecker.isTakeExpression(rnode);
         // The right hand side is an expression that evaluates to an isolate, and therefore the group is null
         if (!rightGroup) {
             // The isolate must be taken, even when assigned to a reference
@@ -6340,6 +6340,13 @@ export class TypeChecker {
             kind = GroupKind.Bound;
         }
         return new Group(kind, "return");
+    }
+
+    public static isTakeExpression(enode: Node): boolean {
+        if (enode.op == "take" || enode.op == "id" || enode.op == "int" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
+            return true;
+        }
+        return false;
     }
 
     public t_bool: Type;
