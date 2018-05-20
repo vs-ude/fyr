@@ -5893,19 +5893,20 @@ export class TypeChecker {
                 throw new TypeError("Assignment of an expression that evaluates to an isolate is only allowed via a variable or take expression", loc);
             }
             if (TypeChecker.hasReferenceOrStrongPointers(rnode.type)) {
+                // Accessing a strong pointer or reference inside an isolate is not allowed.
                 throw "Implementation error";
             }
             rightGroup = new Group(GroupKind.Free);
         }
 
         if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
-            rnode.flags |= AstFlags.IsTakeExpression;
             if (rhsIsVariable) {
                 // Make the RHS variable unavailable
                 if (!rnodeReuse) {
                     let rhsVariable = scope.resolveElement(rhsVariableName);
                     scope.setGroup(rhsVariable, null);
                 }
+                rnode.flags |= AstFlags.ZeroAfterAssignment;
             } else if (rhsIsTakeExpr) {
                 // Nothing special todo
             } else {

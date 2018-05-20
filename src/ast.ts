@@ -12,7 +12,7 @@ export function currentFile(): string {
 
 export enum AstFlags {
     None = 0,
-    IsTakeExpression = 1
+    ZeroAfterAssignment = 1
 }
 
 export type NodeConfig = {

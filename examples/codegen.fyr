@@ -18,10 +18,10 @@ export func main() int {
     var ref3 ~List
     var ref4 ~List
     var tuple2 (*List, *List) = ({}, {})
-    ref3, ref4 = take(tuple2)
+    ref3, ref4 = tuple2
     var val1 List
     var val2 List
-    val1, val2 = take(tuple)
+    val1, val2 = tuple
     var tuple3 (*List, *List) = ({}, {})
     take(tuple3)
     var list2 *List = list

@@ -442,7 +442,7 @@ export class CodeGenerator {
                             }
                         } else {
                             let rhs: ssa.Variable | number | ssa.Pointer;
-                            if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression && snode.rhs.op == "take") {
+                            if (snode.rhs.op == "take") {
                                 // Skip the take
                                 rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars);
                             } else {
@@ -470,7 +470,7 @@ export class CodeGenerator {
                                 }
                                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
                             }                            
-                            if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression) {                                
+                            if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {                                
                                 // Fill the RHS with zeros
                                 if (rhs instanceof ssa.Variable) {
                                     if (t instanceof ssa.StructType) {
@@ -602,7 +602,18 @@ export class CodeGenerator {
                     } else {
                         ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [val]), 0);
                     }
-                    processAssignment(snode.lhs, snode.rhs.type, TypeChecker.isTakeExpression(snode.rhs), destinations, 0, ptr);
+                    let rhsIsTakeExpr = TypeChecker.isTakeExpression(snode.rhs);
+                    processAssignment(snode.lhs, snode.rhs.type, rhsIsTakeExpr, destinations, 0, ptr);
+                    if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {                                
+                        // Fill the RHS with zeros
+                        let t = this.getSSAType(snode.rhs.type);
+                        if (t instanceof ssa.StructType) {
+                            let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
+                            b.assign(b.mem, "store", t, [ptr.variable, ptr.offset, tmp]);
+                        } else {
+                            b.assign(b.mem, "store", t, [ptr.variable, ptr.offset, 0]);                            
+                        }                                    
+                    }                                
                 } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
                     // TODO: Ownership transfer
                     let mtype: MapType = this.tc.stripType(snode.lhs.lhs.type) as MapType;
@@ -628,7 +639,7 @@ export class CodeGenerator {
                     let rhs: ssa.Pointer | ssa.Variable | number;
                     if ((this.tc.isArray(snode.lhs.type) || this.tc.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
                         rhs = this.processPureLiteral(snode.rhs);
-                    } else if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression && snode.rhs.op == "take") {
+                    } else if (snode.rhs.op == "take") {
                         rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars);
                     } else {
                         rhs = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
@@ -662,7 +673,7 @@ export class CodeGenerator {
                         }
                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
-                    if ((snode.rhs.flags & AstFlags.IsTakeExpression) == AstFlags.IsTakeExpression) {                                
+                    if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {                                
                         // Fill the RHS with zeros
                         if (rhs instanceof ssa.Variable) {
                             if (t instanceof ssa.StructType) {
