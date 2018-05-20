@@ -1579,14 +1579,16 @@ export class TypeChecker {
         this.t_int8 = new BasicType("int8");
         this.t_int16 = new BasicType("int16");
         this.t_int32 = new BasicType("int32");
-        this.t_int = this.t_int32;
         this.t_int64 = new BasicType("int64");
+        // TODO: Depends on arch
+        this.t_int = this.t_int64;
         this.t_uint8 = new BasicType("uint8");
         this.t_byte = this.t_uint8;
         this.t_uint16 = new BasicType("uint16");
         this.t_uint32 = new BasicType("uint32");
-        this.t_uint = this.t_uint32;
         this.t_uint64 = new BasicType("uint64");
+        // TODO: Depends on arch
+        this.t_uint = this.t_uint64;
         this.t_any = new BasicType("any");
         this.t_string = new BasicType("string");
         this.t_void = new BasicType("void");
@@ -2574,13 +2576,13 @@ export class TypeChecker {
         scope.registerType("int8", this.t_int8);
         scope.registerType("int16", this.t_int16);
         scope.registerType("int32", this.t_int32);
-        scope.registerType("int", this.t_int);
         scope.registerType("int64", this.t_int64);
+        scope.registerType("int", this.t_int);
         scope.registerType("uint8", this.t_uint8);
         scope.registerType("uint16", this.t_uint16);
         scope.registerType("uint32", this.t_uint32);
-        scope.registerType("uint", this.t_uint32);
         scope.registerType("uint64", this.t_uint64);
+        scope.registerType("uint", this.t_uint);
         scope.registerType("string", this.t_string);
         scope.registerType("void", this.t_void);
         scope.registerType("error", this.t_error);

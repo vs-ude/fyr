@@ -912,9 +912,10 @@ export class CInclude {
 export class CModule {
     public toString(): string {
         let str = this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
+        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + ";\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
         str += "\n";     
-        str += this.elements.map(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) return c.toString(); else return c.toString() + ";"}).join("\n\n");
+        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) { } else if (c instanceof CFunction) str += c.toString() + "\n\n"; else str += c.toString() + ";\n\n"});
         return str;
     }
 
