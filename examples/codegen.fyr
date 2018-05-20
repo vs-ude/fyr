@@ -22,6 +22,8 @@ export func main() int {
     var val1 List
     var val2 List
     val1, val2 = take(tuple)
+    var tuple3 (*List, *List) = ({}, {})
+    take(tuple3)
     var counter = 0
     return list.value + slice.len() + slice.cap()
 }

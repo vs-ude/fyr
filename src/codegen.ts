@@ -1077,6 +1077,30 @@ export class CodeGenerator {
                 this.processExpression(f, scope, snode, b, vars, snode.type);
                 break;
             }
+            case "take":
+            {
+                // If take is used as a statement, run the destructor on it and zero everything
+                let t = this.getSSAType(snode.type);
+                let src: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
+                if (src instanceof ssa.Pointer) {
+                    this.callDestructor(snode.type, src.variable, src.offset, b, true, "no");
+                    if (t instanceof ssa.StructType) {
+                        let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, tmp]);                        
+                    } else {
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, 0]);                            
+                    }
+                    break;
+                }
+                let pointer = b.assign(b.tmp(), "addr_of", "addr", [src]);
+                this.callDestructor(snode.type, pointer, 0, b, true, "no");
+                if (t instanceof ssa.StructType) {
+                    b.assign(src, "struct", t, this.generateZeroStruct(t));
+                } else {
+                    b.assign(src, "copy", t, [0]);                            
+                }
+                break;
+            }
             default:
                 this.processExpression(f, scope, snode, b, vars, snode.type);
         }
