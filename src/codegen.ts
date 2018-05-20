@@ -2622,8 +2622,8 @@ export class CodeGenerator {
                     // Convert string to a slice
                     let sizePointer = b.assign(b.tmp(), "sub", "addr", [expr, ssa.sizeOf("sint")]);
                     let size = b.assign(b.tmp(), "load", "sint", [sizePointer, 0]);
-                    let src = b.assign(b.tmp("addr"), "add", "i32", [expr, 4]);
-                    let mem = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [size, 1]);
+                    let src = b.assign(b.tmp(), "add", "i32", [expr, 4]);
+                    let mem = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
                     b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, src, size]);
                     return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, mem, size]);
                 } else if (t2 == this.tc.t_null) {
@@ -2633,6 +2633,30 @@ export class CodeGenerator {
                 } else {
                     throw "TODO: conversion not implemented";
                 }
+            }
+            case "take":
+            {
+                // This code does not work when take is a statement-level expression, because in this case refcounting and freeing is required.
+                let t = this.getSSAType(enode.type);
+                let src: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                let pointer: ssa.Variable;
+                if (src instanceof ssa.Pointer) {
+                    let copy = b.assign(b.tmp(), "load", t, [src.variable, src.offset]);
+                    if (t instanceof ssa.StructType) {
+                        let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, tmp]);                        
+                    } else {
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, 0]);                            
+                    }
+                    return copy;
+                }
+                let copy = b.assign(b.tmp(), "copy", t, [src]);
+                if (t instanceof ssa.StructType) {
+                    b.assign(src, "struct", t, this.generateZeroStruct(t));
+                } else {
+                    b.assign(src, "copy", t, [0]);                            
+                }
+                return copy;
             }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
