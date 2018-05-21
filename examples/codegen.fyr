@@ -28,7 +28,7 @@ export func main() int {
     var list3 *List
     list3 = list2
     var counter = 0
-    return list3.value + getLen(slice) + slice.cap()
+    return list3.value + slice.len() + slice.cap()
 }
 
 func getValue(list &List) int {

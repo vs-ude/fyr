@@ -2,16 +2,17 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef char* addr_t;
-typedef long int_t;
-typedef unsigned long uint_t;
+typedef int64_t int_t;
+typedef uint64_t uint_t;
 
 typedef void (*fyr_dtr_t)(addr_t ptr);
 typedef void (*fyr_dtr_arr_t)(addr_t ptr, int_t count);
 
-addr_t fyr_alloc(size_t size);
-addr_t fyr_alloc_arr(size_t count, size_t size);
+addr_t fyr_alloc(int_t size);
+addr_t fyr_alloc_arr(int_t count, int_t size);
 void fyr_free(addr_t);
 void fyr_free_arr(addr_t);
 bool fyr_isnull(addr_t);

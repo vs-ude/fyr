@@ -4,15 +4,16 @@
 
 // #include <stdio.h>
 
-addr_t fyr_alloc(size_t size) {
-    int_t* ptr = calloc(1, size + sizeof(int_t));
+addr_t fyr_alloc(int_t size) {
+    // TODO: If int_t is larger than size_t, the size could be shortened.
+    int_t* ptr = calloc(1, (size_t)size + sizeof(int_t));
     // printf("calloc %lx\n", (long)ptr);
     *ptr++ = 1;
     return (addr_t)ptr;
 }
 
-addr_t fyr_alloc_arr(size_t count, size_t size) {
-    int_t* ptr = calloc(1, count * size + 2 * sizeof(int_t));
+addr_t fyr_alloc_arr(int_t count, int_t size) {
+    int_t* ptr = calloc(1, (size_t)count * (size_t)size + 2 * sizeof(int_t));
     // printf("calloc arr %lx\n", (long)ptr);
     *ptr++ = 1;
     *ptr++ = count;
