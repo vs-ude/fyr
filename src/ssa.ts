@@ -37,6 +37,15 @@ export class StructType {
         return this.fields[index][0];
     }
 
+    public fieldIndexByName(name: string): number {
+        for(var i = 0; i < this.fields.length; i++) {
+            if (this.fields[i][0] == name) {
+                return i;
+            }
+        }
+        throw "Implementation error";
+    }
+
     public toDetailedString(): string {
         let str = "{\n";
         for(let i = 0; i < this.fields.length; i++) {

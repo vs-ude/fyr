@@ -465,27 +465,16 @@ export class CodeGenerator {
                                 if (rhs instanceof ssa.Pointer) {
                                     arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
                                 } else {
-                                    let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                                    arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                                    arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
                                 }
                                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
                             }                            
-                            if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {                                
-                                // Fill the RHS with zeros
-                                if (rhs instanceof ssa.Variable) {
-                                    if (t instanceof ssa.StructType) {
-                                        b.assign(rhs, "struct", t, this.generateZeroStruct(t));
-                                    } else {
-                                        b.assign(rhs, "copy", t, [0]);                            
-                                    }
-                                } else if (rhs instanceof ssa.Pointer) {
-                                    if (t instanceof ssa.StructType) {
-                                        let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
-                                        b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, tmp]);
-                                    } else {
-                                        b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, 0]);                            
-                                    }                                    
+                            if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {      
+                                if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
+                                    throw "Implementation error";
                                 }
+                                // Fill the RHS with zeros
+                                this.processFillZeros(rhs, snode.rhs.type, b);
                             }            
                         }
                     } else if (snode.lhs.op == "tuple") {
@@ -551,13 +540,14 @@ export class CodeGenerator {
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     destCount = processAssignment(p, type.types[i], rhsIsTakeExpr, destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
                                 } else {
+                                    let elementType = type.types[i];
                                     let etype: ssa.Type | ssa.StructType = stype.fields[i][1];
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;
                                     let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
                                     // Reference counting to pointers
-                                    if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(type) || TypeChecker.isUnique(type) || !rhsIsTakeExpr)) {
+                                    if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                         val = b.assign(b.tmp(), "incref", "addr", [val]);
                                     }
@@ -568,14 +558,13 @@ export class CodeGenerator {
                                         b.assign(dest, "copy", etype, [val]);
                                     }
                                     // Reference counting for slices
-                                    if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                                    if (this.tc.isSlice(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {            
                                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                                         let arrayPointer: ssa.Variable;
                                         if (dest instanceof ssa.Pointer) {
                                             arrayPointer = b.assign(b.tmp(), "load", "addr", [dest.variable, dest.offset + st.fieldOffset("array_ptr")]);
                                         } else {
-                                            let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [dest]);
-                                            arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                                            arrayPointer = b.assign(b.tmp(), "member", "addr", [dest, st.fieldIndexByName("array_ptr")]);
                                         }
                                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                                     }                
@@ -604,15 +593,9 @@ export class CodeGenerator {
                     }
                     let rhsIsTakeExpr = TypeChecker.isTakeExpression(snode.rhs);
                     processAssignment(snode.lhs, snode.rhs.type, rhsIsTakeExpr, destinations, 0, ptr);
-                    if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {                                
+                    if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                         // Fill the RHS with zeros
-                        let t = this.getSSAType(snode.rhs.type);
-                        if (t instanceof ssa.StructType) {
-                            let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
-                            b.assign(b.mem, "store", t, [ptr.variable, ptr.offset, tmp]);
-                        } else {
-                            b.assign(b.mem, "store", t, [ptr.variable, ptr.offset, 0]);                            
-                        }                                    
+                        this.processFillZeros(ptr, snode.rhs.type, b);
                     }                                
                 } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
                     // TODO: Ownership transfer
@@ -668,27 +651,16 @@ export class CodeGenerator {
                         if (dest instanceof ssa.Pointer) {
                             arrayPointer = b.assign(b.tmp(), "load", "addr", [dest.variable, dest.offset + st.fieldOffset("array_ptr")]);
                         } else {
-                            let slicePointer = b.assign(b.tmp(), "addr_of", "addr", [dest]);
-                            arrayPointer = b.assign(b.tmp(), "load", "addr", [slicePointer, st.fieldOffset("array_ptr")]);
+                            arrayPointer = b.assign(b.tmp(), "member", "addr", [dest, st.fieldIndexByName("array_ptr")]);
                         }
                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
-                    if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {                                
-                        // Fill the RHS with zeros
-                        if (rhs instanceof ssa.Variable) {
-                            if (t instanceof ssa.StructType) {
-                                b.assign(rhs, "struct", t, this.generateZeroStruct(t));
-                            } else {
-                                b.assign(rhs, "copy", t, [0]);                            
-                            }
-                        } else if (rhs instanceof ssa.Pointer) {
-                            if (t instanceof ssa.StructType) {
-                                let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
-                                b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, tmp]);
-                            } else {
-                                b.assign(b.mem, "store", t, [rhs.variable, rhs.offset, 0]);                            
-                            }                                    
+                    if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
+                        if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
+                            throw "Implementation error";
                         }
+                        // Fill the RHS with zeros
+                        this.processFillZeros(rhs, snode.rhs.type, b);
                     }            
                 }
                 break;
@@ -2342,10 +2314,48 @@ export class CodeGenerator {
                         b.assign(b.mem, "store", elementType, [mem, offset, v]);
                     }
                     args.push(b.assign(b.tmp(), "struct", this.localSlicePointer, [mem, enode.parameters.length - normalParametersCount]));
+                    // TODO: There is no take and incref support here
                 } else if (enode.parameters) {
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let pnode = enode.parameters[i];
-                        args.push(this.processExpression(f, scope, pnode.op == "unary..." ? pnode.rhs : pnode, b, vars, t.parameters[i].type));
+                        let vnode = pnode.op == "unary..." ? pnode.rhs : pnode;
+                        let targetType = t.parameters[i].type;
+                        let rhs: ssa.Variable | ssa.Pointer | number;
+                        if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
+                            rhs = this.processLeftHandExpression(f, scope, vnode, b, vars);
+                        } else {
+                            rhs = this.processExpression(f, scope, vnode, b, vars, targetType);                            
+                        }
+                        let st = this.getSSAType(pnode.type);
+                        let data: ssa.Variable | number;
+                        if (rhs instanceof ssa.Pointer) {
+                            data = b.assign(b.tmp(), "load", st, [rhs.variable, rhs.offset]);
+                        } else {
+                            data = rhs;
+                        }            
+                        // Reference counting for pointers
+                        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(vnode.type) || TypeChecker.isUnique(vnode.type) || !TypeChecker.isTakeExpression(vnode))) {
+                            // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
+                            data = b.assign(b.tmp(), "incref", "addr", [data]);
+                        }
+                        args.push(data);
+                        // Reference counting for slices
+                        if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(vnode.type) || TypeChecker.isUnique(vnode.type) || !TypeChecker.isTakeExpression(vnode))) {
+                            let st = this.getSSAType(targetType) as ssa.StructType;
+                            let arrayPointer: ssa.Variable;
+                            if (rhs instanceof ssa.Pointer) {
+                                arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
+                            } else {
+                                arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
+                            }
+                            b.assign(null, "incref_arr", "addr", [arrayPointer]);
+                        }
+                        if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
+                            if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
+                                throw "Implementation error"
+                            }
+                            this.processFillZeros(rhs, vnode.type, b);
+                        }            
                     }
                 }
                 
@@ -2763,6 +2773,25 @@ export class CodeGenerator {
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
+    }
+
+    private processFillZeros(target: ssa.Variable | ssa.Pointer, type: Type, b: ssa.Builder) {
+        // Fill the RHS with zeros
+        let st = this.getSSAType(type);
+        if (target instanceof ssa.Variable) {
+            if (st instanceof ssa.StructType) {
+                b.assign(target, "struct", st, this.generateZeroStruct(st));
+            } else {
+                b.assign(target, "copy", st, [0]);                            
+            }
+        } else if (target instanceof ssa.Pointer) {
+            if (st instanceof ssa.StructType) {
+                let tmp = b.assign(b.tmp(), "struct", st, this.generateZeroStruct(st));
+                b.assign(b.mem, "store", st, [target.variable, target.offset, tmp]);
+            } else {
+                b.assign(b.mem, "store", st, [target.variable, target.offset, 0]);                            
+            }                                    
+        }        
     }
 
     private processCompare(opcode: ssa.NodeKind, f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
