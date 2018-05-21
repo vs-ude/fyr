@@ -668,6 +668,24 @@ export class CBackend implements backend.Backend {
             m.funcExpr = new CConst("fyr_incref_arr");
             m.args = [this.emitExpr("addr", n.args[0])];
             return m;
+        } else if (n.kind == "member") {
+            let m = new CBinary();
+            m.operator = ".";
+            let s = n.args[0];
+            if (!(s instanceof ssa.Variable) && !(s instanceof ssa.Node)) {
+                throw "Implementation error";
+            }
+            let idx = n.args[1];
+            if (typeof(idx) != "number") {
+                throw "Implementation error";
+            }
+            let t = s.type;
+            if (!(t instanceof ssa.StructType) || t.fields.length <= idx) {
+                throw "Implementation error";
+            }
+            m.lExpr = this.emitExpr(s.type, n.args[0]);
+            m.rExpr = new CConst(t.fieldNameByIndex(idx));
+            return m;
         }
 
         throw "Implementation error " + n.kind;
@@ -1026,7 +1044,11 @@ export class CBinary extends CNode {
         } else {
             str += this.lExpr;
         }
-        str += " " + this.operator + " ";
+        if (this.operator == ".") {
+            str += ".";
+        } else {
+            str += " " + this.operator + " ";
+        }
         if (this.precedence() <= this.rExpr.precedence()) {
             str += "(" + this.rExpr.toString("") + ")";
         } else {

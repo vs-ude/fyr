@@ -21,16 +21,16 @@ export class CodeGenerator {
         } else {
             this.backend = new Wasm32Backend(emitIR, emitFunction);
         }
-        this.strongSlicePointer = new ssa.StructType();
-        this.strongSlicePointer.name = "strongSlice";
-        this.strongSlicePointer.addField("data_ptr", "addr");
-        this.strongSlicePointer.addField("data_length", "sint");
-        this.strongSlicePointer.addField("array_ptr", "addr");
 
         this.localSlicePointer = new ssa.StructType();
         this.localSlicePointer.name = "localSlice";
         this.localSlicePointer.addField("data_ptr", "addr");
         this.localSlicePointer.addField("data_length", "sint");
+
+        this.strongSlicePointer = new ssa.StructType();
+        this.strongSlicePointer.name = "strongSlice";
+        this.strongSlicePointer.addField("base", this.localSlicePointer);
+        this.strongSlicePointer.addField("array_ptr", "addr");
 
         this.ifaceHeader = new ssa.StructType();
         this.ifaceHeader.name = "iface";
@@ -1587,6 +1587,10 @@ export class CodeGenerator {
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         let v = this.processExpressionIntern(f, scope, enode, b, vars);
+        // Convert a normal slice to a local-reference slice
+        if (this.tc.isSlice(enode.type) && !TypeChecker.isLocalReference(enode.type) && this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+            v = b.assign(b.tmp(), "member", this.localSlicePointer, [v, 0]);
+        }
         if ((this.tc.isInterface(targetType) || this.tc.isComplexOrType(targetType)) && !this.tc.isInterface(enode.type) && !this.tc.isComplexOrType(enode.type)) {
             // TODO: Do not use instanceof here
             if (this.tc.isUnsafePointer(enode.type)) {
@@ -2064,7 +2068,7 @@ export class CodeGenerator {
                             head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                         }
                         if (head_addr instanceof ssa.Variable) {
-                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [head_addr]), 0);
                         }
                         return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                     } else if (objType instanceof ArrayType) {
@@ -2082,7 +2086,7 @@ export class CodeGenerator {
                             head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                         }
                         if (head_addr instanceof ssa.Variable) {
-                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [head_addr]), 0);
                         }
                         if (objType.mode == "local_reference") {
                             return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);    
@@ -2094,7 +2098,7 @@ export class CodeGenerator {
                             count = b.assign(b.tmp(), "mul", "sint", [count, size]);
                         }
                         let endPointer = b.assign(b.tmp(), "add", "addr", [arrPointer, count]);
-                        let dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("data_ptr")]);
+                        let dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                         let diff = b.assign(b.tmp(), "sub", "sint", [endPointer, dataPointer]);
                         if (size != 1) {
                             diff = b.assign(b.tmp(), "div", "sint", [diff, size]);
@@ -2118,9 +2122,9 @@ export class CodeGenerator {
                         head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                     }
                     if (head_addr instanceof ssa.Variable) {
-                        head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [head_addr]), 0);
+                        head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [head_addr]), 0);
                     }
-                    let data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                    let data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                     let len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                     let mem = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [len, size]);
                     b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, data_ptr, len]);
@@ -2184,6 +2188,7 @@ export class CodeGenerator {
                     */
                    throw "TODO";
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "remove") {
+                    /*
                     let objType = this.tc.stripType(enode.lhs.lhs.type);
                     if (!(objType instanceof MapType)) {
                         throw "Implementation error";
@@ -2200,7 +2205,8 @@ export class CodeGenerator {
                             key64 = b.assign(b.tmp(), "extend", this.getSSAType(objType.keyType), [key]);
                         }   
                         return b.call(b.tmp(), this.removeNumericMapKeyFunctionType, [SystemCalls.removeNumericMapKey, m, key64]);
-                    }
+                    } */
+                    throw "TODO";
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system") {
                     t = striplhs;
                 } else if (enode.lhs.op == "id") {
