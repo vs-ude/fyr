@@ -2317,6 +2317,7 @@ export class CodeGenerator {
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let pnode = enode.parameters[i];
                         let vnode = pnode.op == "unary..." ? pnode.rhs : pnode;
+                        // Evaluate the RHS
                         let targetType = t.parameters[i].type;
                         let rhs: ssa.Variable | ssa.Pointer | number;
                         if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
@@ -2325,6 +2326,7 @@ export class CodeGenerator {
                             rhs = this.processExpression(f, scope, vnode, b, vars, targetType);                            
                         }
                         let st = this.getSSAType(pnode.type);
+                        // Load the data if we have a pointer to it
                         let data: ssa.Variable | number;
                         if (rhs instanceof ssa.Pointer) {
                             data = b.assign(b.tmp(), "load", st, [rhs.variable, rhs.offset]);
@@ -2336,7 +2338,6 @@ export class CodeGenerator {
                             // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                             data = b.assign(b.tmp(), "incref", "addr", [data]);
                         }
-                        args.push(data);
                         // Reference counting for slices
                         if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(vnode.type) || TypeChecker.isUnique(vnode.type) || !TypeChecker.isTakeExpression(vnode))) {
                             let st = this.getSSAType(targetType) as ssa.StructType;
@@ -2348,12 +2349,18 @@ export class CodeGenerator {
                             }
                             b.assign(null, "incref_arr", "addr", [arrayPointer]);
                         }
+                        // Zero the RHS is necessary
                         if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
                             if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                                 throw "Implementation error"
                             }
+                            if (rhs instanceof ssa.Variable) {
+                                // Make a copy of the data, otherwise it will be overwritten with zeros
+                                data = b.assign(b.tmp(), "copy", st, [data]);
+                            }
                             this.processFillZeros(rhs, vnode.type, b);
                         }            
+                        args.push(data);
                     }
                 }
                 

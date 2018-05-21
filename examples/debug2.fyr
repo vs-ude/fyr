@@ -1,7 +1,6 @@
 type Point struct {
     x int
 }
-export func main(x ~Point) int {
-    var p *Point = {}
-    return p.x
+export func main(x *Point) {
+    main(x)
 }
