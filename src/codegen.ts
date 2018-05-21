@@ -337,8 +337,10 @@ export class CodeGenerator {
             this.processStatement(f, f.scope, node, b, vars, null);
         }
 
-        // Free all variables
-        this.freeScopeVariables(b, vars, f.scope);
+        if (!f.type.returnType || f.type.returnType == this.tc.t_void) {
+            // Free all variables
+            this.freeScopeVariables(b, vars, f.scope);
+        }
 
         b.end();
 
@@ -371,23 +373,19 @@ export class CodeGenerator {
         // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
-            if (e instanceof Variable) {
-                if (e.isResult) {
-                    continue;
-                } else {
-                    let v = vars.get(e);
-                    if (!v) {
-                        throw "Implementation error";
-                    }
-                    let t = RestrictedType.strip(e.type);
-                    if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
-                        this.callDestructor(t.elementType, v, 0, b, false, "free");
-                    } else if (t instanceof PointerType && (t.mode == "reference")) {
-                        this.callDestructor(t.elementType, v, 0, b, false, "decref");
-                    } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
-                        let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                        this.callDestructor(t, obj, 0, b, true, "no");
-                    }
+            if ((e instanceof Variable && !e.isResult) || e instanceof FunctionParameter) {
+                let v = vars.get(e);
+                if (!v) {
+                    throw "Implementation error";
+                }
+                let t = RestrictedType.strip(e.type);
+                if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
+                    this.callDestructor(t.elementType, v, 0, b, false, "free");
+                } else if (t instanceof PointerType && (t.mode == "reference")) {
+                    this.callDestructor(t.elementType, v, 0, b, false, "decref");
+                } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
+                    let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
+                    this.callDestructor(t, obj, 0, b, true, "no");
                 }
             }
         }
@@ -1067,7 +1065,7 @@ export class CodeGenerator {
                     let s = scope;
                     while (s) {
                         this.freeScopeVariables(b, vars, s);
-                        if (s.forLoop) {
+                        if (s.func) {
                             break;
                         }
                         s = s.parent;
@@ -3088,7 +3086,7 @@ export class CodeGenerator {
         }
         let dtr: backend.Function;
         let obj = pointer;
-        if (!this.tc.isPureValue(typ)) {
+        if (!this.tc.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
             let t = RestrictedType.strip(typ);
             if (t instanceof PointerType) {
                 if (free == "decref") {
@@ -3164,13 +3162,13 @@ export class CodeGenerator {
     private scopeNeedsDestructors(scope: Scope): boolean {
         while(scope) {
             for(let e of scope.elements.values()) {
-                if (e instanceof Variable && !e.isResult) {
+                if ((e instanceof Variable && !e.isResult) || e instanceof FunctionParameter) {
                     if (!this.tc.isPureValue(e.type)) {
                         return true;
                     }
                 }
             }
-            if (scope.forLoop) {
+            if (scope.func) {
                 break;
             }
             scope = scope.parent;
