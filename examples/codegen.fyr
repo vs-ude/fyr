@@ -27,8 +27,8 @@ export func main() int {
     var list2 *List = list
     var list3 *List
     list3 = list2
-    var counter = 0
-    return list3.value + getLen(slice) + slice.cap()
+    var counter = val1.value
+    return list3.value + getLen(slice) + slice.cap() + counter + sum(&arr2)
 }
 
 func getValue(list &List) int {
@@ -37,4 +37,8 @@ func getValue(list &List) int {
 
 func getLen(slice &[]List) int {
     return slice.len()
+}
+
+func sum(arr &[2]List) int {
+    return (*arr)[0].value + (*arr)[1].value
 }
