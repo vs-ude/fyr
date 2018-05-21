@@ -3,10 +3,7 @@ type Point struct {
 }
 
 export func main() int {
-    var arr [2]Point = [{}, {}]
-    return callme(&arr)
+    var p Point = {x: 42}
+    return p.x
 }
 
-func callme(arr &[2]Point) int {
-    return (*arr)[1].x
-}

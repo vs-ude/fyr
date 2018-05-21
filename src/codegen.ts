@@ -2028,7 +2028,7 @@ export class CodeGenerator {
                     let objType = RestrictedType.strip(enode.lhs.lhs.type);
                     if (objType == this.tc.t_string) {
                         let s = this.processExpression(f, scope, enode.lhs.lhs, b, vars, this.tc.t_string);
-                        return b.assign(b.tmp(), "load", "int", [s, 0]);
+                        return b.assign(b.tmp(), "load", "sint", [s, -ssa.sizeOf("sint")]);
                     } else if (objType instanceof SliceType) {
                         // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                         let head_addr: ssa.Variable | ssa.Pointer;
@@ -2038,7 +2038,7 @@ export class CodeGenerator {
                             head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                         }
                         if (head_addr instanceof ssa.Variable) {
-                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [head_addr]), 0);
+                           return b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                         }
                         return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                     } else if (objType instanceof ArrayType) {
@@ -2055,20 +2055,32 @@ export class CodeGenerator {
                         } else {
                             head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                         }
-                        if (head_addr instanceof ssa.Variable) {
-                           head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [head_addr]), 0);
-                        }
                         if (objType.mode == "local_reference") {
-                            return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);    
+                            if (head_addr instanceof ssa.Variable) {
+                                return b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            } else {
+                                return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                            }
+                        }
+                        let dataSize: ssa.Variable;
+                        let arrayPointer: ssa.Variable;
+                        let dataPointer: ssa.Variable;
+                        if (head_addr instanceof ssa.Variable) {
+                            let tmp1 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            dataSize = b.assign(b.tmp(), "member", "sint", [tmp1, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            let tmp2 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            dataPointer = b.assign(b.tmp(), "member", "addr", [tmp1, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            arrayPointer = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
+                        } else {
+                            dataSize = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                            dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                            arrayPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
                         }
                         let size = ssa.alignedSizeOf(this.getSSAType(objType.getElementType()));
-                        let arrPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
-                        let count = b.assign(b.tmp(), "load", "sint", [arrPointer, -ssa.sizeOf("sint")]);
                         if (size != 1) {
-                            count = b.assign(b.tmp(), "mul", "sint", [count, size]);
+                            dataSize = b.assign(b.tmp(), "mul", "sint", [dataSize, size]);
                         }
-                        let endPointer = b.assign(b.tmp(), "add", "addr", [arrPointer, count]);
-                        let dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                        let endPointer = b.assign(b.tmp(), "add", "addr", [arrayPointer, dataSize]);
                         let diff = b.assign(b.tmp(), "sub", "sint", [endPointer, dataPointer]);
                         if (size != 1) {
                             diff = b.assign(b.tmp(), "div", "sint", [diff, size]);
@@ -2620,6 +2632,14 @@ export class CodeGenerator {
             }
             case ".":
             {
+                let t = this.tc.stripType(enode.lhs.type);
+                if (t instanceof StructType) {
+                    // It is a value, i.e. not a pointer to a value
+                    let left = this.processExpression(f, scope, enode.lhs, b, vars, t) as ssa.Variable;                    
+                    let memberType = this.getSSAType(enode.type) as ssa.StructType;
+                    let structType = this.getSSAType(enode.lhs.type) as ssa.StructType;
+                    return b.assign(b.tmp(), "member", memberType, [left, structType.fieldIndexByName(enode.name.value)]);
+                }
                 // Note: processLeftHandExpression implements the non-left-hand cases as well.
                 let expr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
                 let storage = this.getSSAType(enode.type);

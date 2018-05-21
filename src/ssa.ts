@@ -43,7 +43,7 @@ export class StructType {
                 return i;
             }
         }
-        throw "Implementation error";
+        throw "Implementation error " + name;
     }
 
     public toDetailedString(): string {
