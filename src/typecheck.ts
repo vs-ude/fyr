@@ -2,6 +2,7 @@ import {Node, NodeOp, Location, AstFlags} from "./ast"
 import pkg = require("./pkg");
 import { doesNotThrow } from "assert";
 import { isUndefined } from "util";
+import { Pointer } from "./ssa";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -1826,16 +1827,18 @@ export class TypeChecker {
                 }
                 iface.methods.set(ft.name, ft);
                 let fscope = new Scope(scope); // This scope is required for box names
-                let r = this.createType(mnode.lhs, fscope, "default");
-                let ptr = r;
-                if (!(ptr instanceof PointerType)) {
-                    throw "Implementation error";
+                let ptrMode: PointerMode = "reference";
+                if ((mnode.lhs.flags & AstFlags.ReferenceObjectMember) == AstFlags.ReferenceObjectMember) {
+                    ptrMode = "local_reference";
                 }
-                if (ptr.elementType instanceof RestrictedType) {
-                    ptr = ptr.elementType;
+                let isConst = false;
+                if (mnode.lhs.op == "constType") {
+                    isConst = true;
                 }
-                (ptr as PointerType | RestrictedType).elementType = iface;
-                ft.objectType = r;
+                ft.objectType = new PointerType(iface, ptrMode);
+                if (isConst) {
+                    ft.objectType = this.makeConst(ft.objectType, mnode.loc);
+                }
             } else {
                 throw "Implementation error " + mnode.op + " " + iface.name;
             }
@@ -2193,7 +2196,11 @@ export class TypeChecker {
                 throw new TypeError(obj.toString() + " is not a named struct", fnode.lhs.loc);
             }
             structType = obj2;
-            objectType = new PointerType(obj, "reference");
+            let mode: PointerMode = "reference";
+            if ((fnode.lhs.flags & AstFlags.ReferenceObjectMember) == AstFlags.ReferenceObjectMember) {
+                mode = "local_reference";
+            }
+            objectType = new PointerType(obj, mode);
         }
         let f: Function | TemplateFunction;
         if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {

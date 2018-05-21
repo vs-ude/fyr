@@ -290,12 +290,18 @@ primitiveType
     }
 
 memberObjectType
-  = "const" [ \t]+ t:identifier {
+  = "const" [ \t]+ r:("&" [ \t]*)? t:identifier {
         t.op = "basicType";
+        if (r) {
+            t.flags |= ast.AstFlags.ReferenceObjectMember;
+        }
         return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
     }
-  /  i: identifier {
+  /  r:("&" [ \t]*)? i: identifier {
       i.op = "basicType";
+      if (r) {
+        t.flags |= ast.AstFlags.ReferenceObjectMember;
+      }
       return i;
     }
 
@@ -328,10 +334,13 @@ interfaceMember
     }
 
 ifaceObjectType
-  = c:"const"? {
+  = c:"const"? r:("&" [ \t]*)?  {
         let t = new ast.Node({loc: fl(location()), op: "structType", parameters: []});
         if (c) {
-            return new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+            t = new ast.Node({loc: fl(location()), op: "constType", rhs: t})
+        }
+        if (r) {
+            t.flags |= ast.AstFlags.ReferenceObjectMember;
         }
         return t;
     }
