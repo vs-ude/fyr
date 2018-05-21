@@ -1,6 +1,12 @@
 type Point struct {
     x int
 }
-export func main(x *Point) {
-    main(x)
+
+export func main() int {
+    var arr [2]Point = [{}, {}]
+    return callme(&arr)
+}
+
+func callme(arr &[2]Point) int {
+    return (*arr)[1].x
 }
