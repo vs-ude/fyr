@@ -3,7 +3,7 @@ type Point struct {
 }
 
 export func main() int {
-    var p Point = {x: 42}
-    return p.x
+    var p []Point = [{x: 42}, {x:13}]
+    return p[1].x
 }
 

@@ -1190,17 +1190,19 @@ export class CodeGenerator {
                     } else {
                         head_addr = this.processExpression(f, scope, enode.lhs, b, vars, ltype) as ssa.Variable;
                     }
-                    if (head_addr instanceof ssa.Variable) {
-                        head_addr = b.assign(b.tmp(), "addr_of", "ptr", [head_addr]);
-                    }
                     let data_ptr: ssa.Variable;
                     let len: ssa.Variable;
                     if (head_addr instanceof ssa.Pointer) {
-                        data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                        data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                         len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                    } else if (ltype.mode == "local_reference") {
+                        data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                        len = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                     } else {
-                        data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr, this.localSlicePointer.fieldOffset("data_ptr")]);
-                        len = b.assign(b.tmp(), "load", "sint", [head_addr, this.localSlicePointer.fieldOffset("data_length")]);
+                        let tmp1 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        data_ptr = b.assign(b.tmp(), "member", "addr", [tmp1, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                        let tmp2 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        len = b.assign(b.tmp(), "member", "sint", [tmp2, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
                     let t = this.getSSAType(ltype);
                     let index: ssa.Variable | number = 0;
@@ -2069,7 +2071,7 @@ export class CodeGenerator {
                             let tmp1 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
                             dataSize = b.assign(b.tmp(), "member", "sint", [tmp1, this.localSlicePointer.fieldIndexByName("data_length")]);
                             let tmp2 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
-                            dataPointer = b.assign(b.tmp(), "member", "addr", [tmp1, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            dataPointer = b.assign(b.tmp(), "member", "addr", [tmp2, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             arrayPointer = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
                         } else {
                             dataSize = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);

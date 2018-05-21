@@ -1349,6 +1349,9 @@ export class Stackifier {
                     return null;
                 }
             }
+            if (this.containsCall(n)) {
+                return null;
+            }
             n = n.prev[0];
         }
         return null;
@@ -1382,6 +1385,9 @@ export class Stackifier {
                 if (this.collectAssignments(n, v, assigned)) {
                     return null;
                 }
+            }
+            if (this.containsCall(n)) {
+                return null;
             }
             n = n.prev[0];
         }
@@ -1440,6 +1446,20 @@ export class Stackifier {
                 return true;
             } else if (a instanceof Node) {
                 if (this.readsFromVariables(a, vars)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private containsCall(n: Node): boolean {
+        if (n.kind == "call") {
+            return true;
+        }
+        for(let a of n.args) {
+            if (a instanceof Node) {
+                if (this.containsCall(a)) {
                     return true;
                 }
             }
