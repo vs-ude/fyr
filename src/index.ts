@@ -60,7 +60,7 @@ function compileModules() {
         }
     }
 
-//    try {
+    try {
         // Run the type checker
         let tc = new typecheck.TypeChecker();
         pkg.initPackages(tc);
@@ -69,7 +69,7 @@ function compileModules() {
             // Generate IR and WASM code
             let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck, program.emitC);
             cg.processModule(mnode);
-            if (!program.disableWasm) {
+            if (program.emitWasm) {
                 let wastcode = cg.getCode();
                 var input = path.resolve(args[args.length - 2]);
                 let f = path.parse(input);
@@ -84,7 +84,7 @@ function compileModules() {
                 fs.writeFileSync(cfile, code, 'utf8');
             }
         }
-/*    } catch(ex) {
+    } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
@@ -95,10 +95,10 @@ function compileModules() {
             console.log(ex);
             throw ex;
         }
-    } */
+    }
 
     // Compile Wast to Wasm
-    if (!program.disableWasm && !program.disableCodegen) {
+    if (program.emitWasm && !program.disableCodegen) {
         var input = path.resolve(args[args.length - 2]);
         let f = path.parse(input);
         let wastfile = f.dir + path.sep + f.name + ".wat";
@@ -110,13 +110,13 @@ function compileModules() {
 program
 	.version(pkgJson.version, '-v, --version', "Output version")
 	.usage('[options] [command] <module ...>')
-    .option('-r, --emit-ir', "Emit IR code")
-    .option('-f, --emit-ir-function <name>', "Emit IR code only for one function", null)
-    .option('-W, --disable-wasm', "Do not emit WASM code")
+    .option('-r, --emit-ir', "Emit IR code on stdout")
+    .option('-f, --emit-ir-function <name>', "Emit IR code on stdout for one function only", null)
+    .option('-w, --emit-wasm', "Emit WASM code")
     .option('-N, --disable-null-check', "Do not check for null pointers")
     .option('-c, --emit-c', "Emit C code")
     .option('-T, --disable-runtime', "Do not include the standard runtime")
-    .option('-G, --disable-codegen', "Do not generate IR code")
+    .option('-G, --disable-codegen', "Do not generate IR code, just perform syntax and typechecks")
 
 program
     .command('compile')
