@@ -3382,7 +3382,7 @@ export class TypeChecker {
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
                 if (snode.lhs.op == "tuple") {
                     if (snode.lhs.parameters[0].value != "_") {
-                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false);
+                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false, snode.op == "let_in");
                         if (v1.type) {
                             this.checkIsAssignableType(v1.type, tindex1, snode.loc, "assign", true);
                         } else {
@@ -3390,7 +3390,7 @@ export class TypeChecker {
                         }
                     }
                     if (snode.lhs.parameters[1].value != "_") {
-                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false);
+                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false, snode.op == "let_in");
                         if (v2.type) {
                             this.checkIsAssignableType(v2.type, tindex2, snode.loc, "assign", true);
                         } else {
@@ -3398,7 +3398,7 @@ export class TypeChecker {
                         }
                     }
                 } else {
-                    let v = this.createVar(snode.lhs, scope, false);
+                    let v = this.createVar(snode.lhs, scope, false, snode.op == "let_in");
                     if (v.type) {
                         this.checkIsAssignableType(v.type, tindex1, snode.loc, "assign", true);
                     } else {
