@@ -42,6 +42,8 @@ export class Variable implements ScopeElement {
     // Variable is the named return variable of a function, e.g. "count" or "error" in "func foo() (count int, err error) { }"
     public isResult: boolean = false;
     public isGlobal: boolean;
+    // Variables declared with "let" are constant. Their type, however, is unaffected by this. It may be constant or not
+    public isConst: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
@@ -88,6 +90,7 @@ export class FunctionParameter implements ScopeElement {
     public type: Type;
     public loc: Location;
     public localReferenceCount: number = 0;
+    public isConst: boolean;
 }
 
 /**
@@ -2261,10 +2264,11 @@ export class TypeChecker {
         // A member function?
         if (objectType) {
             f.type.objectType = objectType;
-            let p = new FunctionParameter();
+            let p = new FunctionParameter();            
             p.name = "this";                        
             p.loc = fnode.lhs.loc;
             p.type = objectType;
+            p.isConst = true;
             f.scope.registerElement("this", p);
         }
         if (fnode.parameters) {
@@ -2362,15 +2366,13 @@ export class TypeChecker {
         v.loc = vnode.loc;
         v.name = vnode.value;
         v.isGlobal = isGlobal;
+        v.isConst = isConst;
         if (!vnode.rhs) {
             if (needType) {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
             v.type = this.createType(vnode.rhs, scope, "variable");
-            if (isConst) {
-                v.type = this.makeConst(v.type, vnode.loc);
-            }
             this.checkVariableType(v.type, vnode.loc);
         }
         if (v.name != "_") {
@@ -5083,8 +5085,17 @@ export class TypeChecker {
         return false;
     }
 
-    private isLeftHandSide(node: Node): boolean {
+    private isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: boolean = false): boolean {
         if (node.op == "id") {
+            if (!_allowConstVariable) {
+                let e = scope.resolveElement(node.value);
+                if (!e) {
+                    throw "Implementation error";
+                }
+                if ((e instanceof Variable && e.isConst) || (e instanceof FunctionParameter && e.isConst)) {
+                    return false;
+                }
+            }
             return true;
         } else if (node.op == "unary*") {
             return true;
@@ -5092,23 +5103,23 @@ export class TypeChecker {
             if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
                 return true;
             }
-            return this.isLeftHandSide(node.lhs);
+            return this.isLeftHandSide(node.lhs, scope, true);
         } else if (node.op == "[") {
             if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
                 return true;
             }
-            return this.isLeftHandSide(node.lhs);
+            return this.isLeftHandSide(node.lhs, scope, true);
         }
         return false;
     }
 
     public checkIsMutable(node: Node, scope: Scope) {
         if (node.type instanceof RestrictedType && node.type.isConst) {
-            throw new TypeError("The expression is not mutable because is const", node.loc);
+            throw new TypeError("The expression is not mutable because it is const", node.loc);
         }
 
-        if (!this.isLeftHandSide(node)) {
-            throw new TypeError("The expression is not mutable because it is an intermediate value", node.loc);
+        if (!this.isLeftHandSide(node, scope)) {
+            throw new TypeError("The expression is not mutable because it is an intermediate value or the variable is not mutable", node.loc);
         }
     }
 
