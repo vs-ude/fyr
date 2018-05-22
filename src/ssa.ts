@@ -1349,7 +1349,7 @@ export class Stackifier {
                     return null;
                 }
             }
-            if (this.containsCall(n)) {
+            if (this.doNotByPassForInline(n)) {
                 return null;
             }
             n = n.prev[0];
@@ -1386,7 +1386,7 @@ export class Stackifier {
                     return null;
                 }
             }
-            if (this.containsCall(n)) {
+            if (this.doNotByPassForInline(n)) {
                 return null;
             }
             n = n.prev[0];
@@ -1453,13 +1453,13 @@ export class Stackifier {
         return false;
     }
 
-    private containsCall(n: Node): boolean {
-        if (n.kind == "call") {
+    private doNotByPassForInline(n: Node): boolean {
+        if (n.kind == "call" || n.kind == "decref") {
             return true;
         }
         for(let a of n.args) {
             if (a instanceof Node) {
-                if (this.containsCall(a)) {
+                if (this.doNotByPassForInline(a)) {
                     return true;
                 }
             }

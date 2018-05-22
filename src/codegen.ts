@@ -2302,6 +2302,7 @@ export class CodeGenerator {
                     t = enode.lhs.type as FunctionType;
                 }
                 
+                let decrefArgs: Array<[Node, ssa.Variable, Type]> = [];
                 if (f) {
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {
@@ -2316,7 +2317,7 @@ export class CodeGenerator {
                     } else {
                         args.push(objPtr);
                     }
-                }
+                }                
                 if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
                     // TODO: If the last parameter is volatile, the alloc is not necessary.
                     let elementType = this.getSSAType((t.lastParameter().type as SliceType).getElementType());
@@ -2334,6 +2335,7 @@ export class CodeGenerator {
                     args.push(b.assign(b.tmp(), "struct", this.localSlicePointer, [mem, enode.parameters.length - normalParametersCount]));
                     // TODO: There is no take and incref support here
                 } else if (enode.parameters) {
+                    // TODO: Evaluate parameters from right to left as in C
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let pnode = enode.parameters[i];
                         let vnode = pnode.op == "unary..." ? pnode.rhs : pnode;
@@ -2352,7 +2354,13 @@ export class CodeGenerator {
                             data = b.assign(b.tmp(), "load", st, [rhs.variable, rhs.offset]);
                         } else {
                             data = rhs;
-                        }            
+                        }     
+                        let dataAndRef = this.functionArgumentIncref(rhs, vnode, data, targetType, scope, b);
+                        args.push(dataAndRef[0]);
+                        if (dataAndRef[1]) {
+                            decrefArgs.push([vnode, dataAndRef[1], targetType]);
+                        }
+                        /*
                         // Reference counting for pointers
                         if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(vnode.type) || TypeChecker.isUnique(vnode.type) || !TypeChecker.isTakeExpression(vnode))) {
                             // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
@@ -2369,7 +2377,9 @@ export class CodeGenerator {
                             }
                             b.assign(null, "incref_arr", "addr", [arrayPointer]);
                         }
+                        */
                         // Zero the RHS is necessary
+                        /*
                         if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
                             if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                                 throw "Implementation error"
@@ -2379,29 +2389,37 @@ export class CodeGenerator {
                                 data = b.assign(b.tmp(), "copy", st, [data]);
                             }
                             this.processFillZeros(rhs, vnode.type, b);
-                        }            
-                        args.push(data);
+                        }*/
                     }
                 }
                 
+                let result: ssa.Variable | number;
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
                     if (isSpawn) {
                         b.spawn(ft, args);
-                        return 0;
+                        result = 0;
+                    } else {
+                        result = b.call(b.tmp(), ft, args);
                     }
-                    return b.call(b.tmp(), ft, args);
                 } else if (findex) {
                     let ft = this.getSSAFunctionType(t);
                     if (isSpawn) {
-                        return b.spawnIndirect(b.tmp(), ft, args);
+                        result =  b.spawnIndirect(b.tmp(), ft, args);
+                    } else {
+                        result = b.callIndirect(b.tmp(), ft, args);
                     }
-                    return b.callIndirect(b.tmp(), ft, args);
                 } else if (t.callingConvention == "system") {
                     let ft = this.getSSAFunctionType(t);
-                    return b.call(b.tmp(), ft, args);
+                    result = b.call(b.tmp(), ft, args);
+                } else {
+                    throw "TODO: call a lambda function"
                 }
-                throw "TODO: call a lambda function"
+
+                for(let decrefArg of decrefArgs) {
+                    this.functionArgumentDecref(decrefArg[1], decrefArg[0], decrefArg[2], scope, b);
+                }
+                return result;
             }
             case ":":
             {
@@ -3148,12 +3166,12 @@ export class CodeGenerator {
                 if (offset) {
                     obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
                 }
-                let size: number | ssa.Variable = t.size;
-                if (t.size < 0) {
-                    size = b.assign(b.tmp(), "load", "sint", [obj, -ssa.sizeOf("sint")]);
-                }
                 dtr = this.generateArrayDestructor(t);
                 if (free != "decref") {
+                    let size: number | ssa.Variable = t.size;
+                    if (t.size < 0) {
+                        size = b.assign(b.tmp(), "load", "sint", [obj, -ssa.sizeOf("sint")]);
+                    }
                     b.call(null, new ssa.FunctionType(["addr", "sint"], null), [dtr.getIndex(), obj, size]);
                 }
             } else if (t instanceof TupleType) {
@@ -3209,6 +3227,135 @@ export class CodeGenerator {
             scope = scope.parent;
         }
         return false;
+    }
+
+    private functionArgumentIncref(rhs: ssa.Variable | ssa.Pointer | number, rhsNode: Node, rhsData: ssa.Variable | number, targetType: Type, scope: Scope, b: ssa.Builder): [ssa.Variable | number, ssa.Variable] {
+        let decrefVar: ssa.Variable;
+        // Reference counting for pointers
+        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
+            // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
+            rhsData = b.assign(b.tmp(), "incref", "addr", [rhsData]);
+        } else if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
+            // Reference counting for slices
+            let st = this.getSSAType(targetType) as ssa.StructType;
+            let arrayPointer: ssa.Variable;
+            if (rhs instanceof ssa.Pointer) {
+                arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
+            } else {
+                arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
+            }
+            b.assign(null, "incref_arr", "addr", [arrayPointer]);
+        } else if (this.tc.isSafePointer(targetType) && TypeChecker.isLocalReference(targetType)) {
+            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
+            if (result[0] == "yes") {
+                b.assign(null, 'incref', "addr", [rhsData]);
+                decrefVar = rhsData as ssa.Variable;
+            } else {
+                result[1].localReferenceCount++;    
+            }
+        } else if (this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
+            if (result[0] == "yes") {
+                let st = this.getSSAType(rhsNode.type) as ssa.StructType;
+                let arrayPointer: ssa.Variable;
+                if (rhs instanceof ssa.Pointer) {
+                    arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
+                } else {
+                    arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
+                }
+                b.assign(null, "incref_arr", "addr", [arrayPointer]);
+                decrefVar = arrayPointer;
+            } else {
+                result[1].localReferenceCount++;
+            }
+        }
+        
+        if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
+            if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
+                throw "Implementation error"
+            }
+            if (rhs instanceof ssa.Variable) {
+                let st = this.getSSAType(rhsNode.type) as ssa.StructType;
+                // Make a copy of the data, otherwise it will be overwritten with zeros
+                rhsData = b.assign(b.tmp(), "copy", st, [rhsData]);
+            }
+            this.processFillZeros(rhs, rhsNode.type, b);
+        }            
+
+        return [rhsData, decrefVar];
+    }
+
+    private functionArgumentDecref(decrefVar: ssa.Variable, rhsNode: Node, targetType: Type, scope: Scope, b: ssa.Builder): void {
+        if (this.tc.isSafePointer(targetType) && TypeChecker.isLocalReference(targetType)) {
+            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
+            if (result[0] == "yes") {
+                this.callDestructor(rhsNode.type, decrefVar, 0, b, true, "decref");
+            } else {
+                result[1].localReferenceCount--;
+            }        
+        } else if (this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
+            if (result[0] == "yes") {
+                let sliceType = RestrictedType.strip(rhsNode.type);
+                let arrayType = RestrictedType.strip(sliceType);
+                this.callDestructor(arrayType, decrefVar, 0, b, true, "decref");
+            } else {
+                result[1].localReferenceCount--;
+            }
+        }
+    }
+
+    private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "one_indirection" | "no", Variable | FunctionParameter] {
+        switch(enode.op) {
+            case "(":
+            case "unary*":
+            case "take":
+                return ["yes", null];
+            case ".":
+            {
+                let lhs = this.functionArgumentIncrefIntern(enode.lhs, scope);
+                if (lhs[0] == "yes") {
+                    return lhs;
+                }
+                let type: Type = RestrictedType.strip(enode.lhs.type);
+                if (this.tc.isStruct(type) || this.tc.isUnsafePointer(type)) {
+                    return lhs;
+                }
+                if (type instanceof PointerType && (type.mode == "unique" || type.mode == "strong") && lhs[0] == "no" && lhs[1].localReferenceCount == 0) {
+                    return ["one_indirection", lhs[1]];
+                }
+                return ["yes", null];
+            }
+            case "[":
+            {
+                let lhs = this.functionArgumentIncrefIntern(enode.lhs, scope);
+                if (lhs[0] == "yes") {
+                    return lhs;
+                }
+                let type: Type = RestrictedType.strip(enode.lhs.type);
+                if (this.tc.isArray(type) || this.tc.isUnsafePointer(type)) {
+                    return lhs;
+                }
+                if (type instanceof SliceType && (type.mode == "unique" || type.mode == "strong") && lhs[0] == "no" && lhs[1].localReferenceCount == 0) {
+                    return ["one_indirection", lhs[1]];
+                }
+                return ["yes", null];
+            }
+            case "unary&":
+                return this.functionArgumentIncrefIntern(enode.rhs, scope);
+            case "id":
+            {
+                let e = scope.resolveElement(enode.value);
+                if (!e) {
+                    throw "Implementation error";
+                }
+                if ((e instanceof Variable || e instanceof FunctionParameter)) {
+                    return ["no", e];
+                }
+                return ["yes", null];
+            }
+        }
+        return ["yes", null];
     }
 
     private optimizer: ssa.Optimizer;

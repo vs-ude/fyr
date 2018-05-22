@@ -46,6 +46,7 @@ export class Variable implements ScopeElement {
     public type: Type;
     public loc: Location;
     public node: Node;
+    public localReferenceCount: number = 0;
 }
 
 // Function is a named function inside a scope.
@@ -86,6 +87,7 @@ export class FunctionParameter implements ScopeElement {
     public ellipsis: boolean;
     public type: Type;
     public loc: Location;
+    public localReferenceCount: number = 0;
 }
 
 /**

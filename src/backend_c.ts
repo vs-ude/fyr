@@ -657,7 +657,7 @@ export class CBackend implements backend.Backend {
             if (typeof(n.args[1]) != "number") {
                 throw "Implementation error";
             }
-            if (n.args[1] === 0) {
+            if (n.args[1] === -1) {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];
@@ -686,7 +686,7 @@ export class CBackend implements backend.Backend {
             if (typeof(n.args[1]) != "number") {
                 throw "Implementation error";
             }
-            if (n.args[1] === 0) {
+            if (n.args[1] === -1) {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];

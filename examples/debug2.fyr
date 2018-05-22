@@ -4,6 +4,15 @@ type Point struct {
 
 export func main() int {
     var p []Point = [{x: 42}, {x:13}]
-    return p[1].x
+    var p2 *Point = {x: 11}
+    var ref ~[]Point = p
+    return localme(&p[0]) + refme(p2) + localme(&ref[0])
 }
 
+func localme(p &Point) int {
+    return p.x
+}
+
+func refme(p ~Point) int {
+    return p.x
+}
