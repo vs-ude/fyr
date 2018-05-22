@@ -373,7 +373,7 @@ export class CodeGenerator {
         // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
-            if ((e instanceof Variable && !e.isResult) || e instanceof FunctionParameter) {
+            if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
                 let v = vars.get(e);
                 if (!v) {
                     throw "Implementation error";
@@ -3215,7 +3215,8 @@ export class CodeGenerator {
     private scopeNeedsDestructors(scope: Scope): boolean {
         while(scope) {
             for(let e of scope.elements.values()) {
-                if ((e instanceof Variable && !e.isResult) || e instanceof FunctionParameter) {
+                // FunctionParameters marked with isConst are not destructed by the function but by their caller
+                if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
                     if (!this.tc.isPureValue(e.type)) {
                         return true;
                     }
@@ -3231,6 +3232,7 @@ export class CodeGenerator {
 
     private functionArgumentIncref(rhs: ssa.Variable | ssa.Pointer | number, rhsNode: Node, rhsData: ssa.Variable | number, targetType: Type, scope: Scope, b: ssa.Builder): [ssa.Variable | number, ssa.Variable] {
         let decrefVar: ssa.Variable;
+        /*
         // Reference counting for pointers
         if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
             // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
@@ -3245,17 +3247,18 @@ export class CodeGenerator {
                 arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
             }
             b.assign(null, "incref_arr", "addr", [arrayPointer]);
-        } else if (this.tc.isSafePointer(targetType) && TypeChecker.isLocalReference(targetType)) {
+        */
+        if (this.tc.isSafePointer(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] == "yes") {
+            if (result[0] != "no") {
                 b.assign(null, 'incref', "addr", [rhsData]);
                 decrefVar = rhsData as ssa.Variable;
             } else {
                 result[1].localReferenceCount++;    
             }
-        } else if (this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+        } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] == "yes") {
+            if (result[0] != "no") {
                 let st = this.getSSAType(rhsNode.type) as ssa.StructType;
                 let arrayPointer: ssa.Variable;
                 if (rhs instanceof ssa.Pointer) {
@@ -3286,16 +3289,16 @@ export class CodeGenerator {
     }
 
     private functionArgumentDecref(decrefVar: ssa.Variable, rhsNode: Node, targetType: Type, scope: Scope, b: ssa.Builder): void {
-        if (this.tc.isSafePointer(targetType) && TypeChecker.isLocalReference(targetType)) {
+        if (this.tc.isSafePointer(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] == "yes") {
+            if (result[0] != "no") {
                 this.callDestructor(rhsNode.type, decrefVar, 0, b, true, "decref");
             } else {
                 result[1].localReferenceCount--;
             }        
-        } else if (this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+        } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] == "yes") {
+            if (result[0] != "no") {
                 let sliceType = RestrictedType.strip(rhsNode.type);
                 let arrayType = RestrictedType.strip(sliceType);
                 this.callDestructor(arrayType, decrefVar, 0, b, true, "decref");
@@ -3342,7 +3345,13 @@ export class CodeGenerator {
                 return ["yes", null];
             }
             case "unary&":
-                return this.functionArgumentIncrefIntern(enode.rhs, scope);
+            {
+                let result = this.functionArgumentIncrefIntern(enode.rhs, scope);
+                if (result[0] == "one_indirection") {
+                    result[0] == "no";
+                }
+                return result;
+            }
             case "id":
             {
                 let e = scope.resolveElement(enode.value);

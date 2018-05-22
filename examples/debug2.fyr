@@ -2,10 +2,22 @@ type Point struct {
     x int
 }
 
-func Point.size() int {
-    return 0
-}
+//func Point.size() int {
+//    return 0
+//}
 
 export func main() int {
-    return 0
+    var slice []*Point = [{}, {}]
+    var arr [2]Point = [{}, {}]
+    var p *Point = {}
+    var r ~Point = p
+    return refme(slice[0]) + refme(p) + refme(r) + localme(&arr[1])
+}
+
+func refme(p ~Point) int {
+    return p.x
+}
+
+func localme(p &Point) int {
+    return p.x
 }
