@@ -2287,6 +2287,9 @@ export class TypeChecker {
                     }
                 }
                 p.type = this.createType(pnode, f.scope, "parameter_toplevel");
+                if (TypeChecker.isReference(p.type) || TypeChecker.isLocalReference(p.type)) {
+                    p.isConst = true;
+                }
                 if (p.ellipsis && (!(p.type instanceof SliceType) || p.type.mode != "local_reference")) {
                     throw new TypeError("Ellipsis parameters must be of a local reference slice type, i.e. &[]", pnode.loc);
                 }
@@ -3411,7 +3414,7 @@ export class TypeChecker {
             {
                 let f = scope.envelopingFunction();
                 if (f.type.callingConvention != "fyrCoroutine") {
-                    throw new TypeError("yield is only allowed in async function", snode.loc);
+                    throw new TypeError("yield is only allowed in async functions", snode.loc);
                 }
                 break;
             }
