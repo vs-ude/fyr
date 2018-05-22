@@ -822,12 +822,12 @@ export class Optimizer {
                 Node.removeNode(n);
                 n = n2;
             } else {
-                for(let i = 0; i < n.args.length; i++) {
+              /*  for(let i = 0; i < n.args.length; i++) {
                     let a = n.args[i];
                     if (a instanceof Variable && a.isConstant && typeof(a.constantValue) == "number") {
                         n.args[i] = a.constantValue;
                     }
-                }
+                } */
                 n = n.next[0];
             }
             // TODO: Computations on constants can be optimized

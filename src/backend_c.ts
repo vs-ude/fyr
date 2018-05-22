@@ -327,7 +327,7 @@ export class CBackend implements backend.Backend {
             case "addr":
             case "ptr":
                 return new CType("saddr_t");
-            case "sint":
+            case "int":
                 return new CType("int_t");
         }
         throw "Implementation error";
@@ -343,14 +343,14 @@ export class CBackend implements backend.Backend {
                 return new CType("uint32_t");
             case "s64":
                 return new CType("uint64_t");
-            case "int":
+            case "sint":
                 return new CType("uint_t");
         }
         throw "Implementation error";
     }
 
     private isSignedType(t: ssa.Type | ssa.StructType | ssa.FunctionType): boolean {
-        return t == "s8" || t == "s16" || t == "s32" || t == "s64";
+        return t == "s8" || t == "s16" || t == "s32" || t == "s64" || t == "sint";
     }
 
     private emitExpr(n: number | ssa.Variable | ssa.Node): CNode {
@@ -374,7 +374,16 @@ export class CBackend implements backend.Backend {
             if (n.isConstant && typeof(n.constantValue) == "string") {
                 // TODO: Proper string escape
                 return new CConst("\"" + n.constantValue + "\"");
+            } else if (n.isConstant && typeof(n.constantValue) == "number") {
+                //let t = new CTypeCast();
+                //t.type = this.mapType(n.type);
+                //t.expr = new CConst((n.constantValue as number).toString());
+                //return t;
+                return new CConst((n.constantValue as number).toString());
+            } else if (n.isConstant) {
+                throw "TODO"
             }
+
             if (this.globalStorage.has(n)) {
                 let name = this.globalStorage.get(n);
                 return new CConst(name);                    
@@ -429,6 +438,12 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "const") {
             if (n.type instanceof FunctionType || !n.assign) {
                 throw "Implementation error"
+            }
+            if (typeof(n.args[0]) == "number") {
+                let t = new CTypeCast();
+                t.type = this.mapType(n.type);
+                t.expr = new CConst((n.args[0] as number).toString());
+                return t;
             }
             return this.emitExpr(n.args[0]);
         } else if (n.kind == "call") {
@@ -585,12 +600,11 @@ export class CBackend implements backend.Backend {
                 t.expr = e.rExpr;
                 e.rExpr = t;
             }
-            // TODO: If number is larger than the signed can hold, but unsigned could hold it, then cast the unsigned to signed
             return e;            
         } else if (n.kind == "div_u" || n.kind == "shr_u" || n.kind == "rem_u" || n.kind == "lt_u" || n.kind == "gt_u" || n.kind == "le_u" || n.kind == "ge_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
                 throw "Implementation error"
-            }            
+            }
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
             e.lExpr = this.emitExpr(n.args[0]);
@@ -600,8 +614,6 @@ export class CBackend implements backend.Backend {
                 t.type = this.mapToUnsignedType(a.type);
                 t.expr = e.lExpr;
                 e.lExpr = t;
-            } else if (typeof(a) == "number" && a < 0) {
-
             }
             e.rExpr = this.emitExpr(n.args[1]);
             a = n.args[1];
@@ -610,8 +622,6 @@ export class CBackend implements backend.Backend {
                 t.type = this.mapToUnsignedType(a.type);
                 t.expr = e.rExpr;
                 e.rExpr = t;
-            } else if (typeof(a) == "number" && a < 0) {
-                
             }
             return e;            
         } else if (n.kind == "wrap" || n.kind == "extend") {

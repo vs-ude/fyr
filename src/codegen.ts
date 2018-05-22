@@ -1206,13 +1206,19 @@ export class CodeGenerator {
                     }
                     let t = this.getSSAType(ltype);
                     let index: ssa.Variable | number = 0;
+                    let indexVar: ssa.Variable;
                     if (enode.rhs.op == "int") {
                         index = parseInt(enode.rhs.value);
                     } else {
                         index = this.processExpression(f, scope, enode.rhs, b, vars, this.tc.t_int);
                     }
+                    if (typeof(index) == "number") {
+                        indexVar = b.assign(b.tmp(), "const", "sint", [index]);
+                    } else {
+                        indexVar = index;
+                    }
                     // Compare 'index' with 'len'
-                    let cmp = b.assign(b.tmp(), "ge_u", "sint", [index, len]);
+                    let cmp = b.assign(b.tmp(), "ge_u", "i8", [indexVar, len]);
                     b.ifBlock(cmp);
                     b.assign(null, "trap", null, []);
                     b.end();
@@ -1220,13 +1226,13 @@ export class CodeGenerator {
                         if (typeof(index) == "number") {
                             index *= size;
                         } else {
-                            index = b.assign(b.tmp(), "mul", "sint", [index, size]);
+                            index = b.assign(b.tmp(), "mul", "sint", [indexVar, size]);
                         }
                     }
                     if (typeof(index) == "number") {
                         return new ssa.Pointer(data_ptr, index);
                     }
-                    return new ssa.Pointer(b.assign(b.tmp(), "add", "ptr", [data_ptr, index]), 0);
+                    return new ssa.Pointer(b.assign(b.tmp(), "add", "ptr", [data_ptr, indexVar]), 0);
                 } else if (ltype == this.tc.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, ltype);
                     let t = this.getSSAType(ltype);
