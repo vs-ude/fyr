@@ -353,19 +353,20 @@ export class CBackend implements backend.Backend {
         return t == "s8" || t == "s16" || t == "s32" || t == "s64";
     }
 
-    private emitExpr(t: ssa.Type | ssa.StructType | ssa.FunctionType, n: number | ssa.Variable | ssa.Node): CNode {
-        let c = this.emitExprIntern(t, n);
+    private emitExpr(n: number | ssa.Variable | ssa.Node): CNode {
+        let c = this.emitExprIntern(n);
         if (n instanceof ssa.Node && n.assign && (n.assign.readCount != 0 || n.assign.writeCount != 0)) {
             let e = new CBinary();
             e.operator = "=";
-            e.lExpr = this.emitExprIntern(n.type, n.assign);
+            e.lExpr = this.emitExprIntern(n.assign);
             e.rExpr = c;
             return e;    
         }
         return c;
     }
 
-    private emitExprIntern(t: ssa.Type | ssa.StructType | ssa.FunctionType, n: number | ssa.Variable | ssa.Node): CNode {
+    // TODO: Remove tx
+    private emitExprIntern(n: number | ssa.Variable | ssa.Node): CNode {
         if (typeof(n) == "number") {
             return new CConst(n.toString());
         }
@@ -396,7 +397,7 @@ export class CBackend implements backend.Backend {
             }
             let e = new CUnary();
             e.operator = "&";
-            e.expr = this.emitExpr((n.args[0] as ssa.Variable).type, n.args[0]);
+            e.expr = this.emitExpr(n.args[0]);
             let t = new CTypeCast();
             t.type = new CType("addr_t");
             t.expr = e;
@@ -405,7 +406,7 @@ export class CBackend implements backend.Backend {
             if (n.type instanceof FunctionType) {
                 throw "Implementation error"
             }
-            let expr = this.emitExpr(n.type, n.args[0]);
+            let expr = this.emitExpr(n.args[0]);
             if (n.args[1] != 0) {
                 let addExpr= new CBinary();
                 addExpr.operator = "+";
@@ -429,7 +430,7 @@ export class CBackend implements backend.Backend {
             if (n.type instanceof FunctionType || !n.assign) {
                 throw "Implementation error"
             }
-            return this.emitExpr(n.type, n.args[0]);
+            return this.emitExpr(n.args[0]);
         } else if (n.kind == "call") {
             if (!(n.type instanceof FunctionType)) {
                 throw "Implementation error"
@@ -439,7 +440,7 @@ export class CBackend implements backend.Backend {
             c.funcExpr = new CConst(f.func.name);
             for(let i = 1; i < n.args.length; i++) {
                 let a = n.args[i];
-                c.args.push(this.emitExpr(n.type.params[i-1], a));
+                c.args.push(this.emitExpr(a));
             }
             return c;
         } else if (n.kind == "call_indirect") {
@@ -451,7 +452,7 @@ export class CBackend implements backend.Backend {
             if (n.type instanceof FunctionType) {
                 throw "Implementation error"
             }
-            return this.emitExpr(n.type, n.args[0]);
+            return this.emitExpr(n.args[0]);
         } else if (n.kind == "struct") {
             if (!(n.type instanceof StructType)) {
                 throw "Implementation error"
@@ -460,15 +461,15 @@ export class CBackend implements backend.Backend {
             t.type = this.mapType(n.type);
             let l = new CCompoundLiteral();
             for(let a of n.args) {
-                l.values.push(this.emitExpr(null, a));
+                l.values.push(this.emitExpr(a));
             }
             t.expr = l;
             return t;
         } else if (n.kind == "add" || n.kind == "sub" || n.kind == "mul" || n.kind == "div" || n.kind == "eq" || n.kind == "ne" || n.kind == "or" || n.kind == "xor" || n.kind == "and" || n.kind == "shl" || n.kind == "lt" || n.kind == "gt" || n.kind == "le" || n.kind == "ge") {
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
-            e.lExpr = this.emitExpr(n.type, n.args[0]);
-            e.rExpr = this.emitExpr(n.type, n.args[1]);
+            e.lExpr = this.emitExpr(n.args[0]);
+            e.rExpr = this.emitExpr(n.args[1]);
 /*            if (n.assign) {
                 let a = new CBinary();
                 a.operator = "=";
@@ -480,13 +481,13 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "eqz") {
             let e = new CBinary();
             e.operator = "==";
-            e.lExpr = this.emitExpr(n.type, n.args[0]);
+            e.lExpr = this.emitExpr(n.args[0]);
             e.rExpr = new CConst("0");
             return e;
         } else if (n.kind == "neg") {
             let e = new CUnary();
             e.operator = "-";
-            e.expr = this.emitExpr(n.type, n.args[0]);
+            e.expr = this.emitExpr(n.args[0]);
             return e;
         } else if (n.kind == "abs") {
             let c = new CFunctionCall();
@@ -495,7 +496,7 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("abs_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
+            c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "sqrt") {
             let c = new CFunctionCall();
@@ -504,7 +505,7 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("sqrt_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
+            c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "ceil") {
             let c = new CFunctionCall();
@@ -513,7 +514,7 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("ceil_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
+            c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "floor") {
             let c = new CFunctionCall();
@@ -522,7 +523,7 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("floor_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
+            c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "trunc") {
             let c = new CFunctionCall();
@@ -531,7 +532,7 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("trunc_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
+            c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "nearest") {
             let c = new CFunctionCall();
@@ -540,7 +541,7 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("nearest_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
+            c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "min") {
             let c = new CFunctionCall();
@@ -549,8 +550,8 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("min_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
-            c.args.push(this.emitExpr(n.type, n.args[1]));
+            c.args.push(this.emitExpr(n.args[0]));
+            c.args.push(this.emitExpr(n.args[1]));
             return c;
         } else if (n.kind == "max") {
             let c = new CFunctionCall();
@@ -559,8 +560,8 @@ export class CBackend implements backend.Backend {
             } else {
                 c.funcExpr = new CConst("max_f64");
             }
-            c.args.push(this.emitExpr(n.type, n.args[0]));
-            c.args.push(this.emitExpr(n.type, n.args[1]));
+            c.args.push(this.emitExpr(n.args[0]));
+            c.args.push(this.emitExpr(n.args[1]));
             return c;
         } else if (n.kind == "div_s" || n.kind == "shr_s" || n.kind == "rem_s" || n.kind == "lt_s" || n.kind == "gt_s" || n.kind == "le_s" || n.kind == "ge_s") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
@@ -568,7 +569,7 @@ export class CBackend implements backend.Backend {
             }            
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
-            e.lExpr = this.emitExpr(n.type, n.args[0]);
+            e.lExpr = this.emitExpr(n.args[0]);
             let a = n.args[0];
             if ((a instanceof Node || a instanceof Variable) && !this.isSignedType(a.type)) {
                 let t = new CTypeCast();
@@ -576,7 +577,15 @@ export class CBackend implements backend.Backend {
                 t.expr = e.lExpr;
                 e.lExpr = t;
             }
-            e.rExpr = this.emitExpr(n.type, n.args[1]);
+            e.rExpr = this.emitExpr(n.args[1]);
+            a = n.args[1];
+            if ((a instanceof Node || a instanceof Variable) && !this.isSignedType(a.type)) {
+                let t = new CTypeCast();
+                t.type = this.mapToSignedType(a.type);
+                t.expr = e.rExpr;
+                e.rExpr = t;
+            }
+            // TODO: If number is larger than the signed can hold, but unsigned could hold it, then cast the unsigned to signed
             return e;            
         } else if (n.kind == "div_u" || n.kind == "shr_u" || n.kind == "rem_u" || n.kind == "lt_u" || n.kind == "gt_u" || n.kind == "le_u" || n.kind == "ge_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
@@ -584,15 +593,26 @@ export class CBackend implements backend.Backend {
             }            
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
-            e.lExpr = this.emitExpr(n.type, n.args[0]);
+            e.lExpr = this.emitExpr(n.args[0]);
             let a = n.args[0];
             if ((a instanceof Node || a instanceof Variable) && this.isSignedType(a.type)) {
                 let t = new CTypeCast();
                 t.type = this.mapToUnsignedType(a.type);
                 t.expr = e.lExpr;
                 e.lExpr = t;
+            } else if (typeof(a) == "number" && a < 0) {
+
             }
-            e.rExpr = this.emitExpr(n.type, n.args[1]);
+            e.rExpr = this.emitExpr(n.args[1]);
+            a = n.args[1];
+            if ((a instanceof Node || a instanceof Variable) && this.isSignedType(a.type)) {
+                let t = new CTypeCast();
+                t.type = this.mapToUnsignedType(a.type);
+                t.expr = e.rExpr;
+                e.rExpr = t;
+            } else if (typeof(a) == "number" && a < 0) {
+                
+            }
             return e;            
         } else if (n.kind == "wrap" || n.kind == "extend") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
@@ -600,7 +620,7 @@ export class CBackend implements backend.Backend {
             }            
             let e = new CTypeCast();
             e.type = this.mapType(n.type);
-            e.expr = this.emitExpr(n.type, n.args[0]);
+            e.expr = this.emitExpr(n.args[0]);
             return e;
         } else if (n.kind == "convert32_s" || n.kind == "convert32_u" || n.kind == "convert64_s" || n.kind == "convert64_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
@@ -608,7 +628,7 @@ export class CBackend implements backend.Backend {
             }            
             let e = new CTypeCast();
             e.type = this.mapType(n.type);
-            e.expr = this.emitExpr(n.type, n.args[0]);
+            e.expr = this.emitExpr(n.args[0]);
             return e;            
         } else if (n.kind == "alloc") {
             let t = this.mapType(n.type);
@@ -619,7 +639,7 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "free") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_free");
-            m.args = [this.emitExpr("addr", n.args[0])];
+            m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "decref") {
             let m = new CFunctionCall();
@@ -628,27 +648,27 @@ export class CBackend implements backend.Backend {
                 throw "Implementation error";
             }
             if (n.args[1] === 0) {
-                m.args = [this.emitExpr("addr", n.args[0]), new CConst("0")];
+                m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];
-                m.args = [this.emitExpr("addr", n.args[0]), new CConst(f.func.name)];
+                m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             }
             return m;
         } else if (n.kind == "incref") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_incref");
-            m.args = [this.emitExpr("addr", n.args[0])];
+            m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "alloc_arr") {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_alloc_arr");
-            m.args = [this.emitExpr("sint", n.args[0]), this.emitExpr("sint", n.args[1])];
+            m.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1])];
             return m;
         } else if (n.kind == "free_arr") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_free_arr");
-            m.args = [this.emitExpr("addr", n.args[0])];
+            m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "decref_arr") {
             let m = new CFunctionCall();
@@ -657,16 +677,16 @@ export class CBackend implements backend.Backend {
                 throw "Implementation error";
             }
             if (n.args[1] === 0) {
-                m.args = [this.emitExpr("addr", n.args[0]), new CConst("0")];
+                m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];
-                m.args = [this.emitExpr("addr", n.args[0]), new CConst(f.func.name)];
+                m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             }
             return m;
         } else if (n.kind == "incref_arr") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_incref_arr");
-            m.args = [this.emitExpr("addr", n.args[0])];
+            m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "member") {
             let m = new CBinary();
@@ -683,7 +703,7 @@ export class CBackend implements backend.Backend {
             if (!(t instanceof ssa.StructType) || t.fields.length <= idx) {
                 throw "Implementation error";
             }
-            m.lExpr = this.emitExpr(s.type, n.args[0]);
+            m.lExpr = this.emitExpr(n.args[0]);
             m.rExpr = new CConst(t.fieldNameByIndex(idx));
             return m;
         }
@@ -702,7 +722,7 @@ export class CBackend implements backend.Backend {
                 if (n.type instanceof ssa.FunctionType) {
                     throw "Implementation error"
                 }
-                let expr = this.emitExpr(n.type, n.args[0]);
+                let expr = this.emitExpr(n.args[0]);
                 let s = new CIf(expr);
                 code.push(s);
                 this.emitCode(n.next[0], n.blockPartner, s.body);
@@ -727,7 +747,7 @@ export class CBackend implements backend.Backend {
                 code.push(new CGoto(this.blockStack[n.args[0] as number]));
                 n = n.next[0];
             } else if (n.kind == "br_if") {
-                let expr = this.emitExpr(n.type, n.args[0]);
+                let expr = this.emitExpr(n.args[0]);
                 let s = new CIf(expr);
                 s.body.push(new CGoto(this.blockStack[n.args[1] as number]));
                 code.push(s);
@@ -748,8 +768,8 @@ export class CBackend implements backend.Backend {
                 if (n.type instanceof FunctionType) {
                     throw "Implementation error"
                 }
-                let expr = this.emitExpr(n.type, n.args[0]);
-                let val = this.emitExpr(n.type, n.args[2]);
+                let expr = this.emitExpr(n.args[0]);
+                let val = this.emitExpr(n.args[2]);
                 if (n.args[1] != 0) {
                     let charExpr = new CTypeCast();
                     charExpr.expr = expr;
@@ -788,7 +808,7 @@ export class CBackend implements backend.Backend {
                         throw "return with one parameter, but function has no return type"
                     }
                     let r = new CReturn();
-                    r.expr = this.emitExpr(this.returnVariables[0].type, n.args[0]);;
+                    r.expr = this.emitExpr(n.args[0]);;
                     code.push(r);
                 } else {
                     if (this.returnVariables.length != n.args.length) {
@@ -814,7 +834,7 @@ export class CBackend implements backend.Backend {
                 // Nothing to do
                 n = n.next[0];
             } else {
-                code.push(this.emitExpr(n.type, n));
+                code.push(this.emitExpr(n));
                 n = n.next[0];
             }
         }        
