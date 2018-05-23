@@ -1664,7 +1664,7 @@ export class CodeGenerator {
                     t = RestrictedType.strip(t.elementType);
                     if (t instanceof StructType) {
                         let st = this.getSSAType(t) as ssa.StructType; // This returns a struct type
-                        let ptr = b.assign(b.tmp("ptr"), "alloc", st, []);
+                        let ptr = b.assign(b.tmp(), "alloc", "addr", [ssa.sizeOf(st)]);
                         let args: Array<string | ssa.Variable | number> = [];
                         let fieldValues = new Map<string, Node>();
                         if (enode.parameters) {
@@ -1757,7 +1757,7 @@ export class CodeGenerator {
                 if (t instanceof SliceType) {
                     let et = this.getSSAType(t.getElementType());
                     let esize = ssa.alignedSizeOf(et);
-                    let ptr = b.assign(b.tmp("ptr"), "alloc_arr", et, [enode.parameters.length, esize]);
+                    let ptr = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [enode.parameters.length, esize]);
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processExpression(f, scope, enode.parameters[i], b, vars, t.getElementType());
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
@@ -1956,7 +1956,7 @@ export class CodeGenerator {
                     let t = this.tc.stripType(enode.rhs.type);
                     let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
                     let s = this.getSSAType(t);
-                    let copy = b.assign(b.tmp("ptr"), "alloc", s, []);
+                    let copy = b.assign(b.tmp(), "alloc", "addr", [ssa.sizeOf(s)]);
                     b.assign(b.mem, "store", s, [copy, 0, p]);
                     return copy;
                 }
@@ -2313,7 +2313,7 @@ export class CodeGenerator {
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
                     if (objPtr instanceof ssa.Pointer) {
-                        args.push(b.assign(b.tmp("ptr"), "add", "i32", [objPtr.variable, objPtr.offset]));
+                        args.push(b.assign(b.tmp(), "add", "addr", [objPtr.variable, objPtr.offset]));
                     } else {
                         args.push(objPtr);
                     }
@@ -2326,7 +2326,7 @@ export class CodeGenerator {
                         args.push(this.processExpression(f, scope, enode.parameters[i], b, vars, t.parameters[i].type));
                     }
                     let elementSize = ssa.alignedSizeOf(elementType);
-                    let mem = b.assign(b.tmp("ptr"), "alloc_arr", elementType, [enode.parameters.length - normalParametersCount, elementSize]);
+                    let mem = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [enode.parameters.length - normalParametersCount, elementSize]);
                     let offset = 0;
                     for(let i = normalParametersCount; i < enode.parameters.length; i++, offset += elementSize) {
                         let v = this.processExpression(f, scope, enode.parameters[i], b, vars, (t.lastParameter().type as SliceType).getElementType());
@@ -2360,36 +2360,6 @@ export class CodeGenerator {
                         if (dataAndRef[1]) {
                             decrefArgs.push([vnode, dataAndRef[1], targetType]);
                         }
-                        /*
-                        // Reference counting for pointers
-                        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(vnode.type) || TypeChecker.isUnique(vnode.type) || !TypeChecker.isTakeExpression(vnode))) {
-                            // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                            data = b.assign(b.tmp(), "incref", "addr", [data]);
-                        }
-                        // Reference counting for slices
-                        if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(vnode.type) || TypeChecker.isUnique(vnode.type) || !TypeChecker.isTakeExpression(vnode))) {
-                            let st = this.getSSAType(targetType) as ssa.StructType;
-                            let arrayPointer: ssa.Variable;
-                            if (rhs instanceof ssa.Pointer) {
-                                arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
-                            } else {
-                                arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
-                            }
-                            b.assign(null, "incref_arr", "addr", [arrayPointer]);
-                        }
-                        */
-                        // Zero the RHS is necessary
-                        /*
-                        if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
-                            if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
-                                throw "Implementation error"
-                            }
-                            if (rhs instanceof ssa.Variable) {
-                                // Make a copy of the data, otherwise it will be overwritten with zeros
-                                data = b.assign(b.tmp(), "copy", st, [data]);
-                            }
-                            this.processFillZeros(rhs, vnode.type, b);
-                        }*/
                     }
                 }
                 

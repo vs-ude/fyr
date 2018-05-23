@@ -644,7 +644,7 @@ export class CBackend implements backend.Backend {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_alloc");
-            m.args = [new CConst(ssa.sizeOf(n.type as (ssa.Type | ssa.StructType)).toString())];
+            m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "free") {
             let m = new CFunctionCall();
