@@ -107,7 +107,11 @@ export class CodeGenerator {
                 }
                 let name = e.name;
                 if (e.type.objectType) {
-                    name = this.tc.qualifiedTypeName(RestrictedType.strip(e.type.objectType)) + "." + name;
+                    let t = RestrictedType.strip(e.type.objectType);
+                    if (t instanceof PointerType) {
+                        t = RestrictedType.strip(t.elementType);
+                    }
+                    name = this.tc.qualifiedTypeName(RestrictedType.strip(t)) + "." + name;
                 }
                 let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
@@ -2116,7 +2120,7 @@ export class CodeGenerator {
                     }
                     let data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                     let len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
-                    let mem = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [len, size]);
+                    let mem = b.assign(b.tmp(), "alloc_arr", "addr", [len, size]);
                     b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, data_ptr, len]);
                     return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, len, len]);
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "append") {
@@ -2251,11 +2255,11 @@ export class CodeGenerator {
                         if (this.isLeftHandSide(enode.lhs.lhs)) {
                             objPtr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
                             if (objPtr instanceof ssa.Variable) {
-                                objPtr = b.assign(b.tmp(), "addr_of", "ptr", [objPtr]);
+                                objPtr = b.assign(b.tmp(), "addr_of", "addr", [objPtr]);
                             }
                         } else {
                             let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
-                            objPtr = b.assign(b.tmp(), "addr_of", "ptr", [value]);
+                            objPtr = b.assign(b.tmp(), "addr_of", "addr", [value]);
                         }
                     } else if (ltype instanceof InterfaceType) {
                         objType = ltype;
@@ -2263,15 +2267,15 @@ export class CodeGenerator {
                         if (this.isLeftHandSide(enode.lhs.lhs)) {
                             let p = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
                             if (p instanceof ssa.Variable) {
-                                ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [p]), 0);
+                                ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [p]), 0);
                             } else {
                                 ifacePtr = p;
                             }
                         } else {
                             let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
-                            ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [value]), 0);
+                            ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [value]), 0);
                         }                        
-                        objPtr = b.assign(b.tmp(), "load", "ptr", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("pointer")]);
+                        objPtr = b.assign(b.tmp(), "load", "addr", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("pointer")]);
                         findex = b.assign(b.tmp(), "load", "s32", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("value")]);
                     } else {
                         throw "Implementation error"
@@ -2279,6 +2283,10 @@ export class CodeGenerator {
                     if (objType instanceof StructType) {
                         let method = objType.method(enode.lhs.name.value);
                         let methodObjType = RestrictedType.strip(method.objectType);
+                        methodObjType = RestrictedType.strip(method.objectType);
+                        if (methodObjType instanceof PointerType) {
+                            methodObjType = RestrictedType.strip(methodObjType.elementType);
+                        }    
                         let methodName = this.tc.qualifiedTypeName(methodObjType) + "." + enode.lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
@@ -2312,11 +2320,18 @@ export class CodeGenerator {
                 }
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
+                    let data: ssa.Variable | number;
                     if (objPtr instanceof ssa.Pointer) {
-                        args.push(b.assign(b.tmp(), "add", "addr", [objPtr.variable, objPtr.offset]));
+                        data = b.assign(b.tmp(), "add", "addr", [objPtr.variable, objPtr.offset]);
                     } else {
-                        args.push(objPtr);
+                        data = objPtr;
                     }
+                    let targetType = this.tc.stripType(enode.lhs.lhs.type);
+                    let dataAndRef = this.functionArgumentIncref(objPtr, enode.lhs.lhs, data, targetType, scope, b);
+                    args.push(dataAndRef[0]);
+                    if (dataAndRef[1]) {
+                        decrefArgs.push([enode.lhs.lhs, dataAndRef[1], targetType]);
+                    }                
                 }                
                 if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
                     // TODO: If the last parameter is volatile, the alloc is not necessary.

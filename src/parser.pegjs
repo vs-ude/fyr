@@ -300,7 +300,7 @@ memberObjectType
   /  r:("&" [ \t]*)? i: identifier {
       i.op = "basicType";
       if (r) {
-        t.flags |= ast.AstFlags.ReferenceObjectMember;
+        i.flags |= ast.AstFlags.ReferenceObjectMember;
       }
       return i;
     }
