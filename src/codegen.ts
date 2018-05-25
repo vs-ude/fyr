@@ -343,7 +343,7 @@ export class CodeGenerator {
 
         if (!f.type.returnType || f.type.returnType == this.tc.t_void) {
             // Free all variables
-            this.freeScopeVariables(b, vars, f.scope);
+            this.freeScopeVariables(null, b, vars, f.scope);
         }
 
         b.end();
@@ -373,11 +373,14 @@ export class CodeGenerator {
         }
     }
 
-    public freeScopeVariables(b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope) {
+    public freeScopeVariables(ignoreVariables: Array<Variable | FunctionParameter>, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope) {
         // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
+                if (ignoreVariables && ignoreVariables.indexOf(e) != -1) {
+                    continue;
+                }
                 let v = vars.get(e);
                 if (!v) {
                     throw "Implementation error";
@@ -1061,21 +1064,77 @@ export class CodeGenerator {
                 break;
             }
             case "return":
-                if (this.scopeNeedsDestructors(scope)) {
-                    let tmp: ssa.Variable | number;
-                    if (snode.lhs) {
-                        tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
+            {
+                let ignoreVariables: Array<Variable | FunctionParameter> = [];
+                let data: ssa.Variable | number;
+                if (f.namedReturnVariables) {
+                    for(let v of f.namedReturnVariables) {
+                        ignoreVariables.push(v);
                     }
+                }
+                if (snode.lhs) {
+                    let targetType = f.type.returnType;
+                    let rhs: ssa.Variable | ssa.Pointer | number;
+                    // Returning a local variable? Then do not zero it out and do not execute its destructor
+                    let doNotZero = false;   
+                    let forceIncref = false;                 
+                    if ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment && snode.lhs.op == "id") {
+                        let e = scope.resolveElement(snode.lhs.value);
+                        if (e instanceof FunctionParameter || (e instanceof Variable && !e.isGlobal)) {
+                            ignoreVariables.push(e);
+                            doNotZero = true;                        
+                        }
+                        // If the ~ptr parameter does not "own" a reference count, then incref is necessary upon returing the reference
+                        if (e instanceof FunctionParameter && e.isConst) {
+                            forceIncref = true;
+                        }
+                    }
+                    if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.lhs.op == "take")) {
+                        rhs = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
+                    } else {
+                        rhs = this.processExpression(f, scope, snode.lhs, b, vars, targetType);                            
+                    }
+                    let t = this.getSSAType(snode.lhs.type);
+                    if (rhs instanceof ssa.Pointer) {
+                        data = b.assign(b.tmp(), "load", t, [rhs.variable, rhs.offset]);
+                    } else {
+                        data = rhs;
+                    }                                
+                    // Reference counting for pointers
+                    if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !TypeChecker.isTakeExpression(snode.lhs) || forceIncref)) {
+                        // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
+                        data = b.assign(b.tmp(), "incref", "addr", [data]);
+                    }
+                    // Reference counting for slices
+                    if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                        let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
+                        let arrayPointer: ssa.Variable;
+                        if (rhs instanceof ssa.Pointer) {
+                            arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
+                        } else {
+                            arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
+                        }
+                        b.assign(null, "incref_arr", "addr", [arrayPointer]);
+                    }
+                    if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.lhs.op == "take")) {
+                        if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
+                            throw "Implementation error";
+                        }
+                        // Fill the RHS with zeros
+                        this.processFillZeros(rhs, snode.lhs.type, b);
+                    }                                
+                }    
+                if (this.scopeNeedsDestructors(scope)) {
                     let s = scope;
                     while (s) {
-                        this.freeScopeVariables(b, vars, s);
+                        this.freeScopeVariables(ignoreVariables, b, vars, s);
                         if (s.func) {
                             break;
                         }
                         s = s.parent;
                     }
                     if (!snode.lhs) {
-                        if (!f.namedReturnVariables) {
+                        if (f.namedReturnVariables) {
                             let args: Array<ssa.Variable | string | number> = [];
                             for(let key of f.scope.elements.keys()) {
                                 let v = f.scope.elements.get(key);
@@ -1091,7 +1150,7 @@ export class CodeGenerator {
                         }
                     } else {
                         let t = this.getSSAType(f.type.returnType);
-                        b.assign(null, "return", t, [tmp]);                        
+                        b.assign(null, "return", t, [data]);                        
                     }
                 } else {
                     if (!snode.lhs) {
@@ -1110,11 +1169,11 @@ export class CodeGenerator {
                             b.assign(null, "return", null, []);
                         }
                     } else {
-                        let tmp = this.processExpression(f, scope, snode.lhs, b, vars, f.type.returnType);
-                        b.assign(null, "return", this.getSSAType(f.type.returnType), [tmp]);
+                        b.assign(null, "return", this.getSSAType(f.type.returnType), [data]);
                     }    
                 }
                 break;
+            }
             case "yield":
                 b.assign(null, "yield", null, []);
                 break;
@@ -1689,8 +1748,6 @@ export class CodeGenerator {
                         b.assign(b.mem, "store", st, [ptr, 0, v]);
                         return ptr;
                     } else if (t instanceof MapType) {
-                        let mapHeadTypeMap = this.backend.getTypeMapper().mapType(this.mapHead);
-                        // TODO: Reuse this type where possible
                         let entry = new ssa.StructType()
                         entry.name = "map";
                         entry.addField("hashNext", "addr")
@@ -1698,8 +1755,7 @@ export class CodeGenerator {
                         entry.addField("hash", "i64")
                         entry.addField("key", "ptr")
                         entry.addField("value", this.getSSAType(t.valueType));                        
-                        let entryTypeMap = this.backend.getTypeMapper().mapType(entry);
-                        let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, mapHeadTypeMap.addr, enode.parameters ? enode.parameters.length : 4, entryTypeMap.addr]);
+                        let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, enode.parameters ? enode.parameters.length : 4]);
                         if (enode.parameters) {
                             for(let p of enode.parameters) {
                                 if (t.keyType != this.tc.t_string) {

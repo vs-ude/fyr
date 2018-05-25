@@ -10,7 +10,7 @@ export func main() int {
     var slice []*Point = [{}, {}]
     var arr [2]Point = [{}, {}]
     var p *Point = {}
-    var r ~Point = p    
+    var r ~Point = passThru(p)    
     return refme(slice[0]) + refme(p) + refme(r) + localme(&arr[1]) + r.size() + arr[1].size()
 }
 
@@ -20,4 +20,20 @@ func refme(p ~Point) int {
 
 func localme(p &Point) int {
     return p.x
+}
+
+func passThru(p ~Point) ~Point {
+    return p
+}
+
+func passThruWithErr() (ref ~Point, err int) {
+    let p *Point = {}
+    return p, -1
+}
+
+func passThruWithErr2() (ref ~Point, err int) {
+    let p *Point = {}
+    ref = p
+    err = 0
+    return
 }

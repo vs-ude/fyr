@@ -1,5 +1,4 @@
 import * as ssa from "./ssa"
-import {TypeMapper} from "./gc"
 
 export interface FunctionImport {
     getIndex(): number;
@@ -22,5 +21,4 @@ export interface Backend {
     addString(str: string): number | ssa.Variable;
     addFunctionToTable(f: Function, index: number);
     getCode(): string;
-    getTypeMapper(): TypeMapper;
 }

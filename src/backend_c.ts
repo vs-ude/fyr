@@ -1,4 +1,3 @@
-import {TypeMapper, TypeMap} from "./gc"
 import {SystemCalls} from "./pkg"
 import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind} from "./ssa"
 import * as backend from "./backend"
@@ -175,8 +174,7 @@ export class CBackend implements backend.Backend {
                 console.log(Node.strainToString("", f.node));
             }
 
-            let typemap = this.analyzeVariableStorage(f.node, f.node.blockPartner);
-            // TODO: Set the typemap for GC
+            this.analyzeVariableStorage(f.node, f.node.blockPartner);
 
             let code: Array<CNode> = [];
 
@@ -250,10 +248,6 @@ export class CBackend implements backend.Backend {
 
     public getCode(): string {
         return this.module.toString();
-    }
-
-    public getTypeMapper(): TypeMapper {
-        return this.typeMapper;
     }
 
     private mapType(t: ssa.Type | ssa.StructType | ssa.FunctionType): CType {
@@ -813,14 +807,14 @@ export class CBackend implements backend.Backend {
                         throw "return without a parameter, but function has a return type"
                     }
                     code.push(new CReturn());
-                } else if (n.args.length == 1) {
-                    if (this.returnVariables.length != 1) {
-                        throw "return with one parameter, but function has no return type"
-                    }
+                } else { //} if (n.args.length == 1) {
+//                    if (this.returnVariables.length != 1) {
+//                        throw "return with one parameter, but function has no return type"
+//                    }
                     let r = new CReturn();
                     r.expr = this.emitExpr(n.args[0]);;
                     code.push(r);
-                } else {
+/*                } else {
                     if (this.returnVariables.length != n.args.length) {
                         throw "number of return values does not match with return type"
                     }
@@ -829,7 +823,7 @@ export class CBackend implements backend.Backend {
                         let t = this.returnVariables[i].type;
                         throw "TODO";
                     }
-                    code.push(r);
+                    code.push(r); */
                 }
                 n = n.next[0];
             } else if (n.kind == "trap") {
@@ -850,16 +844,19 @@ export class CBackend implements backend.Backend {
         }        
     }
 
-    private analyzeVariableStorage(start: Node, end: Node, typemap: TypeMap | null = null): TypeMap | null {
-        if (!typemap) {
-            typemap = new TypeMap();
-        }
+    private analyzeVariableStorage(start: Node, end: Node) {
+        let resultTypes: Array<[string, ssa.Type | ssa.StructType]> = [];
         let n = start;
         for(; n; ) {
             // Ignore decl_var here. These variables get storage when they are assigned.
             // Parameters and result variables, however, need storage even if they are not being assigned.
             if (n.kind == "decl_result") {
-                this.currentFunction.func.returnType = this.mapType(n.type);
+                if (n.assign.name == "$return") {
+                    this.currentFunction.func.returnType = this.mapType(n.type);
+                } else {
+                    resultTypes.push([n.assign.name, n.type as ssa.Type | ssa.StructType]);
+                    this.assignVariableStorage(n.assign);
+                }
                 this.returnVariables.push(n.assign);
                 this.varStorage.set(n.assign, n.assign.name);
                 n = n.next[0];                
@@ -880,26 +877,32 @@ export class CBackend implements backend.Backend {
                 }
             }
             if (n.assign) {
-                this.assignVariableStorage(n.assign, typemap);
+                this.assignVariableStorage(n.assign);
             }
             for(let v of n.args) {
                 if (v instanceof Variable) {
-                    this.assignVariableStorage(v, typemap);
+                    this.assignVariableStorage(v);
                 } else if (v instanceof Node) {
-                    this.analyzeVariableStorage(v, null, typemap);
+                    this.analyzeVariableStorage(v, null);
                 }
             }
             if (n.kind == "if" && n.next.length > 1) {
-                this.analyzeVariableStorage(n.next[1], n.blockPartner, typemap);
+                this.analyzeVariableStorage(n.next[1], n.blockPartner);
                 n = n.next[0];
             } else {
                 n = n.next[0];                
             }
         }
-        return typemap;
+        if (resultTypes.length != 0) {
+            let s = new ssa.StructType;
+            for(let r of resultTypes) {
+                s.addField(r[0], r[1]);
+            }
+            this.currentFunction.func.returnType = this.mapType(s);
+        }            
     }
 
-    private assignVariableStorage(v: Variable, typemap: TypeMap): void {
+    private assignVariableStorage(v: Variable): void {
         if (v.name == "$mem") {
             return;
         }
@@ -909,7 +912,7 @@ export class CBackend implements backend.Backend {
         if (v.isConstant) {
             return;
         }
-        if (this.returnVariables.indexOf(v) != -1 || this.parameterVariables.indexOf(v) != -1) {
+        if (this.parameterVariables.indexOf(v) != -1) {
             return;
         }
         let name = v.name;
@@ -922,7 +925,6 @@ export class CBackend implements backend.Backend {
         this.localVariables.push(v);
     }
 
-    private typeMapper: TypeMapper;
     private emitIR: boolean;
     private emitIRFunction: string | null;
     private optimizer: Optimizer;
