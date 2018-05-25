@@ -1740,7 +1740,7 @@ export class CodeGenerator {
                                 args.push(0);
                             } else {
                                 let p = fieldValues.get(st.fields[i][0]);
-                                let v = this.processExpression(f, scope, p, b, vars, t.fields[i].type);
+                                let v = this.processLiteralArgument(f, scope, p, t.fields[i].type, b, vars);
                                 args.push(v);
                             }
                         }
@@ -1766,7 +1766,7 @@ export class CodeGenerator {
                                 str.isConstant = true;
                                 str.constantValue = p.name.value;
                                 str.type = "addr";
-                                let value = this.processExpression(f, scope, p.lhs, b, vars, t.valueType);
+                                let value = this.processLiteralArgument(f, scope, p.lhs, t.valueType, b, vars);
                                 let dest = b.call(b.tmp(), this.setMapFunctionType, [SystemCalls.setMap, m, str]);
                                 b.assign(b.mem, "store", this.getSSAType(t.valueType), [dest, 0, value]);
                             }
@@ -1792,7 +1792,7 @@ export class CodeGenerator {
 //                            }
                         } else {
                             let p = fieldValues.get(st.fields[i][0]);
-                            let v = this.processExpression(f, scope, p, b, vars, t.fields[i].type);
+                            let v = this.processLiteralArgument(f, scope, p, t.fields[i].type, b, vars);
                             args.push(v);
                         }
                     }
@@ -1806,7 +1806,7 @@ export class CodeGenerator {
                 let st = this.getSSAType(enode.type); // This returns a struct type
                 let args: Array<string | ssa.Variable | number> = [];
                 for(let i = 0; i < enode.parameters.length; i++) {
-                    let v = this.processExpression(f, scope, enode.parameters[i], b, vars, (t as TupleType).types[i]);
+                    let v = this.processLiteralArgument(f, scope, enode.parameters[i], (t as TupleType).types[i], b, vars);
                     args.push(v);
                 }
                 return b.assign(b.tmp(), "struct", st, args);                
@@ -1819,7 +1819,7 @@ export class CodeGenerator {
                     let esize = ssa.alignedSizeOf(et);
                     let ptr = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [enode.parameters.length, esize]);
                     for(let i = 0; i < enode.parameters.length; i++) {
-                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars, t.getElementType());
+                        let v = this.processLiteralArgument(f, scope, enode.parameters[i], t.getElementType(), b, vars);
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
                     }
                     return b.assign(b.tmp(), "struct", this.strongSlicePointer, [ptr, enode.parameters.length, ptr]);
@@ -1827,7 +1827,7 @@ export class CodeGenerator {
                     let st = this.getSSAType(t); // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     for(let i = 0; i < enode.parameters.length; i++) {
-                        let v = this.processExpression(f, scope, enode.parameters[i], b, vars, t.elementType);
+                        let v = this.processLiteralArgument(f, scope, enode.parameters[i], t.elementType, b, vars);
                         args.push(v);
                     }
                     return b.assign(b.tmp(), "struct", st, args);
@@ -3406,6 +3406,49 @@ export class CodeGenerator {
             }
         }
         return ["yes", null];
+    }
+
+    private processLiteralArgument(f: Function, scope: Scope, rhsNode: Node, targetType: Type, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
+        let rhs: ssa.Pointer | ssa.Variable | number;
+        if ((this.tc.isArray(rhsNode.type) || this.tc.isStruct(rhsNode.type)) && this.isPureLiteral(targetType, rhsNode)) {
+            rhs = this.processPureLiteral(rhsNode);
+        } else if (rhsNode.op == "take") {
+            rhs = this.processLeftHandExpression(f, scope, rhsNode.lhs, b, vars);
+        } else {
+            rhs = this.processExpression(f, scope, rhsNode, b, vars, targetType);
+        }
+        let data: ssa.Variable | number;
+        if (rhs instanceof ssa.Pointer) {
+            let st = this.getSSAType(rhsNode.type) as ssa.StructType;
+            data = b.assign(b.tmp(), "load", st, [rhs.variable, rhs.offset]);
+        } else {
+            data = rhs;
+        }            
+        // Reference counting for pointers
+        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
+            // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
+            data = b.assign(b.tmp(), "incref", "addr", [data]);
+        }
+        // Reference counting for slices
+        if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
+            let st = this.getSSAType(targetType) as ssa.StructType;
+            let arrayPointer: ssa.Variable;
+            if (rhs instanceof ssa.Pointer) {
+                arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
+            } else {
+                arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
+            }
+            b.assign(null, "incref_arr", "addr", [arrayPointer]);
+        }
+        if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
+            if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
+                throw "Implementation error";
+            }
+            // Fill the RHS with zeros
+            this.processFillZeros(rhs, rhsNode.type, b);
+        }            
+
+        return data;
     }
 
     private optimizer: ssa.Optimizer;
