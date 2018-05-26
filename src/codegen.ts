@@ -776,167 +776,88 @@ export class CodeGenerator {
             }
             case "for":
             {
-                let valElement: Variable;
-                let val: ssa.Variable | ssa.Pointer;
-                let counter: ssa.Variable | ssa.Pointer;
-                let offset: ssa.Variable;
-                let end: ssa.Variable;
+                let val: ssa.Variable;
+                let counter: ssa.Variable;
                 let ptr: ssa.Variable;
                 let len: ssa.Variable | number;
                 this.processScopeVariables(b, vars, snode.scope);
+                //
+                // Loop initialization
+                //
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     // A c-style for loop
                     this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
-                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "in")) {
+                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "let_in")) {
+                    //
                     // A for loop of the form "for(var i in list) or for(var i, j in list)" or the same without "var"
+                    //
                     let t = RestrictedType.strip(snode.condition.rhs.type);
-                    if (t instanceof SliceType || t instanceof ArrayType) {
-                        let arrayType: ArrayType;
-                        if (t instanceof SliceType) {
-                            arrayType = t.array();
-                            // Get the address of the slice header
-                            let sliceHeaderAddr: ssa.Pointer;
-                            if (this.isLeftHandSide(snode.condition.rhs)) {
-                                let sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
-                                if (sliceHeader instanceof ssa.Variable) {
-                                    sliceHeaderAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [sliceHeader]), 0);                                
-                                } else {
-                                    sliceHeaderAddr = sliceHeader;
-                                }
+                    //
+                    // Address and length of array or string
+                    //                    
+                    if (t instanceof SliceType) {
+                        // TODO: Incref
+                        let sliceHeader: ssa.Pointer | ssa.Variable;
+                        if (this.isLeftHandSide(snode.condition.rhs)) {
+                            sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                        } else {
+                            sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
+                        }
+                        if (sliceHeader instanceof ssa.Variable) {
+                            ptr = b.assign(b.tmp(), "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            len = b.assign(b.tmp(), "member", "sint", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        } else {
+                            ptr = b.assign(b.tmp(), "load", "addr", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                            len = b.assign(b.tmp(), "load", "sint", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                        }
+                    } else if (t instanceof ArrayType) {
+                        // TODO: Incref
+                        // Get the address of the array
+                        len = t.size;
+                        if (this.isLeftHandSide(snode.condition.rhs)) {
+                            let arr = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                            if (arr instanceof ssa.Variable) {
+                                ptr = b.assign(b.tmp(), "addr_of", "addr", [arr]);
                             } else {
-                                let sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
-                                sliceHeaderAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [sliceHeader]), 0);
-                            }
-                            ptr = b.assign(b.tmp(), "load", "ptr", [sliceHeaderAddr.variable, sliceHeaderAddr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
-                            len = b.assign(b.tmp(), "load", "sint", [sliceHeaderAddr.variable, sliceHeaderAddr.offset + this.localSlicePointer.fieldOffset("data_length")]);
-                        } else {
-                            // Get the address of the array
-                            len = t.size;
-                            if (this.isLeftHandSide(snode.condition.rhs)) {
-                                let arr = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
-                                if (arr instanceof ssa.Variable) {
-                                    ptr = b.assign(b.tmp(), "addr_of", "ptr", [arr]);
-                                } else {
-                                    ptr = b.assign(b.tmp(), "copy", "ptr", [arr.variable]);
-                                    if (arr.offset != 0) {
-                                        b.assign(ptr, "add", "addr", [ptr, arr.offset]);
-                                    }
+                                ptr = b.assign(b.tmp(), "copy", "addr", [arr.variable]);
+                                if (arr.offset != 0) {
+                                    b.assign(ptr, "add", "addr", [ptr, arr.offset]);
                                 }
-                            } else {
-                                let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
-                                ptr = b.assign(b.tmp(), "addr_of", "ptr", [arr]);
-                            }
-                        }
-                        // Compute the end of the slice
-                        let storage = this.getSSAType(arrayType.elementType);
-                        let size = ssa.alignedSizeOf(storage);
-                        if (size > 1) {
-                            len = b.assign(b.tmp(), "mul", "sint", [len, size]);
-                        }
-                        end = b.assign(b.tmp(), "add", "addr", [ptr, len]);
-                        if (snode.condition.op == "var_in") {
-                            if (snode.condition.lhs.op == "tuple") {
-                                if (snode.condition.lhs.parameters[0].value != "_") {
-                                    // Initialize the counter with 0                            
-                                    let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
-                                    counter = vars.get(element);
-                                    b.assign(counter, "const", "sint", [0]);
-                                }
-                                if (snode.condition.lhs.parameters[1].value != "_") {
-                                    valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
-                                    val = vars.get(valElement);
-                                }
-                            } else if (snode.condition.lhs.value != "_") {                            
-                                // Initialize the counter with 0                            
-                                let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
-                                counter = vars.get(element);
-                                b.assign(counter, "const", "sint", [0]);
                             }
                         } else {
-                            if (snode.condition.lhs.op == "tuple") {
-                                if (snode.condition.lhs.parameters[0].value != "_") {
-                                    counter = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[0], b, vars);
-                                    // If the left-hand expression returns an address, the resulting value must be stored in memory
-                                    if (counter instanceof ssa.Pointer) {
-                                        b.assign(b.mem, "store", "sint", [counter.variable, counter.offset, 0]);
-                                    } else {
-                                        b.assign(counter, "const", "sint", [0]);
-                                    }
-                                }
-                                if (snode.condition.lhs.parameters[1].value != "_") {
-                                    val = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[1], b, vars);
-                                }
-                            } else if (snode.condition.lhs.value != "_") {                            
-                                counter = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
-                                // If the left-hand expression returns an address, the resulting value must be stored in memory
-                                if (counter instanceof ssa.Pointer) {
-                                    b.assign(b.mem, "store", "sint", [counter.variable, counter.offset, 0]);
-                                } else {
-                                    b.assign(counter, "const", "sint", [0]);
-                                }                            
-                            }
+                            let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
+                            ptr = b.assign(b.tmp(), "addr_of", "addr", [arr]);
                         }
-                    } else if (snode.condition.rhs.type == this.tc.t_string) {
-                        // Compute pointer to the character data
-                        let s = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, this.tc.t_string);
-                        if (s instanceof ssa.Variable) {
-                            ptr = s;
-                        } else {                            
-                            ptr = b.assign(b.tmp(), "const", "addr", [s]);                            
-                        }
-                        // Get the length of the string
-                        len = b.assign(b.tmp(), "load", "sint", [ptr, -4]);
-                        // b.assign(ptr, "add", "addr", [ptr, 4]);
-                        end = len;
-                        // Initialize the iterator variables
-                        if (snode.condition.op == "var_in") {
-                            if (snode.condition.lhs.op == "tuple") {
-                                if (snode.condition.lhs.parameters[0].value != "_") {
-                                    // Initialize the counter with 0                            
-                                    let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
-                                    counter = vars.get(element);
-                                    b.assign(counter, "const", "sint", [0]);
-                                }
-                                if (snode.condition.lhs.parameters[1].value != "_") {
-                                    valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
-                                    val = vars.get(valElement);
-                                }
-                            } else if (snode.condition.lhs.value != "_") {                            
-                                // Initialize the counter with 0                            
-                                let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
-                                counter = vars.get(element);
-                                b.assign(counter, "const", "sint", [0]);
-                            }
-                        } else {
-                            if (snode.condition.lhs.op == "tuple") {
-                                if (snode.condition.lhs.parameters[0].value != "_") {
-                                    counter = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[0], b, vars);
-                                    // If the left-hand expression returns an address, the resulting value must be stored in memory
-                                    if (counter instanceof ssa.Pointer) {
-                                        b.assign(b.mem, "store", "sint", [counter.variable, counter.offset, 0]);
-                                    } else {
-                                        b.assign(counter, "const", "sint", [0]);
-                                    }
-                                }
-                                if (snode.condition.lhs.parameters[1].value != "_") {
-                                    val = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs.parameters[1], b, vars);
-                                }
-                            } else if (snode.condition.lhs.value != "_") {                            
-                                counter = this.processLeftHandExpression(f, snode.scope, snode.condition.lhs, b, vars);
-                                // If the left-hand expression returns an address, the resulting value must be stored in memory
-                                if (counter instanceof ssa.Pointer) {
-                                    b.assign(b.mem, "store", "sint", [counter.variable, counter.offset, 0]);
-                                } else {
-                                    b.assign(counter, "const", "sint", [0]);
-                                }                            
-                            }
-                        }
-                        offset = b.assign(b.tmp(), "const", "sint", [0])
                     } else {
-                        throw "Implementation error";
+                        throw "TODO string and map"
                     }
-                    // TODO map
+                    //
+                    // Initialize the counter with 0
+                    //
+                    if (snode.condition.lhs.op == "tuple") {
+                        if (snode.condition.lhs.parameters[0].value != "_") {
+                            // Initialize the counter with 0                            
+                            let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
+                            counter = vars.get(element);
+                        } else {
+                            counter = b.tmp();
+                        }
+                        if (snode.condition.lhs.parameters[1].value != "_") {
+                            let valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
+                            val = vars.get(valElement);
+                        }
+                    } else {
+                        if (snode.condition.lhs.value != "_") {
+                            let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
+                            val = vars.get(element);                                
+                        }
+                        counter = b.tmp();                                    
+                    }
+                    b.assign(counter, "const", "sint", [0]);
                 }
+                //
+                // Loop condition
+                //
                 let outer = b.block();
                 let loop = b.loop();
                 if (snode.condition) {
@@ -946,63 +867,45 @@ export class CodeGenerator {
                             let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                             b.br_if(tmp2, outer);
                         }
-                    } else if (snode.condition.op == "var_in" || snode.condition.op == "in") {
+                    } else if (snode.condition.op == "var_in" || snode.condition.op == "let_in" || snode.condition.op == "in") {
+                        // End of iteration?
+                        let endcond = b.assign(b.tmp(), "eq", "i8", [counter, len]);
+                        b.br_if(endcond, outer);
                         let t = RestrictedType.strip(snode.condition.rhs.type);
                         if (t instanceof SliceType || t instanceof ArrayType) {
-                            // End of iteration?
-                            let endcond = b.assign(b.tmp(), "eq", "addr", [ptr, end]);
-                            b.br_if(endcond, outer);
+                            // TODO: null-check
                             // Store the current value in a variable
                             let storage = this.getSSAType(t.getElementType());
-                            if (val instanceof ssa.Variable) {
-                                b.assign(val, "load", storage, [ptr, 0]);
-                            } else if (val instanceof ssa.Pointer) {
-                                let v = b.assign(b.tmp(), "load", storage, [ptr, 0]);
-                                b.assign(b.mem, "store", storage, [val.variable, val.offset, v]);
-                            }
-                            // Increase the pointer towards the last element
-                            let size = ssa.alignedSizeOf(storage)
-                            b.assign(ptr, "add", "ptr", [ptr, size]);
+                            b.assign(val, "load", storage, [ptr, 0]);
                         } else if (t == this.tc.t_string) {
-                            // End of iteration?
-                            let endcond = b.assign(b.tmp(), "eq", "sint", [offset, end]);
-                            b.br_if(endcond, outer);
                             // Get address of value
                             let valAddr: ssa.Variable;
-                            if (val instanceof ssa.Pointer) {
-                                valAddr = val.variable;
-                                if (val.offset != 0) {
-                                    b.assign(valAddr, "add", "addr", [valAddr, val.offset]);
-                                }
-                            } else if (val instanceof ssa.Variable) {
+                            if (val instanceof ssa.Variable) {
                                 valAddr = b.assign(b.tmp(), "addr_of", "addr", [val]);
                             } else {
                                 let tmp = b.declareVar("sint", "$dummyVar");
                                 valAddr = b.assign(b.tmp(), "addr_of", "addr", [tmp]);
                             }
-                            // Start computing the next rune with 0, ion state 0
-                            b.assign(b.mem, "store", "s32", [valAddr, 0, 0]);
+                            // Start computing the next rune with 0, in state 0
+                            b.assign(val, "const", "s32", [0]);
                             let state = b.assign(b.tmp(), "const", "sint", [0]);
                             // Decode loop
                             let decodeLoop = b.loop();
                             // Load a character
-                            let chPtr = b.assign(b.tmp("addr"), "add", "addr", [ptr, offset])
-                            let ch = b.assign(b.tmp(), "load", "i8", [chPtr, 0]);
-                            b.assign(offset, "add", "sint", [offset, 1]);                            
+                            let ch = b.assign(b.tmp(), "load", "i8", [ptr, 0]);
+                            // Increase the counter
+                            counter = b.assign(counter, "add", "sint", [counter, 1]);
+                            b.assign(ptr, "add", "addr", [ptr, 1]);                            
                             b.call(state, this.decodeUtf8FunctionType, [SystemCalls.decodeUtf8, valAddr, ch, state]);
                             // Not a complete or illegal unicode char?
                             b.ifBlock(state);
                             // If illegal or end of string -> return 0xfffd      
                             let illegal = b.assign(b.tmp(), "eq", "sint", [state, 1]);
-                            endcond = b.assign(b.tmp(), "eq", "sint", [offset, end]);
+                            endcond = b.assign(b.tmp(), "eq", "sint", [counter, len]);
                             b.assign(illegal, "or", "i8", [illegal, endcond]);                            
                             b.ifBlock(illegal);
                             // Handle illegal characters
-                            if (val instanceof ssa.Variable) {
-                                b.assign(val, "const", "i32", [0xfffd]);
-                            } else if (val instanceof ssa.Pointer) {
-                                b.assign(b.mem, "store", "i32", [val.variable, val.offset, 0xfffd]);
-                            }
+                            b.assign(val, "const", "i32", [0xfffd]);
                             b.elseBlock();
                             // In the middle of a character. Repeat the loop
                             b.br(decodeLoop);
@@ -1019,33 +922,32 @@ export class CodeGenerator {
                         b.br_if(tmp2, outer);
                     }
                 }
+                //
+                // Loop body
+                //
                 let body = b.block();
                 for(let s of snode.statements) {
                     this.processStatement(f, snode.scope, s, b, vars, {body: body, outer: outer});
                 }
+                //
+                // Loop footer
+                //
                 b.end();
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
                     this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
-                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "in")) {
+                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "let_in" || snode.condition.op == "in")) {
                     let t = RestrictedType.strip(snode.condition.rhs.type);
                     if (t instanceof SliceType || t instanceof ArrayType) {
+                        // Increase the pointer towards the last element
+                        let storage = this.getSSAType(t.getElementType());
+                        let size = ssa.alignedSizeOf(storage)
+                        b.assign(ptr, "add", "addr", [ptr, size]);
                         // Increase the counter
-                        if (counter instanceof ssa.Variable) {                            
-                            b.assign(counter, "add", "sint", [counter, 1]);
-                        } else if (counter instanceof ssa.Pointer) {
-                            let v = b.assign(b.tmp(), "load", "sint", [counter.variable, counter.offset]);
-                            b.assign(v, "add", 's32', [v, 1]);
-                            b.assign(b.mem, "store", "sint", [counter.variable, counter.offset, v]);
-                        }
+                        b.assign(counter, "add", "sint", [counter, 1]);
                     } else if (t == this.tc.t_string) {
-                        // Increase the counter
-                        if (counter instanceof ssa.Variable) {                            
-                            b.assign(counter, "copy", "sint", [offset]);
-                        } else if (counter instanceof ssa.Pointer) {
-                            b.assign(b.mem, "store", "s32", [counter.variable, counter.offset, offset]);
-                        }
+                        // Nothing to do. Counter has been increased already
                     } else {
-                        throw "TODO map and string"
+                        throw "TODO map"
                     }
                 }
                 b.br(loop);

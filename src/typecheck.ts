@@ -3264,7 +3264,7 @@ export class TypeChecker {
                             }
                         }
                     } else {
-                        this.checkExpression(snode.condition, forScope);
+                        this.checkStatement(snode.condition, forScope, scopeExit);
                     }
                 }
                 snode.scopeExit = this.checkStatements(snode.statements, forScope);
@@ -5783,7 +5783,7 @@ export class TypeChecker {
                             this.checkGroupsInStatement(snode.condition.rhs, snode.scope);
                         }
                     } else {
-                        this.checkGroupsInExpression(snode.condition, snode.scope, GroupCheckFlags.None);
+                        this.checkGroupsInStatement(snode.condition, snode.scope);
                     }
                 }
                 for(let st of snode.statements) {

@@ -745,7 +745,7 @@ export class CBackend implements backend.Backend {
                 this.emitCode(n.next[0], n.blockPartner, code);
                 this.blockStack.shift();
                 code.push(new CComment("end of loop"));
-                code.push(new CGoto(b));
+//                code.push(new CGoto(b));
                 n = n.blockPartner.next[0];
             } else if (n.kind == "br") {
                 code.push(new CGoto(this.blockStack[n.args[0] as number]));
