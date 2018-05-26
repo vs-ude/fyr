@@ -2,7 +2,7 @@
     var ast = require("./ast");
 
     function isAssignment(n) {
-        if (n.op == "=" || n.op == "var_in" || n.op == "in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "let") {
+        if (n.op == "=" || n.op == "var_in" || n.op == "let_in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "let") {
             return true;
         }
         return false;
@@ -468,7 +468,7 @@ statement
       return new ast.Node({loc: fl(location()), op: "spawn", rhs: e});
     }
   / s: simpleStatement { 
-      if (s.op == "in" || s.op == "var_in") {
+      if (s.op == "let_in" || s.op == "var_in") {
           error("'in' is allowed inside a for loop header only", s.loc);
       }
       return s;
@@ -503,12 +503,6 @@ simpleStatement
             i = new ast.Node({loc: fl(location()), op: "tuple", parameters: i});
         } else {
             i = i[0];
-        }
-        if (p[0] == "in " && i.op == "tuple" && i.parameters.length > 2) {
-            error("too many identifiers in tuple left of 'in'", i.parameters[2].loc);
-        }
-        if (p[0] == "in" && (i.op == "array" || i.op == "object")) {
-            error("array or object not allowed left of 'in'", i.loc)
         }
         return new ast.Node({loc: fl(location()), op: p[0], lhs: i, rhs: p[2]});
     }
@@ -704,14 +698,13 @@ assignOp
   / "-="
   / "|="
   / "^="
-  / "in"
 
 forCondition
   = left: simpleStatement r:([ \t]* ";" [ \t]* expression? [ \t]* ";" [ \t]* simpleStatement?)? {
       if (r) {
           return new ast.Node({loc: fl(location()), op: ";;", lhs: left, condition: r[3], rhs: r[7]});
       }
-      if (isAssignment(left) && left.op != "in" && left.op != "var_in") {
+      if (isAssignment(left) && left.op != "let_in" && left.op != "var_in") {
         error("assignment is not allowed in the condition branch of a 'for' loop", left.loc);
       }
       return left;
