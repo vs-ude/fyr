@@ -347,7 +347,7 @@ export class CBackend implements backend.Backend {
         return t == "s8" || t == "s16" || t == "s32" || t == "s64" || t == "sint";
     }
 
-    private emitExpr(n: number | ssa.Variable | ssa.Node): CNode {
+    private emitExpr(n: number | string | ssa.Variable | ssa.Node): CNode {
         let c = this.emitExprIntern(n);
         if (n instanceof ssa.Node && n.assign && (n.assign.readCount != 0 || n.assign.writeCount != 0)) {
             let e = new CBinary();
@@ -360,22 +360,31 @@ export class CBackend implements backend.Backend {
     }
 
     // TODO: Remove tx
-    private emitExprIntern(n: number | ssa.Variable | ssa.Node): CNode {
+    private emitExprIntern(n: number | string | ssa.Variable | ssa.Node): CNode {
         if (typeof(n) == "number") {
             return new CConst(n.toString());
         }
+        if (typeof(n) == "string") {
+            // TODO: Proper string escape, no size information
+            return new CConst("\"" + n + "\"");            
+        }
         if (n instanceof ssa.Variable) {
             if (n.isConstant && typeof(n.constantValue) == "string") {
-                // TODO: Proper string escape
-                return new CConst("\"" + n.constantValue + "\"");
+                return this.emitExprIntern(n.constantValue);
             } else if (n.isConstant && typeof(n.constantValue) == "number") {
-                //let t = new CTypeCast();
-                //t.type = this.mapType(n.type);
-                //t.expr = new CConst((n.constantValue as number).toString());
-                //return t;
-                return new CConst((n.constantValue as number).toString());
+                return this.emitExprIntern(n.constantValue);
             } else if (n.isConstant) {
-                throw "TODO"
+                if (!(n.type instanceof StructType)) {
+                    throw "Implementation error"
+                }
+                let t = new CTypeCast();
+                t.type = this.mapType(n.type);
+                let l = new CCompoundLiteral();
+                for(let a of (n.constantValue as ssa.BinaryData)) {
+                    l.values.push(this.emitExpr(a));
+                }
+                t.expr = l;
+                return t;
             }
 
             if (this.globalStorage.has(n)) {

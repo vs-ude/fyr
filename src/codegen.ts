@@ -804,8 +804,18 @@ export class CodeGenerator {
                             sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
                         }
                         if (sliceHeader instanceof ssa.Variable) {
-                            ptr = b.assign(b.tmp(), "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                            len = b.assign(b.tmp(), "member", "sint", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            if (t.mode != "local_reference") {
+                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.strongSlicePointer.fieldIndexByName("base")]);
+                                ptr = b.assign(b.tmp(), "member", "addr", [base, this.localSlicePointer.fieldIndexByName("data_ptr")]);    
+                            } else {
+                                ptr = b.assign(b.tmp(), "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            }
+                            if (t.mode != "local_reference") {
+                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.strongSlicePointer.fieldIndexByName("base")]);
+                                len = b.assign(b.tmp(), "member", "sint", [base, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            } else {
+                                len = b.assign(b.tmp(), "member", "sint", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            }
                         } else {
                             ptr = b.assign(b.tmp(), "load", "addr", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                             len = b.assign(b.tmp(), "load", "sint", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_length")]);
@@ -1719,7 +1729,7 @@ export class CodeGenerator {
                 if (t instanceof SliceType) {
                     let et = this.getSSAType(t.getElementType());
                     let esize = ssa.alignedSizeOf(et);
-                    let ptr = b.assign(b.tmp("ptr"), "alloc_arr", "addr", [enode.parameters.length, esize]);
+                    let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [enode.parameters.length, esize]);
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processLiteralArgument(f, scope, enode.parameters[i], t.getElementType(), b, vars);
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);

@@ -23,3 +23,21 @@ func loop() int {
     }
     return sum    
 }
+
+func loop2() int {
+    var arr []int = [4,13,42]
+    var sum int = 0
+    for(let x in arr) {
+        sum += x
+    }
+    return sum
+}
+
+func loop3() int {
+    var arr []Point = [{}, {}, {}]
+    var sum int = 0
+    for(let i, p in arr) {
+        sum += p.x
+    }
+    return sum    
+}
