@@ -146,6 +146,9 @@ export class CBackend implements backend.Backend {
             let cv = new CVar();
             cv.name = v.name;
             cv.type = this.mapType(v.type);
+            if (v.isConstant) {
+                cv.initExpr = this.emitExprIntern(v);
+            }
             this.module.elements.push(cv);
         }
 
@@ -395,9 +398,6 @@ export class CBackend implements backend.Backend {
                 let name = this.varStorage.get(n);
                 return new CConst(name);
             }
-            throw "Implementation error";
-        }
-        if (n instanceof ssa.FunctionType) {
             throw "Implementation error";
         }
         if (n.kind == "addr_of") {

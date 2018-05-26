@@ -235,9 +235,6 @@ export class Variable {
     }
 
     public toString(): string {
-        if (this.gcDiscoverable) {
-            return "[gc]" + this.name;
-        }
         return this.name;
     }
 

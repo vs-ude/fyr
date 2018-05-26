@@ -7,7 +7,7 @@ func &Point.size() int {
 }
 
 export func main() int {
-    var arr [3]int = [4,13,42]
+    var arr const [3]int = [4,13,42]
     var sum int = 0
     for(let x in arr) {
         sum += x
@@ -41,3 +41,5 @@ func loop3() int {
     }
     return sum    
 }
+
+let table [3]byte = [1,2,3]
