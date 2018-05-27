@@ -147,7 +147,7 @@ export class CBackend implements backend.Backend {
             cv.name = v.name;
             cv.type = this.mapType(v.type);
             if (v.isConstant) {
-                cv.initExpr = this.emitExprIntern(v);
+                cv.initExpr = this.emitExprIntern(v, true);
             }
             this.module.elements.push(cv);
         }
@@ -182,12 +182,17 @@ export class CBackend implements backend.Backend {
             let code: Array<CNode> = [];
 
             for(let v of this.localVariables) {
+                // Ignore variables which are neither read nor written
                 if (v.readCount == 0 && v.writeCount == 0) {
                     continue;
                 }
                 let cv = new CVar();
                 cv.type = this.mapType(v.type);
                 cv.name = this.varStorage.get(v);
+                if (v.isConstant) {
+                    cv.type = new CType("static " + cv.type.code);
+                    cv.initExpr = this.emitExprIntern(v, true);
+                }
                 code.push(cv);
             }
 
@@ -363,7 +368,7 @@ export class CBackend implements backend.Backend {
     }
 
     // TODO: Remove tx
-    private emitExprIntern(n: number | string | ssa.Variable | ssa.Node): CNode {
+    private emitExprIntern(n: number | string | ssa.Variable | ssa.Node, generateConstants: boolean = false): CNode {
         if (typeof(n) == "number") {
             return new CConst(n.toString());
         }
@@ -372,6 +377,14 @@ export class CBackend implements backend.Backend {
             return new CConst("\"" + n + "\"");            
         }
         if (n instanceof ssa.Variable) {
+            if (this.globalStorage && this.globalStorage.has(n) && !generateConstants) {
+                let name = this.globalStorage.get(n);
+                return new CConst(name);                    
+            }
+            if (this.varStorage && this.varStorage.has(n) && !generateConstants) {
+                let name = this.varStorage.get(n);
+                return new CConst(name);
+            }
             if (n.isConstant && typeof(n.constantValue) == "string") {
                 return this.emitExprIntern(n.constantValue);
             } else if (n.isConstant && typeof(n.constantValue) == "number") {
@@ -390,14 +403,6 @@ export class CBackend implements backend.Backend {
                 return t;
             }
 
-            if (this.globalStorage.has(n)) {
-                let name = this.globalStorage.get(n);
-                return new CConst(name);                    
-            }
-            if (this.varStorage.has(n)) {
-                let name = this.varStorage.get(n);
-                return new CConst(name);
-            }
             throw "Implementation error";
         }
         if (n.kind == "addr_of") {
@@ -918,15 +923,17 @@ export class CBackend implements backend.Backend {
         if (this.varStorage.has(v) || this.globalStorage.has(v)) {
             return;
         }
-        if (v.isConstant) {
-            return;
-        }
         if (this.parameterVariables.indexOf(v) != -1) {
             return;
         }
         let name = v.name;
         if (name.substr(0, 1) == "%") {
             name = "nr_" + name.substr(1);
+        } else if (v.isConstant) {
+            if (typeof(v.constantValue) == "string" || typeof(v.constantValue) == "number") {
+                return;
+            }    
+            name = "s_" + name;
         } else {
             name = "v_" + name;
         }

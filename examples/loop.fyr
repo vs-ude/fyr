@@ -42,4 +42,9 @@ func loop3() int {
     return sum    
 }
 
+func tableFunc() byte {
+    let ltable [3]byte = [1,2,3]
+    return ltable[1]
+}
+
 let table [3]byte = [1,2,3]
