@@ -72,8 +72,6 @@ export class Wasm32Backend implements backend.Backend {
         this.module = new wasm.Module();
         this.module.importMemory("imports", "mem");
         this.module.funcTypes.push(new wasm.FunctionType("$callbackFn", ["i32", "i32"], ["i32"]));
-        // Null pointers point to a string that has length zero.
-        // this.module.addString("");
         this.heapGlobalVariableIndex = 0;
         this.heapGlobalVariable = new wasm.Global("i32", null, false);
         this.module.addGlobal(this.heapGlobalVariable);
@@ -95,11 +93,6 @@ export class Wasm32Backend implements backend.Backend {
 
     public getCode(): string {
         return this.module.toWast("");
-    }
-
-    public addString(str: string): number | Variable {
-        let [off, len] = this.module.addString(str);
-        return off;        
     }
 
     public addFunctionToTable(f: backend.Function, index: number) {

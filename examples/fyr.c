@@ -102,3 +102,10 @@ void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
         free(iptr);
     }
 }
+
+inline int_t fyr_len_arr(addr_t ptr) {
+    if (ptr == 0) {
+        return 0;
+    }
+    return *(((int_t*)ptr)-1);
+}

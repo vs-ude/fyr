@@ -147,6 +147,7 @@ export class CBackend implements backend.Backend {
             cv.name = v.name;
             cv.type = this.mapType(v.type);
             if (v.isConstant) {
+                cv.type = new CType("const " + cv.type.code);
                 cv.initExpr = this.emitExprIntern(v, true);
             }
             this.module.elements.push(cv);
@@ -239,15 +240,6 @@ export class CBackend implements backend.Backend {
             main.body.push(r);
         }
         this.module.elements.push(main);
-    }
-
-    public addString(str: string): number | ssa.Variable {
-        let v = new ssa.Variable();
-        v.isConstant = true;
-        v.constantValue = str;
-        v.readCount = 2;
-        v.writeCount = 2;
-        return v;
     }
 
     public addFunctionToTable(f: Function, index: number) {
@@ -374,7 +366,16 @@ export class CBackend implements backend.Backend {
         }
         if (typeof(n) == "string") {
             // TODO: Proper string escape, no size information
-            return new CConst("\"" + n + "\"");            
+            // return new CConst("\"" + n + "\"");            
+            let s = this.module.addString(n);
+            let addr = new CUnary();
+            addr.operator = "&";
+            let member = new CBinary();
+            member.operator = ".";
+            member.lExpr = new CConst(s.name);
+            member.rExpr = new CConst("data");
+            addr.expr = member;
+            return addr;
         }
         if (n instanceof ssa.Variable) {
             if (this.globalStorage && this.globalStorage.has(n) && !generateConstants) {
@@ -724,6 +725,11 @@ export class CBackend implements backend.Backend {
             m.lExpr = this.emitExpr(n.args[0]);
             m.rExpr = new CConst(t.fieldNameByIndex(idx));
             return m;
+        } else if (n.kind == "len_arr") {
+            let call = new CFunctionCall();
+            call.funcExpr = new CConst("fyr_len_arr");
+            call.args = [this.emitExpr(n.args[0])];
+            return call;
         }
 
         throw "Implementation error " + n.kind;
@@ -978,6 +984,9 @@ export class CInclude {
 export class CModule {
     public toString(): string {
         let str = this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
+        for(let s of this.strings.values()) {
+            str += s.toString() + "\n\n";
+        }
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + ";\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
         str += "\n";     
@@ -985,7 +994,17 @@ export class CModule {
         return str;
     }
 
+    public addString(str: string): CString {
+        if (this.strings.has(str)) {
+            return this.strings.get(str);
+        }
+        let s = new CString(str);
+        this.strings.set(str, s);
+        return s;        
+    }
+
     public includes: Array<CInclude> = [];
+    public strings: Map<string, CString> = new Map<string, CString>();
     public elements: Array<CStruct | CFunction | CVar | CComment | CType> = [];
 }
 
@@ -995,6 +1014,60 @@ export abstract class CNode {
     }
 
     public abstract toString(indent: string): string;
+}
+
+export class CString extends CNode {
+    constructor(str: string) {
+        super();
+        this.name = "str_" + CString.counter.toString();
+        CString.counter++;
+        this.bytes = this.toUTF8Array(str);
+    }
+
+    public toString(indent: string = ""): string {
+        let str = indent + "struct {\n" + indent + "    int refcount;\n" + indent + "    int size;\n" + indent + "    uint8_t data[" + this.bytes.length + "];\n" + indent + "} " + this.name + " = {1, " + this.bytes.length;
+        if (this.bytes.length != 0) {
+            str += ",";
+        }
+        str += this.bytes.map(function(val: number) { return val.toString();}).join(",");
+        return str + "};";
+    }
+
+    private static counter: number = 0;
+
+    private toUTF8Array(str: string): Array<number> {
+        var utf8: Array<number> = [];
+        for (var i = 0; i < str.length; i++) {
+            var charcode = str.charCodeAt(i);
+            if (charcode < 0x80) utf8.push(charcode);
+            else if (charcode < 0x800) {
+                utf8.push(0xc0 | (charcode >> 6), 
+                          0x80 | (charcode & 0x3f));
+            }
+            else if (charcode < 0xd800 || charcode >= 0xe000) {
+                utf8.push(0xe0 | (charcode >> 12), 
+                          0x80 | ((charcode>>6) & 0x3f), 
+                          0x80 | (charcode & 0x3f));
+            }
+            // surrogate pair
+            else {
+                i++;
+                // UTF-16 encodes 0x10000-0x10FFFF by
+                // subtracting 0x10000 and splitting the
+                // 20 bits of 0x0-0xFFFFF into two halves
+                charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+                          | (str.charCodeAt(i) & 0x3ff))
+                utf8.push(0xf0 | (charcode >>18), 
+                          0x80 | ((charcode>>12) & 0x3f), 
+                          0x80 | ((charcode>>6) & 0x3f), 
+                          0x80 | (charcode & 0x3f));
+            }
+        }
+        return utf8;
+    }
+
+    public bytes: Array<number>;
+    public name: string;
 }
 
 export class CStruct extends CNode {

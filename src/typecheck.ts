@@ -5558,7 +5558,13 @@ export class TypeChecker {
 
     private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
         let type = this.stripType(t);
-        if (type instanceof SliceType) {
+        if (type == this.t_string) {
+            if (name == "len") {
+                return this.builtin_len;
+            } else if (name == "cap") {
+                return this.builtin_cap;
+            }
+        } else if (type instanceof SliceType) {
             if (name == "len") {
                 return this.builtin_len;
             } else if (name == "cap") {
@@ -6107,9 +6113,9 @@ export class TypeChecker {
             case "(":
             {
                 let g = this.checkGroupsInExpression(enode.lhs, scope, flags | GroupCheckFlags.ForbidIsolates);
-                if (!g) {
-                    throw "Implementation error";                    
-                }
+//                if (!g) {
+//                    throw "Implementation error";                    
+//                }
                 // When calling a non-member function, the default group is determined by the first parameter.
                 if (enode.lhs.op == "id") {
                     g = null;

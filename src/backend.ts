@@ -17,8 +17,6 @@ export interface Backend {
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean);
     generateModule();
-    // TODO: Should not be necessary. Just use a constant variable
-    addString(str: string): number | ssa.Variable;
     addFunctionToTable(f: Function, index: number);
     getCode(): string;
 }

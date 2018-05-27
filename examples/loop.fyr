@@ -48,3 +48,7 @@ func tableFunc() byte {
 }
 
 let table [3]byte = [1,2,3]
+
+func name() int {
+    return "Hallo".len()
+}
