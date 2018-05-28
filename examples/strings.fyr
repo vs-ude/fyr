@@ -1,7 +1,11 @@
 export func main() int {
-    return name()
+    return name() + lenof("Duda")
 }
 
 func name() int {
     return "Hallo".len()
+}
+
+func lenof(str string) int {
+    return str.len()
 }

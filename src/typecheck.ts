@@ -5888,8 +5888,9 @@ export class TypeChecker {
             lhsVariable = scope.resolveElement((lnode as Node).value);
         }
 
-        // Assigning a value type? -> Nothing to do
-        if (this.isPureValue(ltype)) {
+        // Assigning a value type? -> Nothing to do.
+        // Assigning to a string? -> Nothing to do because strings are not bound to any group
+        if (this.isPureValue(ltype) || this.isString(ltype)) {
             if (lhsVariable) {
                 scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
             }

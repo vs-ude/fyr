@@ -937,7 +937,7 @@ export class CBackend implements backend.Backend {
             return;
         }
         let name = v.name;
-        if (name.substr(0, 1) == "%") {
+        if (name.substr(0, 1) == "%" && !v.isConstant) {
             name = "nr_" + name.substr(1);
         } else if (v.isConstant) {
             if (typeof(v.constantValue) == "string" || typeof(v.constantValue) == "number") {

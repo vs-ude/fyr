@@ -3186,28 +3186,12 @@ export class CodeGenerator {
 
     private functionArgumentIncref(rhs: ssa.Variable | ssa.Pointer | number, rhsNode: Node, rhsData: ssa.Variable | number, targetType: Type, scope: Scope, b: ssa.Builder): [ssa.Variable | number, ssa.Variable] {
         let decrefVar: ssa.Variable;
-        /*
-        // Reference counting for pointers
-        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
-            // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-            rhsData = b.assign(b.tmp(), "incref", "addr", [rhsData]);
-        } else if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
-            // Reference counting for slices
-            let st = this.getSSAType(targetType) as ssa.StructType;
-            let arrayPointer: ssa.Variable;
-            if (rhs instanceof ssa.Pointer) {
-                arrayPointer = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset + st.fieldOffset("array_ptr")]);
-            } else {
-                arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
-            }
-            b.assign(null, "incref_arr", "addr", [arrayPointer]);
-        */
         if (this.tc.isSafePointer(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no") {
                 b.assign(null, 'incref', "addr", [rhsData]);
                 decrefVar = rhsData as ssa.Variable;
-            } else {
+            } else if (result[1]) {
                 result[1].localReferenceCount++;    
             }
         } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
@@ -3222,11 +3206,23 @@ export class CodeGenerator {
                 }
                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
                 decrefVar = arrayPointer;
-            } else {
+            } else if (result[1]) {
                 result[1].localReferenceCount++;
             }
+        } else if (this.tc.isString(targetType)) {
+            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
+            if (result[0] != "no") {
+                if (rhs instanceof ssa.Pointer) {
+                    let tmp = b.assign(b.tmp(), "load", "addr", [rhs.variable, rhs.offset]);
+                    decrefVar = b.assign(b.tmp(), "incref_arr", "addr", [tmp]);
+                } else {
+                    decrefVar = b.assign(b.tmp(), "incref_arr", "addr", [rhs]);
+                }
+            } else if (result[1]) {
+                result[1].localReferenceCount++;
+            }            
         }
-        
+
         if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
             if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                 throw "Implementation error"
@@ -3247,7 +3243,7 @@ export class CodeGenerator {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no") {
                 this.callDestructor(rhsNode.type, decrefVar, 0, b, true, "decref");
-            } else {
+            } else if (result[1]) {
                 result[1].localReferenceCount--;
             }        
         } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
@@ -3256,9 +3252,16 @@ export class CodeGenerator {
                 let sliceType = RestrictedType.strip(rhsNode.type);
                 let arrayType = RestrictedType.strip(sliceType);
                 this.callDestructor(arrayType, decrefVar, 0, b, true, "decref");
-            } else {
+            } else if (result[1]) {
                 result[1].localReferenceCount--;
             }
+        } else if (this.tc.isString(targetType)) {
+            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
+            if (result[0] != "no") {
+                decrefVar = b.assign(b.tmp(), "decref_arr", "addr", [decrefVar]);
+            } else if (result[1]) {
+                result[1].localReferenceCount++;
+            }            
         }
     }
 
@@ -3317,6 +3320,8 @@ export class CodeGenerator {
                 }
                 return ["yes", null];
             }
+            case "str":
+                return ["no", null];
         }
         return ["yes", null];
     }
