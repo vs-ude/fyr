@@ -462,6 +462,8 @@ export class CodeGenerator {
                             if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                                 // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                 data = b.assign(b.tmp(), "incref", "addr", [data]);
+                            } else if (this.tc.isString(snode.lhs.type) && !TypeChecker.isTakeExpression(snode.rhs)) {
+                                data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                             }
                             b.assign(v, "copy", v.type, [data]);
                             if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
@@ -473,7 +475,7 @@ export class CodeGenerator {
                                     arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
                                 }
                                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
-                            }                            
+                            }                                            
                             if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {      
                                 if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                                     throw "Implementation error";
@@ -555,6 +557,8 @@ export class CodeGenerator {
                                     if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                         val = b.assign(b.tmp(), "incref", "addr", [val]);
+                                    } else if (this.tc.isString(p.type) && !rhsIsTakeExpr) {
+                                        val = b.assign(b.tmp(), "incref_arr", "addr", [val]);
                                     }
                                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                                     if (dest instanceof ssa.Pointer) {
@@ -642,6 +646,8 @@ export class CodeGenerator {
                     if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                         data = b.assign(b.tmp(), "incref", "addr", [data]);
+                    } else if (this.tc.isString(snode.lhs.type) && !TypeChecker.isTakeExpression(snode.rhs)) {
+                        data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
                     if (dest instanceof ssa.Pointer) {

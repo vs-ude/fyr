@@ -1,5 +1,5 @@
 export func main() int {
-    return name() + lenof("Duda")
+    return name() + lenof("Duda") + lenof2("!!")
 }
 
 func name() int {
@@ -8,4 +8,9 @@ func name() int {
 
 func lenof(str string) int {
     return str.len()
+}
+
+func lenof2(str string) int {
+    var s2 = str
+    return s2.len()
 }
