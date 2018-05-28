@@ -3265,6 +3265,13 @@ export class CodeGenerator {
         }
     }
 
+    /**
+     * Determines whether the expression enode needs an incref before passing it as argument to a function call.
+     * References to values stored in local variables on the stack do not need an incref, if no pointer to said local variables have been passed as arguments already.
+     * The reason is that the callee cannot modify the stack variables of the caller.
+     * Furthermore, references to objects owned directly via a strong pointer stored on the stack, do not need incref as well.
+     * The reason is that local variables of the caller are not modified, hence said object must exist, because the local variable holds a strong pointer on it.
+     */
     private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "one_indirection" | "no", Variable | FunctionParameter] {
         switch(enode.op) {
             case "(":
