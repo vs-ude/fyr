@@ -11,6 +11,7 @@ func lenof(str string) int {
 }
 
 func lenof2(str string) int {
-    var s2 = str
+    var s2 string
+    s2 = str
     return s2.len()
 }

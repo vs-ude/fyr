@@ -390,6 +390,8 @@ export class CodeGenerator {
                     this.callDestructor(t.elementType, v, 0, b, false, "free");
                 } else if (t instanceof PointerType && (t.mode == "reference")) {
                     this.callDestructor(t.elementType, v, 0, b, false, "decref");
+                } else if (t == this.tc.t_string) {
+                    this.callDestructor(t, v, 0, b, false, "decref");
                 } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
                     let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
                     this.callDestructor(t, obj, 0, b, true, "no");
@@ -483,6 +485,11 @@ export class CodeGenerator {
                                 // Fill the RHS with zeros
                                 this.processFillZeros(rhs, snode.rhs.type, b);
                             }            
+                            if (this.tc.isString(snode.lhs.type) || this.tc.isSafePointer(snode.lhs.type) || this.tc.isSlice(snode.lhs.type)) {
+                                // Avoid that the variable is inlined. It carries a reference count and must be destructed correctly
+                                v.readCount = 2;
+                                v.writeCount = 2;
+                            }
                         }
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
@@ -1002,7 +1009,7 @@ export class CodeGenerator {
                             ignoreVariables.push(e);
                             doNotZero = true;                        
                         }
-                        // If the ~ptr parameter does not "own" a reference count, then incref is necessary upon returing the reference
+                        // If the ~ptr parameter does not "own" a reference count, then incref is necessary upon returning the reference
                         if (e instanceof FunctionParameter && e.isConst) {
                             forceIncref = true;
                         }
@@ -1022,6 +1029,8 @@ export class CodeGenerator {
                     if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !TypeChecker.isTakeExpression(snode.lhs) || forceIncref)) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                         data = b.assign(b.tmp(), "incref", "addr", [data]);
+                    } else if (this.tc.isString(targetType) && (!TypeChecker.isTakeExpression(snode.lhs) || forceIncref)) {
+                        data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }
                     // Reference counting for slices
                     if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
@@ -3150,18 +3159,22 @@ export class CodeGenerator {
                 if (free != "decref") {
                     b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
                 }
+            } else if (t == this.tc.t_string) {
+                if (offset) {
+                    obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
+                }
             } else {
                 throw "Implementation error";
             }
         }
         if (free == "free") {
-            if (this.tc.isArray(typ)) {
+            if (this.tc.isArray(typ) || this.tc.isString(typ)) {
                 b.assign(null, "free_arr", null, [obj]);
             } else {
                 b.assign(null, "free", null, [obj]);
             }
         } else if (free == "decref") {
-            if (this.tc.isArray(typ)) {
+            if (this.tc.isArray(typ) || this.tc.isString(typ)) {
                 b.assign(null, "decref_arr", null, [obj, dtr ? dtr.getIndex() : -1]);
             } else {
                 b.assign(null, "decref", null, [obj, dtr ? dtr.getIndex() : -1]);
