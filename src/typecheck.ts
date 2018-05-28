@@ -2287,7 +2287,7 @@ export class TypeChecker {
                     }
                 }
                 p.type = this.createType(pnode, f.scope, "parameter_toplevel");
-                if (TypeChecker.isReference(p.type) || TypeChecker.isLocalReference(p.type)) {
+                if (TypeChecker.isReference(p.type) || TypeChecker.isLocalReference(p.type) || this.isString(p.type)) {
                     p.isConst = true;
                 }
                 if (p.ellipsis && (!(p.type instanceof SliceType) || p.type.mode != "local_reference")) {
@@ -5144,16 +5144,11 @@ export class TypeChecker {
     
     public isString(t: Type): boolean {
         if (t instanceof RestrictedType) {
-            return t.elementType.name == "string";
+            return t.elementType == this.t_string;
         }
-        return t.name == "string";
+        return t == this.t_string;
     }
     
-    public isStringLike(t: Type): boolean {
-        // A string is a frozen slice of bytes
-        return t instanceof RestrictedType && t.isConst && t.elementType instanceof SliceType && t.elementType.mode == "unique" && t.elementType.getElementType() == this.t_byte;
-    }
-
     public isTupleType(t: Type): boolean {
         if (t instanceof RestrictedType) {
             return t.elementType instanceof OrType;

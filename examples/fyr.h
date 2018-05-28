@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef char* addr_t;
+typedef uint8_t* addr_t;
 typedef int64_t int_t;
 typedef uint64_t uint_t;
 
@@ -21,4 +21,4 @@ inline addr_t fyr_incref(addr_t ptr);
 inline addr_t fyr_incref_arr(addr_t ptr);
 void fyr_decref(addr_t ptr, fyr_dtr_t dtr);
 void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr);
-inline int_t fyr_len_arr(addr_t ptr);
+int_t fyr_len_arr(addr_t ptr);

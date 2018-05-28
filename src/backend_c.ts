@@ -3,7 +3,7 @@ import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Va
 import * as backend from "./backend"
 import * as ssa from "./ssa"
 
-export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=";
+export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
 export class FunctionImport implements backend.FunctionImport {
     public getIndex(): number {
@@ -374,7 +374,11 @@ export class CBackend implements backend.Backend {
             member.operator = ".";
             member.lExpr = new CConst(s.name);
             member.rExpr = new CConst("data");
-            addr.expr = member;
+            let arr = new CBinary();
+            arr.operator = "[";
+            arr.lExpr = member;
+            arr.rExpr = new CConst("0");
+            addr.expr = arr;
             return addr;
         }
         if (n instanceof ssa.Variable) {
@@ -1025,7 +1029,7 @@ export class CString extends CNode {
     }
 
     public toString(indent: string = ""): string {
-        let str = indent + "struct {\n" + indent + "    int refcount;\n" + indent + "    int size;\n" + indent + "    uint8_t data[" + this.bytes.length + "];\n" + indent + "} " + this.name + " = {1, " + this.bytes.length;
+        let str = indent + "struct {\n" + indent + "    int_t refcount;\n" + indent + "    int_t size;\n" + indent + "    uint8_t data[" + this.bytes.length + "];\n" + indent + "} " + this.name + " = {1, " + this.bytes.length;
         if (this.bytes.length != 0) {
             str += ",";
         }
@@ -1167,6 +1171,8 @@ export class CBinary extends CNode {
         }
         if (this.operator == ".") {
             str += ".";
+        } else if (this.operator == "[") {
+            str += "[";
         } else {
             str += " " + this.operator + " ";
         }
@@ -1175,11 +1181,15 @@ export class CBinary extends CNode {
         } else {
             str += this.rExpr;
         }
+        if (this.operator == "[") {
+            str += "]";
+        }
         return str;
     }
 
     public precedence(): number {
         switch (this.operator) {
+        case "[":
         case ".":
         case "->":
             return 1;
