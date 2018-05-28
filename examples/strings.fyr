@@ -1,4 +1,9 @@
+import . {
+    func puts(#const char) int
+} from "<stdio.h>"
+
 export func main() int {
+    puts(<#const char>"Hello World")
     return name() + lenof("Duda") + lenof2("!!")
 }
 

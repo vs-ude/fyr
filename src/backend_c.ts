@@ -14,7 +14,8 @@ export class FunctionImport implements backend.FunctionImport {
         return true;
     }
 
-    private index: number;
+    public index: number;
+    public name: string;
 }
 
 export class Function implements backend.Function {
@@ -75,7 +76,23 @@ export class CBackend implements backend.Backend {
     }
 
     public importFunction(name: string, from: string, type: ssa.FunctionType): FunctionImport {
-        throw "TODO"
+        let path = from;
+        let isSystemPath = false;
+        if (path[0] == '<') {
+            isSystemPath = true;
+            path = path.substr(1, path.length - 2);
+        }
+        if (!this.module.hasInclude(path, isSystemPath)) {
+            let imp = new CInclude();
+            imp.isSystemPath = isSystemPath;
+            imp.path = path;
+            this.module.includes.push(imp);
+        }
+        let f = new FunctionImport();
+        f.name = name;
+        f.index = this.funcs.length;
+        this.funcs.push(f);
+        return f;
     }
 
     public declareGlobalVar(name: string, type: ssa.Type | ssa.StructType): ssa.Variable {
@@ -154,6 +171,9 @@ export class CBackend implements backend.Backend {
         }
 
         for(let f of this.funcs) {
+            if (f instanceof FunctionImport) {
+                continue;
+            }
             this.optimizer.optimizeConstants(f.node);
             if (this.emitIR || f.name == this.emitIRFunction) {
                 console.log('============ OPTIMIZED Constants ===============');
@@ -465,7 +485,11 @@ export class CBackend implements backend.Backend {
             }
             let c = new CFunctionCall();
             let f = this.funcs[n.args[0] as number];
-            c.funcExpr = new CConst(f.func.name);
+            if (f instanceof FunctionImport) {
+                c.funcExpr = new CConst(f.name);
+            } else {
+                c.funcExpr = new CConst(f.func.name);
+            }
             for(let i = 1; i < n.args.length; i++) {
                 let a = n.args[i];
                 c.args.push(this.emitExpr(a));
@@ -674,6 +698,9 @@ export class CBackend implements backend.Backend {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];
+                if (f instanceof FunctionImport) {
+                    throw "Implementation error";
+                }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             }
             return m;
@@ -703,6 +730,9 @@ export class CBackend implements backend.Backend {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];
+                if (f instanceof FunctionImport) {
+                    throw "Implementation error";
+                }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             }
             return m;
@@ -959,7 +989,7 @@ export class CBackend implements backend.Backend {
     private initFunction: Function;
     private mainFunction: Function;
     private globalVariables: Array<ssa.Variable> = [];
-    private funcs: Array<Function> = [];
+    private funcs: Array<Function | FunctionImport> = [];
     private currentFunction: Function;
     private blocks: Map<ssa.Node, string> = new Map<ssa.Node, string>();
     private blockStack: Array<string> = [];
@@ -996,6 +1026,15 @@ export class CModule {
         str += "\n";     
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) { } else if (c instanceof CFunction) str += c.toString() + "\n\n"; else str += c.toString() + ";\n\n"});
         return str;
+    }
+
+    public hasInclude(path: string, isSystemPath: boolean): boolean {
+        for(let inc of this.includes) {
+            if (inc.path == path && inc.isSystemPath == isSystemPath) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public addString(str: string): CString {

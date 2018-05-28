@@ -1583,6 +1583,7 @@ export class TypeChecker {
         this.t_double = new BasicType("double");
         this.t_null = new BasicType("null");
         this.t_int8 = new BasicType("int8");
+        this.t_char = this.t_int8;
         this.t_int16 = new BasicType("int16");
         this.t_int32 = new BasicType("int32");
         this.t_int64 = new BasicType("int64");
@@ -2572,6 +2573,7 @@ export class TypeChecker {
             f.type.returnType = this.t_void;
         }
         scope.registerElement(f.name, f);
+        scope.setGroup(f, new Group(GroupKind.Free));
         return f;
     }
 
@@ -2587,6 +2589,7 @@ export class TypeChecker {
         scope.registerType("double", this.t_double);
         scope.registerType("null", this.t_null);
         scope.registerType("byte", this.t_byte);
+        scope.registerType("char", this.t_char);
         scope.registerType("int8", this.t_int8);
         scope.registerType("int16", this.t_int16);
         scope.registerType("int32", this.t_int32);
@@ -4147,11 +4150,11 @@ export class TypeChecker {
                 } else if (this.isString(t) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (this.isString(t) && right instanceof SliceType && right.getElementType() == this.t_byte) {
+                } else if (this.isString(t) && right instanceof SliceType && (right.getElementType() == this.t_byte || right.getElementType() == this.t_char)) {
                     // A slice of bytes can be converted to a string by copying it by copying it.
                     // Restrictions are irrelevant.
                     enode.type = t;
-                } else if (t instanceof SliceType && t.getElementType() == this.t_byte && this.isString(right)) {
+                } else if (t instanceof SliceType && (t.getElementType() == this.t_byte || t.getElementType() == this.t_char) && this.isString(right)) {
                     // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
@@ -5890,7 +5893,8 @@ export class TypeChecker {
 
         // Assigning a value type? -> Nothing to do.
         // Assigning to a string? -> Nothing to do because strings are not bound to any group
-        if (this.isPureValue(ltype) || this.isString(ltype)) {
+        // Assigning to an unsafe pointer -> Nothing to do. Programmer hopefully knows what he is doing ...
+        if (this.isPureValue(ltype) || this.isString(ltype) || this.isUnsafePointer(ltype)) {
             if (lhsVariable) {
                 scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
             }
@@ -6389,6 +6393,7 @@ export class TypeChecker {
     public t_int64: Type;
     public t_uint8: Type;
     public t_byte: Type;
+    public t_char: Type;
     public t_int: Type;
     public t_uint16: Type;
     public t_uint32: Type;
