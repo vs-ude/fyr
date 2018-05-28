@@ -3359,6 +3359,8 @@ export class CodeGenerator {
         if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
             // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
             data = b.assign(b.tmp(), "incref", "addr", [data]);
+        } else if (this.tc.isString(targetType) && !TypeChecker.isTakeExpression(rhsNode)) {
+            data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
         }
         // Reference counting for slices
         if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
