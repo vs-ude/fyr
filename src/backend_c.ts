@@ -270,7 +270,7 @@ export class CBackend implements backend.Backend {
         return this.module.toString();
     }
 
-    private mapType(t: ssa.Type | ssa.StructType | ssa.FunctionType): CType {
+    private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false): CType {
         if (t instanceof ssa.StructType) {
             if (t.name) {
                 if (!this.namedStructs.has(t.name)) {
@@ -279,11 +279,11 @@ export class CBackend implements backend.Backend {
                 return new CType("struct " + t.name);
             }
             let str = " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
-                let t = this.mapType(c[1]).toString();
+                let t = this.mapType(c[1], cstyle).toString();
                 if (c[2] > 1) {
                     return "    " + t + " field" + i.toString() + "[" + c[2].toString() + "];\n"
                 }
-                return "    " + this.mapType(c[1]).toString() + " field" + i.toString() + ";\n";
+                return "    " + this.mapType(c[1], cstyle).toString() + " field" + i.toString() + ";\n";
             }).join("") + "}";
             if (this.anonymousStructs.has(str)) {
                 return new CType("struct " + this.anonymousStructs.get(str));
@@ -293,6 +293,15 @@ export class CBackend implements backend.Backend {
             str = "struct " + name + str;
             this.module.elements.unshift(new CType(str));
             return new CType("struct " + name);
+        }
+        if (t instanceof ssa.PointerType) {
+            if (cstyle) {
+                if (t.isConst) {
+                    return new CType("const void*");                    
+                }
+                return new CType("void*");
+            }
+            return new CType("addr_t");
         }
         if (t instanceof ssa.FunctionType) {
             throw "TODO"
@@ -326,9 +335,10 @@ export class CBackend implements backend.Backend {
             case "sint":
                 return new CType("int_t");
         }
+        throw "Implementation error";
     }
 
-    private mapToSignedType(t: ssa.Type | ssa.StructType | ssa.FunctionType): CType {
+    private mapToSignedType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): CType {
         switch(t) {
             case "i8":
                 return new CType("int8_t");
@@ -347,7 +357,7 @@ export class CBackend implements backend.Backend {
         throw "Implementation error";
     }
 
-    private mapToUnsignedType(t: ssa.Type | ssa.StructType | ssa.FunctionType): CType {
+    private mapToUnsignedType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): CType {
         switch(t) {
             case "s8":
                 return new CType("uint8_t");
@@ -363,7 +373,7 @@ export class CBackend implements backend.Backend {
         throw "Implementation error";
     }
 
-    private isSignedType(t: ssa.Type | ssa.StructType | ssa.FunctionType): boolean {
+    private isSignedType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): boolean {
         return t == "s8" || t == "s16" || t == "s32" || t == "s64" || t == "sint";
     }
 
@@ -492,7 +502,18 @@ export class CBackend implements backend.Backend {
             }
             for(let i = 1; i < n.args.length; i++) {
                 let a = n.args[i];
-                c.args.push(this.emitExpr(a));
+                let e = this.emitExpr(a);
+                if (f instanceof FunctionImport) {
+                    let ctype = this.mapType(n.type.params[i-1], true);
+                    let fyrtype = this.mapType(n.type.params[i-1]);
+                    if (ctype != fyrtype) {
+                        let tcast = new CTypeCast();
+                        tcast.type = ctype;
+                        tcast.expr = e;
+                        e = tcast;
+                    }
+                }
+                c.args.push(e);
             }
             return c;
         } else if (n.kind == "call_indirect") {

@@ -6,8 +6,18 @@ export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" |
 export var intSize = 8;
 export var ptrSize = 8;
 
+export class PointerType {
+    constructor(elementType: Type | StructType | PointerType, isConst: boolean) {
+        this.elementType = elementType;
+        this.isConst = isConst;
+    }
+
+    public elementType: Type | StructType | PointerType;
+    public isConst: boolean;
+}
+
 export class StructType {
-    public addField(name: string, type: Type | StructType, count: number = 1): number {
+    public addField(name: string, type: Type | StructType | PointerType, count: number = 1): number {
         let align = alignmentOf(type);
         this.alignment = Math.max(this.alignment, align);
         let alignOffset = (align - this.size % align) % align;
@@ -64,19 +74,22 @@ export class StructType {
     }
 
     // An array of type [name, type, count].
-    public fields: Array<[string, Type | StructType, number]> = [];
+    public fields: Array<[string, Type | StructType | PointerType, number]> = [];
     public fieldOffsetsByName: Map<string, number> = new Map<string, number>();
     public size: number = 0;
     public name: string | null;
     public alignment: number = 1;
 }
 
-export function alignmentOf(x: Type | StructType): number {
+export function alignmentOf(x: Type | StructType | PointerType): number {
     if (x instanceof StructType) {
         if (x.fields.length == 0) {
             return 1;
         }
         return x.alignment;
+    }
+    if (x instanceof PointerType) {
+        return ptrSize;
     }
     switch(x) {
         case "i8":
@@ -102,13 +115,16 @@ export function alignmentOf(x: Type | StructType): number {
     }
 }
 
-export function isSigned(x: Type): boolean {
+export function isSigned(x: Type | PointerType): boolean {
     return x == "s8" || x == "s16" || x == "s32" || x == "s64";
 }
 
-export function sizeOf(x: Type | StructType): number {
+export function sizeOf(x: Type | StructType | PointerType): number {
     if (x instanceof StructType) {
         return x.size;
+    }
+    if (x instanceof PointerType) {
+        return ptrSize;
     }
     switch(x) {
         case "i8":
@@ -134,7 +150,7 @@ export function sizeOf(x: Type | StructType): number {
     }
 }
 
-export function alignedSizeOf(type: Type | StructType): number {
+export function alignedSizeOf(type: Type | StructType | PointerType): number {
     let size = sizeOf(type);
     if (size == 0) {
         return 0;
@@ -143,7 +159,8 @@ export function alignedSizeOf(type: Type | StructType): number {
     return align * Math.ceil(size/align);
 }
 
-export function hasPointers(t: Type | StructType): boolean {
+/*
+export function hasPointers(t: Type | StructType | PointerType): boolean {
     if (t instanceof StructType) {
         for(let f of t.fields) {
             if (hasPointers(f[1])) {
@@ -155,8 +172,9 @@ export function hasPointers(t: Type | StructType): boolean {
     }
     return false;
 }
+*/
 
-export function compareTypes(t1: Type | StructType, t2: Type | StructType): boolean {
+export function compareTypes(t1: Type | StructType | PointerType, t2: Type | StructType | PointerType): boolean {
     if (t1 == t2) {
         return true;
     }
@@ -171,13 +189,16 @@ export function compareTypes(t1: Type | StructType, t2: Type | StructType): bool
         }
         return true;
     }
+    if (t1 instanceof PointerType && t2 instanceof PointerType) {
+        return compareTypes(t1.elementType, t2.elementType);
+    }
     return false;
 }
 
 export type CallingConvention = "fyr" | "fyrCoroutine" | "system";
 
 export class FunctionType {
-    constructor(params: Array<Type | StructType>, result: Type | StructType | null, conv: CallingConvention = "fyr") {
+    constructor(params: Array<Type | StructType | PointerType>, result: Type | StructType | PointerType | null, conv: CallingConvention = "fyr") {
         this.params = params;
         this.result = result;
         this.callingConvention = conv;
@@ -214,9 +235,9 @@ export class FunctionType {
         return this.callingConvention == "fyrCoroutine";
     }
 
-    public params: Array<Type | StructType>;
-    public ellipsisParam: Type | StructType | null;
-    public result: Type | StructType | null;
+    public params: Array<Type | StructType | PointerType>;
+    public ellipsisParam: Type | StructType | PointerType | null;
+    public result: Type | StructType | PointerType | null;
     public callingConvention: CallingConvention = "fyr";
 
     private _stackFrame: StructType;
@@ -239,7 +260,7 @@ export class Variable {
     }
 
     public name: string;
-    public type: Type | StructType;
+    public type: Type | StructType | PointerType;
     /**
      * The number of times the value of the variable is used.
      */
@@ -300,7 +321,7 @@ export class Pointer {
 }
 
 export class Node {
-    constructor(assign: Variable, kind: NodeKind, type: Type | FunctionType | StructType, args: Array<Variable | string | number>) {
+    constructor(assign: Variable, kind: NodeKind, type: Type | FunctionType | StructType | PointerType, args: Array<Variable | string | number>) {
         this.assign = assign;
         if (this.assign) {
             this.assignType = this.assign.type;
@@ -412,12 +433,12 @@ export class Node {
 
     public name: string;
     public kind: NodeKind;
-    public type: Type | FunctionType | StructType;
+    public type: Type | FunctionType | StructType | PointerType;
     public next: Array<Node> = [];
     public prev: Array<Node> = [];
     public blockPartner: Node; // 'end' for 'if'/'block'/'loop' and either 'if' or 'block' or 'loop' for 'end'.
     public assign: Variable;
-    public assignType: Type | StructType;
+    public assignType: Type | StructType | PointerType;
     public args: Array<Variable | number | Node> = [];
     public isAsync: boolean = false;
 }
@@ -449,7 +470,7 @@ export class Builder {
         return n;
     }
     
-    public declareParam(type: Type | StructType, name: string): Variable {
+    public declareParam(type: Type | StructType | PointerType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_param", type, []);
         n.assign.type = type;
         n.assignType = type;
@@ -464,7 +485,7 @@ export class Builder {
         return n.assign;
     }
 
-    public declareResult(type: Type | StructType, name: string): Variable {
+    public declareResult(type: Type | StructType | PointerType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_result", type, []);
         n.assign.type = type;
         n.assignType = type;
@@ -479,7 +500,7 @@ export class Builder {
         return n.assign;
     }
 
-    public declareVar(type: Type | StructType, name: string): Variable {
+    public declareVar(type: Type | StructType | PointerType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_var", type, []);
         n.assign.type = type;
         n.assignType = type;
@@ -494,7 +515,7 @@ export class Builder {
         return n.assign;
     }
 
-    public assign(assign: Variable, kind: NodeKind, type: Type | StructType, args: Array<Variable | string | number>) : Variable {
+    public assign(assign: Variable, kind: NodeKind, type: Type | StructType | PointerType, args: Array<Variable | string | number>) : Variable {
         let n = new Node(assign, kind, type, args);
 //        if (assign && assign.type && assign != this.mem) {
 //            if (!compareTypes(assign.type, type)) {
@@ -756,7 +777,7 @@ export class Builder {
         this._current = n;
     }
 
-    public tmp(t: Type | StructType = null): Variable {
+    public tmp(t: Type | StructType | PointerType = null): Variable {
         let v = new Variable();
         // v.isTemporary = true;
         v.type = t;

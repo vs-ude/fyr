@@ -12,7 +12,7 @@ export interface Function {
 
 export interface Backend {
     importFunction(name: string, from: string, type: ssa.FunctionType): FunctionImport;
-    declareGlobalVar(name: string, type: ssa.Type | ssa.StructType): ssa.Variable;
+    declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable;
     declareFunction(name: string): Function;
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean);

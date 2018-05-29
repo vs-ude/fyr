@@ -1,5 +1,6 @@
 import {Location, Node, NodeOp, AstFlags} from "./ast"
 import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
+import * as tc from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import {Wasm32Backend} from "./backend_wasm"
@@ -87,7 +88,8 @@ export class CodeGenerator {
                     if (this.imports.has(name)) {
                         this.funcs.set(e, this.imports.get(name));
                     } else {
-                        let wf = this.backend.importFunction(e.name, e.importFromModule, this.getSSAFunctionType(e.type));
+                        let ft = this.getSSAFunctionType(e.type);
+                        let wf = this.backend.importFunction(e.name, e.importFromModule, ft);
                         this.funcs.set(e, wf);
                         this.imports.set(name, wf);
                     }
@@ -185,7 +187,7 @@ export class CodeGenerator {
         return this.backend.getCode();
     }
 
-    public getSSAType(t: Type): ssa.Type | ssa.StructType {
+    public getSSAType(t: Type): ssa.Type | ssa.StructType | ssa.PointerType {
         if (t == this.tc.t_bool || t == this.tc.t_uint8 || t == this.tc.t_byte || t == this.tc.t_void) {
             return "i8";
         }
@@ -219,14 +221,20 @@ export class CodeGenerator {
         if (t == this.tc.t_rune) {
             return "i32";
         }
-        if (t instanceof PointerType) {
-            return "ptr";
+        if (t instanceof RestrictedType && t.elementType instanceof tc.PointerType) {
+            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
         }
-        if (t instanceof UnsafePointerType) {
-            return "addr";
+        if (t instanceof tc.PointerType) {
+            return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
+        }
+        if (t instanceof RestrictedType && t.elementType instanceof tc.UnsafePointerType) {
+            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
+        }
+        if (t instanceof tc.UnsafePointerType) {
+            return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
         }
         if (t == this.tc.t_string) {
-            return "ptr";
+            return "addr";
         }
         if (t == this.tc.t_null) {
             return "addr";
@@ -289,7 +297,7 @@ export class CodeGenerator {
     private getSSAFunctionType(t: FunctionType): ssa.FunctionType {
         let ftype = new ssa.FunctionType([], null, t.callingConvention);
         if (t.objectType) {
-            ftype.params.push("ptr");
+            ftype.params.push("addr");
         }
         for(let p of t.parameters) {
             ftype.params.push(this.getSSAType(p.type));
@@ -555,7 +563,7 @@ export class CodeGenerator {
                                     destCount = processAssignment(p, type.types[i], rhsIsTakeExpr, destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
                                 } else {
                                     let elementType = type.types[i];
-                                    let etype: ssa.Type | ssa.StructType = stype.fields[i][1];
+                                    let etype: ssa.Type | ssa.StructType | ssa.PointerType = stype.fields[i][1];
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;

@@ -2526,6 +2526,7 @@ export class TypeChecker {
         f.type = new FunctionType();
 //        f.type.callingConvention = "host";
         f.type.loc = fnode.loc;
+//        f.type.callingConvention = "system";
         let i = 0;
         if (fnode.parameters) {
             for(let pnode of fnode.parameters) {

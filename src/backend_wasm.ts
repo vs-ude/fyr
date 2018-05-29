@@ -1,9 +1,9 @@
 import * as wasm from "./wasm"
-import {TypeMapper, TypeMap} from "./gc"
 import {SystemCalls} from "./pkg"
-import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "./ssa"
+import {SMTransformer, Optimizer, Stackifier, Type, PointerType, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "./ssa"
 import * as backend from "./backend"
 import {BinaryBuffer} from "./binarybuffer"
+import * as tc from "./typecheck";
 
 export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap" | "global_strings";
 
@@ -26,7 +26,7 @@ class Wasm32LocalVariableList {
         return l;
     }
 
-    public allocate(type: Type): number {
+    public allocate(type: Type | PointerType): number {
         let t: wasm.StackType;
         switch(type) {
             case "i64":
@@ -79,16 +79,11 @@ export class Wasm32Backend implements backend.Backend {
         this.typemapGlobalVariable = new wasm.Global("i32", null, false);
         this.module.addGlobal(this.typemapGlobalVariable);
         this.customglobalVariablesIndex = 2;
-        this.typeMapper = new TypeMapper(this.module);
         this.varsFrameHeader = new StructType();
         this.varsFrameHeader.addField("$func", "i32");
         this.varsFrameHeader.addField("$sp", "i32");
         this.varsFrameHeader.addField("$step", "i32");
         this.varsFrameHeader.addField("$prevFrame", "addr");
-    }
-
-    public getTypeMapper(): TypeMapper {
-        return this.typeMapper;
     }
 
     public getCode(): string {
@@ -163,7 +158,6 @@ export class Wasm32Backend implements backend.Backend {
                 let offset = this.module.addGlobalStruct(sizeOf(v.type));
                 let s: Wasm32Storage = {storageType: "global_heap", offset: offset};
                 this.globalVarStorage.set(v, s);
-                this.typeMapper.mapGlobal(offset, v.type);
             } else {
                 let s: Wasm32Storage = {storageType: "global", offset: index};
                 this.globalVarStorage.set(v, s);
@@ -172,7 +166,6 @@ export class Wasm32Backend implements backend.Backend {
                 index++;
             }
         }
-        this.typeMapper.globalMapping.declare(this.module);
 
         // Generate WASM code for all functions
         for(let f of this.funcs) {
@@ -219,12 +212,8 @@ export class Wasm32Backend implements backend.Backend {
             }
         }
 
-        // Add type maps to the module
-        this.typeMapper.addToModule(this.module);
-
         this.module.memorySize = this.module.textSize() + this.heapSize + this.stackSize;
 
-        this.typemapGlobalVariable.initial = [new wasm.Constant("i32", this.typeMapper.globalMapping.addr)];
         this.heapGlobalVariable.initial = [new wasm.Constant("i32", this.module.textSize())];
     }
 
@@ -272,20 +261,7 @@ export class Wasm32Backend implements backend.Backend {
         this.traverse(n.next[0], n.blockPartner, null);
         this.stackifier.stackifyStep(n, null);
         let locals = new Wasm32LocalVariableList(0);
-        let typemap = this.analyzeVariableStorage(n, n.blockPartner, locals);
-        if (this.varsFrame.size > 0) {
-            this.varsFrame.addField("$typemap", "i32");
-        }
-        if (this.resultFrame.size > 0) {
-            this.resultFrame.addField("$typemapCall", "i32");
-        } else if (this.paramsFrame.size > 0) {
-            this.paramsFrame.addField("$typemapCall", "i32");
-        }
-        if (typemap.offsets.length != 0) {
-            typemap.typeSize = this.varsFrame.size;
-            typemap.declare(this.module);
-            typemap.define();
-        }
+        this.analyzeVariableStorage(n, n.blockPartner, locals);
 
         let code: Array<wasm.Node> = [];
         
@@ -344,9 +320,6 @@ export class Wasm32Backend implements backend.Backend {
             code.push(new wasm.BinaryInstruction("i32", "sub"));
             code.push(new wasm.TeeLocal(this.spLocal));
             code.push(new wasm.TeeLocal(this.bpLocal)); // Now SP and BP point to the varsFrame
-            // Put the typemap on the stack
-            code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? -this.varsFrame.size : typemap.addr));
-            code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$typemap")));
         } else if (this.resultFrame.size != 0 || this.paramsFrame.size != 0) {
             code.push(new wasm.GetLocal(this.spLocal));
             code.push(new wasm.SetLocal(this.bpLocal)); // Now SP and BP point to the varsFrame
@@ -411,20 +384,6 @@ export class Wasm32Backend implements backend.Backend {
         let locals = new Wasm32LocalVariableList(0);
         let typemap = this.analyzeVariableStorage(n, n.blockPartner, locals);
                 
-        if (this.varsFrame.size > 0) {
-            this.varsFrame.addField("$typemap", "i32");
-        }
-        if (this.resultFrame.size > 0) {
-            this.resultFrame.addField("$typemapCall", "i32");
-        } else if (this.paramsFrame.size > 0) {
-            this.paramsFrame.addField("$typemapCall", "i32");
-        }
-        if (typemap.offsets.length != 0) {
-            typemap.typeSize = this.varsFrame.size;
-            typemap.declare(this.module);
-            typemap.define();
-        }
-
         this.spLocal = this.wf.parameters.length;
         this.wf.parameters.push("i32"); // sp
 
@@ -472,9 +431,6 @@ export class Wasm32Backend implements backend.Backend {
         code.push(new wasm.BinaryInstruction("i32", "sub"));
         code.push(new wasm.TeeLocal(this.spLocal));
         code.push(new wasm.TeeLocal(this.bpLocal)); // Now SP and BP point to the localsFrame
-        // Put the typemap on the stack
-        code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? -this.varsFrame.size : typemap.addr));
-        code.push(new wasm.Store("i32", null, this.varsFrame.fieldOffset("$typemap")));
         // So far no parent function has yielded
         code.push(new wasm.GetLocal(this.bpLocal));
         code.push(new wasm.Constant("i32", 0));
@@ -717,10 +673,7 @@ export class Wasm32Backend implements backend.Backend {
         }
     }
 
-    private analyzeVariableStorage(start: Node, end: Node, locals: Wasm32LocalVariableList, typemap: TypeMap | null = null): TypeMap | null {
-        if (!typemap) {
-            typemap = new TypeMap();
-        }
+    private analyzeVariableStorage(start: Node, end: Node, locals: Wasm32LocalVariableList) {
         let n = start;
         for(; n; ) {
             // Ignore decl_var here. These variables get storage when they are assigned.
@@ -758,13 +711,11 @@ export class Wasm32Backend implements backend.Backend {
                     let index = this.varsFrame.addField("$param" + s.offset.toString(), t);
                     let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
                     this.varGCStorage.set(n.assign, sAlternative);
-                    this.typeMapper.mapStack(typemap, t, index);
                 } else if (this.wfIsAsync) {
                     // If the function yields, the heapstack must store the value of the parameter
                     let index = this.varsFrame.addField("$param" + s.offset.toString(), t);
                     let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
                     this.varAsyncStorage.set(n.assign, sAlternative);
-                    this.typeMapper.mapStack(typemap, t, index);
                 }
                 this.parameterVariables.push(n.assign);                
                 n = n.next[0];                
@@ -775,26 +726,25 @@ export class Wasm32Backend implements backend.Backend {
                 continue;
             }
             if (n.assign) {
-                this.assignVariableStorage(n.assign, locals, typemap);
+                this.assignVariableStorage(n.assign, locals);
             }
             for(let v of n.args) {
                 if (v instanceof Variable) {
-                    this.assignVariableStorage(v, locals, typemap);
+                    this.assignVariableStorage(v, locals);
                 } else if (v instanceof Node) {
-                    this.analyzeVariableStorage(v, null, locals, typemap);
+                    this.analyzeVariableStorage(v, null, locals);
                 }
             }
             if (n.kind == "if" && n.next.length > 1) {
-                this.analyzeVariableStorage(n.next[1], n.blockPartner, locals.clone(), typemap);
+                this.analyzeVariableStorage(n.next[1], n.blockPartner, locals.clone());
                 n = n.next[0];
             } else {
                 n = n.next[0];                
             }
         }
-        return typemap;
     }
 
-    private assignVariableStorage(v: Variable, locals: Wasm32LocalVariableList, typemap: TypeMap): void {
+    private assignVariableStorage(v: Variable, locals: Wasm32LocalVariableList): void {
         if (v.name == "$mem") {
             return;
         }
@@ -833,7 +783,6 @@ export class Wasm32Backend implements backend.Backend {
             let indexAlternative = this.varsFrame.addField(v.name, v.type);
             let sAlternative: Wasm32Storage = {storageType: "vars", offset: indexAlternative};
             this.varAsyncStorage.set(v, sAlternative);
-            this.typeMapper.mapStack(typemap, v.type, indexAlternative);
         } else if (!(v.type instanceof StructType) && !v.addressable) {
             // Non-struct variables (which are GC-relevant) are stored in local variables and in addition on the heap stack where GC can find them.
             let index = locals.allocate(v.type);
@@ -842,12 +791,10 @@ export class Wasm32Backend implements backend.Backend {
             let indexAlternative = this.varsFrame.addField(v.name, v.type);
             let sAlternative: Wasm32Storage = {storageType: "vars", offset: indexAlternative};
             this.varGCStorage.set(v, sAlternative);
-            this.typeMapper.mapStack(typemap, v.type, indexAlternative);
         } else {
             let index = this.varsFrame.addField(v.name, v.type);
             let s: Wasm32Storage = {storageType: "vars", offset: index};
             this.varStorage.set(v, s);
-            this.typeMapper.mapStack(typemap, v.type, index);
         }
         this.localVariables.push(v);
     }
@@ -980,12 +927,6 @@ export class Wasm32Backend implements backend.Backend {
                     code.push(new wasm.Constant("i32", n.type.stackFrame.size));
                     code.push(new wasm.BinaryInstruction("i32", "sub"));
                     code.push(new wasm.SetLocal(this.spLocal));
-                    // Put typemap on the stack
-                    let typemap = this.typeMapper.mapType(n.type.stackFrame);
-                    code.push(new wasm.Comment("Store typemap"));
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
-                    code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
                 }
                 code.push(new wasm.Constant("i32", 0xffffffff)); // Initialization step
                 // Put parameters on stack
@@ -1243,7 +1184,7 @@ export class Wasm32Backend implements backend.Backend {
 
     /**
      */
-    private emitAssign(type: Type | StructType, n: Node | Variable | number, dest: "heap" | "heapStack" | "wasmStack" | null, destOffset: number, code: Array<wasm.Node>) {
+    private emitAssign(type: Type | StructType | PointerType, n: Node | Variable | number, dest: "heap" | "heapStack" | "wasmStack" | null, destOffset: number, code: Array<wasm.Node>) {
         if (dest === null && (n instanceof Variable || typeof(n) == "number" || (n instanceof Node && n.kind != "call" && n.kind != "call_indirect"  && n.kind != "spawn" && n.kind != "spawn_indirect" && !n.assign))) {
             throw "Implementation error: No assignment";
         }
@@ -1284,12 +1225,6 @@ export class Wasm32Backend implements backend.Backend {
                 code.push(new wasm.BinaryInstruction("i32", "sub"));
 //                }
                 code.push(new wasm.SetLocal(this.spLocal));
-                // Put typemap on the stack
-                let typemap = this.typeMapper.mapType(n.type.stackFrame);
-                code.push(new wasm.Comment("Store typemap"));
-                code.push(new wasm.GetLocal(this.spLocal));
-                code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
-                code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
                 // Put parameters on wasm/heap stack
                 let paramTypes: Array<wasm.StackType> = [];
                 for(let i = 0; i < n.type.params.length; i++) {
@@ -1313,12 +1248,9 @@ export class Wasm32Backend implements backend.Backend {
                 // Call the function
                 if (n.args[0] < 0) {
                     if (n.args[0] == SystemCalls.appendSlice) {
-                        let typemap = this.typeMapper.mapType(n.type.ellipsisParam);
-                        code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
                         code.push(new wasm.GetLocal(this.spLocal));
                         code.push(new wasm.Call(this.sliceAppendFunctionIndex));
                     } else if (n.args[0] == SystemCalls.growSlice) {
-                        code.push(new wasm.Constant("i32", (!typemap || typemap.offsets.length == 0) ? 0 : typemap.addr));
                         code.push(new wasm.GetLocal(this.spLocal));
                         code.push(new wasm.Call(this.growSliceFunctionIndex));                        
                     } else {
@@ -1423,7 +1355,7 @@ export class Wasm32Backend implements backend.Backend {
                     }
                     let f = type.fields[i];
                     let name: string = f[0];
-                    let t: Type | StructType = f[1];
+                    let t: Type | StructType | PointerType = f[1];
                     let count = f[2];
                     let size = sizeOf(t);
                     let arrOffset = 0;
@@ -1547,7 +1479,7 @@ export class Wasm32Backend implements backend.Backend {
         for(let i = 0; i < type.fields.length; i++) {
             let f = type.fields[i];
             let name: string = f[0];
-            let t: Type | StructType = f[1];
+            let t: Type | StructType | PointerType = f[1];
             let count = f[2];
             let size = sizeOf(t);
             let arrOffset = 0;
@@ -1563,7 +1495,7 @@ export class Wasm32Backend implements backend.Backend {
         }
     }
 
-    private emitCopy(type: Type | StructType, srcOffset: number, destOffset: number, code: Array<wasm.Node>) {
+    private emitCopy(type: Type | StructType | PointerType, srcOffset: number, destOffset: number, code: Array<wasm.Node>) {
         let size = sizeOf(type);
         let align = alignmentOf(type);
         switch (size) {
@@ -1685,7 +1617,7 @@ export class Wasm32Backend implements backend.Backend {
         return 0;
     }
 
-    private emitWordAssign(type: Type, n: Node | Variable | number, stack: "wasmStack" | null, code: Array<wasm.Node>) {
+    private emitWordAssign(type: Type | PointerType, n: Node | Variable | number, stack: "wasmStack" | null, code: Array<wasm.Node>) {
         if (stack == null && (n instanceof Variable || typeof(n) == "number" || (n.kind != "call" && n.kind != "call_indirect" && n.kind != "spawn" && n.kind != "spawn_indirect" && !n.assign))) {
             throw "Implementation error: No assignment"
         }
@@ -1700,7 +1632,7 @@ export class Wasm32Backend implements backend.Backend {
         }
     }
 
-    private emitWordVariable(type: Type, v: Variable, code: Array<wasm.Node>) {
+    private emitWordVariable(type: Type | PointerType, v: Variable, code: Array<wasm.Node>) {
         let width: wasm.StackType = this.stackTypeOf(type);
         let asWidth: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u" = null;
         switch (type) {
@@ -1763,23 +1695,11 @@ export class Wasm32Backend implements backend.Backend {
             let size = sizeOf(n.type as Type | StructType);
             this.emitWordAssign("i32", n.args[0], "wasmStack", code);
             code.push(new wasm.Constant("i32", size));
-            let m = this.typeMapper.mapType(n.type as Type | StructType);
-            if (m == null || m.offsets.length == 0) {
-                code.push(new wasm.Constant("i32", 0));
-            } else {
-                code.push(new wasm.Constant("i32", m.addr));
-            }
             if (n.args.length == 2) {
                 let headType = (n.args[1] as Variable).type;
                 let headSize = sizeOf(headType);
                 code.push(new wasm.Constant("i32", headSize));
-                let m = this.typeMapper.mapType(headType);
-                if (!m) {
-                    throw "Implementation error. headType must have a TypeMap"                    
-                }
-                code.push(new wasm.Constant("i32", m.addr));                
             } else {
-                code.push(new wasm.Constant("i32", 0));
                 code.push(new wasm.Constant("i32", 0));                
             }
             code.push(new wasm.GetLocal(this.spLocal));
@@ -1979,12 +1899,6 @@ export class Wasm32Backend implements backend.Backend {
                 code.push(new wasm.Constant("i32", n.type.stackFrame.size));
                 code.push(new wasm.BinaryInstruction("i32", "sub"));
                 code.push(new wasm.SetLocal(this.spLocal));
-                // Put typemap on the stack
-                let typemap = this.typeMapper.mapType(n.type.stackFrame);
-                code.push(new wasm.Comment("Store typemap"));
-                code.push(new wasm.GetLocal(this.spLocal));
-                code.push(new wasm.Constant("i32", typemap.offsets.length == 0 ? 0 : typemap.addr));
-                code.push(new wasm.Store("i32", null, n.type.stackFrame.fieldOffset("$typemapCall")));
             }
             if (n.kind == "spawn") {
                 // Put the step number on the stack
@@ -2162,7 +2076,7 @@ export class Wasm32Backend implements backend.Backend {
             }
             let f = type.fields[i];
             let name: string = f[0];
-            let t: Type | StructType = f[1];
+            let t: Type | StructType | PointerType = f[1];
             let count = f[2];
             let size = sizeOf(t);
             let arrOffset = 0;
@@ -2192,7 +2106,7 @@ export class Wasm32Backend implements backend.Backend {
             }
             let f = type.fields[i];
             let name: string = f[0];
-            let t: Type | StructType = f[1];
+            let t: Type | StructType | PointerType = f[1];
             let count = f[2];
             let size = sizeOf(t);
             let arrOffset = 0;
@@ -2211,7 +2125,7 @@ export class Wasm32Backend implements backend.Backend {
         return zeroCount;
     }
 
-    private storeVariableFromWasmStack1(type: Type, v: Variable, code: Array<wasm.Node>) {
+    private storeVariableFromWasmStack1(type: Type | PointerType, v: Variable, code: Array<wasm.Node>) {
         let s = this.storageOf(v);
         switch(s.storageType) {
             case "vars":
@@ -2234,7 +2148,7 @@ export class Wasm32Backend implements backend.Backend {
         }
     }
 
-    private storeVariableFromWasmStack2(type: Type, v: Variable, tee: boolean, code: Array<wasm.Node>) {
+    private storeVariableFromWasmStack2(type: Type | PointerType, v: Variable, tee: boolean, code: Array<wasm.Node>) {
         let width: wasm.StackType = this.stackTypeOf(type);
         let asWidth: null | "8"| "16" | "32" = null;
         switch (type) {
@@ -2390,7 +2304,10 @@ export class Wasm32Backend implements backend.Backend {
         return false;
     }
 
-    private stackTypeOf(t: Type): wasm.StackType {
+    private stackTypeOf(t: Type | PointerType): wasm.StackType {
+        if (t instanceof PointerType) {
+            return "i32";
+        }
         switch(t) {
             case "i64":
             case "s64":
@@ -2403,7 +2320,7 @@ export class Wasm32Backend implements backend.Backend {
         return "i32";
     }
 
-    private allocLocal(type: Type): number {
+    private allocLocal(type: Type | PointerType): number {
         let wtype = this.stackTypeOf(type);
         for(var entry of this.tmpLocalVariables.entries()) {
             let n = entry[0];
@@ -2483,13 +2400,13 @@ export class Wasm32Backend implements backend.Backend {
         return false;
     }
 
-    private encodeLiteral(type: Type | StructType, data: BinaryData): Uint8Array {
+    private encodeLiteral(type: Type | PointerType | StructType, data: BinaryData): Uint8Array {
         let buf = new BinaryBuffer();
         this.encodeLiteralIntern(type, data, 0, buf);
         return buf.data;
     }
     
-    private encodeLiteralIntern(type: Type | StructType, data: BinaryData, dataOffset: number, buf: BinaryBuffer): number {
+    private encodeLiteralIntern(type: Type | PointerType | StructType, data: BinaryData, dataOffset: number, buf: BinaryBuffer): number {
         if (type instanceof StructType) {
             let pos = 0;
             for(let f of type.fields) {
@@ -2554,7 +2471,6 @@ export class Wasm32Backend implements backend.Backend {
     }
 
     public module: wasm.Module;
-    public typeMapper: TypeMapper;
     
     private tr: SMTransformer;
     private optimizer: Optimizer;
