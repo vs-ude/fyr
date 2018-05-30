@@ -3983,6 +3983,12 @@ export class TypeChecker {
                 enode.type = t;
                 if (enode.lhs) {
                     let ct = this.createType(enode.lhs, scope, "variable");
+                    if (this.isArray(ct) && enode.parameters && enode.parameters.length > 0 && enode.parameters[enode.parameters.length - 1].op == "unary...") {
+                        let p = enode.parameters[enode.parameters.length - 1];
+                        if (p.rhs.op != "int") {
+                            throw new TypeError("Only constants are allowed after ... in array context", p.loc);
+                        }
+                    }
                     this.unifyLiterals(ct, enode, scope, enode.loc);
                 }
                 break;
@@ -4376,9 +4382,20 @@ export class TypeChecker {
                 if (this.isArray(t)) {
                     let arrayType = this.stripType(t) as ArrayType;
                     if (arrayType.size != -1) {
-                        if (arrayType.size == 0 && (!node.parameters || node.parameters.length == 0)) {
-                            // Ok
-                        } else if (!node.parameters || node.parameters.length != arrayType.size) {
+                        // Count array elements
+                        let count = 0;
+                        if (node.parameters) {
+                            count = node.parameters.length;                        
+                            for(var i = 0; i < node.parameters.length; i++) {
+                                let pnode = node.parameters[i];
+                                if (pnode.op == "unary...") {
+                                    count--;
+                                    count += parseInt(pnode.rhs.value);
+                                    break;
+                                }
+                            }
+                        }
+                        if (count != arrayType.size) {
                             throw new TypeError("Mismatch in array size", node.loc);                                                
                         }
                     }

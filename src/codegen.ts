@@ -1424,8 +1424,33 @@ export class CodeGenerator {
         } else if (this.tc.isArray(n.type)) {
             if (n.parameters) {
                 for(let p of n.parameters) {
+                    if (p.op == "unary...") {
+                        continue;
+                    }
                     this.processPureLiteralInternal(p, buf);
                 }
+                let count = 0;
+                for(let i = 0; i < n.parameters.length; i++) {
+                    let p = n.parameters[i];
+                    if (p.op == "unary...") {             
+                        if (p.rhs.op != "int") {
+                            throw "Implementation error";
+                        }
+                        count = parseInt(p.rhs.value);                            
+                        break;
+                    }
+                }
+                if (count > 0) {
+                    let t = RestrictedType.strip(n.type) as ArrayType;
+                    let et  = this.getSSAType(t.elementType);
+                    for(let i = 0; i < count; i++) {
+                        let z = this.generateZero(et);
+                        for(let v of z) {
+                            buf.push(v);
+                        }
+                    }
+                }
+            
             }
         } else if (this.tc.isTuple(n.type)) {
             for(let p of n.parameters) {
@@ -1784,6 +1809,23 @@ export class CodeGenerator {
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let v = this.processLiteralArgument(f, scope, enode.parameters[i], t.elementType, b, vars);
                         args.push(v);
+                    }
+                    let count = 0;
+                    for(let i = 0; i < enode.parameters.length; i++) {
+                        let p = enode.parameters[i];
+                        if (p.op == "unary...") {             
+                            if (p.rhs.op != "int") {
+                                throw "Implementation error";
+                            }
+                            let count = parseInt(p.rhs.value);                            
+                            break;
+                        }
+                    }
+                    if (count > 0) {
+                        let et  = this.getSSAType(t.elementType);
+                        for(let i = 0; i < count; i++) {
+                            args = args.concat(this.generateZero(et));
+                        }
                     }
                     return b.assign(b.tmp(), "struct", st, args);
                 }
@@ -2893,8 +2935,18 @@ export class CodeGenerator {
         throw "CodeGen: Implementation error: signed check on non number type " + t.toString();       
     }
 
-    private generateZeroStruct(st: ssa.StructType): Array<ssa.Variable | number> {
-        let args = [];
+    private generateZero(t: ssa.Type | ssa.StructType | ssa.PointerType): Array<number> {
+        if (t instanceof ssa.StructType) {
+            return this.generateZeroStruct(t);
+        }
+        if (t instanceof ssa.PointerType) {
+            return [0];
+        }
+        return [0];
+    }
+
+    private generateZeroStruct(st: ssa.StructType): Array<number> {
+        let args: Array<number> = [];
         for(let f of st.fields) {
             for(let i = 0; i < f[2]; i++) {
                 args.push(0);
@@ -2942,7 +2994,9 @@ export class CodeGenerator {
                 if (this.tc.isArray(t)) {
                     if (n.parameters) {
                         for(let p of n.parameters) {
-                            if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
+                            if (p.op == "unary...") {
+                                continue;
+                            } else if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
                                 return false;
                             }
                         }
