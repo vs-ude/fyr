@@ -1752,12 +1752,32 @@ export class CodeGenerator {
                 if (t instanceof SliceType) {
                     let et = this.getSSAType(t.getElementType());
                     let esize = ssa.alignedSizeOf(et);
-                    let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [enode.parameters.length, esize]);
+                    let count: number | ssa.Variable = enode.parameters.length;
                     for(let i = 0; i < enode.parameters.length; i++) {
-                        let v = this.processLiteralArgument(f, scope, enode.parameters[i], t.getElementType(), b, vars);
+                        let p = enode.parameters[i];
+                        if (p.op == "unary..." && typeof(count) == "number") {
+                            count--;
+                            let dynCount = this.processExpression(f, scope, p.rhs, b, vars, this.tc.t_int);
+                            if (typeof(dynCount) == "number") {
+                                count += dynCount;
+                            } else if (count == 0) {
+                                count = dynCount;
+                            } else {
+                                count = b.assign(b.tmp(), "add", "sint", [count, dynCount]);
+                            }
+                            break;
+                        }
+                    }
+                    let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [count, esize]);
+                    for(let i = 0; i < enode.parameters.length; i++) {
+                        let p = enode.parameters[i];
+                        if (p.op == "unary...") {
+                            continue;
+                        }
+                        let v = this.processLiteralArgument(f, scope, p, t.getElementType(), b, vars);
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
                     }
-                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [ptr, enode.parameters.length, ptr]);
+                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [ptr, count, ptr]);
                 } else if (t instanceof ArrayType) {
                     let st = this.getSSAType(t); // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
@@ -2041,7 +2061,11 @@ export class CodeGenerator {
                             head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                         }
                         if (head_addr instanceof ssa.Variable) {
-                           return b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            if (objType.mode == "local_reference") {
+                                return b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            }
+                            let base = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            return b.assign(b.tmp(), "member", "sint", [base, this.localSlicePointer.fieldIndexByName("data_length")]);
                         }
                         return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                     } else if (objType instanceof ArrayType) {

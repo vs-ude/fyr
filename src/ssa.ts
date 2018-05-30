@@ -1317,14 +1317,14 @@ export class Stackifier {
                             n.args[i] = inline;
                             Node.removeNode(inline);
                         }
-                    } else if (a instanceof Variable && a.writeCount == 1) {
+/*                    } else if (a instanceof Variable && a.writeCount == 1) {
                         // Try to inline the computation
                         let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline, assigned);
                         if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
                             inline.assign.readCount--;
                             n.args[i] = inline;
                             Node.removeNode(inline);
-                        }
+                        }*/
                     }
                     if (a instanceof Variable) {
                         doNotInline.push(a);

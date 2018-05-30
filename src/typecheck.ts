@@ -3968,9 +3968,15 @@ export class TypeChecker {
             {
                 let types: Array<Type> = [];
                 if (enode.parameters) {
-                    for(let p of enode.parameters) {
-                        this.checkExpression(p, scope);
-                        types.push(p.type);
+                    for(var i = 0; i < enode.parameters.length; i++) {
+                        let p = enode.parameters[i];
+                        if (p.op == "unary...") {
+                            this.checkExpression(p.rhs, scope);
+                            this.checkIsPlatformIntNumber(p.rhs);
+                        } else {
+                            this.checkExpression(p, scope);
+                            types.push(p.type);
+                        }
                     }
                 }
                 let t = new ArrayLiteralType(types);
@@ -4196,6 +4202,7 @@ export class TypeChecker {
                 enode.type = enode.lhs.type;
                 break;
             case "ellipsisId":
+            case "unary...":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
             case "optionalId":
                 throw new TypeError("'?' is not allowed in this context", enode.loc);
@@ -4310,7 +4317,7 @@ export class TypeChecker {
             return true;
         }
 
-        if (allowPointerIndirection && this.isSlice(t) && node.op == "array" && t.name != "string") {
+        if (allowPointerIndirection && this.isSlice(t) && node.op == "array") {
             if (!this.unifyLiterals(this.sliceArrayType(t), node, scope, loc, doThrow, templateParams, false)) {
                 return false;
             }
@@ -4365,6 +4372,7 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between string and " + t.toString(), loc);   
             case "array":
+            {
                 if (this.isArray(t)) {
                     let arrayType = this.stripType(t) as ArrayType;
                     if (arrayType.size != -1) {
@@ -4376,7 +4384,11 @@ export class TypeChecker {
                     }
                     if (node.parameters) {
                         let elementType = this.arrayElementType(t);
-                        for(let pnode of node.parameters) {
+                        for(var i = 0; i < node.parameters.length; i++) {
+                            let pnode = node.parameters[i];
+                            if (pnode.op == "unary...") {
+                                continue;
+                            }
                             if (!this.checkIsAssignableNode(elementType, pnode, scope, doThrow)) {
                                 return false;
                             }
@@ -4389,6 +4401,7 @@ export class TypeChecker {
                     return false;
                 }
                 throw new TypeError("Type mismatch between array literal and " + t.toString(), loc);
+            }
             case "tuple":
                 if (this.isTupleType(t)) {
                     let tupleType = this.stripType(t) as TupleType;
@@ -4925,6 +4938,16 @@ export class TypeChecker {
         return false;
     }
 
+    public checkIsPlatformIntNumber(node: Node, doThrow: boolean = true): boolean {
+        if (this.isPlatformIntNumber(node.type)) {
+            return true;
+        }
+        if (doThrow) {
+            throw new TypeError("Expected type int, but got " + node.type.toString(), node.loc);
+        }
+        return false;
+    }
+
     // TODO: Rename to checkIsAddrInt
     public checkIsInt32Number(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
@@ -5341,6 +5364,11 @@ export class TypeChecker {
         return false;
     }
 
+    public isPlatformIntNumber(type: Type): boolean {
+        type = this.stripType(type);
+        return (type == this.t_int);
+    }
+
     public isIntNumber(type: Type): boolean {
         type = this.stripType(type);
         if (type == this.t_int8 || type == this.t_int16 || type == this.t_int32 || type == this.t_int64 || type == this.t_uint8 || type == this.t_uint16 || type == this.t_uint32 || type == this.t_uint64) {
@@ -5349,11 +5377,13 @@ export class TypeChecker {
         return false;
     }
 
+    // TODO: Platform specific
     public isInt32Number(t: Type): boolean {
         t = this.stripType(t);
         return t == this.t_int32 || t == this.t_uint32;
     }
 
+    // TODO: Platform specific
     public isUInt32Number(t: Type): boolean {
         t = this.stripType(t);
         return t == this.t_uint32;
@@ -5532,7 +5562,7 @@ export class TypeChecker {
 
     public sliceArrayType(t: Type): Type {
         t = RestrictedType.strip(t);
-        if (t instanceof SliceType) {
+        if (t instanceof SliceType) {        
             return t.arrayType;
         }
         return null;
@@ -6159,7 +6189,12 @@ export class TypeChecker {
                 let elementType = this.arrayElementType(t);
                 let group: Group = null;
                 if (enode.parameters) {
-                    for(let p of enode.parameters) {
+                    for(var i = 0; i < enode.parameters.length; i++) {
+                        let p = enode.parameters[i];                        
+                        if (p.op == "unary...") {
+                            this.checkGroupsInExpression(p.rhs, scope, flags & GroupCheckFlags.None);
+                            continue;
+                        }
                         let g = this.checkGroupsInExpression(p, scope, flags & GroupCheckFlags.NotIsolateMask);
                         if (!group) {
                             group = g;

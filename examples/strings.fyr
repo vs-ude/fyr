@@ -4,7 +4,7 @@ import . {
 
 export func main() int {
     puts(<#const char>"Hello World")
-    return name() + lenof("Duda") + lenof2("!!")
+    return name() + lenof("Duda") + lenof2("!!") + appendMe()
 }
 
 func name() int {
@@ -19,4 +19,11 @@ func lenof2(str string) int {
     var s2 string
     s2 = str
     return s2.len()
+}
+
+func appendMe() int {
+    let n = []int[...100][:20]
+    let arr = []int[1,2,3,...4]
+    let arr2 = [4,5,6,7]
+    return n.cap() + n.len()
 }

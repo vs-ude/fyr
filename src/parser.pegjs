@@ -823,9 +823,7 @@ multiplicative2
   / "&" ![=&] [ \t\n]* right:unary { return new ast.Node({loc: fl(location()), op: "&", rhs:right}); }
 
 unary
-  = t: typedLiteral { return t; }
-  / c: typeCast { return c; }
-  / "+" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary+", rhs:p}); }
+  = "+" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary+", rhs:p}); }
   / "-" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary-", rhs:p}); }
   / "!" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary!", rhs:p}); }
   / "^" [ \t\n]* p:unary { return new ast.Node({loc: fl(location()), op: "unary^", rhs:p}); }
@@ -836,15 +834,18 @@ unary
 
 typedLiteral
   = "[]" [ \t]* t:type [ \t]* l: array {
-      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "[]"});
+      let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "[]"});
       return l;
     }
   / "^[]" [ \t]* t:type [ \t]* l: array {
-      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "^[]"});
+      let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "^[]"});
       return l;
     }
   / "~[]" [ \t]* t:type [ \t]* l: array {
-      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: t, value: "~[]"});
+      let a = new ast.Node({loc: fl(location()), op: "arrayType", rhs: t, lhs: null});
+      l.lhs = new ast.Node({loc: fl(location()), op: "sliceType", rhs: a, value: "~[]"});
       return l;
     }
   / "[" [ \t]* e:expression? "]" [ \t]* t:type [ \t]* l: array {
@@ -889,7 +890,9 @@ primary
     }
 
 primary2
-  = n: number { return n; }
+  = t: typedLiteral { return t; }
+  / c: typeCast { return c; }
+  / n: number { return n; }
   / s: string { return s; }
   / "true" { return new ast.Node({loc: fl(location()), op: "bool", value: "true"}); }
   / "false" { return new ast.Node({loc: fl(location()), op: "bool", value: "false"}); }
