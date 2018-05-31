@@ -5160,6 +5160,9 @@ export class TypeChecker {
             if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
                 return true;
             }
+            if (node.lhs.type == this.t_string) {
+                return false;
+            }
             return this.isLeftHandSide(node.lhs, scope, true);
         }
         return false;
