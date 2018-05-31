@@ -3854,6 +3854,8 @@ export class TypeChecker {
                         // For slices the type remains the same
                         enode.type = enode.lhs.type;
                     }
+                } else if (t == this.t_string) {
+                    enode.type = this.t_string;
                 } else {
                     throw "Implementation error";
                 }
@@ -4837,6 +4839,8 @@ export class TypeChecker {
             return t.types[index];
         } else if (t instanceof UnsafePointerType || t instanceof PointerType) {
             return t.elementType;
+        } else if (t == this.t_string) {
+            return this.t_byte;
         }
         throw new TypeError("The type " + t.toString() + " is not indexable", node.loc);
     }

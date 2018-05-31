@@ -5,6 +5,8 @@ import . {
 export func main() int {
     puts(<#const char>"Hello World")
     let str = "Hello World"
+    let str2 = str[6:]
+    puts(<#const char>str2)
     return name() + lenof("Duda") + lenof2("!!") + appendMe() + <int>str[0]
 }
 

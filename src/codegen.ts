@@ -2457,7 +2457,10 @@ export class CodeGenerator {
                 }
                 let t = this.tc.stripType(enode.lhs.type);
                 if (t instanceof UnsafePointerType) {
-                    let size = ssa.sizeOf(this.getSSAType(t.elementType));
+                    if (!TypeChecker.isLocalReference(enode.type)) {
+                        throw "Implementation error";
+                    }
+                    let size = ssa.alignedSizeOf(this.getSSAType(t.elementType));
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
@@ -2479,9 +2482,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", this.localSlicePointer, [ptr, l]);
                 } else if (t instanceof SliceType) {
-                    throw "TODO";
-                    /*
-                    let size = ssa.sizeOf(this.getSSAType(t.getElementType()));
+                    let size = ssa.alignedSizeOf(this.getSSAType(t.getElementType()));
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
@@ -2489,31 +2490,38 @@ export class CodeGenerator {
                     } else {
                         head_addr = this.processExpression(f, scope, enode.lhs, b, vars, t) as ssa.Variable;
                     }
-                    if (head_addr instanceof ssa.Variable) {
-                        head_addr = b.assign(b.tmp(), "addr_of", "ptr", [head_addr]);
-                    }
                     let data_ptr: ssa.Variable;
                     let len: ssa.Variable;
-                    let cap: ssa.Variable;
+                    let array_ptr: ssa.Variable;
                     if (head_addr instanceof ssa.Pointer) {
-                        data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("data_ptr")]);
-                        len = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("length")]);
-                        cap = b.assign(b.tmp(), "load", "i32", [head_addr.variable, head_addr.offset + this.sliceHeader.fieldOffset("cap")]);
+                        data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                        len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                        if (!TypeChecker.isLocalReference(enode.type)) {
+                            array_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
+                        }
                     } else {
-                        data_ptr = b.assign(b.tmp(), "load", "ptr", [head_addr, this.sliceHeader.fieldOffset("data_ptr")]);
-                        len = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("length")]);
-                        cap = b.assign(b.tmp(), "load", "i32", [head_addr, this.sliceHeader.fieldOffset("cap")]);
+                        if (t.mode == "local_reference") {
+                            data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            len = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        } else {
+                            if (TypeChecker.isLocalReference(enode.type)) {
+                                array_ptr = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
+                            }
+                            let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            len = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        }
                     }
                     if (enode.parameters[0] && index1 !== 0) {
                         // Compare 'index1' with 'len'
-                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index1, len]);
+                        let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();                        
                     }
                     if (enode.parameters[1]) {
                         // Compare 'index2' with 'len'
-                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index2, len]);
+                        let trap = b.assign(b.tmp(), "gt_u", "i8", [index2, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();
@@ -2521,7 +2529,7 @@ export class CodeGenerator {
                         index2 = len;
                     }
                     if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
-                        let cmp = b.assign(b.tmp(), "gt_s", "i32", [index1, index2]);
+                        let cmp = b.assign(b.tmp(), "gt_s", "i8", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
                         b.end();                        
@@ -2532,7 +2540,6 @@ export class CodeGenerator {
                     } else {
                         l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     }
-                    let c = b.assign(b.tmp(), "sub", "i32", [len, index1]);
                     if (index1 != 0) {
                         if (size != 1) {
                             if (typeof(index1) == "number") {
@@ -2542,24 +2549,32 @@ export class CodeGenerator {
                                 data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, tmp]);
                             }
                         } else {
-                            data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, index1]);
+                            data_ptr = b.assign(b.tmp(), "add", "addr", [data_ptr, index1]);
                         }
                     }
-                    return b.assign(b.tmp(), "struct", this.sliceHeader, [data_ptr, l, c]);
-                    */
+                    if (TypeChecker.isLocalReference(enode.type)) {
+                        if (TypeChecker.isTakeExpression(enode.lhs)) {
+                            throw "Implementation error";
+                        }
+                        return b.assign(b.tmp(), "struct", this.localSlicePointer, [data_ptr, l]);                        
+                    }
+                    if (TypeChecker.isReference(enode.type) && !TypeChecker.isTakeExpression(enode.lhs)) {
+                        b.assign(null, "incref_arr", null, [array_ptr]);
+                    }
+                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [data_ptr, l, array_ptr]);
                 } else if (t == this.tc.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, this.tc.t_string);
-                    let len = b.assign(b.tmp(), "load", "int", [ptr, -4]);
+                    let len = b.assign(b.tmp(), "len_arr", "sint", [ptr]);
                     if (enode.parameters[0] && index1 !== 0) {
                         // Compare 'index1' with 'len'
-                        let trap = b.assign(b.tmp(), "gt_u", "int", [index1, len]);
+                        let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();                        
                     }
                     if (enode.parameters[1]) {
                         // Compare 'index2' with 'len'
-                        let trap = b.assign(b.tmp(), "gt_u", "int", [index2, len]);
+                        let trap = b.assign(b.tmp(), "gt_u", "i8", [index2, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();
@@ -2574,21 +2589,28 @@ export class CodeGenerator {
                     }
                     let ptr3 = b.assign(b.tmp(), "add", "addr", [ptr, index1]);
                     let l = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
-                    return b.call(b.tmp(), this.makeStringFunctionType, [SystemCalls.makeString, ptr3, l]);
+                    let result = b.assign(b.tmp(), "alloc_arr", "addr", [l, 1]);
+                    b.assign(null, "memcpy", null, [result, ptr3, l, 1]);
+                    if (TypeChecker.isTakeExpression(enode.lhs)) {
+                        b.assign(null, "decref_arr", null, [ptr]);
+                    }
+                    return result;
                 } else if (t instanceof ArrayType) {
-                    /*
+                    if (!TypeChecker.isLocalReference(enode.type)) {
+                        throw "Implementation error";
+                    }
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     let len = t.size;
                     if (enode.parameters[0] && index1 !== 0) {
                         // Compare 'index1' with 'len'
-                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index1, len]);
+                        let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();                        
                     }
                     if (enode.parameters[1]) {
                         // Compare 'index2' with 'len'
-                        let trap = b.assign(b.tmp(), "gt_u", "i32", [index2, len]);
+                        let trap = b.assign(b.tmp(), "gt_u", "i8", [index2, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();
@@ -2596,30 +2618,38 @@ export class CodeGenerator {
                         index2 = len;
                     }
                     if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
-                        let cmp = b.assign(b.tmp(), "gt_s", "i32", [index1, index2]);
+                        let cmp = b.assign(b.tmp(), "gt_s", "i8", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
                         b.end();                        
                     }
                     let ptr2: ssa.Pointer;
                     if (ptr instanceof ssa.Variable) {
-                        ptr2 = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [ptr]), 0);
+                        ptr2 = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ptr]), 0);
                     } else {
                         ptr2 = ptr;
                     }
+                    let st = this.getSSAType(t.elementType);
+                    let size = ssa.alignedSizeOf(st);
                     let ptr3: ssa.Variable;
                     if (typeof(index1) == "number") {
-                        if (index1 != 0 || ptr2.offset != 0) {
-                            ptr3 = b.assign(b.tmp("ptr"), "add", "i32", [ptr2.variable, ptr2.offset + index1]);
+                        if (index1 != 0) {
+                            ptr3 = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset + size * index1]);
+                        } else if (ptr2.offset != 0) {
+                            ptr3 = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset]);
                         } else {
                             ptr3 = ptr2.variable;
                         }
                     } else {
                         let tmp = ptr2.variable;
-                        if (ptr2.offset != 0 ) {
-                            tmp = b.assign(b.tmp("ptr"), "add", "i32", [ptr2.variable, ptr2.offset]);
+                        let offset = tmp;
+                        if (size != 1) {
+                            offset = b.assign(b.tmp(), "mul", "sint", [tmp, size]);
                         }
-                        ptr3 = b.assign(b.tmp("ptr"), "add", "i32", [tmp, index1]);
+                        if (ptr2.offset != 0 ) {
+                            tmp = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset]);
+                        }
+                        ptr3 = b.assign(b.tmp(), "add", "addr", [tmp, offset]);
                     }
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
@@ -2627,15 +2657,7 @@ export class CodeGenerator {
                     } else {
                         l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     }
-                    let cap: ssa.Variable | number;
-                    if (typeof(index1) == "number") {
-                        cap = len - index1;
-                    } else {
-                        cap = b.assign(b.tmp(), "sub", "i32", [len, index1]);
-                    }
-                    return b.assign(b.tmp(), "struct", this.sliceHeader, [ptr3, l, cap]);
-                    */
-                   throw "TODO";
+                    return b.assign(b.tmp(), "struct", this.localSlicePointer, [ptr3, l]);
                 } else {
                     throw "Implementation error";
                 }                
