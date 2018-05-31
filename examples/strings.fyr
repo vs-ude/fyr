@@ -7,7 +7,7 @@ export func main() int {
     let str = "Hello World"
     let str2 = str[6:]
     puts(<#const char>str2)
-    return name() + lenof("Duda") + lenof2("!!") + appendMe() + <int>str[0]
+    return name() + lenof("Duda") + lenof2("!!") + appendMe() + <int>str[0] + sliceMe()
 }
 
 func name() int {
@@ -38,4 +38,10 @@ func allocMe(count int) []int {
 
 func cloneMe(arr &[]int) []int {
     return arr.clone()
+}
+
+func sliceMe() int {
+    let arr = [100, 200, 300, 400, 500]
+    let arr2 = arr[1:4]
+    return arr2.len()
 }

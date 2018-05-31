@@ -469,14 +469,14 @@ export class CodeGenerator {
                             } else {
                                 data = rhs;
                             }
-                            if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                            if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                                 // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                 data = b.assign(b.tmp(), "incref", "addr", [data]);
-                            } else if (this.tc.isString(snode.lhs.type) && !TypeChecker.isTakeExpression(snode.rhs)) {
+                            } else if (this.tc.isString(snode.lhs.type) && !this.tc.isTakeExpression(snode.rhs)) {
                                 data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                             }
                             b.assign(v, "copy", v.type, [data]);
-                            if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                            if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                                 let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                                 let arrayPointer: ssa.Variable;
                                 if (rhs instanceof ssa.Pointer) {
@@ -615,7 +615,7 @@ export class CodeGenerator {
                     } else {
                         ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [val]), 0);
                     }
-                    let rhsIsTakeExpr = TypeChecker.isTakeExpression(snode.rhs);
+                    let rhsIsTakeExpr = this.tc.isTakeExpression(snode.rhs);
                     processAssignment(snode.lhs, snode.rhs.type, rhsIsTakeExpr, destinations, 0, ptr);
                     if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                         // Fill the RHS with zeros
@@ -658,10 +658,10 @@ export class CodeGenerator {
                         data = rhs;
                     }            
                     // Reference counting for pointers
-                    if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                    if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                         data = b.assign(b.tmp(), "incref", "addr", [data]);
-                    } else if (this.tc.isString(snode.lhs.type) && !TypeChecker.isTakeExpression(snode.rhs)) {
+                    } else if (this.tc.isString(snode.lhs.type) && !this.tc.isTakeExpression(snode.rhs)) {
                         data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
@@ -671,7 +671,7 @@ export class CodeGenerator {
                         b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [data]);
                     }
                     // Reference counting for slices
-                    if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                    if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                         let arrayPointer: ssa.Variable;
                         if (dest instanceof ssa.Pointer) {
@@ -1034,14 +1034,14 @@ export class CodeGenerator {
                         data = rhs;
                     }                                
                     // Reference counting for pointers
-                    if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !TypeChecker.isTakeExpression(snode.lhs) || forceIncref)) {
+                    if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !this.tc.isTakeExpression(snode.lhs) || forceIncref)) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                         data = b.assign(b.tmp(), "incref", "addr", [data]);
-                    } else if (this.tc.isString(targetType) && (!TypeChecker.isTakeExpression(snode.lhs) || forceIncref)) {
+                    } else if (this.tc.isString(targetType) && (!this.tc.isTakeExpression(snode.lhs) || forceIncref)) {
                         data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }
                     // Reference counting for slices
-                    if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !TypeChecker.isTakeExpression(snode.rhs))) {
+                    if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                         let arrayPointer: ssa.Variable;
                         if (rhs instanceof ssa.Pointer) {
@@ -2504,11 +2504,12 @@ export class CodeGenerator {
                             data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             len = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                         } else {
-                            if (TypeChecker.isLocalReference(enode.type)) {
-                                array_ptr = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
+                            if (!TypeChecker.isLocalReference(enode.type)) {
+                                array_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
                             }
                             let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
                             data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
                             len = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                         }
                     }
@@ -2553,14 +2554,14 @@ export class CodeGenerator {
                         }
                     }
                     if (TypeChecker.isLocalReference(enode.type)) {
-                        if (TypeChecker.isTakeExpression(enode.lhs)) {
+                        if (this.tc.isTakeExpression(enode.lhs)) {
                             throw "Implementation error";
                         }
                         return b.assign(b.tmp(), "struct", this.localSlicePointer, [data_ptr, l]);                        
                     }
-                    if (TypeChecker.isReference(enode.type) && !TypeChecker.isTakeExpression(enode.lhs)) {
-                        b.assign(null, "incref_arr", null, [array_ptr]);
-                    }
+//                    if (TypeChecker.isReference(enode.type) && !this.tc.isTakeExpression(enode.lhs)) {
+//                        b.assign(null, "incref_arr", null, [array_ptr]);
+//                    }
                     return b.assign(b.tmp(), "struct", this.strongSlicePointer, [data_ptr, l, array_ptr]);
                 } else if (t == this.tc.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, this.tc.t_string);
@@ -2591,7 +2592,7 @@ export class CodeGenerator {
                     let l = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
                     let result = b.assign(b.tmp(), "alloc_arr", "addr", [l, 1]);
                     b.assign(null, "memcpy", null, [result, ptr3, l, 1]);
-                    if (TypeChecker.isTakeExpression(enode.lhs)) {
+                    if (this.tc.isTakeExpression(enode.lhs)) {
                         b.assign(null, "decref_arr", null, [ptr]);
                     }
                     return result;
@@ -3471,14 +3472,14 @@ export class CodeGenerator {
             data = rhs;
         }            
         // Reference counting for pointers
-        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
+        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !this.tc.isTakeExpression(rhsNode))) {
             // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
             data = b.assign(b.tmp(), "incref", "addr", [data]);
-        } else if (this.tc.isString(targetType) && !TypeChecker.isTakeExpression(rhsNode)) {
+        } else if (this.tc.isString(targetType) && !this.tc.isTakeExpression(rhsNode)) {
             data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
         }
         // Reference counting for slices
-        if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !TypeChecker.isTakeExpression(rhsNode))) {
+        if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !this.tc.isTakeExpression(rhsNode))) {
             let st = this.getSSAType(targetType) as ssa.StructType;
             let arrayPointer: ssa.Variable;
             if (rhs instanceof ssa.Pointer) {

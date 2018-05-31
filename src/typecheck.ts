@@ -3847,7 +3847,7 @@ export class TypeChecker {
                 } else if (this.isMap(t)) {
                     throw new TypeError("Ranges are not supported on maps", enode.loc);
                 } else if (t instanceof SliceType) {
-                    let isTakeExpr = TypeChecker.isTakeExpression(enode.lhs);
+                    let isTakeExpr = this.isTakeExpression(enode.lhs);
                     if ((t.mode == "unique" || t.mode == "strong") && !isTakeExpr) {
                         enode.type = new SliceType(t.arrayType, "reference");
                     } else {
@@ -5971,7 +5971,7 @@ export class TypeChecker {
                 rhsVariableName = r.value;
             }
         }
-        let rhsIsTakeExpr = TypeChecker.isTakeExpression(rnode);
+        let rhsIsTakeExpr = this.isTakeExpression(rnode);
         // The right hand side is an expression that evaluates to an isolate, and therefore the group is null
         if (!rightGroup) {
             // The isolate must be taken, even when assigned to a reference
@@ -6436,8 +6436,13 @@ export class TypeChecker {
 
     // Returns true ff the expression yields ownership of the object it is pointing to.
     // Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
-    public static isTakeExpression(enode: Node): boolean {
+    public isTakeExpression(enode: Node): boolean {
         if (enode.op == "take" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
+            return true;
+        }
+        // A slice operation on a string creates a new string which already has a reference count of 1.
+        // Hence it behaves like a take expression.
+        if (enode.type == this.t_string && enode.op == ":") {
             return true;
         }
         return false;
