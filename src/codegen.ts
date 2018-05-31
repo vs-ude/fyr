@@ -2135,27 +2135,13 @@ export class CodeGenerator {
                                 return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                             }
                         }
-//                        let dataSize: ssa.Variable;
                         let arrayPointer: ssa.Variable;
-                        let dataPointer: ssa.Variable;
                         if (head_addr instanceof ssa.Variable) {
-//                            let tmp1 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
-//                            dataSize = b.assign(b.tmp(), "member", "sint", [tmp1, this.localSlicePointer.fieldIndexByName("data_length")]);
-                            let tmp2 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
-                            dataPointer = b.assign(b.tmp(), "member", "addr", [tmp2, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             arrayPointer = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
                         } else {
-//                            dataSize = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
-                            dataPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                             arrayPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
                         }
-                        let len = b.assign(b.tmp(), "len_arr", "sint", [arrayPointer]);
-                        let prefix = b.assign(b.tmp(), "sub", "sint", [dataPointer, arrayPointer]);
-                        let size = ssa.alignedSizeOf(this.getSSAType(objType.getElementType()));
-                        if (size != 1) {
-                            prefix = b.assign(b.tmp(), "div", "sint", [prefix, size]);
-                        }
-                        return b.assign(b.tmp(), "sub", "sint", [len, prefix]);
+                        return b.assign(b.tmp(), "len_arr", "sint", [arrayPointer]);
                     }
                     throw "Implementation error";
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "clone") {
