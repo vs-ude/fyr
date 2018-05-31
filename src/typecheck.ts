@@ -4632,7 +4632,7 @@ export class TypeChecker {
                 return true;
             }            
         } else if (to instanceof ArrayType && from instanceof ArrayType) {
-            if (to.size == from.size && this.checkIsAssignableType(to.elementType, from.elementType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
+            if ((to.size == from.size || to.size == -1 || from.size == -1) && this.checkIsAssignableType(to.elementType, from.elementType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                 return true;
             }
         } else if (to instanceof SliceType && from instanceof SliceType) {

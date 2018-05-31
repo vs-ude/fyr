@@ -43,5 +43,7 @@ func cloneMe(arr &[]int) []int {
 func sliceMe() int {
     let arr = [100, 200, 300, 400, 500]
     let arr2 = arr[1:4]
-    return arr2.len()
+    let arr3 = [2]int[22,33]
+    let arr4 = cloneMe(arr3[:])
+    return arr2.len() + arr4.len()
 }

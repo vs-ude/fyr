@@ -3395,11 +3395,19 @@ export class CodeGenerator {
      * The reason is that local variables of the caller are not modified, hence said object must exist, because the local variable holds a strong pointer on it.
      */
     private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "one_indirection" | "no", Variable | FunctionParameter] {
+        if (TypeChecker.isLocalReference(enode.type)) {
+            // Passing on a local reference means no incref/decref.
+            return ["no", null];
+        }
         switch(enode.op) {
+            case "null":
+            case "object":
+            case "array":
             case "(":
-            case "unary*":
             case "take":
-                return ["yes", null];
+                // Take returns an owning pointer and hence there is no need to increase the reference count.
+                // However, the value must be destructed afterwards.
+                return ["no", null];
             case ".":
             {
                 let lhs = this.functionArgumentIncrefIntern(enode.lhs, scope);
