@@ -1231,30 +1231,6 @@ export class CodeGenerator {
                         return new ssa.Pointer(data_ptr, index);
                     }
                     return new ssa.Pointer(b.assign(b.tmp(), "add", "ptr", [data_ptr, indexVar]), 0);
-                } else if (ltype == this.tc.t_string) {
-                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars, ltype);
-                    let t = this.getSSAType(ltype);
-                    let index: ssa.Variable | number = 0;
-                    if (enode.rhs.op == "int") {
-                        index = parseInt(enode.rhs.value);
-                    } else {
-                        index = this.processExpression(f, scope, enode.rhs, b, vars, this.tc.t_int);
-                    }
-                    let len = b.assign(b.tmp(), "load", "int", [ptr, -2 * ssa.sizeOf("sint")]);
-                    // Compare 'index' with 'len'
-                    let trap = b.assign(b.tmp(), "ge_u", "int", [index, len]);
-                    // let zero = b.assign(b.tmp(), "eqz", "addr", [ptr]);
-                    // let trap = b.assign(b.tmp(), "or", "i32", [cmp, zero]);
-                    b.ifBlock(trap);
-                    b.assign(null, "trap", null, []);
-                    b.end();
-                    if (typeof(index) == "number") {
-                        if (typeof(ptr) == "number") {
-                            return new ssa.Pointer(b.assign(b.tmp(), "const", "addr", [ptr + index]), 0);
-                        }
-                        return new ssa.Pointer(ptr, index);
-                    }
-                    return new ssa.Pointer(b.assign(b.tmp(), "add", "addr", [ptr, index]), 0);
                 } else if (ltype instanceof ArrayType) {
                     let size = ssa.alignedSizeOf(this.getSSAType(ltype.elementType));
                     let ptr: ssa.Variable | ssa.Pointer;
@@ -2689,6 +2665,28 @@ export class CodeGenerator {
                         b.end();
                     }
                     return b.assign(b.tmp(), "load", this.getSSAType(this.tc.stripType(t.valueType)), [result, 0]);
+                } else if (t == this.tc.t_string) {
+                    let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
+                    let st = this.getSSAType(t);
+                    let index: ssa.Variable | number = 0;
+                    if (enode.rhs.op == "int") {
+                        index = parseInt(enode.rhs.value);
+                    } else {
+                        index = this.processExpression(f, scope, enode.rhs, b, vars, this.tc.t_int);
+                    }
+                    let len = b.assign(b.tmp(), "len_arr", "sint", [ptr]);
+                    // Compare 'index' with 'len'
+                    let trap = b.assign(b.tmp(), "ge_u", "int", [index, len]);
+                    // let zero = b.assign(b.tmp(), "eqz", "addr", [ptr]);
+                    // let trap = b.assign(b.tmp(), "or", "i32", [cmp, zero]);
+                    b.ifBlock(trap);
+                    b.assign(null, "trap", null, []);
+                    b.end();
+                    if (typeof(index) == "number") {
+                        return b.assign(b.tmp(), "load", "i8", [ptr, index]);
+                    }
+                    let tmp = b.assign(b.tmp(), "add", "addr", [ptr, index]);
+                    return b.assign(b.tmp(), "load", "i8", [tmp, 0]);
                 }
                 // Note: processLeftHandExpression implements the non-left-hand cases as well.
                 let ptr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;

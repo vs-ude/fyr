@@ -4,7 +4,8 @@ import . {
 
 export func main() int {
     puts(<#const char>"Hello World")
-    return name() + lenof("Duda") + lenof2("!!") + appendMe()
+    let str = "Hello World"
+    return name() + lenof("Duda") + lenof2("!!") + appendMe() + <int>str[0]
 }
 
 func name() int {

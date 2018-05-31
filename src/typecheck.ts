@@ -3873,7 +3873,7 @@ export class TypeChecker {
                     let index = parseInt(enode.rhs.value);
                     enode.type = this.checkIsIndexable(enode.lhs, index);
                 } else if (t instanceof ArrayType) {
-                    this.checkIsIntNumber(enode.rhs);
+                    this.checkIsPlatformIntNumber(enode.rhs);
                     let index = 0;
                     if (enode.rhs.op == "int") {
                         index = parseInt(enode.rhs.value);
@@ -3888,9 +3888,14 @@ export class TypeChecker {
                     }
                     enode.type = this.mapValueType(t);
                 } else if (t instanceof SliceType) {
+                    this.checkIsPlatformIntNumber(enode.rhs);
                     enode.type = t.getElementType();
                     isConst = isConst || this.isConst(t.arrayType);
+                } else if (t == this.t_string) {
+                    this.checkIsPlatformIntNumber(enode.rhs);
+                    enode.type = this.t_byte;                    
                 } else if (t instanceof UnsafePointerType) {
+                    this.checkIsPlatformIntNumber(enode.rhs);
                     enode.type = t.elementType;
                 } else {
                     throw new TypeError("[] operator is not allowed on " + enode.lhs.type.toString(), enode.loc);
