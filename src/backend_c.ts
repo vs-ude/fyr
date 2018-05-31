@@ -785,6 +785,21 @@ export class CBackend implements backend.Backend {
             call.funcExpr = new CConst("fyr_len_arr");
             call.args = [this.emitExpr(n.args[0])];
             return call;
+        } else if (n.kind == "memcpy") {
+            let call = new CFunctionCall();
+            call.funcExpr = new CConst("memcpy");
+            let size = new CBinary();
+            size.operator = "*";
+            size.lExpr = this.emitExpr(n.args[2]);
+            size.rExpr = this.emitExpr(n.args[3]);
+            call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), size];
+            if (!this.module.hasInclude("string.h", true)) {
+                let inc = new CInclude();
+                inc.isSystemPath = true;
+                inc.path = "strings.h";
+                this.module.includes.push(inc);
+            }
+            return call;            
         }
 
         throw "Implementation error " + n.kind;

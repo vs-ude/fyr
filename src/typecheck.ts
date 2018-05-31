@@ -5607,8 +5607,6 @@ export class TypeChecker {
         if (type == this.t_string) {
             if (name == "len") {
                 return this.builtin_len;
-            } else if (name == "cap") {
-                return this.builtin_cap;
             }
         } else if (type instanceof SliceType) {
             if (name == "len") {
@@ -5635,11 +5633,8 @@ export class TypeChecker {
                 let ft = new FunctionType()
                 ft.name = "clone";
                 ft.callingConvention = "system";
-                ft.objectType = type;
-                ft.returnType = new SliceType(new ArrayType(type.getElementType(), -1), "strong");
-                if (this.isConst(t) && !this.isPureValue(type.getElementType())) {
-                    ft.returnType = this.makeConst(ft.returnType, loc);
-                }
+                ft.objectType = new SliceType(type.arrayType, "local_reference");
+                ft.returnType = new SliceType(type.arrayType, "strong");
                 return ft;                
             }
         } else if (type instanceof ArrayType) {

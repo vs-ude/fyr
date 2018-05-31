@@ -2117,10 +2117,10 @@ export class CodeGenerator {
                     throw "Implementation error";
                 } else if (striplhs == this.tc.builtin_cap) {
                     let objType = this.tc.stripType(enode.lhs.lhs.type);
-                    if (objType == this.tc.t_string) {
-                        let s = this.processExpression(f, scope, enode.lhs.lhs, b, vars, this.tc.t_string);
-                        return b.assign(b.tmp(), "len_arr", "sint", [s]);
-                    } else if (objType instanceof SliceType) {
+//                    if (objType == this.tc.t_string) {
+//                        let s = this.processExpression(f, scope, enode.lhs.lhs, b, vars, this.tc.t_string);
+//                        return b.assign(b.tmp(), "len_arr", "sint", [s]);
+                    if (objType instanceof SliceType) {
                         // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                         let head_addr: ssa.Variable | ssa.Pointer;
                         if (this.isLeftHandSide(enode.lhs.lhs)) {
@@ -2159,14 +2159,24 @@ export class CodeGenerator {
                     } else {
                         head_addr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType) as ssa.Variable;
                     }
+                    let data_ptr: ssa.Variable | number;
+                    let count: ssa.Variable | number;
                     if (head_addr instanceof ssa.Variable) {
-                        head_addr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [head_addr]), 0);
+                        if (objType.mode == "local_reference") {
+                            data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            count = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        } else {
+                            let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        }
+                    } else {
+                        data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                        data_ptr = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                     }
-                    let data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
-                    let len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
-                    let mem = b.assign(b.tmp(), "alloc_arr", "addr", [len, size]);
-                    b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, data_ptr, len]);
-                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, len, len]);
+                    let mem = b.assign(b.tmp(), "alloc_arr", "addr", [count, size]);
+                    b.assign(null, "memcpy", null, [mem, data_ptr, count, size]);
+                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, count, mem]);
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "append") {
                     /*
                     let objType = this.tc.stripType(enode.lhs.lhs.type);
