@@ -11,17 +11,17 @@ export func main() int {
 }
 
 func name() int {
-    return "Hallo".len()
+    return len("Hallo")
 }
 
 func lenof(str string) int {
-    return str.len()
+    return len(str)
 }
 
 func lenof2(str string) int {
     var s2 string
     s2 = str
-    return s2.len()
+    return len(s2)
 }
 
 func appendMe() int {
@@ -29,7 +29,7 @@ func appendMe() int {
     let wrong = [4]int[1,...3]
     let arr = []int[1,2,3,...4]
     let arr2 = [4,5,6,7]
-    return n.cap() + n.len() + wrong[0]
+    return cap(n) + len(n) + wrong[0]
 }
 
 func allocMe(count int) []int {
@@ -37,7 +37,7 @@ func allocMe(count int) []int {
 }
 
 func cloneMe(arr &[]int) []int {
-    return arr.clone()
+    return clone(arr)
 }
 
 func sliceMe() int {
@@ -45,5 +45,5 @@ func sliceMe() int {
     let arr2 = arr[1:4]
     let arr3 = [2]int[22,33]
     let arr4 = cloneMe(arr3[:])
-    return arr2.len() + arr4.len()
+    return len(arr2) + len(arr4)
 }

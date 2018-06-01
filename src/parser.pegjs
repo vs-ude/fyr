@@ -898,6 +898,21 @@ primary2
   / "false" { return new ast.Node({loc: fl(location()), op: "bool", value: "false"}); }
   / "null" { return new ast.Node({loc: fl(location()), op: "null"}); }
   / "this" { return new ast.Node({loc: fl(location()), op: "id", value: "this"}); }
+  / "take" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "take", lhs: e});
+    }
+  / "len" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "len", lhs: e});
+    }
+  / "cap" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "cap", lhs: e});
+    }
+  / "clone" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "clone", lhs: e});
+    }
+  / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "clone", lhs: e, rhs: e2});
+    }
   / i: identifier {
       return i;
     }
@@ -916,9 +931,6 @@ primary2
           expected("return type in lambda expression", fl(location()));
       }
       return new ast.Node({loc: fl(location()), op: "=>", parameters: p, lhs: t, statements: b});
-    }
-  / "take" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
-      return new ast.Node({loc: fl(location()), op: "take", lhs: e});
     }
   / o:object { return o; }
   / a:array { return a; }

@@ -1610,16 +1610,6 @@ export class TypeChecker {
         this.t_error.methods.set("toError", toError);
         this.ifaces.push(this.t_error);
 
-        this.builtin_len = new FunctionType();
-        this.builtin_len.callingConvention = "system";
-        this.builtin_len.name = "len";
-        this.builtin_len.returnType = this.t_int;
-
-        this.builtin_cap = new FunctionType();
-        this.builtin_cap.callingConvention = "system";
-        this.builtin_cap.name = "cap";
-        this.builtin_cap.returnType = this.t_int;
-
         this.globalGroup = new Group(GroupKind.Bound, "$global");
     }
 
@@ -3764,11 +3754,6 @@ export class TypeChecker {
                     enode.type = type.elements.get(name);
                     break;
                 }
-                let method = this.getBuiltinFunction(enode.lhs.type, name, enode.name.loc);
-                if (method) {
-                    enode.type = method;
-                    break;
-                }
                 let objectType = type;
                 let isConst = this.isConst(enode.lhs.type);
                 if (type instanceof PointerType || type instanceof UnsafePointerType) {
@@ -4214,6 +4199,41 @@ export class TypeChecker {
                 }
                 enode.type = enode.lhs.type;
                 break;
+            case "len":
+                this.checkExpression(enode.lhs, scope);
+                if (!this.isString(enode.lhs.type) && !this.isArray(enode.lhs.type) && !this.isSlice(enode.lhs.type)) {
+                    throw new TypeError("'len' is only allowed on strings, arrays and slices", enode.loc);
+                }
+                enode.type = this.t_int;
+                break;
+            case "cap":
+                this.checkExpression(enode.lhs, scope);
+                if (!this.isSlice(enode.lhs.type)) {
+                    throw new TypeError("'cap' is only allowed on slices", enode.loc);
+                }
+                enode.type = this.t_int;
+                break;
+            case "copy":
+                this.checkExpression(enode.lhs, scope);
+                this.checkExpression(enode.rhs, scope);
+                if (!this.isSlice(enode.lhs.type) || !this.isSlice(enode.rhs.type)) {
+                    throw new TypeError("'clone' is only allowed on slices", enode.loc);
+                }
+                if (!this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc, false)) {
+                    throw new TypeError("'copy' requires two slices of the same type", enode.loc);
+                }
+                enode.type = this.t_void;
+                break;
+            case "clone":
+            {
+                this.checkExpression(enode.lhs, scope);
+                if (!this.isSlice(enode.lhs.type)) {
+                    throw new TypeError("'clone' is only allowed on slices", enode.loc);
+                }
+                let t = RestrictedType.strip(enode.lhs.type) as SliceType;
+                enode.type = new SliceType(t.arrayType, "strong");
+                break;
+            }
             case "ellipsisId":
             case "unary...":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
@@ -5614,62 +5634,6 @@ export class TypeChecker {
         return t;
     }
 
-    private getBuiltinFunction(t: Type, name: string, loc: Location): FunctionType | null {
-        let type = this.stripType(t);
-        if (type == this.t_string) {
-            if (name == "len") {
-                return this.builtin_len;
-            }
-        } else if (type instanceof SliceType) {
-            if (name == "len") {
-                return this.builtin_len;
-            } else if (name == "cap") {
-                return this.builtin_cap;
-            } else if (name == "append") {
-                // TODO: Restriction can be lifted
-                if (this.isConst(t)) {
-                    throw new TypeError("append is not allowed on const slices", loc);
-                }
-                let ft = new FunctionType()
-                ft.name = "append";
-                ft.callingConvention = "system";
-                ft.objectType = type;
-                let p = new FunctionParameter();
-                p.name = "slice";
-                p.type = type;
-                p.ellipsis = true;
-                ft.parameters.push(p);
-                ft.returnType = type;
-                return ft;
-            } else if (name == "clone") {
-                let ft = new FunctionType()
-                ft.name = "clone";
-                ft.callingConvention = "system";
-                ft.objectType = new SliceType(type.arrayType, "local_reference");
-                ft.returnType = new SliceType(type.arrayType, "strong");
-                return ft;                
-            }
-        } else if (type instanceof ArrayType) {
-            if (name == "len") {
-                return this.builtin_len;
-            }
-        } else if (this.isMap(type)) {
-            if (name == "remove") {
-                let ft = new FunctionType()
-                ft.name = "remove";
-                ft.callingConvention = "system";
-                ft.objectType = type;
-                let p = new FunctionParameter();
-                p.name = "key";
-                p.type = this.mapKeyType(type);
-                ft.parameters.push(p);
-                ft.returnType = this.t_bool;
-                return ft;                                
-            }
-        }
-        return null;
-    }
-
     public qualifiedTypeName(t: Type): string {
         return t.toString();
     }
@@ -6341,6 +6305,17 @@ export class TypeChecker {
                     throw new TypeError("Expression with side effects is not allowed in this place", enode.loc);
                 }
                 return this.checkGroupsInExpression(enode.lhs, scope, flags);
+            case "cap":
+            case "len":
+                this.checkGroupsInExpression(enode.lhs, scope, flags);
+                return null;
+            case "copy":
+                this.checkGroupsInExpression(enode.lhs, scope, flags);
+                this.checkGroupsInExpression(enode.rhs, scope, flags);
+                return null;
+            case "clone":
+                this.checkGroupsInExpression(enode.lhs, scope, flags);
+                return new Group(GroupKind.Free);
             default:
                 throw "Implementation error " + enode.op;
         }    
@@ -6437,7 +6412,7 @@ export class TypeChecker {
     // Returns true ff the expression yields ownership of the object it is pointing to.
     // Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
     public isTakeExpression(enode: Node): boolean {
-        if (enode.op == "take" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
+        if (enode.op == "clone" || enode.op == "take" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
             return true;
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.
@@ -6469,9 +6444,6 @@ export class TypeChecker {
     public t_void: Type;
     public t_any: Type;
     public t_error: InterfaceType;
-
-    public builtin_len: FunctionType;
-    public builtin_cap: FunctionType;
 
     // List of all interfaces. These are checked for possible errors after they have been defined.
     public ifaces: Array<InterfaceType> = [];
