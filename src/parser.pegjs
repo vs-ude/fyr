@@ -911,7 +911,7 @@ primary2
       return new ast.Node({loc: fl(location()), op: "clone", lhs: e});
     }
   / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
-      return new ast.Node({loc: fl(location()), op: "clone", lhs: e, rhs: e2});
+      return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2});
     }
   / "sizeOf" [ \t]* "(" [ \t]* t:type [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "sizeof", lhs: t});
