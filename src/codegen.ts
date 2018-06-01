@@ -2884,6 +2884,16 @@ export class CodeGenerator {
                 b.assign(null, "memcpy", null, [mem, data_ptr, count, size]);
                 return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, count, mem]);
             }
+            case "sizeof":
+            {
+                let st = this.getSSAType(enode.lhs.type);
+                return ssa.sizeOf(st);
+            }
+            case "aligned_sizeof":
+            {
+                let st = this.getSSAType(enode.lhs.type);
+                return ssa.alignedSizeOf(st);
+            }
             case "copy":
             {
                 throw "TODO";
@@ -3412,6 +3422,7 @@ export class CodeGenerator {
             case "array":
             case "(":
             case "take":
+            case "clone":
                 // Take returns an owning pointer and hence there is no need to increase the reference count.
                 // However, the value must be destructed afterwards.
                 return ["no", null];

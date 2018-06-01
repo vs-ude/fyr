@@ -913,6 +913,12 @@ primary2
   / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "clone", lhs: e, rhs: e2});
     }
+  / "sizeOf" [ \t]* "(" [ \t]* t:type [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "sizeof", lhs: t});
+    }
+  / "alignedSizeOf" [ \t]* "(" [ \t]* t:type [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "aligned_sizeof", lhs: t});
+    }
   / i: identifier {
       return i;
     }

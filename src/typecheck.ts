@@ -4234,6 +4234,11 @@ export class TypeChecker {
                 enode.type = new SliceType(t.arrayType, "strong");
                 break;
             }
+            case "sizeof":
+            case "aligned_sizeof":
+                enode.lhs.type = this.createType(enode.lhs, scope, "default");
+                enode.type = this.t_int;
+                break;
             case "ellipsisId":
             case "unary...":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
@@ -6308,6 +6313,9 @@ export class TypeChecker {
             case "cap":
             case "len":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);
+                return null;
+            case "sizeof":
+            case "aligned_sizeof":                
                 return null;
             case "copy":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);

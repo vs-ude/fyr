@@ -7,7 +7,7 @@ export func main() int {
     let str = "Hello World"
     let str2 = str[6:]
     puts(<#const char>str2)
-    return name() + lenof("Duda") + lenof2("!!") + appendMe() + <int>str[0] + sliceMe()
+    return name() + lenof("Duda") + lenof2("!!") + appendMe() + <int>str[0] + sliceMe() + sizeOf(int)
 }
 
 func name() int {
