@@ -2552,15 +2552,15 @@ export class CodeGenerator {
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
                         l = index2 - index1;  
                     } else {
-                        l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
+                        l = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
                     }
                     if (index1 != 0) {
                         if (size != 1) {
                             if (typeof(index1) == "number") {
-                                data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, index1 * size]);
+                                data_ptr = b.assign(b.tmp(), "add", "addr", [data_ptr, index1 * size]);
                             } else {
-                                let tmp = b.assign(b.tmp(), "mul", "i32", [index1, size]);
-                                data_ptr = b.assign(b.tmp("ptr"), "add", "i32", [data_ptr, tmp]);
+                                let tmp = b.assign(b.tmp(), "mul", "sint", [index1, size]);
+                                data_ptr = b.assign(b.tmp(), "add", "addr", [data_ptr, tmp]);
                             }
                         } else {
                             data_ptr = b.assign(b.tmp(), "add", "addr", [data_ptr, index1]);
@@ -2578,7 +2578,7 @@ export class CodeGenerator {
                     return b.assign(b.tmp(), "struct", this.strongSlicePointer, [data_ptr, l, array_ptr]);
                 } else if (t == this.tc.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, this.tc.t_string);
-                    let len = b.assign(b.tmp(), "len_arr", "sint", [ptr]);
+                    let len = b.assign(b.tmp(), "len_str", "sint", [ptr]);
                     if (enode.parameters[0] && index1 !== 0) {
                         // Compare 'index1' with 'len'
                         let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
@@ -2586,13 +2586,13 @@ export class CodeGenerator {
                         b.assign(null, "trap", null, []);
                         b.end();                        
                     }
-                    if (enode.parameters[1]) {
+                    if (enode.parameters[1] && index2 !== 0) {
                         // Compare 'index2' with 'len'
                         let trap = b.assign(b.tmp(), "gt_u", "i8", [index2, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
                         b.end();
-                    } else {
+                    } else if (!enode.parameters[2]) {
                         index2 = len;
                     }
                     if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
@@ -2602,9 +2602,18 @@ export class CodeGenerator {
                         b.end();                        
                     }
                     let ptr3 = b.assign(b.tmp(), "add", "addr", [ptr, index1]);
-                    let l = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
+                    let l: ssa.Variable | number;
+                    let copyLen: ssa.Variable | number;
+                    if (typeof(index1) == "number" && typeof(index2) == "number") {
+                        l = index2 - index1 + 1;
+                        copyLen = index2 - index1;
+                    } else {
+                        copyLen = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
+                        l = b.assign(b.tmp(), "add", "sint", [copyLen, 1]);
+                    }
+                    // This is allocating one byte more. Optimization: Do not use calloc. But then add a trailing zero!
                     let result = b.assign(b.tmp(), "alloc_arr", "addr", [l, 1]);
-                    b.assign(null, "memcpy", null, [result, ptr3, l, 1]);
+                    b.assign(b.mem, "memcpy", null, [result, ptr3, copyLen, 1]);
                     if (this.tc.isTakeExpression(enode.lhs)) {
                         b.assign(null, "decref_arr", null, [ptr]);
                     }
@@ -2899,7 +2908,7 @@ export class CodeGenerator {
                 let objType = RestrictedType.strip(enode.lhs.type);
                 if (objType == this.tc.t_string) {
                     let s = this.processExpression(f, scope, enode.lhs, b, vars, this.tc.t_string);
-                    return b.assign(b.tmp(), "len_arr", "sint", [s]);
+                    return b.assign(b.tmp(), "len_str", "sint", [s]);
                 } else if (objType instanceof SliceType) {
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;

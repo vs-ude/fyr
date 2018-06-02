@@ -785,6 +785,16 @@ export class CBackend implements backend.Backend {
             call.funcExpr = new CConst("fyr_len_arr");
             call.args = [this.emitExpr(n.args[0])];
             return call;
+        } else if (n.kind == "len_str") {
+            let call = new CFunctionCall();
+            call.funcExpr = new CConst("fyr_len_arr");
+            call.args = [this.emitExpr(n.args[0])];
+            // Subtract one, because the trailing zero does not count
+            let s = new CBinary();
+            s.operator = "-";
+            s.lExpr = call;
+            s.rExpr = new CConst("1");
+            return s;
         }
 
         throw "Implementation error " + n.kind;
@@ -1141,6 +1151,8 @@ export class CString extends CNode {
         this.name = "str_" + CString.counter.toString();
         CString.counter++;
         this.bytes = this.toUTF8Array(str);
+        // Add trailing zero for C-compatibility
+        this.bytes.push(0);
     }
 
     public toString(indent: string = ""): string {
