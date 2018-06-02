@@ -6,12 +6,13 @@ type Point struct {
     x int
 }
 
-export func main() {
+export func main() int {
 //    var ptr **Point = null
 //    var p3 *Point = take(*ptr)
     var ptr *Point = {}
     let p Point = {}
     let ref ~Point = callme4(&ptr)
+    return 0
 }
 
 func callme(ptr &int) {
@@ -28,4 +29,9 @@ func callme3(p const &Point) {
 
 func callme4(p &*Point) ~Point {
     return *p
+}
+
+func addme() string {
+    let str = "123"
+    return str + "456"
 }
