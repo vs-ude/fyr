@@ -7,8 +7,11 @@ type Point struct {
 }
 
 export func main() {
+//    var ptr **Point = null
+//    var p3 *Point = take(*ptr)
+    var ptr *Point = {}
     let p Point = {}
-    callme3(&p)
+    let ref ~Point = callme4(&ptr)
 }
 
 func callme(ptr &int) {
@@ -21,4 +24,8 @@ func callme2(p &Point) {
 
 func callme3(p const &Point) {
 
+}
+
+func callme4(p &*Point) ~Point {
+    return *p
 }

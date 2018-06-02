@@ -2020,7 +2020,15 @@ export class CodeGenerator {
                 if (t == this.tc.t_string) {
                     let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
-                    return b.call(b.tmp(), this.concatStringFunctionType, [SystemCalls.concatString, p1, p2]);
+                    let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
+                    let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
+                    let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
+                    let lplus = b.assign(b.tmp(), "add", "sint", [l, 1]);
+                    let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [lplus, 1]);
+                    b.assign(b.mem, "memcpy", null, [ptr, p1, l1, 1]);
+                    let ptr2 = b.assign(b.tmp(), "add", "addr", [ptr, l1]);
+                    b.assign(b.mem, "memcpy", null, [ptr2, p2, l2, 1]);
+                    return ptr;
                 }
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2: ssa.Variable | number;
@@ -2542,7 +2550,7 @@ export class CodeGenerator {
                     } else if (!enode.parameters[1]) {
                         index2 = len;
                     }
-                    if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
+                    if (index1 instanceof ssa.Variable || (index2 instanceof ssa.Variable && index2 !== len)) {
                         let cmp = b.assign(b.tmp(), "gt_s", "i8", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
@@ -2595,7 +2603,7 @@ export class CodeGenerator {
                     } else if (!enode.parameters[2]) {
                         index2 = len;
                     }
-                    if (index1 instanceof ssa.Variable || index2 instanceof ssa.Variable) {
+                    if (index1 instanceof ssa.Variable || (index2 instanceof ssa.Variable && index2 != len)) {
                         let cmp = b.assign(b.tmp(), "gt_s", "sint", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);

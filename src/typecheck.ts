@@ -6522,7 +6522,7 @@ export class TypeChecker {
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.
         // Hence it behaves like a take expression.
-        if (enode.type == this.t_string && enode.op == ":") {
+        if (enode.type == this.t_string && (enode.op == ":" || enode.op == "+")) {
             return true;
         }
         return false;
