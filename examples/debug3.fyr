@@ -35,3 +35,9 @@ func addme() string {
     let str = "123"
     return str + "456"
 }
+
+func addme2() string {
+    let str = "123"
+    let str2 = str + "456"
+    return str2
+}
