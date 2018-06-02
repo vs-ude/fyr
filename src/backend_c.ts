@@ -785,21 +785,6 @@ export class CBackend implements backend.Backend {
             call.funcExpr = new CConst("fyr_len_arr");
             call.args = [this.emitExpr(n.args[0])];
             return call;
-        } else if (n.kind == "memcpy") {
-            let call = new CFunctionCall();
-            call.funcExpr = new CConst("memcpy");
-            let size = new CBinary();
-            size.operator = "*";
-            size.lExpr = this.emitExpr(n.args[2]);
-            size.rExpr = this.emitExpr(n.args[3]);
-            call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), size];
-            if (!this.module.hasInclude("string.h", true)) {
-                let inc = new CInclude();
-                inc.isSystemPath = true;
-                inc.path = "strings.h";
-                this.module.includes.push(inc);
-            }
-            return call;            
         }
 
         throw "Implementation error " + n.kind;
@@ -926,6 +911,61 @@ export class CBackend implements backend.Backend {
                 n = n.next[0];
             } else if (n.kind == "end") {
                 // Nothing to do
+                n = n.next[0];
+            } else if (n.kind == "memcpy") {
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("memcpy");
+                let size = new CBinary();
+                size.operator = "*";
+                size.lExpr = this.emitExpr(n.args[2]);
+                size.rExpr = this.emitExpr(n.args[3]);
+                call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), size];
+                if (!this.module.hasInclude("string.h", true)) {
+                    let inc = new CInclude();
+                    inc.isSystemPath = true;
+                    inc.path = "strings.h";
+                    this.module.includes.push(inc);
+                }
+                code.push(call);
+                n = n.next[0];
+            } else if (n.kind == "memmove") {
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("memmove");
+                let size = new CBinary();
+                size.operator = "*";
+                size.lExpr = this.emitExpr(n.args[2]);
+                size.rExpr = this.emitExpr(n.args[3]);
+                call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), size];
+                if (!this.module.hasInclude("string.h", true)) {
+                    let inc = new CInclude();
+                    inc.isSystemPath = true;
+                    inc.path = "strings.h";
+                    this.module.includes.push(inc);
+                }
+                code.push(call);
+                n = n.next[0];
+            } else if (n.kind == "set_member") {
+                let m = new CBinary();
+                m.operator = ".";
+                let s = n.args[0];
+                if (!(s instanceof ssa.Variable) && !(s instanceof ssa.Node)) {
+                    throw "Implementation error";
+                }
+                let idx = n.args[1];
+                if (typeof(idx) != "number") {
+                    throw "Implementation error";
+                }
+                let t = s.type;
+                if (!(t instanceof ssa.StructType) || t.fields.length <= idx) {
+                    throw "Implementation error";
+                }
+                m.lExpr = this.emitExpr(n.args[0]);
+                m.rExpr = new CConst(t.fieldNameByIndex(idx));
+                let assign = new CBinary();
+                assign.operator = "=";
+                assign.lExpr = m;
+                assign.rExpr = this.emitExpr(n.args[2]);
+                code.push(assign);
                 n = n.next[0];
             } else {
                 code.push(this.emitExpr(n));

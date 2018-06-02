@@ -3426,6 +3426,73 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "copy":
+                this.checkExpression(snode.lhs, scope);
+                this.checkExpression(snode.rhs, scope);
+                if (this.isConst(snode.lhs.type)) {
+                    throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);
+                }
+                if (!this.isSlice(snode.lhs.type) || !this.isSlice(snode.rhs.type)) {
+                    throw new TypeError("'copy' is only allowed on slices", snode.loc);
+                }
+                let t = RestrictedType.strip(snode.lhs.type) as SliceType;
+                if (this.isConst(t.arrayType)) {
+                    throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);                    
+                }
+                let e = RestrictedType.strip(t.getElementType());
+                let t2 = RestrictedType.strip(snode.rhs.type) as SliceType;
+                let e2 = RestrictedType.strip(t2.getElementType());
+                if (!this.checkTypeEquality(e, e2, snode.loc, false)) {
+                    throw new TypeError("'copy' requires two slices of the same type", snode.loc);
+                }
+                break;
+            case "append":
+            {
+                if (snode.parameters.length < 2) {
+                    throw new TypeError("'append' expects at least two arguments", snode.loc);
+                }
+                let e: Type;
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    let p = snode.parameters[i];
+                    let expand = false;
+                    if (i > 0) {
+                        if (p.op == "unary...") {
+                            expand = true;
+                            p = p.rhs;
+                        }
+                    }
+                    this.checkExpression(p, scope);
+                    if (i == 0) {
+                        if (!this.isSlice(p.type) || !this.checkIsMutable(p, scope, false)) {
+                            throw new TypeError("First argument to 'append' must be a mutable non-const slice", p.loc);
+                        }
+                        let t = RestrictedType.strip(p.type) as SliceType;
+                        if (this.isConst(t.arrayType)) {
+                            throw new TypeError("First argument to 'append' must be a mutable non-const slice", p.loc);
+                        }
+                        e = t.getElementType();
+                        if (this.isPureValue(e)) {
+                            // Remove constness in case of pure values.
+                            e = RestrictedType.strip(e);
+                        }
+                    } else {
+                        if (expand) {
+                            if (!this.isSlice(p.type)) {
+                                throw new TypeError("'...' must be followed by a slice", p.loc);
+                            }
+                            let e2 = (RestrictedType.strip(p.type) as SliceType).getElementType();
+                            if (this.isPureValue(e)) {
+                                // Remove constness in case of pure values.
+                                e2 = RestrictedType.strip(e2);
+                            }
+                            this.checkTypeEquality(e, e2, p.loc, true);
+                        } else {
+                            this.checkIsAssignableNode(e, p, scope, true);
+                        }
+                    }
+                }
+                break;
+            }
             default:
                 this.checkExpression(snode, scope);
                 if (snode.type instanceof ArrayLiteralType || snode.type instanceof ObjectLiteralType || snode.type instanceof TupleLiteralType) {
@@ -4212,17 +4279,6 @@ export class TypeChecker {
                     throw new TypeError("'cap' is only allowed on slices", enode.loc);
                 }
                 enode.type = this.t_int;
-                break;
-            case "copy":
-                this.checkExpression(enode.lhs, scope);
-                this.checkExpression(enode.rhs, scope);
-                if (!this.isSlice(enode.lhs.type) || !this.isSlice(enode.rhs.type)) {
-                    throw new TypeError("'clone' is only allowed on slices", enode.loc);
-                }
-                if (!this.checkTypeEquality(enode.lhs.type, enode.rhs.type, enode.loc, false)) {
-                    throw new TypeError("'copy' requires two slices of the same type", enode.loc);
-                }
-                enode.type = this.t_void;
                 break;
             case "clone":
             {
@@ -5197,14 +5253,21 @@ export class TypeChecker {
         return false;
     }
 
-    public checkIsMutable(node: Node, scope: Scope) {
+    public checkIsMutable(node: Node, scope: Scope, doThrow: boolean = true): boolean {
         if (node.type instanceof RestrictedType && node.type.isConst) {
+            if (!doThrow) {
+                return false;
+            }
             throw new TypeError("The expression is not mutable because it is const", node.loc);
         }
 
         if (!this.isLeftHandSide(node, scope)) {
+            if (!doThrow) {
+                return false;
+            }
             throw new TypeError("The expression is not mutable because it is an intermediate value or the variable is not mutable", node.loc);
         }
+        return true;
     }
 
     private checkVariableType(t: Type, loc: Location) {
@@ -5841,6 +5904,36 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "copy":
+                this.checkGroupsInExpression(snode.lhs, scope, GroupCheckFlags.None);
+                this.checkGroupsInExpression(snode.rhs, scope, GroupCheckFlags.None);
+                break;
+            case "append":
+            {
+                let group: Group;
+                let ltype: Type;
+                for(let i = 0; i < snode.parameters.length; i++) {                    
+                    let p = snode.parameters[i];
+                    let g = this.checkGroupsInExpression(p.op == "unary..." ? p.rhs : p, scope, GroupCheckFlags.None);
+                    if (i == 0) {
+                        group = g;
+                        ltype = (RestrictedType.strip(p.type) as SliceType).getElementType();
+                    } else {
+                        if (p.op == "unary...") {
+                            if (!this.isPureValue(ltype)) {
+                                // TODO: Could be realized. Might need to zero the slice
+                                throw new TypeError("Appending a slice of pointers is not supported.", p.loc);
+                            }
+                        } else {
+                            // Appending a pointer-like type? Then we must care about the groups involved
+                            if (this.isSafePointer(p.type) || this.isSlice(p.type)) {
+                                this.checkGroupsInSingleAssignment(ltype, group, g, p, false, scope, p.loc);
+                            }
+                        }
+                    }
+                }
+                break;
+            }
                 /*
             case "spawn":
             {
@@ -5949,6 +6042,7 @@ export class TypeChecker {
             }
             if (TypeChecker.hasReferenceOrStrongPointers(rnode.type)) {
                 // Accessing a strong pointer or reference inside an isolate is not allowed.
+                // This should be guarded by the GroupCheckFlags.ForbidIsolates above. Just being paranoid here.
                 throw "Implementation error";
             }
             rightGroup = new Group(GroupKind.Free);
@@ -5956,7 +6050,7 @@ export class TypeChecker {
 
         if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
             if (rhsIsVariable) {
-                // Make the RHS variable unavailable
+                // Make the RHS variable unavailable, since the LHS is not the owner and there can be only one owner
                 if (!rnodeReuse) {
                     let rhsVariable = scope.resolveElement(rhsVariableName);
                     scope.setGroup(rhsVariable, null);
@@ -6316,10 +6410,6 @@ export class TypeChecker {
                 return null;
             case "sizeof":
             case "aligned_sizeof":                
-                return null;
-            case "copy":
-                this.checkGroupsInExpression(enode.lhs, scope, flags);
-                this.checkGroupsInExpression(enode.rhs, scope, flags);
                 return null;
             case "clone":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);

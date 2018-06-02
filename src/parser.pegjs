@@ -467,6 +467,12 @@ statement
       }
       return new ast.Node({loc: fl(location()), op: "spawn", rhs: e});
     }
+  / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2});
+    }
+  / "append" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+      return new ast.Node({loc: fl(location()), op: "append", parameters: e});
+    }    
   / s: simpleStatement { 
       if (s.op == "let_in" || s.op == "var_in") {
           error("'in' is allowed inside a for loop header only", s.loc);
@@ -909,9 +915,6 @@ primary2
     }
   / "clone" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "clone", lhs: e});
-    }
-  / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
-      return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2});
     }
   / "sizeOf" [ \t]* "(" [ \t]* t:type [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "sizeof", lhs: t});
