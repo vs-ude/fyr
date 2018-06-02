@@ -1643,7 +1643,7 @@ export class TypeChecker {
             let t = this.stringLiteralType(tnode.value);
             return t;
         } else if (tnode.op == "constType") {
-            let c = this.createType(tnode.rhs, scope, mode);
+            let c = this.createType(tnode.rhs, scope, originalMode);
             if (this.isSafePointer(c)) {
                 let ptr = RestrictedType.strip(c) as PointerType;
                 ptr.elementType = this.makeConst(ptr.elementType, tnode.loc);
@@ -3598,6 +3598,10 @@ export class TypeChecker {
                 } else {
                     this.checkIsAddressable(enode.rhs, scope, true, true);
                     enode.type = new PointerType(enode.rhs.type, "local_reference");
+                    // A reference to a non-mutable variable (e.g. 'let') must not be dereferenced and assigned to -> const
+                    if (!this.checkIsMutable(enode.rhs, scope, false)) {
+                        enode.type = this.applyConst(enode.type, enode.loc);
+                    }
                 }
                 break;
             }
@@ -4287,6 +4291,9 @@ export class TypeChecker {
                     throw new TypeError("'clone' is only allowed on slices", enode.loc);
                 }
                 let t = RestrictedType.strip(enode.lhs.type) as SliceType;
+                if (!this.isPureValue(t.getElementType())) {
+                    throw new TypeError("'clone' cannot work on slices which contain pointer-like types", enode.loc);
+                }
                 enode.type = new SliceType(t.arrayType, "strong");
                 break;
             }
@@ -5633,25 +5640,25 @@ export class TypeChecker {
 
     public applyConst(t: Type, loc: Location): Type {
         if (this.isSafePointer(t)) {                                    
-            let r: RestrictedType;
+//            let r: RestrictedType;
             if (t instanceof RestrictedType) {
-                r = t;
+//                r = t;
                 t = t.elementType;
             }
-            t = new PointerType(this.makeConst((t as PointerType).elementType, loc), (t as PointerType).mode);
-            if (r) {
-                t =  new RestrictedType(t, r);
-            }
+            return new PointerType(this.makeConst((t as PointerType).elementType, loc), (t as PointerType).mode);
+//            if (r) {
+//                t =  new RestrictedType(t, r);
+//            }
         } else if (this.isSlice(t)) {
-            let r: RestrictedType;
+//            let r: RestrictedType;
             if (t instanceof RestrictedType) {
-                r = t;
+//                r = t;
                 t = t.elementType;
             }
-            t = new SliceType(this.makeConst((t as SliceType).arrayType, loc) as ArrayType | RestrictedType, (t as SliceType).mode);
-            if (r) {
-                t =  new RestrictedType(t, r);
-            }
+            return new SliceType(this.makeConst((t as SliceType).arrayType, loc) as ArrayType | RestrictedType, (t as SliceType).mode);
+//            if (r) {
+//                t =  new RestrictedType(t, r);
+//            }
         }
         return this.makeConst(t, loc);
     }
@@ -6059,7 +6066,7 @@ export class TypeChecker {
             } else if (rhsIsTakeExpr) {
                 // Nothing special todo
             } else {
-                throw new TypeError("Assignment to an owning pointer is only allowed from a variable or take expression", loc);
+                throw new TypeError("Assignment to an owning pointer (or data structure containing an owning pointer) is only allowed from a variable or take expression", loc);
             }
         }
 
