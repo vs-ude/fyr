@@ -6139,10 +6139,13 @@ export class TypeChecker {
                 let element = scope.resolveElement(enode.value);
                 if (!element) {
                     throw "Implementation error";
+                }                
+                if (element instanceof TemplateFunction) {
+                    return new Group(GroupKind.Free);
                 }
                 let g = scope.resolveGroup(element);
                 if (!g || !scope.isGroupAvailable(g)) {
-                    if ((origFlags & GroupCheckFlags.AllowUnavailableVariable) == 0) {
+                    if ((origFlags & GroupCheckFlags.AllowUnavailableVariable) == 0) {                        
                         throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
                     }
 //                    console.log(element.name + " is not available, but do not care");

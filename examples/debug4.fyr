@@ -22,7 +22,7 @@ export func main() int {
     var list *LinkedList<int> = {value: 42}
     list.next = {value: 43}
     list.next.setValue(44)
-    let smaller = min<int>(42, 2)
+    let smaller = min(42, 2)
     let ref ~LinkedList<int> = list
     if (ref != list) {
         return 42
