@@ -249,8 +249,12 @@ export class CodeGenerator {
             return "ptr";
         }
         if (t instanceof StructType) {
+            if (this.structs.has(t)) {
+                return this.structs.get(t);
+            }            
             let s = new ssa.StructType();
             s.name = t.name;
+            this.structs.set(t, s);
             for(let i = 0; i < t.fields.length; i++) {
                 let f = t.fields[i];
                 let ft = this.getSSAType(f.type);
@@ -3677,5 +3681,6 @@ export class CodeGenerator {
     private interfaceTableLength: number = 0;
     private typeCodeMap: Map<string,number> = new Map<string, number>();
     private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
+    private structs: Map<StructType, ssa.StructType> = new Map<StructType, ssa.StructType>();
 }
 

@@ -132,6 +132,8 @@ export class CBackend implements backend.Backend {
         }
         let nameWithoutDot = f.name.replace("_", "_u");
         nameWithoutDot = nameWithoutDot.replace(".", "__");
+        nameWithoutDot = nameWithoutDot.replace("<", "_l");
+        nameWithoutDot = nameWithoutDot.replace(">", "_g");
         if (isExported && f.name == "main") {
             this.mainFunction = f;
             f.func.name = "f_" + nameWithoutDot;        

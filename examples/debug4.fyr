@@ -1,0 +1,19 @@
+type LinkedList<T> struct {
+    next *LinkedList<T>
+    value T
+}
+
+func LinkedList.setValue(x T) {
+    this.value = x
+}
+
+func LinkedList.getValue() T {
+    return this.value
+}
+
+export func main() int {
+    var list *LinkedList<int> = {value: 42}
+    list.next = {value: 43}
+    list.next.setValue(44)
+    return list.value + list.next.value + list.next.getValue()
+}
