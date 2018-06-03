@@ -18,4 +18,5 @@ measurements/rect_go/rect
 measurements/call_go/call
 playground
 backup
+pkg/*
 

@@ -9,43 +9,150 @@ import typecheck = require("./typecheck");
 import codegen = require("./codegen");
 import ast = require("./ast");
 import pkg = require("./pkg");
-import child_process = require("child_process")
-import process = require("process")
+import child_process = require("child_process");
+import process = require("process");
+import os = require("os");
 
 // Make TSC not throw out the colors lib
 colors.red;
 
 var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
+function createPath(basePath: string, subs: Array<string>): string {
+    let p = basePath;
+    for(let sub of subs) {
+        try {
+            p = path.join(p, sub);
+            fs.mkdirSync(p);
+        } catch(e) {
+            if (e.code !== "EEXIST") {
+                console.log(("Cannot create directory " + p).red);
+                return null;
+            }
+        }
+    }
+    return p;
+}
+
 function compileModules() {
-    if (program.emitC) {
-        program.disableWasm = true;
+    if (program.emitC && program.emitWasm) {
+        console.log(("Only one code emit path can be selected".red));
+        return;
     }
 
-    var args = Array.prototype.slice.call(arguments, 0);
-    var files = [];
-    let fyrPath = process.env["FYRBASE"];
-    if (!fyrPath) {
+    var args: Array<object | string> = Array.prototype.slice.call(arguments, 0);
+    if (args.length <= 1) {
+        console.log(("Missing package or file information").red);
+        return;
+    }
+    args = args.splice(args.length -2, 1);
+    
+    // Environment variables
+    let fyrBase = process.env["FYRBASE"];
+    if (!fyrBase) {
         console.log(("No FYRBASE environment variable has been set").red);
         return;
     }
-    if (!program.disableRuntime) {
-        files.push(path.join(fyrPath, "runtime/mem.fyr"));
-        files.push(path.join(fyrPath, "runtime/map.fyr"));
+    let fyrPaths_str = process.env["FYRPATH"];
+    if (!fyrPaths_str) {
+        let home = process.env["HOME"];
+        if (!home) {
+            fyrPaths_str = "";
+        } else {
+            fyrPaths_str = home + path.sep + "fyr";
+        }        
     }
-    // Determine all source files to compile
-    for(var i = 0; i < args.length - 1; i++) {
-        let file = args[i];
-        files.push(file);
+    let fyrPaths = [fyrBase].concat(fyrPaths_str.split(":"));
+
+    let architecture = os.platform() + "-" + os.arch();
+    let packageFullName: string;
+    let packageShortName: string;
+
+    // Determine which files to compile and where to write the output
+    let objFilesDir: string;
+    let files: Array<string> = [];
+    let filesDone = false;
+    // Compile a package?
+    if (args.length == 1) {
+        let p = path.resolve(args[0] as string);
+        if (p[p.length - 1] != path.sep) {
+            p += path.sep;
+        }
+        let isdir: boolean;
+        try {
+            isdir = fs.lstatSync(p).isDirectory();
+        } catch(e) {
+            isdir = false;
+        }        
+        if (isdir) {
+            let allFiles = fs.readdirSync(p);
+            for(let f of allFiles) {
+                if (f.length > 4 && f.substr(f.length - 4, 4) == ".fyr") {
+                    files.push(path.join(p, f));
+                }
+            }
+            // Is this package located in one of the known pathes. If yes -> put the output in the right location
+            for(let fyrPath of fyrPaths) {
+                let test = path.join(path.normalize(fyrPath), "src");
+                if (test[test.length - 1] != path.sep) {
+                    test += path.sep;
+                }
+                if (p.length > test.length && p.substr(0, test.length) == test) {
+                    packageFullName = p.substring(test.length, p.length - 1);
+                    let packagePaths: Array<string> = packageFullName.split(path.sep);
+                    console.log(packagePaths);
+                    packageShortName = packagePaths[packagePaths.length - 1];
+                    packagePaths.splice(packagePaths.length - 1, 1);
+                    objFilesDir = createPath(fyrPath, ["pkg", architecture].concat(packagePaths));
+                    if (!objFilesDir) {
+                        return;
+                    }
+                    if (objFilesDir[objFilesDir.length - 1] != path.sep) {
+                        objFilesDir += path.sep;
+                    }
+                    break;
+                }
+            }
+            if (!objFilesDir) {
+                objFilesDir = p;
+            }
+            filesDone = true;
+        }
     }
+    // Compile a list of files?
+    if (!filesDone) {
+        // Determine all source files to compile
+        for(let i = 0; i < args.length; i++) {
+            let file = args[i];
+            files.push(file as string);
+            if (!objFilesDir) {            
+                let input = path.resolve(file);
+                let f = path.parse(input);
+                packageShortName = f.name;
+                packageFullName = path.join(f.dir, packageShortName);
+                objFilesDir = f.dir + path.sep;
+            }
+        }
+    }
+
+//    if (!program.disableRuntime) {
+//        files.push(path.join(fyrBase, "runtime/mem.fyr"));
+//        files.push(path.join(fyrBase, "runtime/map.fyr"));
+//    }
 
     // Parse all files into a single AST
     let mnode = new ast.Node({loc: null, op: "module", statements: []});
-	for(var file of files) {
+	for(let file of files) {
         ast.setCurrentFile(file);
-        var fileResolved = path.resolve(file);
+        let fileResolved = path.resolve(file);
         console.log("Compiling " + fileResolved + " ...");
-        let code = fs.readFileSync(fileResolved, 'utf8') + "\n";
+        let code: string;
+        try {
+            code = fs.readFileSync(fileResolved, 'utf8') + "\n";
+        } catch(e) {
+            console.log(("Cannot read file " + file).red);
+            return;
+        }
         try {
             let f = parser.parse(code);
             mnode.statements.push(f);
@@ -71,16 +178,12 @@ function compileModules() {
             cg.processModule(mnode);
             if (program.emitWasm) {
                 let wastcode = cg.getCode();
-                var input = path.resolve(args[args.length - 2]);
-                let f = path.parse(input);
-                let wastfile = f.dir + path.sep + f.name + ".wat";
+                let wastfile = objFilesDir + packageShortName + ".wat";
                 fs.writeFileSync(wastfile, wastcode, 'utf8');
             }
             if (program.emitC) {
                 let code = cg.getCode();
-                var input = path.resolve(args[args.length - 2]);
-                let f = path.parse(input);
-                let cfile = f.dir + path.sep + f.name + ".c";
+                let cfile = objFilesDir + packageShortName + ".c";
                 fs.writeFileSync(cfile, code, 'utf8');
             }
         }
@@ -101,8 +204,8 @@ function compileModules() {
     if (program.emitWasm && !program.disableCodegen) {
         var input = path.resolve(args[args.length - 2]);
         let f = path.parse(input);
-        let wastfile = f.dir + path.sep + f.name + ".wat";
-        let wasmfile = f.dir + path.sep + f.name + ".wasm";
+        let wastfile = objFilesDir + packageShortName + ".wat";
+        let wasmfile = objFilesDir + packageShortName + ".wasm";
         child_process.execFileSync("wat2wasm", [wastfile, "-r", "-o", wasmfile]);
     }
 }
