@@ -1708,7 +1708,6 @@ export class TypeChecker {
                 t.callingConvention = "fyrCoroutine";
             }
             t.loc = tnode.loc;
-//            let box = new Box(true)
             if (tnode.parameters) {
                 for(let pnode of tnode.parameters) {
                     var p = new FunctionParameter();
@@ -1716,7 +1715,10 @@ export class TypeChecker {
                         p.ellipsis = true;
                         pnode = pnode.lhs;
                     }
-                    p.type = this.createType(pnode, scope, "parameter");
+                    p.type = this.createType(pnode, scope, "parameter_toplevel");
+                    if (TypeChecker.isReference(p.type) || TypeChecker.isLocalReference(p.type) || this.isString(p.type)) {
+                        p.isConst = true;
+                    }                        
                     if (p.ellipsis && !(p.type instanceof SliceType)) {
                         throw new TypeError("Ellipsis parameters must be of a slice type", pnode.loc);
                     }
@@ -2184,14 +2186,21 @@ export class TypeChecker {
         }
         let objectType: Type;
         let structType: StructType;
+        let templateType: TemplateType;
         // A member function?
         if (fnode.lhs) {
             let obj = this.createType(fnode.lhs, parentScope, "parameter");
             let obj2 = RestrictedType.strip(obj);
-            if (!(obj2 instanceof StructType) || obj2.name == "") {
+            if (obj2.name == "") {
                 throw new TypeError(obj.toString() + " is not a named struct", fnode.lhs.loc);
             }
-            structType = obj2;
+            if (obj2 instanceof StructType) {
+                structType = obj2;
+            } else if (obj2 instanceof TemplateType) {
+                templateType = obj2;
+            } else {
+                throw new TypeError(obj.toString() + " is not a named struct", fnode.lhs.loc);
+            }
             let mode: PointerMode = "reference";
             if ((fnode.lhs.flags & AstFlags.ReferenceObjectMember) == AstFlags.ReferenceObjectMember) {
                 mode = "local_reference";
@@ -2199,13 +2208,12 @@ export class TypeChecker {
             objectType = new PointerType(obj, mode);
         }
         let f: Function | TemplateFunction;
-        if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(objectType)) {
+        if ((fnode.genericParameters && !instantiateTemplate) || this.isTemplateType(templateType)) {
             f = new TemplateFunction();
             f.node = fnode;
-            if (this.isTemplateType(objectType)) {
-                let tt = this.stripType(objectType) as TemplateType;
-                f.owner = tt;
-                tt.methods.push(f);
+            if (templateType) {
+                f.owner = templateType;
+                templateType.methods.push(f);
             }
         } else {
             f = new Function();
