@@ -11,9 +11,17 @@ func LinkedList.getValue() T {
     return this.value
 }
 
+func min<T is int8 | uint8 | int16 | uint16 | int32 | uint32 | int64 | uint64 | double | float>(x T, y T) T {
+     if (x < y) {
+         return x
+     }
+     return y
+}
+
 export func main() int {
     var list *LinkedList<int> = {value: 42}
     list.next = {value: 43}
     list.next.setValue(44)
-    return list.value + list.next.value + list.next.getValue()
+    let smaller = min<int>(42, 2)
+    return list.value + list.next.value + list.next.getValue() + smaller
 }

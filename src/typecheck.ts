@@ -4017,7 +4017,6 @@ export class TypeChecker {
             }
             case "genericInstance":
                 this.checkExpression(enode.lhs, scope);
-                // enode.type = this.createType(enode, scope);
                 enode.type = this.instantiateTemplateFunctionFromNode(enode, scope).type;
                 break;
             case "tuple":
@@ -6258,14 +6257,10 @@ export class TypeChecker {
                     throw "Implementation error";
                 }
                 return this.checkGroupsInFunctionArguments(t, g, enode.parameters, scope, enode.loc);
-            }
-            /*
+            }            
             case "genericInstance":
-                this.checkExpression(enode.lhs, scope);
-                // enode.type = this.createType(enode, scope);
-                enode.type = this.instantiateTemplateFunctionFromNode(enode, scope).type;
-                break;
-                */
+                // return this.checkGroupsInExpression(enode.lhs, scope, flags);                
+                return new Group(GroupKind.Free);
             case "tuple":
             {
                 let group: Group = null;
