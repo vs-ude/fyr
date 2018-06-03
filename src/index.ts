@@ -24,9 +24,9 @@ function compileModules() {
 
     var args = Array.prototype.slice.call(arguments, 0);
     var files = [];
-    let fyrPath = process.env["FYRPATH"];
+    let fyrPath = process.env["FYRBASE"];
     if (!fyrPath) {
-        console.log(("No FYRPATH environment variable has been set").red);
+        console.log(("No FYRBASE environment variable has been set").red);
         return;
     }
     if (!program.disableRuntime) {
