@@ -134,6 +134,7 @@ export class CBackend implements backend.Backend {
         nameWithoutDot = nameWithoutDot.replace(".", "__");
         nameWithoutDot = nameWithoutDot.replace("<", "_l");
         nameWithoutDot = nameWithoutDot.replace(">", "_g");
+        nameWithoutDot = nameWithoutDot.replace(",", "_c");
         if (isExported && f.name == "main") {
             this.mainFunction = f;
             f.func.name = "f_" + nameWithoutDot;        
