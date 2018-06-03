@@ -1,5 +1,9 @@
 import {Location} from "./ast"
 import {Variable, Function, FunctionParameter, FunctionType, PolymorphFunctionType, GenericParameter, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
+import path = require('path');
+import colors = require('colors');
+import process = require("process");
+import fs = require("fs");
 
 export enum SystemCalls {
     heap = -1,
@@ -62,12 +66,51 @@ export class Package {
     public scope: Scope;
 }
 
-export function resolve(path: string, loc: Location): Package | null {
-    if (packages.has(path)) {
-        return packages.get(path);
+var fyrPaths: Array<string>;
+
+export function getFyrPaths(): Array<string> {
+    if (fyrPaths) {
+        return fyrPaths;
     }
 
-    throw new ImportError("Unknown package \"" + path + "\"", loc, path);
+    // Environment variables
+    let fyrBase = process.env["FYRBASE"];
+    if (!fyrBase) {
+        console.log(("No FYRBASE environment variable has been set").red);
+        return null;
+    }
+    let fyrPaths_str = process.env["FYRPATH"];
+    if (!fyrPaths_str) {
+        let home = process.env["HOME"];
+        if (!home) {
+            fyrPaths_str = "";
+        } else {
+            fyrPaths_str = home + path.sep + "fyr";
+        }        
+    }
+    fyrPaths = [fyrBase].concat(fyrPaths_str.split(":"));
+    return fyrPaths;
+}
+
+export function resolve(pkgPath: string, loc: Location): Package | null {
+    if (packages.has(pkgPath)) {
+        return packages.get(pkgPath);
+    }
+
+    for(let p of fyrPaths) {
+        let test = path.join(p, pkgPath);
+        let isdir: boolean;
+        try {
+            isdir = fs.lstatSync(test).isDirectory();
+        } catch(e) {
+            isdir = false;
+        }        
+        if (!isdir) {
+            continue;
+        }
+    }
+
+    throw new ImportError("Unknown package \"" + pkgPath + "\"", loc, pkgPath);
 }
 
 var packages: Map<string, Package> = new Map<string, Package>();

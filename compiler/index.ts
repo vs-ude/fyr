@@ -47,22 +47,10 @@ function compileModules() {
     }
     args = args.splice(args.length -2, 1);
     
-    // Environment variables
-    let fyrBase = process.env["FYRBASE"];
-    if (!fyrBase) {
-        console.log(("No FYRBASE environment variable has been set").red);
+    let fyrPaths = pkg.getFyrPaths();
+    if (!fyrPaths) {
         return;
     }
-    let fyrPaths_str = process.env["FYRPATH"];
-    if (!fyrPaths_str) {
-        let home = process.env["HOME"];
-        if (!home) {
-            fyrPaths_str = "";
-        } else {
-            fyrPaths_str = home + path.sep + "fyr";
-        }        
-    }
-    let fyrPaths = [fyrBase].concat(fyrPaths_str.split(":"));
 
     let architecture = os.platform() + "-" + os.arch();
     let packageFullName: string;
@@ -100,7 +88,6 @@ function compileModules() {
                 if (p.length > test.length && p.substr(0, test.length) == test) {
                     packageFullName = p.substring(test.length, p.length - 1);
                     let packagePaths: Array<string> = packageFullName.split(path.sep);
-                    console.log(packagePaths);
                     packageShortName = packagePaths[packagePaths.length - 1];
                     packagePaths.splice(packagePaths.length - 1, 1);
                     objFilesDir = createPath(fyrPath, ["pkg", architecture].concat(packagePaths));
