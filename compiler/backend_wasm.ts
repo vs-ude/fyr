@@ -60,9 +60,7 @@ class Wasm32LocalVariableList {
 }
 
 export class Wasm32Backend implements backend.Backend {
-    constructor(emitIR: boolean, emitIRFunction: string | null) {
-        this.emitIR = emitIR;
-        this.emitIRFunction = emitIRFunction;
+    constructor() {
         this.tr = new SMTransformer();
         this.optimizer = new Optimizer();
         this.stackifier = new Stackifier(this.optimizer);
@@ -170,16 +168,16 @@ export class Wasm32Backend implements backend.Backend {
         // Generate WASM code for all functions
         for(let f of this.funcs) {
             this.optimizer.optimizeConstants(f.node);
-            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
-                console.log('============ OPTIMIZED Constants ===============');
-                console.log(Node.strainToString("", f.node));
-            }
+//            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
+//                console.log('============ OPTIMIZED Constants ===============');
+//                console.log(Node.strainToString("", f.node));
+//            }
 
             this.optimizer.removeDeadCode(f.node);
-            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
-                console.log('============ OPTIMIZED Dead code ===============');
-                console.log(Node.strainToString("", f.node));
-            }
+//            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
+//                console.log('============ OPTIMIZED Dead code ===============');
+//                console.log(Node.strainToString("", f.node));
+//            }
 
             this.generateFunction(f.node, f.wf);
             if (f.isExported) {
@@ -301,7 +299,7 @@ export class Wasm32Backend implements backend.Backend {
         // Add the local variables to WASM
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
-        if (this.emitIR || this.emitIRFunction == wf.name) {
+/*        if (this.emitIR || this.emitIRFunction == wf.name) {
             console.log("========= Stackified ==========");
             console.log(Node.strainToString("", n));
             for(let v of this.varStorage.keys()) {
@@ -311,6 +309,7 @@ export class Wasm32Backend implements backend.Backend {
             console.log("sp -> local " + this.spLocal);
             console.log("bp -> local " + this.bpLocal);
         }
+*/
 
         // Generate function body
         if (this.varsFrame.size > 0) {
@@ -404,7 +403,7 @@ export class Wasm32Backend implements backend.Backend {
         }
         this.wf.locals = this.wf.locals.concat(locals.locals);
 
-        if (this.emitIR || this.emitIRFunction == wf.name) {
+/*        if (this.emitIR || this.emitIRFunction == wf.name) {
             console.log("========= Stackified ==========");
             console.log(Node.strainToString("", n));
             for(let v of this.varStorage.keys()) {
@@ -415,7 +414,7 @@ export class Wasm32Backend implements backend.Backend {
             console.log("bp -> local " + this.bpLocal);
             console.log("step -> local " + this.stepLocal);
             console.log("varsFrame = ", this.varsFrame.toDetailedString());
-        }
+        } */
 
         // Generate function body
         let code: Array<wasm.Node> = [];
@@ -2543,8 +2542,6 @@ export class Wasm32Backend implements backend.Backend {
     private tmpI32DestLocal: number;
     private wf: wasm.Function;
     private wfIsAsync: boolean;
-    private emitIR: boolean;
-    private emitIRFunction: string | null;
     private heapGlobalVariable: wasm.Global;
     private heapGlobalVariableIndex: number;
     private typemapGlobalVariable: wasm.Global;

@@ -3,25 +3,15 @@ import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapTyp
 import * as tc from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
-import {Wasm32Backend} from "./backend_wasm"
-import {CBackend} from "./backend_c"
 import * as backend from "./backend"
 import { tmpdir } from "os";
 
 export class CodeGenerator {
-    constructor(tc: TypeChecker, emitIR: boolean, emitNoWasm: boolean, emitFunction: string, disableNullCheck: boolean, emitC: boolean) {
+    constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
         this.tc = tc;
-        this.emitIR = emitIR;
-        this.emitNoWasm = emitNoWasm;
-        this.emitFunction = emitFunction;
-        this.emitC = emitC;
         this.disableNullCheck = disableNullCheck;
+        this.backend = backend;
         this.imports = new Map<string, backend.FunctionImport>();
-        if (emitC) {
-            this.backend = new CBackend(emitIR, emitFunction);
-        } else {
-            this.backend = new Wasm32Backend(emitIR, emitFunction);
-        }
 
         this.localSlicePointer = new ssa.StructType();
         this.localSlicePointer.name = "localSlice";
@@ -177,7 +167,7 @@ export class CodeGenerator {
             }
         }
 
-        if (!this.emitNoWasm || this.emitC) {
+        if (this.backend) {
             // Generate WASM code for the module
             this.backend.generateModule();
         }
@@ -360,9 +350,9 @@ export class CodeGenerator {
 
         b.end();
 
-        if (this.emitIR || f.name == this.emitFunction) {
-            console.log(ssa.Node.strainToString("", b.node));                
-        }
+//        if (this.emitIR || f.name == this.emitFunction) {
+//            console.log(ssa.Node.strainToString("", b.node));                
+//        }
 
         this.backend.defineFunction(b.node, wf, f.isExported);
 
@@ -3658,10 +3648,6 @@ export class CodeGenerator {
     private ifaceHeaderDouble: ssa.StructType;
     private ifaceHeaderSlice: ssa.StructType;
     private mapHead: ssa.StructType;
-    private emitIR: boolean;
-    private emitNoWasm: boolean;
-    private emitFunction: string | null;
-    private emitC: boolean;
     private disableNullCheck: boolean;
     private concatStringFunctionType: ssa.FunctionType;
     private compareStringFunctionType: ssa.FunctionType;

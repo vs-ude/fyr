@@ -1,5 +1,5 @@
 import {Node, NodeOp, Location, AstFlags} from "./ast"
-import pkg = require("./pkg");
+import {Package} from "./pkg";
 import { doesNotThrow } from "assert";
 import { isUndefined } from "util";
 import { Pointer } from "./ssa";
@@ -2461,7 +2461,7 @@ export class TypeChecker {
             }
         } else {
             let importPath: string = inode.rhs.value;
-            let p = pkg.resolve(importPath, inode.rhs.loc);        
+            let p = Package.resolve(importPath, inode.rhs.loc);
             let ip: ImportedPackage;
             if (!inode.lhs) {
                 // Syntax of the kind: import "path/to/module"
@@ -2480,7 +2480,7 @@ export class TypeChecker {
                         var t = p.scope.types.get(pnode.value);
                         scope.registerType(pnode.value, t, pnode.loc);
                     } else {
-                        throw new TypeError("Unknown identifier " + pnode.value + " in package \"" + p.path + "\"", pnode.loc);
+                        throw new TypeError("Unknown identifier " + pnode.value + " in package \"" + p.pkgPath + "\"", pnode.loc);
                     }
                 }
             } else if (inode.lhs.op == "id") {
@@ -2578,9 +2578,6 @@ export class TypeChecker {
 
     // The main function of the Typechecker that checks the types of an entire module.
     public checkModule(mnode: Node): Scope {
-        let typedefs: Array<Typedef> = [];
-        let functions: Array<Function> = [];
-        let globalVariables: Array<Variable> = [];
 
         let scope = new Scope(null);
         scope.registerType("bool", this.t_bool);
@@ -2604,6 +2601,7 @@ export class TypeChecker {
         scope.registerType("error", this.t_error);
         scope.registerType("rune", this.t_rune);
         mnode.scope = scope;
+        this.moduleNode = mnode;
 
         // Iterate over all files and process all imports
         for(let fnode of mnode.statements) {
@@ -2618,17 +2616,23 @@ export class TypeChecker {
         // Iterate over all files and declare all types.
         // The body of structs and interfaces is processed after all types are declared,
         // because types can reference themselves or each other cross-wise.
-        for(let fnode of mnode.statements) {
+        for(let fnode of this.moduleNode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "typedef") {
                     let t = this.createTypedef(snode, scope);
-                    typedefs.push(t);
+                    this.typedefs.push(t);
                 }
             }
         }
 
+        return scope;
+    }
+
+    public checkModulePassTwo() {
+        let scope = this.moduleNode.scope;
+
         // Define all types which have been declared before
-        for(let t of typedefs) {
+        for(let t of this.typedefs) {
             if (t.type instanceof StructType) {
                 this.createStructType(t.node.rhs, t.scope, t.type);
             } else if (t.type instanceof InterfaceType) {
@@ -2638,23 +2642,22 @@ export class TypeChecker {
             }
         }
 
-        // Iterate over all files and declare all functions and global variables
-        // and handle all imports
-        for(let fnode of mnode.statements) {
+        // Iterate over all files and declare all functions and global variables.
+        for(let fnode of this.moduleNode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "func" || snode.op == "export_func" || snode.op == "asyncFunc") {
                     let f = this.createFunction(snode, fnode.scope, scope);           
                     if (f instanceof Function) {
-                        functions.push(f);
+                        this.functions.push(f);
                     }
                 } else if (snode.op == "var") {
                     let v = this.createVar(snode.lhs, scope, false, false, true);
                     v.node = snode;
-                    globalVariables.push(v);
+                    this.globalVariables.push(v);
                 } else if (snode.op == "let") {
                     let v = this.createVar(snode.lhs, scope, false, true, true);
                     v.node = snode;
-                    globalVariables.push(v);
+                    this.globalVariables.push(v);
                 } else if (snode.op == "import") {
                     // Do nothing by intention
                 } else if (snode.op == "typedef") {
@@ -2666,6 +2669,10 @@ export class TypeChecker {
                 }
             }
         }
+    }
+
+    public checkModulePassThree() {
+        let scope = this.moduleNode.scope;
 
         // Check all interfaces for conflicting names
         for(let iface of this.ifaces) {
@@ -2678,7 +2685,7 @@ export class TypeChecker {
         }
 
         // Check variable assignments
-        for(let v of globalVariables) {
+        for(let v of this.globalVariables) {
             // Unique global pointers are subject to their own group.
             // All other global variables belong to the same group.
             if (TypeChecker.isUnique(v.type)) {
@@ -2690,7 +2697,7 @@ export class TypeChecker {
         }
 
         // Check function bodies
-        for(let e of functions) {
+        for(let e of this.functions) {
             this.checkFunctionBody(e);
         }
 
@@ -2716,7 +2723,6 @@ export class TypeChecker {
             }
         } while(changes);
         */
-        return scope;
     }
 
     private checkFunctionBody(f: Function) {
@@ -6561,8 +6567,13 @@ export class TypeChecker {
     public structs: Array<StructType> = [];
     public templateTypeInstantiations: Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>> = new Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>>();
     public templateFunctionInstantiations: Map<TemplateType, Array<Function>> = new Map<TemplateType, Array<Function>>();
-    
+
+    private typedefs: Array<Typedef> = [];
+    private functions: Array<Function> = [];
+    private globalVariables: Array<Variable> = [];
+
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
+    private moduleNode: Node;
 
     private globalGroup: Group;
 }

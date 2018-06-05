@@ -8,31 +8,12 @@ import parser = require("./parser");
 import typecheck = require("./typecheck");
 import codegen = require("./codegen");
 import ast = require("./ast");
-import pkg = require("./pkg");
-import child_process = require("child_process");
-import process = require("process");
-import os = require("os");
+import {Package, ImportError} from "./pkg";
 
 // Make TSC not throw out the colors lib
 colors.red;
 
 var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
-
-function createPath(basePath: string, subs: Array<string>): string {
-    let p = basePath;
-    for(let sub of subs) {
-        try {
-            p = path.join(p, sub);
-            fs.mkdirSync(p);
-        } catch(e) {
-            if (e.code !== "EEXIST") {
-                console.log(("Cannot create directory " + p).red);
-                return null;
-            }
-        }
-    }
-    return p;
-}
 
 function compileModules() {
     if (program.emitC && program.emitWasm) {
@@ -47,19 +28,12 @@ function compileModules() {
     }
     args = args.splice(args.length -2, 1);
     
-    let fyrPaths = pkg.getFyrPaths();
+    let fyrPaths = Package.getFyrPaths();
     if (!fyrPaths) {
         return;
     }
 
-    let architecture = os.platform() + "-" + os.arch();
-    let packageFullName: string;
-    let packageShortName: string;
-
-    // Determine which files to compile and where to write the output
-    let objFilesDir: string;
-    let files: Array<string> = [];
-    let filesDone = false;
+    let pkg: Package;
     // Compile a package?
     if (args.length == 1) {
         let p = path.resolve(args[0] as string);
@@ -73,12 +47,6 @@ function compileModules() {
             isdir = false;
         }        
         if (isdir) {
-            let allFiles = fs.readdirSync(p);
-            for(let f of allFiles) {
-                if (f.length > 4 && f.substr(f.length - 4, 4) == ".fyr") {
-                    files.push(path.join(p, f));
-                }
-            }
             // Is this package located in one of the known pathes. If yes -> put the output in the right location
             for(let fyrPath of fyrPaths) {
                 let test = path.join(path.normalize(fyrPath), "src");
@@ -86,40 +54,39 @@ function compileModules() {
                     test += path.sep;
                 }
                 if (p.length > test.length && p.substr(0, test.length) == test) {
-                    packageFullName = p.substring(test.length, p.length - 1);
-                    let packagePaths: Array<string> = packageFullName.split(path.sep);
-                    packageShortName = packagePaths[packagePaths.length - 1];
+                    let pkgPath = p.substring(test.length, p.length - 1);
+                    let packagePaths: Array<string> = pkgPath.split(path.sep);
                     packagePaths.splice(packagePaths.length - 1, 1);
-                    objFilesDir = createPath(fyrPath, ["pkg", architecture].concat(packagePaths));
-                    if (!objFilesDir) {
-                        return;
-                    }
-                    if (objFilesDir[objFilesDir.length - 1] != path.sep) {
-                        objFilesDir += path.sep;
-                    }
+                    pkg = new Package();
+                    pkg.findSources(fyrPath, pkgPath);                    
                     break;
                 }
             }
-            if (!objFilesDir) {
-                objFilesDir = p;
+            // Not a package in one of the Fyr paths?
+            if (!pkg) {
+                // Determine all filenames
+                let files: Array<string> = [];
+                let allFiles = fs.readdirSync(p);
+                for(let f of allFiles) {
+                    if (f.length > 4 && f.substr(f.length - 4, 4) == ".fyr") {
+                        files.push(path.join(p, f));
+                    }
+                }
+                pkg = new Package();
+                pkg.setSources(files);
             }
-            filesDone = true;
         }
     }
     // Compile a list of files?
-    if (!filesDone) {
+    if (!pkg) {
+        let files: Array<string> = [];
         // Determine all source files to compile
         for(let i = 0; i < args.length; i++) {
             let file = args[i];
             files.push(file as string);
-            if (!objFilesDir) {            
-                let input = path.resolve(file);
-                let f = path.parse(input);
-                packageShortName = f.name;
-                packageFullName = path.join(f.dir, packageShortName);
-                objFilesDir = f.dir + path.sep;
-            }
         }
+        pkg = new Package();
+        pkg.setSources(files);
     }
 
 //    if (!program.disableRuntime) {
@@ -127,58 +94,14 @@ function compileModules() {
 //        files.push(path.join(fyrBase, "runtime/map.fyr"));
 //    }
 
-    // Parse all files into a single AST
-    let mnode = new ast.Node({loc: null, op: "module", statements: []});
-	for(let file of files) {
-        ast.setCurrentFile(file);
-        let fileResolved = path.resolve(file);
-        console.log("Compiling " + fileResolved + " ...");
-        let code: string;
-        try {
-            code = fs.readFileSync(fileResolved, 'utf8') + "\n";
-        } catch(e) {
-            console.log(("Cannot read file " + file).red);
-            return;
-        }
-        try {
-            let f = parser.parse(code);
-            mnode.statements.push(f);
-        } catch(ex) {
-            if (ex instanceof parser.SyntaxError) {
-                console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-                return;
-            } else {
-                console.log(ex);
-                throw ex;
-            }
-        }
-    }
-
+    // Load all sources
     try {
-        // Run the type checker
-        let tc = new typecheck.TypeChecker();
-        pkg.initPackages(tc);
-        let scope = tc.checkModule(mnode);
-        if (!program.disableCodegen) {
-            // Generate IR and WASM code
-            let cg = new codegen.CodeGenerator(tc, program.emitIr, program.disableWasm, program.emitIrFunction, program.disableNullCheck, program.emitC);
-            cg.processModule(mnode);
-            if (program.emitWasm) {
-                let wastcode = cg.getCode();
-                let wastfile = objFilesDir + packageShortName + ".wat";
-                fs.writeFileSync(wastfile, wastcode, 'utf8');
-            }
-            if (program.emitC) {
-                let code = cg.getCode();
-                let cfile = objFilesDir + packageShortName + ".c";
-                fs.writeFileSync(cfile, code, 'utf8');
-            }
-        }
+        pkg.loadSources();
     } catch(ex) {
-        if (ex instanceof typecheck.TypeError) {
-            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+        if (ex instanceof parser.SyntaxError) {
+            console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
-        } else if (ex instanceof pkg.ImportError) {
+        } else if (ex instanceof ImportError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return
         } else {
@@ -187,13 +110,31 @@ function compileModules() {
         }
     }
 
-    // Compile Wast to Wasm
-    if (program.emitWasm && !program.disableCodegen) {
-        var input = path.resolve(args[args.length - 2]);
-        let f = path.parse(input);
-        let wastfile = objFilesDir + packageShortName + ".wat";
-        let wasmfile = objFilesDir + packageShortName + ".wasm";
-        child_process.execFileSync("wat2wasm", [wastfile, "-r", "-o", wasmfile]);
+    // TypeCheck the sources
+    try {
+        Package.checkTypesForPackages();
+    } catch(ex) {
+        if (ex instanceof parser.SyntaxError) {
+            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            return;
+        } else if (ex instanceof typecheck.TypeError) {
+            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            return;
+        } else {
+            console.log(ex);
+            throw ex;
+        }
+    }
+
+    // Generate code
+    if (!program.disableCodegen) {
+        let backend = null;
+        if (program.emitWasm) {
+            backend = "WASM";
+        } else if (program.emitC) {
+            backend = "C";
+        }
+        Package.generateCodeForPackages(backend, program.disableNullCheck);
     }
 }
 

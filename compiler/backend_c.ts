@@ -39,9 +39,7 @@ export class Function implements backend.Function {
 }
 
 export class CBackend implements backend.Backend {
-    constructor(emitIR: boolean, emitIRFunction: string | null) {
-        this.emitIR = emitIR;
-        this.emitIRFunction = emitIRFunction;
+    constructor() {
         this.optimizer = new Optimizer();
         this.stackifier = new Stackifier(this.optimizer);
         this.module = new CModule();
@@ -178,16 +176,16 @@ export class CBackend implements backend.Backend {
                 continue;
             }
             this.optimizer.optimizeConstants(f.node);
-            if (this.emitIR || f.name == this.emitIRFunction) {
-                console.log('============ OPTIMIZED Constants ===============');
-                console.log(Node.strainToString("", f.node));
-            }
+//            if (this.emitIR || f.name == this.emitIRFunction) {
+//                console.log('============ OPTIMIZED Constants ===============');
+//                console.log(Node.strainToString("", f.node));
+//            }
 
             this.optimizer.removeDeadCode(f.node);
-            if (this.emitIR || f.name == this.emitIRFunction) {
-                console.log('============ OPTIMIZED Dead code ===============');
-                console.log(Node.strainToString("", f.node));
-            }
+//            if (this.emitIR || f.name == this.emitIRFunction) {
+//                console.log('============ OPTIMIZED Dead code ===============');
+//                console.log(Node.strainToString("", f.node));
+//            }
 
             this.currentFunction = f;
             this.returnVariables = [];
@@ -196,10 +194,10 @@ export class CBackend implements backend.Backend {
             this.varStorage = new Map<ssa.Variable, string>();
             this.stackifier.stackifyStep(f.node, null);
 
-            if (this.emitIR || f.name == this.emitIRFunction) {
-                console.log('============ STACKIFIED code ===============');
-                console.log(Node.strainToString("", f.node));
-            }
+//            if (this.emitIR || f.name == this.emitIRFunction) {
+//                console.log('============ STACKIFIED code ===============');
+//                console.log(Node.strainToString("", f.node));
+//            }
 
             this.analyzeVariableStorage(f.node, f.node.blockPartner);
 
@@ -1074,8 +1072,6 @@ export class CBackend implements backend.Backend {
         this.localVariables.push(v);
     }
 
-    private emitIR: boolean;
-    private emitIRFunction: string | null;
     private optimizer: Optimizer;
     private stackifier: Stackifier;
     private module: CModule;
