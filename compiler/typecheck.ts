@@ -1,5 +1,5 @@
 import {Node, NodeOp, Location, AstFlags} from "./ast"
-import {Package} from "./pkg";
+import { Package } from "./pkg";
 import { doesNotThrow } from "assert";
 import { isUndefined } from "util";
 import { Pointer } from "./ssa";
@@ -13,14 +13,14 @@ export interface ScopeElement {
 }
 
 export class ImportedPackage implements ScopeElement {
-    constructor(name: string, loc: Location) {
+    constructor(name: string, pkg: Package, loc: Location) {
         this.name = name;
         this.loc = loc;
-        this.scope = new Scope(null);
-        this.type = new PackageType(name, loc);
+        this.pkg = pkg;
+        this.type = new PackageType(name, pkg, loc);
     }
 
-    public addElement(name: string, element: ScopeElement, loc: Location) {
+/*    public addElement(name: string, element: ScopeElement, loc: Location) {
         this.scope.registerElement(name, element, loc);
         (this.type as PackageType).elements.set(name, element.type);
     }
@@ -29,12 +29,11 @@ export class ImportedPackage implements ScopeElement {
         this.scope.registerType(name, type, loc);
         (this.type as PackageType).types.set(name, type);
     }
-
+*/
     public name: string;
     public type: Type;
     public loc: Location;
-    // The scope containing the elements of the package.
-    public scope: Scope;
+    public pkg: Package;
 }
 
 // Variable is a global or function-local variable.
@@ -1514,10 +1513,11 @@ export class StringLiteralType extends Type {
 }
 
 export class PackageType extends Type {
-    constructor(name: string, loc: Location) {
+    constructor(name: string, pkg: Package, loc: Location) {
         super();
         this.name = name;
         this.loc = loc;
+        this.pkg = pkg;
     }
 
     public toString(): string {
@@ -1528,6 +1528,7 @@ export class PackageType extends Type {
         throw "Implementation error";
     }
 
+    /*
     public resolveType(name: string, loc: Location): Type {
         let t = this.types.get(name);
         if (!t) {
@@ -1535,9 +1536,11 @@ export class PackageType extends Type {
         }
         return t;
     }
+    */
 
-    public elements: Map<string, Type> = new Map<string, Type>();
-    public types: Map<string, Type> = new Map<string, Type>();
+//    public elements: Map<string, Type> = new Map<string, Type>();
+//    public types: Map<string, Type> = new Map<string, Type>();
+    public pkg: Package;
 }
 
 export class ScopeExit {
@@ -1578,37 +1581,39 @@ enum GroupCheckFlags {
 
 export class TypeChecker {
     constructor() {
-        this.t_bool = new BasicType("bool");
-        this.t_float = new BasicType("float");
-        this.t_double = new BasicType("double");
-        this.t_null = new BasicType("null");
-        this.t_int8 = new BasicType("int8");
-        this.t_char = this.t_int8;
-        this.t_int16 = new BasicType("int16");
-        this.t_int32 = new BasicType("int32");
-        this.t_int64 = new BasicType("int64");
-        // TODO: Depends on arch
-        this.t_int = this.t_int64;
-        this.t_uint8 = new BasicType("uint8");
-        this.t_byte = this.t_uint8;
-        this.t_uint16 = new BasicType("uint16");
-        this.t_uint32 = new BasicType("uint32");
-        this.t_uint64 = new BasicType("uint64");
-        // TODO: Depends on arch
-        this.t_uint = this.t_uint64;
-        this.t_any = new BasicType("any");
-        this.t_string = new BasicType("string");
-        this.t_void = new BasicType("void");
-        this.t_rune = new BasicType("rune");
-        
-        this.t_error = new InterfaceType();
-        this.t_error.name = "error";
-        let toError = new FunctionType();
-        toError.name = "toError";
-        toError.returnType = this.t_string;
-        toError.objectType = new RestrictedType(this.t_error, {isConst: true});
-        this.t_error.methods.set("toError", toError);
-        this.ifaces.push(this.t_error);
+        if (!TypeChecker.t_bool) {
+            TypeChecker.t_bool = new BasicType("bool");
+            TypeChecker.t_float = new BasicType("float");
+            TypeChecker.t_double = new BasicType("double");
+            TypeChecker.t_null = new BasicType("null");
+            TypeChecker.t_int8 = new BasicType("int8");
+            TypeChecker.t_char = TypeChecker.t_int8;
+            TypeChecker.t_int16 = new BasicType("int16");
+            TypeChecker.t_int32 = new BasicType("int32");
+            TypeChecker.t_int64 = new BasicType("int64");
+            // TODO: Depends on arch
+            TypeChecker.t_int = TypeChecker.t_int64;
+            TypeChecker.t_uint8 = new BasicType("uint8");
+            TypeChecker.t_byte = TypeChecker.t_uint8;
+            TypeChecker.t_uint16 = new BasicType("uint16");
+            TypeChecker.t_uint32 = new BasicType("uint32");
+            TypeChecker.t_uint64 = new BasicType("uint64");
+            // TODO: Depends on arch
+            TypeChecker.t_uint = TypeChecker.t_uint64;
+            TypeChecker.t_any = new BasicType("any");
+            TypeChecker.t_string = new BasicType("string");
+            TypeChecker.t_void = new BasicType("void");
+            TypeChecker.t_rune = new BasicType("rune");
+            
+            TypeChecker.t_error = new InterfaceType();
+            TypeChecker.t_error.name = "error";
+            let toError = new FunctionType();
+            toError.name = "toError";
+            toError.returnType = TypeChecker.t_string;
+            toError.objectType = new RestrictedType(TypeChecker.t_error, {isConst: true});
+            TypeChecker.t_error.methods.set("toError", toError);
+            this.ifaces.push(TypeChecker.t_error);
+        }
 
         this.globalGroup = new Group(GroupKind.Bound, "$global");
     }
@@ -1632,7 +1637,11 @@ export class TypeChecker {
                 if (!(p instanceof PackageType)) {
                     throw new TypeError(tnode.nspace + " is not a package", tnode.loc);                
                 }
-                return p.resolveType(tnode.value, tnode.loc);
+                let t =  p.pkg.scope.resolveType(tnode.value);
+                if (!t) {
+                    throw new TypeError("Unknown type " + tnode.value + " in package " + p.pkg.pkgPath, tnode.loc);
+                }
+                return t;
             }
             let t = scope.resolveType(tnode.value);
             if (!t) {
@@ -1731,7 +1740,7 @@ export class TypeChecker {
                 t.returnType = this.createType(tnode.rhs, scope, "parameter");
                 this.checkVariableType(t.returnType, tnode.rhs.loc);
             } else {
-                t.returnType = this.t_void;
+                t.returnType = TypeChecker.t_void;
             }
             return t;
         } else if (tnode.op == "mapType") {
@@ -2341,7 +2350,7 @@ export class TypeChecker {
             }
             this.checkVariableType(f.type.returnType, fnode.rhs.loc);
         } else {
-            f.type.returnType = this.t_void;
+            f.type.returnType = TypeChecker.t_void;
         }
 
         // The function is a member function
@@ -2436,28 +2445,22 @@ export class TypeChecker {
                 // Syntax of the kind: import { func ... } from "imports"
                 let importPathElements = importPath.split("/");
                 let name = importPathElements[importPathElements.length - 1];
+                let pkg = new Package();
+                pkg.scope = new Scope(null);
                 // TODO: Sanitize the name
-                ip = new ImportedPackage(name, inode.loc);
+                ip = new ImportedPackage(name, pkg, inode.loc);
                 scope.registerElement(name, ip);
             } else if (inode.lhs.op == "id") {
                 // Syntax of the kind: import identifier { func ... } from "imports"
-                ip = new ImportedPackage(inode.lhs.value, inode.loc);
+                let pkg = new Package();
+                pkg.scope = new Scope(null);
+                ip = new ImportedPackage(inode.lhs.value, pkg, inode.loc);
                 scope.registerElement(ip.name, ip);
             } else if (inode.lhs.op == ".") {
                 // Syntax of the kind: import . { func ... } from "imports"
                 // Do nothing by intention
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
-            }
-            for(let n of inode.rhs.parameters) {
-                if (n.op == "funcType") {
-                    let f = this.createFunctionImport(inode.rhs.rhs.value, n, ip ? ip.scope : scope);
-                    if (ip) {
-                        (ip.type as PackageType).elements.set(f.name, f.type);
-                    }
-                } else {
-                    throw "Implementation error in import " + n.op;
-                }
             }
         } else {
             let importPath: string = inode.rhs.value;
@@ -2468,48 +2471,18 @@ export class TypeChecker {
                 let importPathElements = importPath.split("/");
                 let name = importPathElements[importPathElements.length - 1];
                 // TODO: Sanitize the name
-                ip = new ImportedPackage(name, inode.loc);
+                ip = new ImportedPackage(name, p, inode.loc);
                 scope.registerElement(name, ip);
             } else if (inode.lhs.op == "identifierList") {
                 // Syntax of the kind: import (id1, id2, ...) "path/to/module"
-                for(let pnode of inode.lhs.parameters) {
-                    if (p.scope.elements.has(pnode.value)) {
-                        var el = p.scope.elements.get(pnode.value);
-                        scope.registerElement(pnode.value, el, pnode.loc);
-                    } else if (p.scope.types.has(pnode.value)) {
-                        var t = p.scope.types.get(pnode.value);
-                        scope.registerType(pnode.value, t, pnode.loc);
-                    } else {
-                        throw new TypeError("Unknown identifier " + pnode.value + " in package \"" + p.pkgPath + "\"", pnode.loc);
-                    }
-                }
             } else if (inode.lhs.op == "id") {
                 // Syntax of the kind: import identifier "path/to/module"
-                ip = new ImportedPackage(inode.lhs.value, inode.loc);
+                ip = new ImportedPackage(inode.lhs.value, p, inode.loc);
                 scope.registerElement(ip.name, ip);
             } else if (inode.lhs.op == ".") {
                 // Syntax of the kind: import . "path/to/module"
-                for(var key of p.scope.elements.keys()) {
-                    var el = p.scope.elements.get(key);
-                    scope.registerElement(key, el, inode.loc);
-                }
-                for(var key of p.scope.types.keys()) {
-                    var t = p.scope.types.get(key);
-                    scope.registerType(key, t, inode.loc);
-                }
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
-            }
-
-            if (ip) {
-                for(var key of p.scope.elements.keys()) {
-                    var el = p.scope.elements.get(key);
-                    ip.addElement(key, el, inode.loc);
-                }
-                for(var key of p.scope.types.keys()) {
-                    var t = p.scope.types.get(key);
-                    ip.addType(key, t, inode.loc);
-                }
             }
         }
     }
@@ -2569,37 +2542,132 @@ export class TypeChecker {
                 f.unnamedReturnVariable = v;
             }
         } else {
-            f.type.returnType = this.t_void;
+            f.type.returnType = TypeChecker.t_void;
         }
         scope.registerElement(f.name, f);
         scope.setGroup(f, new Group(GroupKind.Free));
         return f;
     }
 
+    private importTypes(inode: Node, scope: Scope) {
+        if (inode.rhs.op != "importWasm") {
+            let importPath: string = inode.rhs.value;
+            let p = Package.resolve(importPath, inode.rhs.loc);
+            let ip: ImportedPackage;
+            if (!inode.lhs) {
+                // Syntax of the kind: import "path/to/module"
+            } else if (inode.lhs.op == "identifierList") {
+                // Syntax of the kind: import (id1, id2, ...) "path/to/module"
+                for(let pnode of inode.lhs.parameters) {
+                    if (p.scope.types.has(pnode.value)) {
+                        var t = p.scope.types.get(pnode.value);
+                        scope.registerType(pnode.value, t, pnode.loc);
+                    }
+                }
+            } else if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier "path/to/module"
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . "path/to/module"
+                for(var key of p.scope.types.keys()) {
+                    var t = p.scope.types.get(key);
+                    scope.registerType(key, t, inode.loc);
+                }
+            } else {
+                throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+        }
+    }
+
+    private importFunctions(inode: Node, scope: Scope) {
+        if (inode.rhs.op == "importWasm") {
+            let ip: ImportedPackage;
+            let importPath: string = inode.rhs.rhs.value;
+            if (!inode.lhs) {
+                // Syntax of the kind: import { func ... } from "imports"
+                let importPathElements = importPath.split("/");
+                let name = importPathElements[importPathElements.length - 1];
+                // TODO: Sanitize the name
+                let e = scope.resolveElement(name);
+                if (!(e instanceof ImportedPackage)) {
+                    throw "Implementation error";
+                }
+                ip = e;
+            } else if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier { func ... } from "imports"
+                // TODO: Sanitize the name
+                let e = scope.resolveElement(inode.lhs.value);
+                if (!(e instanceof ImportedPackage)) {
+                    throw "Implementation error";
+                }
+                ip = e;
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . { func ... } from "imports"
+            } else {
+                throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+            for(let n of inode.rhs.parameters) {
+                if (n.op == "funcType") {
+                    this.createFunctionImport(inode.rhs.rhs.value, n, ip ? ip.pkg.scope : scope);
+                } else {
+                    throw "Implementation error in import " + n.op;
+                }
+            }
+        } else {
+            let importPath: string = inode.rhs.value;
+            let p = Package.resolve(importPath, inode.rhs.loc);
+            let ip: ImportedPackage;
+            if (!inode.lhs) {
+                // Syntax of the kind: import "path/to/module"
+            } else if (inode.lhs.op == "identifierList") {
+                // Syntax of the kind: import (id1, id2, ...) "path/to/module"
+                for(let pnode of inode.lhs.parameters) {
+                    if (p.scope.elements.has(pnode.value)) {
+                        var el = p.scope.elements.get(pnode.value);
+                        scope.registerElement(pnode.value, el, pnode.loc);
+                    } else if (p.scope.types.has(pnode.value)) {
+                        // Do nothing by intention
+                    } else {
+                        throw new TypeError("Unknown identifier " + pnode.value + " in package \"" + p.pkgPath + "\"", pnode.loc);
+                    }
+                }                
+            } else if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier "path/to/module"
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . "path/to/module"
+                for(var key of p.scope.elements.keys()) {
+                    var el = p.scope.elements.get(key);
+                    scope.registerElement(key, el, inode.loc);
+                }
+            } else {
+                throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+        }
+    }
+
     // The main function of the Typechecker that checks the types of an entire module.
     public checkModule(mnode: Node): Scope {
 
         let scope = new Scope(null);
-        scope.registerType("bool", this.t_bool);
-        scope.registerType("float", this.t_float);
-        scope.registerType("double", this.t_double);
-        scope.registerType("null", this.t_null);
-        scope.registerType("byte", this.t_byte);
-        scope.registerType("char", this.t_char);
-        scope.registerType("int8", this.t_int8);
-        scope.registerType("int16", this.t_int16);
-        scope.registerType("int32", this.t_int32);
-        scope.registerType("int64", this.t_int64);
-        scope.registerType("int", this.t_int);
-        scope.registerType("uint8", this.t_uint8);
-        scope.registerType("uint16", this.t_uint16);
-        scope.registerType("uint32", this.t_uint32);
-        scope.registerType("uint64", this.t_uint64);
-        scope.registerType("uint", this.t_uint);
-        scope.registerType("string", this.t_string);
-        scope.registerType("void", this.t_void);
-        scope.registerType("error", this.t_error);
-        scope.registerType("rune", this.t_rune);
+        scope.registerType("bool", TypeChecker.t_bool);
+        scope.registerType("float", TypeChecker.t_float);
+        scope.registerType("double", TypeChecker.t_double);
+        scope.registerType("null", TypeChecker.t_null);
+        scope.registerType("byte", TypeChecker.t_byte);
+        scope.registerType("char", TypeChecker.t_char);
+        scope.registerType("int8", TypeChecker.t_int8);
+        scope.registerType("int16", TypeChecker.t_int16);
+        scope.registerType("int32", TypeChecker.t_int32);
+        scope.registerType("int64", TypeChecker.t_int64);
+        scope.registerType("int", TypeChecker.t_int);
+        scope.registerType("uint8", TypeChecker.t_uint8);
+        scope.registerType("uint16", TypeChecker.t_uint16);
+        scope.registerType("uint32", TypeChecker.t_uint32);
+        scope.registerType("uint64", TypeChecker.t_uint64);
+        scope.registerType("uint", TypeChecker.t_uint);
+        scope.registerType("string", TypeChecker.t_string);
+        scope.registerType("void", TypeChecker.t_void);
+        scope.registerType("error", TypeChecker.t_error);
+        scope.registerType("rune", TypeChecker.t_rune);
         mnode.scope = scope;
         this.moduleNode = mnode;
 
@@ -2631,6 +2699,15 @@ export class TypeChecker {
     public checkModulePassTwo() {
         let scope = this.moduleNode.scope;
 
+        // Iterate over all files and process all imports
+        for(let fnode of this.moduleNode.statements) {
+            for (let snode of fnode.statements) {
+                if (snode.op == "import") {
+                    this.importTypes(snode, fnode.scope);
+                }
+            }
+        }
+        
         // Define all types which have been declared before
         for(let t of this.typedefs) {
             if (t.type instanceof StructType) {
@@ -2674,6 +2751,15 @@ export class TypeChecker {
     public checkModulePassThree() {
         let scope = this.moduleNode.scope;
 
+        // Iterate over all files and process all imports
+        for(let fnode of this.moduleNode.statements) {
+            for (let snode of fnode.statements) {
+                if (snode.op == "import") {
+                    this.importFunctions(snode, fnode.scope);
+                }
+            }
+        }
+        
         // Check all interfaces for conflicting names
         for(let iface of this.ifaces) {
             this.checkInterfaceType(iface);
@@ -2838,10 +2924,10 @@ export class TypeChecker {
                         if (rtypeStripped instanceof ArrayLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 // TODO: Check that all elements of the array have the same type
-//                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j]);
+//                                this.checkIsAssignableNode(TypeChecker.t_json, rnode.parameters[j]);
 //                                rtype.types[j] = rnode.parameters[j].type;
                             }
-//                            v.type = new SliceType(this.t_json);
+//                            v.type = new SliceType(TypeChecker.t_json);
                             throw "TODO";
                         } else if (rtypeStripped instanceof ArrayType) {
                             v.type = new ArrayType(rtypeStripped.elementType, rtypeStripped.size - i);
@@ -2929,9 +3015,9 @@ export class TypeChecker {
                         if (rtypeStripped instanceof ObjectLiteralType) {
                             let valueType: Type = null; // TODO
                             for(let j = i; j < rnode.parameters.length; j++) {
-//                                this.checkIsAssignableNode(this.t_json, rnode.parameters[j].lhs);
+//                                this.checkIsAssignableNode(TypeChecker.t_json, rnode.parameters[j].lhs);
                             }
-                            v.type = new PointerType(new MapType(this.t_string, valueType), "strong");
+                            v.type = new PointerType(new MapType(TypeChecker.t_string, valueType), "strong");
                             throw "TODO";
                         } else if (rtypeStripped instanceof TemplateStructType) {
                             v.type = rtype;
@@ -3189,7 +3275,7 @@ export class TypeChecker {
                     throw new TypeError("'return' outside of function body", snode.loc);                    
                 }
                 if (!snode.lhs) {
-                    if (f.type.returnType != this.t_void && !f.hasNamedReturnVariables) {
+                    if (f.type.returnType != TypeChecker.t_void && !f.hasNamedReturnVariables) {
                         throw new TypeError("Mismatch in return type", snode.loc);
                     }
                 } else {
@@ -3229,7 +3315,7 @@ export class TypeChecker {
                     }
                 }
                 this.checkExpression(snode.condition, s);
-                this.checkIsAssignableType(this.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
+                this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
                 snode.scopeExit = this.checkStatements(snode.statements, s);
                 scopeExit.merge(snode.scopeExit);
                 if (snode.elseBranch) {
@@ -3261,7 +3347,7 @@ export class TypeChecker {
                         }
                         if (snode.condition.condition) {
                             this.checkExpression(snode.condition.condition, forScope);
-                            this.checkIsAssignableType(this.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
+                            this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
                         }
                         if (snode.condition.rhs) {
                             let loopScopeExit = new ScopeExit();
@@ -3351,7 +3437,7 @@ export class TypeChecker {
                     if (snode.rhs.op == "int") {
                         this.unifyLiterals(snode.lhs.type, snode.rhs, scope, snode.loc);
                     } else {
-                        this.checkIsAssignableType(this.t_int, snode.rhs.type, snode.loc, "assign", true);
+                        this.checkIsAssignableType(TypeChecker.t_int, snode.rhs.type, snode.loc, "assign", true);
                     }
                 } else {
                     this.checkIsIntNumber(snode.lhs);
@@ -3435,7 +3521,7 @@ export class TypeChecker {
                 if (!(snode.rhs.lhs.type instanceof FunctionType)) {
                     throw "Implementation error";
                 }
-                if ((snode.rhs.lhs.type as FunctionType).returnType != this.t_void) {
+                if ((snode.rhs.lhs.type as FunctionType).returnType != TypeChecker.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
                 }
                 break;
@@ -3519,24 +3605,24 @@ export class TypeChecker {
     public checkExpression(enode: Node, scope: Scope) {
         switch (enode.op) {
             case "null":
-                enode.type = this.t_null;
+                enode.type = TypeChecker.t_null;
                 break;
             case "bool":
-                enode.type = this.t_bool;
+                enode.type = TypeChecker.t_bool;
                 break;
             case "str":
-                enode.type = this.t_string;
+                enode.type = TypeChecker.t_string;
                 break;
             case "rune":
-                enode.type = this.t_rune;
+                enode.type = TypeChecker.t_rune;
                 break;
             case "int":
                 // TODO: Check ranges and use t_uint if required
-                enode.type = this.t_int;
+                enode.type = TypeChecker.t_int;
                 break;
             case "float":
                 // TODO: Check ranges
-                enode.type = this.t_double;
+                enode.type = TypeChecker.t_double;
                 break;
             case "id":
                 // TODO: ellipsis, optional
@@ -3591,7 +3677,7 @@ export class TypeChecker {
                     enode.op = enode.rhs.op;
                     enode.value = enode.rhs.value == "true" ? "false" : "true";
                 }
-                enode.type = this.t_bool;
+                enode.type = TypeChecker.t_bool;
                 break;
             case "unary*":
             {
@@ -3636,9 +3722,9 @@ export class TypeChecker {
                         enode.value = enode.lhs.value + enode.rhs.value;
                     }
                     if (enode.op == "+" || enode.op == "str") {
-                        enode.type = this.t_string;
+                        enode.type = TypeChecker.t_string;
                     } else {
-                        enode.type = this.t_bool;
+                        enode.type = TypeChecker.t_bool;
                     }
                 } else if (this.isUnsafePointer(enode.lhs.type)) {
                     if (enode.op == "*" || enode.op == "/") {
@@ -3697,7 +3783,7 @@ export class TypeChecker {
                         }
                         if (enode.lhs.op == "float" || enode.rhs.op == "float") {
                             enode.op = "float";
-                            enode.lhs.type = this.t_double;
+                            enode.lhs.type = TypeChecker.t_double;
                         } else {
                             enode.op = "int";
                         }
@@ -3711,7 +3797,7 @@ export class TypeChecker {
                     if (enode.op == "+" || enode.op == "-" || enode.op == "*" || enode.op == "/" || enode.op == "float" || enode.op == "int") {
                         enode.type = this.stripType(enode.lhs.type);
                     } else {
-                        enode.type = this.t_bool;
+                        enode.type = TypeChecker.t_bool;
                     }
                 }
                 break;
@@ -3721,7 +3807,7 @@ export class TypeChecker {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsBool(enode.lhs);
                 this.checkIsBool(enode.rhs);
-                enode.type = this.t_bool;
+                enode.type = TypeChecker.t_bool;
                 break;
             case "&":
             case "|":
@@ -3764,14 +3850,14 @@ export class TypeChecker {
                     enode.op = "int";
                 } else if (enode.lhs.op == "int") {
                     if (enode.op == "<<" || enode.op == ">>") {
-                        this.unifyLiterals(this.t_uint, enode.lhs, scope, enode.loc);
+                        this.unifyLiterals(TypeChecker.t_uint, enode.lhs, scope, enode.loc);
                         this.checkIsUnsignedNumber(enode.rhs);
                     } else {
                         this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
                     }
                 } else if (enode.rhs.op == "int") {
                     if (enode.op == "<<" || enode.op == ">>") {
-                        this.unifyLiterals(this.t_uint, enode.rhs, scope, enode.loc);
+                        this.unifyLiterals(TypeChecker.t_uint, enode.rhs, scope, enode.loc);
                     } else {
                         this.unifyLiterals(enode.lhs.type, enode.rhs, scope, enode.loc);
                     }
@@ -3779,7 +3865,7 @@ export class TypeChecker {
                     if (enode.op == "<<" || enode.op == ">>") {
                         this.checkIsUnsignedNumber(enode.rhs);
                     } else if (this.isUnsafePointer(enode.lhs.type)) {
-                        this.checkIsAssignableType(this.t_uint, enode.rhs.type, enode.rhs.loc, "assign", true);
+                        this.checkIsAssignableType(TypeChecker.t_uint, enode.rhs.type, enode.rhs.loc, "assign", true);
                     } else {
                         this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
@@ -3825,7 +3911,7 @@ export class TypeChecker {
                 } else {
                     this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                 }
-                enode.type = this.t_bool;
+                enode.type = TypeChecker.t_bool;
                 break;
             case ".":
             {
@@ -3833,10 +3919,10 @@ export class TypeChecker {
                 let type: Type = this.stripType(enode.lhs.type);
                 let name = enode.name.value;
                 if (type instanceof PackageType) {
-                    if (!type.elements.has(name)) {
-                        throw new TypeError("Unknown identifier " + name + " in " + type.toString(), enode.name.loc);                        
+                    if (!type.pkg.scope.elements.has(name)) {
+                        throw new TypeError("Unknown identifier " + name + " in package " + type.pkg.pkgPath, enode.name.loc);                        
                     }
-                    enode.type = type.elements.get(name);
+                    enode.type = type.pkg.scope.elements.get(name).type;
                     break;
                 }
                 let objectType = type;
@@ -3924,8 +4010,8 @@ export class TypeChecker {
                         // For slices the type remains the same
                         enode.type = enode.lhs.type;
                     }
-                } else if (t == this.t_string) {
-                    enode.type = this.t_string;
+                } else if (t == TypeChecker.t_string) {
+                    enode.type = TypeChecker.t_string;
                 } else {
                     throw "Implementation error";
                 }
@@ -3963,9 +4049,9 @@ export class TypeChecker {
                     this.checkIsPlatformIntNumber(enode.rhs);
                     enode.type = t.getElementType();
                     isConst = isConst || this.isConst(t.arrayType);
-                } else if (t == this.t_string) {
+                } else if (t == TypeChecker.t_string) {
                     this.checkIsPlatformIntNumber(enode.rhs);
-                    enode.type = this.t_byte;                    
+                    enode.type = TypeChecker.t_byte;                    
                 } else if (t instanceof UnsafePointerType) {
                     this.checkIsPlatformIntNumber(enode.rhs);
                     enode.type = t.elementType;
@@ -4200,7 +4286,7 @@ export class TypeChecker {
                         throw new TypeError("Interface cannot be contained by another interface", enode.loc);
                     }
                 }
-                enode.type = this.t_bool;
+                enode.type = TypeChecker.t_bool;
                 break;
             }
             case "typeCast":
@@ -4209,22 +4295,22 @@ export class TypeChecker {
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
                 // TODO: Casts remove restrictions
-                if ((t == this.t_float || t == this.t_double) && this.isIntNumber(right)) {
+                if ((t == TypeChecker.t_float || t == TypeChecker.t_double) && this.isIntNumber(right)) {
                     // Ints can be converted to floats
                     enode.type = t;
-                } else if (this.isIntNumber(t) && (right == this.t_float || right == this.t_double)) {
+                } else if (this.isIntNumber(t) && (right == TypeChecker.t_float || right == TypeChecker.t_double)) {
                     // Floats can be converted to ints
                     enode.type = t;
-                } else if (t == this.t_float && right == this.t_double) {
+                } else if (t == TypeChecker.t_float && right == TypeChecker.t_double) {
                     // Doubles can be converted to floats
                     enode.type = t;
-                } else if (t == this.t_double && right == this.t_float) {
+                } else if (t == TypeChecker.t_double && right == TypeChecker.t_float) {
                     // Floats can be converted to doubles
                     enode.type = t;
-                } else if (t == this.t_rune && this.isUInt32Number(right)) {
+                } else if (t == TypeChecker.t_rune && this.isUInt32Number(right)) {
                     // Ints can be converted to floats
                     enode.type = t;
-                } else if (this.isUInt32Number(t) && right == this.t_rune) {
+                } else if (this.isUInt32Number(t) && right == TypeChecker.t_rune) {
                     // Floats can be converted to ints
                     enode.type = t;
                 } else if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
@@ -4233,17 +4319,17 @@ export class TypeChecker {
                 } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || this.isString(right) || this.isInt32Number(right))) {
                     // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
                     enode.type = t;
-                } else if ((t == this.t_bool || this.isIntNumber(t)) && (right == this.t_bool || this.isIntNumber(right)) && t != right) {
+                } else if ((t == TypeChecker.t_bool || this.isIntNumber(t)) && (right == TypeChecker.t_bool || this.isIntNumber(right)) && t != right) {
                     // bool and all integers can be converted into each other
                     enode.type = t;
                 } else if (this.isString(t) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (this.isString(t) && right instanceof SliceType && (right.getElementType() == this.t_byte || right.getElementType() == this.t_char)) {
+                } else if (this.isString(t) && right instanceof SliceType && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
                     // A slice of bytes can be converted to a string by copying it by copying it.
                     // Restrictions are irrelevant.
                     enode.type = t;
-                } else if (t instanceof SliceType && (t.getElementType() == this.t_byte || t.getElementType() == this.t_char) && this.isString(right)) {
+                } else if (t instanceof SliceType && (t.getElementType() == TypeChecker.t_byte || t.getElementType() == TypeChecker.t_char) && this.isString(right)) {
                     // A string can be casted into a sequence of bytes by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
@@ -4260,7 +4346,7 @@ export class TypeChecker {
                     }
                 } else if (this.checkIsAssignableType(t, right, enode.loc, "assign", false)) {
                     // null can be casted, especially when it is assigned to interface{}
-                    if (right != this.t_null) {
+                    if (right != TypeChecker.t_null) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
                     }
                     enode.type = t;
@@ -4288,14 +4374,14 @@ export class TypeChecker {
                 if (!this.isString(enode.lhs.type) && !this.isArray(enode.lhs.type) && !this.isSlice(enode.lhs.type)) {
                     throw new TypeError("'len' is only allowed on strings, arrays and slices", enode.loc);
                 }
-                enode.type = this.t_int;
+                enode.type = TypeChecker.t_int;
                 break;
             case "cap":
                 this.checkExpression(enode.lhs, scope);
                 if (!this.isSlice(enode.lhs.type)) {
                     throw new TypeError("'cap' is only allowed on slices", enode.loc);
                 }
-                enode.type = this.t_int;
+                enode.type = TypeChecker.t_int;
                 break;
             case "clone":
             {
@@ -4313,7 +4399,7 @@ export class TypeChecker {
             case "sizeof":
             case "aligned_sizeof":
                 enode.lhs.type = this.createType(enode.lhs, scope, "default");
-                enode.type = this.t_int;
+                enode.type = TypeChecker.t_int;
                 break;
             case "ellipsisId":
             case "unary...":
@@ -4450,7 +4536,7 @@ export class TypeChecker {
                 node.type = t;
                 t = this.stripType(t);
                 // TODO: Check range
-                if (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64) {
+                if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
                     return true;
                 }
                 if (t instanceof UnsafePointerType) {
@@ -4465,7 +4551,7 @@ export class TypeChecker {
                 node.type = t;
                 t = this.stripType(t);
                 // TODO: Check range
-                if (t == this.t_float || t == this.t_double) {
+                if (t == TypeChecker.t_float || t == TypeChecker.t_double) {
                     return true;
                 }
                 if (!doThrow) {
@@ -4692,7 +4778,7 @@ export class TypeChecker {
                     }
                 }
             }
-        } else if (to instanceof PointerType && from == this.t_null) {
+        } else if (to instanceof PointerType && from == TypeChecker.t_null) {
             // null can be assigned to any pointer type
             if (mode == "assign") {
                 return true;
@@ -4711,19 +4797,19 @@ export class TypeChecker {
                     return true;
                 }            
             }
-        } else if (to instanceof UnsafePointerType && (from == this.t_int || from == this.t_uint || from == this.t_null)) {
+        } else if (to instanceof UnsafePointerType && (from == TypeChecker.t_int || from == TypeChecker.t_uint || from == TypeChecker.t_null)) {
             // integers and null can be assigned to an usafe pointer type
             if (mode == "assign") {
                 return true;
             }
         } else if (to instanceof UnsafePointerType && (from instanceof UnsafePointerType || from instanceof PointerType)) {            
-            if (to.elementType == this.t_void) {
+            if (to.elementType == TypeChecker.t_void) {
                 // Safe and unsafe pointers to anything can be assigned to #void
                 if (mode == "assign") {
                     return true;
                 }
             }
-            if (from.elementType == this.t_void) {
+            if (from.elementType == TypeChecker.t_void) {
                 // #void can be assigned to any unsafe pointer
                 if (mode == "assign") {
                     return true;
@@ -4751,7 +4837,7 @@ export class TypeChecker {
                 this.checkIsAssignableType(to.valueType, from.valueType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                     return true;
             }
-        } else if (to == this.t_any) {
+        } else if (to == TypeChecker.t_any) {
             // Everything can be asssigned to the empty interface
             return true;
         } else if (to instanceof InterfaceType) {
@@ -4902,7 +4988,7 @@ export class TypeChecker {
     
         for(let n of t.templateParameterNames) {
             if (!result.has(n)) {
-                result.set(n, this.t_void);
+                result.set(n, TypeChecker.t_void);
             }
         }
 
@@ -4914,9 +5000,9 @@ export class TypeChecker {
         if (this.isMap(t)) {
             return [this.mapKeyType(t), this.mapValueType(t)];
         } else if (t instanceof ArrayType) {
-            return [this.t_int, t.elementType];
+            return [TypeChecker.t_int, t.elementType];
         } else if (t instanceof SliceType) {
-            return [this.t_int, t.getElementType()];
+            return [TypeChecker.t_int, t.getElementType()];
         }
         throw new TypeError("The type " + t.toString() + " is not enumerable", node.loc);
     }
@@ -4940,8 +5026,8 @@ export class TypeChecker {
             return t.types[index];
         } else if (t instanceof UnsafePointerType || t instanceof PointerType) {
             return t.elementType;
-        } else if (t == this.t_string) {
-            return this.t_byte;
+        } else if (t == TypeChecker.t_string) {
+            return TypeChecker.t_byte;
         }
         throw new TypeError("The type " + t.toString() + " is not indexable", node.loc);
     }
@@ -5014,7 +5100,7 @@ export class TypeChecker {
 
     public checkIsSignedNumber(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64) {
+        if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64) {
             return true;
         }
         if (doThrow) {
@@ -5025,7 +5111,7 @@ export class TypeChecker {
 
     public checkIsUnsignedNumber(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64) {
+        if (t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
             return true;
         }
         if (doThrow) {
@@ -5036,7 +5122,7 @@ export class TypeChecker {
 
     public checkIsBool(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == this.t_bool) {
+        if (t == TypeChecker.t_bool) {
             return true;
         }
         if (doThrow) {
@@ -5078,7 +5164,7 @@ export class TypeChecker {
     // TODO: Rename to checkIsAddrInt
     public checkIsInt32Number(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == this.t_int32 || t == this.t_uint32) {
+        if (t == TypeChecker.t_int32 || t == TypeChecker.t_uint32) {
             return true;
         }
         if (doThrow) {
@@ -5089,7 +5175,7 @@ export class TypeChecker {
     
     public checkIsIntNumberOrUnsafePointer(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64) {
+        if (t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
             return true;
         }
         if (t instanceof UnsafePointerType) {
@@ -5265,7 +5351,7 @@ export class TypeChecker {
             if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
                 return true;
             }
-            if (node.lhs.type == this.t_string) {
+            if (node.lhs.type == TypeChecker.t_string) {
                 return false;
             }
             return this.isLeftHandSide(node.lhs, scope, true);
@@ -5308,9 +5394,9 @@ export class TypeChecker {
     
     public isString(t: Type): boolean {
         if (t instanceof RestrictedType) {
-            return t.elementType == this.t_string;
+            return t.elementType == TypeChecker.t_string;
         }
-        return t == this.t_string;
+        return t == TypeChecker.t_string;
     }
     
     public isTupleType(t: Type): boolean {
@@ -5331,7 +5417,7 @@ export class TypeChecker {
         if (t instanceof RestrictedType) {
             return t.elementType instanceof OrType;
         }
-        return t == this.t_any;
+        return t == TypeChecker.t_any;
     }
 
     public isOrType(t: Type): boolean {
@@ -5416,7 +5502,7 @@ export class TypeChecker {
 
     public isNumber(t: Type): boolean {
         t = this.stripType(t);
-        return (t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64);
+        return (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64);
     }
 
     public isStruct(t: Type): boolean {
@@ -5503,12 +5589,12 @@ export class TypeChecker {
 
     public isPlatformIntNumber(type: Type): boolean {
         type = this.stripType(type);
-        return (type == this.t_int);
+        return (type == TypeChecker.t_int);
     }
 
     public isIntNumber(type: Type): boolean {
         type = this.stripType(type);
-        if (type == this.t_int8 || type == this.t_int16 || type == this.t_int32 || type == this.t_int64 || type == this.t_uint8 || type == this.t_uint16 || type == this.t_uint32 || type == this.t_uint64) {
+        if (type == TypeChecker.t_int8 || type == TypeChecker.t_int16 || type == TypeChecker.t_int32 || type == TypeChecker.t_int64 || type == TypeChecker.t_uint8 || type == TypeChecker.t_uint16 || type == TypeChecker.t_uint32 || type == TypeChecker.t_uint64) {
             return true;
         }
         return false;
@@ -5517,18 +5603,18 @@ export class TypeChecker {
     // TODO: Platform specific
     public isInt32Number(t: Type): boolean {
         t = this.stripType(t);
-        return t == this.t_int32 || t == this.t_uint32;
+        return t == TypeChecker.t_int32 || t == TypeChecker.t_uint32;
     }
 
     // TODO: Platform specific
     public isUInt32Number(t: Type): boolean {
         t = this.stripType(t);
-        return t == this.t_uint32;
+        return t == TypeChecker.t_uint32;
     }
 
     public isPrimitive(t: Type): boolean {
         t = this.stripType(t);
-        return (t == this.t_rune || t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void);
+        return (t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void);
     }
             
     public isSafePointer(t: Type): boolean {
@@ -5625,7 +5711,7 @@ export class TypeChecker {
      */
     public isPureValue(t: Type): boolean {
         t = this.stripType(t);
-        if (t == this.t_rune || t == this.t_bool || t == this.t_float || t == this.t_double || t == this.t_int8 || t == this.t_int16 || t == this.t_int32 || t == this.t_int64 || t == this.t_uint8 || t == this.t_uint16 || t == this.t_uint32 || t == this.t_uint64 || t == this.t_null || t == this.t_void) {
+        if (t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void) {
             return true;
         }
         if (t instanceof TupleType) {
@@ -5964,7 +6050,7 @@ export class TypeChecker {
                 if (!(snode.rhs.lhs.type instanceof FunctionType)) {
                     throw "Implementation error";
                 }
-                if ((snode.rhs.lhs.type as FunctionType).returnType != this.t_void) {
+                if ((snode.rhs.lhs.type as FunctionType).returnType != TypeChecker.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
                 }
                 break;
@@ -6481,7 +6567,7 @@ export class TypeChecker {
         }
 
         // Void function?
-        if (!ft.returnType || ft.returnType == this.t_void) {
+        if (!ft.returnType || ft.returnType == TypeChecker.t_void) {
             return null;
         }
         // The function returns a tuple type?
@@ -6534,33 +6620,33 @@ export class TypeChecker {
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.
         // Hence it behaves like a take expression.
-        if (enode.type == this.t_string && (enode.op == ":" || enode.op == "+")) {
+        if (enode.type == TypeChecker.t_string && (enode.op == ":" || enode.op == "+")) {
             return true;
         }
         return false;
     }
 
-    public t_bool: Type;
-    public t_float: Type;
-    public t_double: Type;
-    public t_null: Type;
-    public t_int8: Type;
-    public t_int16: Type;
-    public t_int32: Type;
-    public t_int64: Type;
-    public t_uint8: Type;
-    public t_byte: Type;
-    public t_char: Type;
-    public t_int: Type;
-    public t_uint16: Type;
-    public t_uint32: Type;
-    public t_uint64: Type;
-    public t_uint: Type;
-    public t_string: Type;
-    public t_rune: Type;
-    public t_void: Type;
-    public t_any: Type;
-    public t_error: InterfaceType;
+    public static t_bool: Type;
+    public static t_float: Type;
+    public static t_double: Type;
+    public static t_null: Type;
+    public static t_int8: Type;
+    public static t_int16: Type;
+    public static t_int32: Type;
+    public static t_int64: Type;
+    public static t_uint8: Type;
+    public static t_byte: Type;
+    public static t_char: Type;
+    public static t_int: Type;
+    public static t_uint16: Type;
+    public static t_uint32: Type;
+    public static t_uint64: Type;
+    public static t_uint: Type;
+    public static t_string: Type;
+    public static t_rune: Type;
+    public static t_void: Type;
+    public static t_any: Type;
+    public static t_error: InterfaceType;
 
     // List of all interfaces. These are checked for possible errors after they have been defined.
     public ifaces: Array<InterfaceType> = [];

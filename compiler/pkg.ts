@@ -83,7 +83,7 @@ export class Package {
         this.fyrPath = fyrPath;
 
         if (this.pkgPath[0] == '/' || this.pkgPath[0] == '\\') {
-            throw new ImportError("Import pathes must not start with " + path.sep, null, this.pkgPath);
+            throw new ImportError("Import path '" + this.pkgPath + "' must not start with " + path.sep, null, this.pkgPath);
         }
 
         if (this.fyrPath[this.fyrPath.length - 1] == path.sep) {
@@ -131,7 +131,7 @@ export class Package {
         for(let file of this.files) {
             ast.setCurrentFile(file);
             let fileResolved = path.resolve(file);
-            console.log("Compiling " + fileResolved + " ...");
+            console.log("Parsing " + fileResolved + " ...");
             let code: string;
             try {
                 code = fs.readFileSync(fileResolved, 'utf8') + "\n";
@@ -143,7 +143,7 @@ export class Package {
         }
 
         // This might load more packages
-        this.tc.checkModule(this.pkgNode);
+        this.scope = this.tc.checkModule(this.pkgNode);
     }
 
     /**
@@ -170,6 +170,8 @@ export class Package {
         if (this.isInternal) {
             return;
         }
+
+        console.log("Compiling " + (this.pkgPath ? this.pkgPath : path.join(this.objFilePath, this.objFileName)) + " ...");
 
         let b: backend.Backend;
         if (backend == "C") {
@@ -282,7 +284,7 @@ export class Package {
                 continue;
             }
             let pkg = new Package();
-            pkg.findSources(pkgPath, p);
+            pkg.findSources(p, pkgPath);
             pkg.loadSources();
             return pkg;
         }
@@ -345,12 +347,12 @@ function makeMathFunction(name: string, paramCount: number, call32: SystemCalls,
     let t = new FunctionType();
     t.callingConvention = "system";
     t.name = name;
-    t.returnType = tc.t_float;
+    t.returnType = TypeChecker.t_float;
     t.systemCallType = call32;
     for(let i = 0; i < paramCount; i++) {
         let p = new FunctionParameter();
         p.name = "value" + i.toString();
-        p.type = tc.t_float;
+        p.type = TypeChecker.t_float;
         t.parameters.push(p);
     }
     gt.instances.push(t);
@@ -358,12 +360,12 @@ function makeMathFunction(name: string, paramCount: number, call32: SystemCalls,
     t = new FunctionType();
     t.callingConvention = "system";
     t.name = name;
-    t.returnType = tc.t_double;
+    t.returnType = TypeChecker.t_double;
     t.systemCallType = call64;
     for(let i = 0; i < paramCount; i++) {
         let p = new FunctionParameter();
         p.name = "value" + i.toString();
-        p.type = tc.t_double;
+        p.type = TypeChecker.t_double;
         t.parameters.push(p);
     }
     gt.instances.push(t);
@@ -382,14 +384,14 @@ function initPackages() {
     heap.type.callingConvention = "system";
     heap.type.name = "heap";
     heap.type.systemCallType = SystemCalls.heap;
-    heap.type.returnType = new UnsafePointerType(systemPkg.tc.t_void);
+    heap.type.returnType = new UnsafePointerType(TypeChecker.t_void);
     systemPkg.scope.registerElement(heap.name, heap);
     var currentMemory: Function = new Function();
     currentMemory.name = "currentMemory";
     currentMemory.type = new FunctionType();
     currentMemory.type.name = "currentMemory";
     currentMemory.type.systemCallType = SystemCalls.currentMemory;
-    currentMemory.type.returnType = systemPkg.tc.t_uint;
+    currentMemory.type.returnType = TypeChecker.t_uint;
     currentMemory.type.callingConvention = "system";
     systemPkg.scope.registerElement(currentMemory.name, currentMemory);
     var growMemory: Function = new Function();
@@ -397,10 +399,10 @@ function initPackages() {
     growMemory.type = new FunctionType();
     growMemory.type.name = "growMemory";
     growMemory.type.systemCallType = SystemCalls.growMemory;
-    growMemory.type.returnType = systemPkg.tc.t_int;
+    growMemory.type.returnType = TypeChecker.t_int;
     let p = new FunctionParameter();
     p.name = "pages";
-    p.type = systemPkg.tc.t_uint;
+    p.type = TypeChecker.t_uint;
     growMemory.type.parameters.push(p);
     growMemory.type.callingConvention = "system";
     systemPkg.scope.registerElement(growMemory.name, growMemory);
@@ -410,7 +412,7 @@ function initPackages() {
     heapTypemap.type.callingConvention = "system";
     heapTypemap.type.name = "heapTypemap";
     heapTypemap.type.systemCallType = SystemCalls.heapTypemap;
-    heapTypemap.type.returnType = new UnsafePointerType(systemPkg.tc.t_void);
+    heapTypemap.type.returnType = new UnsafePointerType(TypeChecker.t_void);
     systemPkg.scope.registerElement(heapTypemap.name, heapTypemap);
     var pageSize: Function = new Function();
     pageSize.name = "pageSize";
@@ -418,7 +420,7 @@ function initPackages() {
     pageSize.type.callingConvention = "system";
     pageSize.type.name = "pageSize";
     pageSize.type.systemCallType = SystemCalls.pageSize;
-    pageSize.type.returnType = systemPkg.tc.t_uint;
+    pageSize.type.returnType = TypeChecker.t_uint;
     systemPkg.scope.registerElement(pageSize.name, pageSize);
     var defaultStackSize: Function = new Function();
     defaultStackSize.name = "defaultStackSize";
@@ -426,7 +428,7 @@ function initPackages() {
     defaultStackSize.type.callingConvention = "system";
     defaultStackSize.type.name = "defaultStackSize";
     defaultStackSize.type.systemCallType = SystemCalls.defaultStackSize;
-    defaultStackSize.type.returnType = systemPkg.tc.t_uint;
+    defaultStackSize.type.returnType = TypeChecker.t_uint;
     systemPkg.scope.registerElement(defaultStackSize.name, defaultStackSize);
     var garbageCollect: Function = new Function();
     garbageCollect.name = "garbageCollect";
@@ -434,7 +436,7 @@ function initPackages() {
     garbageCollect.type.callingConvention = "system";
     garbageCollect.type.name = "garbageCollect";
     garbageCollect.type.systemCallType = SystemCalls.garbageCollect;
-    garbageCollect.type.returnType = systemPkg.tc.t_void;
+    garbageCollect.type.returnType = TypeChecker.t_void;
     systemPkg.scope.registerElement(garbageCollect.name, garbageCollect);
     var stackPointer: Function = new Function();
     stackPointer.name = "stackPointer";
@@ -442,7 +444,7 @@ function initPackages() {
     stackPointer.type.callingConvention = "system";
     stackPointer.type.name = "stackPointer";
     stackPointer.type.systemCallType = SystemCalls.stackPointer;
-    stackPointer.type.returnType = new UnsafePointerType(systemPkg.tc.t_void);
+    stackPointer.type.returnType = new UnsafePointerType(TypeChecker.t_void);
     systemPkg.scope.registerElement(stackPointer.name, stackPointer);
     var trap: Function = new Function();
     trap.name = "trap";
@@ -450,7 +452,7 @@ function initPackages() {
     trap.type.callingConvention = "system";
     trap.type.name = "trap";
     trap.type.systemCallType = SystemCalls.trap;
-    trap.type.returnType = systemPkg.tc.t_void;
+    trap.type.returnType = TypeChecker.t_void;
     systemPkg.scope.registerElement(trap.name, trap);
     var continueCoroutine: Function = new Function();
     continueCoroutine.name = "continueCoroutine";
@@ -458,18 +460,18 @@ function initPackages() {
     continueCoroutine.type.callingConvention = "system";
     continueCoroutine.type.name = "continueCoroutine";
     continueCoroutine.type.systemCallType = SystemCalls.continueCoroutine;
-    continueCoroutine.type.returnType = systemPkg.tc.t_uint32;
+    continueCoroutine.type.returnType = TypeChecker.t_uint32;
     p = new FunctionParameter();
     p.name = "step";
-    p.type = systemPkg.tc.t_uint32;
+    p.type = TypeChecker.t_uint32;
     continueCoroutine.type.parameters.push(p);
     p = new FunctionParameter();
     p.name = "frame";
-    p.type = new UnsafePointerType(systemPkg.tc.t_void);
+    p.type = new UnsafePointerType(TypeChecker.t_void);
     continueCoroutine.type.parameters.push(p);
     p = new FunctionParameter();
     p.name = "step";
-    p.type = systemPkg.tc.t_uint32;
+    p.type = TypeChecker.t_uint32;
     continueCoroutine.type.parameters.push(p);
     systemPkg.scope.registerElement(continueCoroutine.name, continueCoroutine);
     var scheduleCoroutine: Function = new Function();
@@ -478,10 +480,10 @@ function initPackages() {
     scheduleCoroutine.type.callingConvention = "system";
     scheduleCoroutine.type.name = "scheduleCoroutine";
     scheduleCoroutine.type.systemCallType = SystemCalls.scheduleCoroutine;
-    scheduleCoroutine.type.returnType = systemPkg.tc.t_void;
+    scheduleCoroutine.type.returnType = TypeChecker.t_void;
     p = new FunctionParameter();
     p.name = "c";
-    p.type = new UnsafePointerType(systemPkg.tc.t_void);
+    p.type = new UnsafePointerType(TypeChecker.t_void);
     scheduleCoroutine.type.parameters.push(p);
     systemPkg.scope.registerElement(scheduleCoroutine.name, scheduleCoroutine);
     var coroutine: Function = new Function();
@@ -490,7 +492,7 @@ function initPackages() {
     coroutine.type.callingConvention = "system";
     coroutine.type.name = "coroutine";
     coroutine.type.systemCallType = SystemCalls.coroutine;
-    coroutine.type.returnType = new UnsafePointerType(systemPkg.tc.t_void);
+    coroutine.type.returnType = new UnsafePointerType(TypeChecker.t_void);
     systemPkg.scope.registerElement(coroutine.name, coroutine);
 
     mathPkg = new Package();

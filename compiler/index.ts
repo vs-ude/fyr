@@ -102,7 +102,11 @@ function compileModules() {
             console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
         } else if (ex instanceof ImportError) {
-            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            if (ex.location) {
+                console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            } else {
+                console.log((ex.path + ": ".yellow) + ex.message.red);
+            }
             return
         } else {
             console.log(ex);
@@ -114,10 +118,7 @@ function compileModules() {
     try {
         Package.checkTypesForPackages();
     } catch(ex) {
-        if (ex instanceof parser.SyntaxError) {
-            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;
-        } else if (ex instanceof typecheck.TypeError) {
+        if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
         } else {

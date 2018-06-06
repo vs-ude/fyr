@@ -1,0 +1,5 @@
+import "foo/bar"
+
+export func main() int {
+    return bar.square(4)
+}
