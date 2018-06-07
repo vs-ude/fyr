@@ -19,4 +19,6 @@ measurements/call_go/call
 playground
 backup
 pkg/*
-
+src/**/*.o
+src/**/*.h
+src/**/*.c

@@ -208,6 +208,19 @@ export class Package {
         }
     }
 
+    public generateObjectFiles(backend: "C" | "WASM" | null) {
+        // Compile the *.c and *.h files to *.o files
+        if (backend == "C") {
+            let cfile = path.join(this.objFilePath, this.objFileName + ".c");
+            let ofile = path.join(this.objFilePath, this.objFileName + ".o");
+            let includes: Array<string> = [];
+            for (let p of Package.fyrPaths) {
+                includes.push("-I" + path.join(p, "pkg", architecture));
+            }
+            child_process.execFileSync("gcc", includes.concat(["-O3", "-Iexamples", "-o", ofile, "-c", cfile]));
+        }
+    }
+
     /**
      * Might throw ImportError
      */
@@ -246,6 +259,10 @@ export class Package {
     public static generateCodeForPackages(backend: "C" | "WASM" | null, disableNullCheck: boolean) {
         for(let p of Package.packages) {
             p.generateCode(backend, disableNullCheck);
+        }
+
+        for(let p of Package.packages) {
+            p.generateObjectFiles(backend);
         }
     }
 
