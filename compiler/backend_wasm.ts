@@ -1,5 +1,5 @@
 import * as wasm from "./wasm"
-import {SystemCalls} from "./pkg"
+import {SystemCalls, Package} from "./pkg"
 import {SMTransformer, Optimizer, Stackifier, Type, PointerType, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "./ssa"
 import * as backend from "./backend"
 import {BinaryBuffer} from "./binarybuffer"
@@ -95,9 +95,11 @@ export class Wasm32Backend implements backend.Backend {
         return this.module.addFunctionToTable(f, index);
     }
 
-    public importFunction(name: string, from: string, type: FunctionType): backend.FunctionImport {
+    public importFunction(name: string, from: string | Package, type: FunctionType): backend.FunctionImport {
+        if (typeof(from) != "string") {
+            throw "TODO: Packet import in WASM";
+        }
         let wt = new wasm.FunctionType(name, [], []);
-        let hasHeapFrame = false;
         for(let p of type.params) {
             if (!(p instanceof StructType)) {
                 wt.params.push(this.stackTypeOf(p))

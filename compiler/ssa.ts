@@ -195,7 +195,7 @@ export function compareTypes(t1: Type | StructType | PointerType, t2: Type | Str
     return false;
 }
 
-export type CallingConvention = "fyr" | "fyrCoroutine" | "system";
+export type CallingConvention = "fyr" | "fyrCoroutine" | "system" | "native";
 
 export class FunctionType {
     constructor(params: Array<Type | StructType | PointerType>, result: Type | StructType | PointerType | null, conv: CallingConvention = "fyr") {

@@ -434,6 +434,16 @@ export class Scope {
         return false;
     }
 
+    public package(): Package {
+        if (this.pkg) {
+            return this.pkg;
+        }
+        if (this.parent) {
+            return this.parent.package();
+        }
+        return null;
+    }
+
     public func: Function;
     public forLoop: boolean;
     public elements: Map<string, ScopeElement>;
@@ -442,6 +452,9 @@ export class Scope {
     public unavailableGroups: Set<Group> = new Set<Group>();
     public elementGroups: Map<ScopeElement, Group | null> = new Map<ScopeElement, Group | null>();
     public parent: Scope | null = null;
+
+    // Top-level scopes carry information about the package they belong to.
+    public pkg: Package;
 
     private static counter: number = 1;
 }
@@ -667,7 +680,7 @@ export class StructField {
 
 // CallingConvention is part of a FunctionType.
 // It defines how the function is to be called.
-export type CallingConvention = "fyr" | "fyrCoroutine" | "system";
+export type CallingConvention = "fyr" | "fyrCoroutine" | "system" | "native";
 
 export class FunctionType extends Type {
     constructor() {
@@ -2495,7 +2508,7 @@ export class TypeChecker {
         f.node = fnode;
         f.loc = fnode.loc;
         f.type = new FunctionType();
-//        f.type.callingConvention = "host";
+        f.type.callingConvention = "native";
         f.type.loc = fnode.loc;
 //        f.type.callingConvention = "system";
         let i = 0;
@@ -2645,9 +2658,11 @@ export class TypeChecker {
     }
 
     // The main function of the Typechecker that checks the types of an entire module.
-    public checkModule(mnode: Node): Scope {
+    public checkModule(pkg: Package): Scope {
 
         let scope = new Scope(null);
+        scope.pkg = pkg;
+
         scope.registerType("bool", TypeChecker.t_bool);
         scope.registerType("float", TypeChecker.t_float);
         scope.registerType("double", TypeChecker.t_double);
@@ -2668,11 +2683,11 @@ export class TypeChecker {
         scope.registerType("void", TypeChecker.t_void);
         scope.registerType("error", TypeChecker.t_error);
         scope.registerType("rune", TypeChecker.t_rune);
-        mnode.scope = scope;
-        this.moduleNode = mnode;
-
+        pkg.pkgNode.scope = scope;
+        this.moduleNode = pkg.pkgNode;
+        
         // Iterate over all files and process all imports
-        for(let fnode of mnode.statements) {
+        for(let fnode of this.moduleNode.statements) {
             fnode.scope = new Scope(scope);
             for (let snode of fnode.statements) {
                 if (snode.op == "import") {

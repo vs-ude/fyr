@@ -1,4 +1,5 @@
 import * as ssa from "./ssa"
+import {Package} from "./pkg"
 
 export interface FunctionImport {
     getIndex(): number;
@@ -11,12 +12,11 @@ export interface Function {
 }
 
 export interface Backend {
-    importFunction(name: string, from: string, type: ssa.FunctionType): FunctionImport;
+    importFunction(name: string, from: string | Package, type: ssa.FunctionType): FunctionImport;
     declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable;
     declareFunction(name: string): Function;
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean);
     generateModule();
     addFunctionToTable(f: Function, index: number);
-    getCode(): string;
 }

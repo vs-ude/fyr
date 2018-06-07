@@ -173,10 +173,6 @@ export class CodeGenerator {
         }
     }
 
-    public getCode(): string {
-        return this.backend.getCode();
-    }
-
     public getSSAType(t: Type): ssa.Type | ssa.StructType | ssa.PointerType {
         if (t == TypeChecker.t_bool || t == TypeChecker.t_uint8 || t == TypeChecker.t_byte || t == TypeChecker.t_void) {
             return "i8";
@@ -2366,6 +2362,9 @@ export class CodeGenerator {
                 
                 let decrefArgs: Array<[Node, ssa.Variable, Type]> = [];
                 if (f) {
+                    if (!this.funcs.has(f)) {
+                        this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
+                    }
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {
                     args.push(findex);

@@ -1,7 +1,8 @@
-import {SystemCalls} from "./pkg"
-import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind} from "./ssa"
-import * as backend from "./backend"
+import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind} from "./ssa";
+import {Package, SystemCalls} from "./pkg";
+import * as backend from "./backend";
 import * as ssa from "./ssa"
+import path = require("path");
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -16,6 +17,7 @@ export class FunctionImport implements backend.FunctionImport {
 
     public index: number;
     public name: string;
+    public pkg?: Package;
 }
 
 export class Function implements backend.Function {
@@ -39,7 +41,8 @@ export class Function implements backend.Function {
 }
 
 export class CBackend implements backend.Backend {
-    constructor() {
+    constructor(pkg: Package) {
+        this.pkg = pkg;
         this.optimizer = new Optimizer();
         this.stackifier = new Stackifier(this.optimizer);
         this.module = new CModule();
@@ -73,21 +76,41 @@ export class CBackend implements backend.Backend {
         this.operatorMap.set("ge_u", ">=");
     }
 
-    public importFunction(name: string, from: string, type: ssa.FunctionType): FunctionImport {
-        let path = from;
-        let isSystemPath = false;
-        if (path[0] == '<') {
-            isSystemPath = true;
-            path = path.substr(1, path.length - 2);
-        }
-        if (!this.module.hasInclude(path, isSystemPath)) {
-            let imp = new CInclude();
-            imp.isSystemPath = isSystemPath;
-            imp.path = path;
-            this.module.includes.push(imp);
+    public importFunction(name: string, from: string | Package, type: ssa.FunctionType): FunctionImport {
+        if (type.callingConvention == "native") {
+            if (typeof(from) != "string") {
+                throw "Implementation error";
+            }
+            let path = from;
+            let isSystemPath = false;
+            if (path[0] == '<') {
+                isSystemPath = true;
+                path = path.substr(1, path.length - 2);
+            }
+            if (!this.module.hasInclude(path, isSystemPath)) {
+                let imp = new CInclude();
+                imp.isSystemPath = isSystemPath;
+                imp.path = path;
+                this.module.includes.push(imp);
+            }
+        } else {
+            if (!(from instanceof Package)) {
+                throw "Implementation error";
+            }
+            let headerFile = from.pkgPath + ".h";
+            if (!this.module.hasInclude(headerFile, false)) {
+                let imp = new CInclude();
+                imp.isSystemPath = false;
+                imp.path = headerFile;
+                this.module.includes.push(imp);
+            }
         }
         let f = new FunctionImport();
-        f.name = name;
+        if (type.callingConvention == "native") {
+            f.name = name;
+        } else {
+            f.name = this.mangleName((from as Package).pkgPath + "/" + name);
+        }
         f.index = this.funcs.length;
         this.funcs.push(f);
         return f;
@@ -116,7 +139,6 @@ export class CBackend implements backend.Backend {
     public declareInitFunction(name: string): Function {
         let f = new Function();
         f.name = name;
-        f.func.name = "s_" + name;
         f.func.returnType = new CType("void");
         f.index = this.funcs.length;
         this.initFunction = f;
@@ -127,23 +149,35 @@ export class CBackend implements backend.Backend {
     public defineFunction(n: ssa.Node, f: Function, isExported: boolean) {
         if (!(f instanceof Function)) {
             throw "Implementation error";
+        }        
+        let name = f.name;
+        if (this.pkg.pkgPath) {
+            name = this.pkg.pkgPath + "/" + name;
         }
-        let nameWithoutDot = f.name.replace("_", "_u");
-        nameWithoutDot = nameWithoutDot.replace(".", "__");
-        nameWithoutDot = nameWithoutDot.replace("<", "_l");
-        nameWithoutDot = nameWithoutDot.replace(">", "_g");
-        nameWithoutDot = nameWithoutDot.replace(",", "_c");
-        if (isExported && f.name == "main") {
+        name = this.mangleName(name);
+        if (f == this.initFunction) {
+            f.func.name = "s_" + name;
+        } else if (isExported && f.name == "main") {
             this.mainFunction = f;
-            f.func.name = "f_" + nameWithoutDot;        
+            f.func.name = "f_" + name;        
             f.isExported = true;
         } else if (isExported) {
-            f.func.name = nameWithoutDot;        
+            f.func.name = name;
             f.isExported = true;
         } else {
-            f.func.name = "f_" + nameWithoutDot;        
+            f.func.name = "f_" + name;
         }
         f.node = n;
+    }
+
+    private mangleName(name: string): string {        
+        name = name.replace(/_/g, "_u");
+        name = name.replace(/\./g, "__");
+        name = name.replace(/</g, "_l");
+        name = name.replace(/>/g, "_g");
+        name = name.replace(/,/g, "_c");
+        name = name.replace(/\//g, "_");
+        return name;
     }
 
     public generateModule() {
@@ -235,40 +269,44 @@ export class CBackend implements backend.Backend {
             this.module.elements.unshift(ct);
         }
 
-        let main = new CFunction();
-        main.name = "main";
-        main.returnType = new CType("int");
-        let p = new CFunctionParameter();
-        p.name = "argc";
-        p.type = new CType("int");
-        main.parameters.push(p);
-        p = new CFunctionParameter();
-        p.name = "argv";
-        p.type = new CType("char**");
-        main.parameters.push(p);
-
-        if (this.initFunction) {
-            let call = new CFunctionCall();
-            call.funcExpr = new CConst(this.initFunction.func.name);
-            main.body.push(call);
-        }
-
         if (this.mainFunction) {
+            let main = new CFunction();
+            main.name = "main";
+            main.returnType = new CType("int");
+            let p = new CFunctionParameter();
+            p.name = "argc";
+            p.type = new CType("int");
+            main.parameters.push(p);
+            p = new CFunctionParameter();
+            p.name = "argv";
+            p.type = new CType("char**");
+            main.parameters.push(p);
+
+            if (this.initFunction) {
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst(this.initFunction.func.name);
+                main.body.push(call);
+            }
+
             let call = new CFunctionCall();
             call.funcExpr = new CConst(this.mainFunction.func.name);
             let r = new CReturn();
             r.expr = call;
             main.body.push(r);
+            this.module.elements.push(main);
         }
-        this.module.elements.push(main);
     }
 
     public addFunctionToTable(f: Function, index: number) {
         throw "TODO";
     }
 
-    public getCode(): string {
-        return this.module.toString();
+    public getImplementationCode(): string {
+        return this.module.getImplementationCode(this.pkg);
+    }
+
+    public getHeaderCode(): string {
+        return this.module.getHeaderCode(this.pkg);
     }
 
     private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false): CType {
@@ -1072,6 +1110,7 @@ export class CBackend implements backend.Backend {
         this.localVariables.push(v);
     }
 
+    private pkg: Package;
     private optimizer: Optimizer;
     private stackifier: Stackifier;
     private module: CModule;
@@ -1105,15 +1144,38 @@ export class CInclude {
 }
 
 export class CModule {
-    public toString(): string {
-        let str = this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
+    public getImplementationCode(pkg: Package): string {
+        let headerFile: string;
+        if (pkg.pkgPath) {
+            headerFile = pkg.pkgPath + ".h";
+        } else {
+            headerFile = path.join(pkg.objFilePath, pkg.objFileName + ".h");
+        }
+        let str = "#include \"" + headerFile + "\"\n";
+        str += "\n";     
+        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) { } else if (c instanceof CFunction) str += c.toString() + "\n\n"; else str += c.toString() + ";\n\n"});
+        return str;
+    }
+
+    public getHeaderCode(pkg: Package): string {
+        let mangledName = pkg.pkgPath;
+        let str: string = "";
+        if (mangledName) {
+            mangledName = mangledName.replace(/\//g, "_").toUpperCase() + "_H";
+            str += "#ifndef " + mangledName + "\n";
+            str += "#define " + mangledName + "\n\n";
+        }
+
+        str += this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
         for(let s of this.strings.values()) {
             str += s.toString() + "\n\n";
         }
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + ";\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
-        str += "\n";     
-        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) { } else if (c instanceof CFunction) str += c.toString() + "\n\n"; else str += c.toString() + ";\n\n"});
+
+        if (mangledName) {
+            str += "\n#endif\n";
+        }
         return str;
     }
 

@@ -143,7 +143,7 @@ export class Package {
         }
 
         // This might load more packages
-        this.scope = this.tc.checkModule(this.pkgNode);
+        this.scope = this.tc.checkModule(this);
     }
 
     /**
@@ -173,11 +173,15 @@ export class Package {
 
         console.log("Compiling " + (this.pkgPath ? this.pkgPath : path.join(this.objFilePath, this.objFileName)) + " ...");
 
+        let cBackend: CBackend;
+        let wasmBackend: Wasm32Backend;
         let b: backend.Backend;
         if (backend == "C") {
-            b = new CBackend();
+            cBackend = new CBackend(this);
+            b = cBackend;
         } else if (backend == "WASM") {
-            b = new Wasm32Backend();
+            wasmBackend = new Wasm32Backend();
+            b = wasmBackend;
         }
         
         this.codegen = new CodeGenerator(this.tc, b, disableNullCheck);
@@ -187,7 +191,7 @@ export class Package {
 
         if (backend == "WASM") {
             // Generate WAST
-            let wastcode = this.codegen.getCode();
+            let wastcode = wasmBackend.getCode();
             let wastfile = path.join(this.objFilePath, this.objFileName + ".wat");
             fs.writeFileSync(wastfile, wastcode, 'utf8');
             // Generate WASM
@@ -195,11 +199,13 @@ export class Package {
             child_process.execFileSync("wat2wasm", [wastfile, "-r", "-o", wasmfile]);
         } else if (backend == "C") {
             // Generate C code
-            let code = this.codegen.getCode();
+            let code = cBackend.getImplementationCode();
             let cfile = path.join(this.objFilePath, this.objFileName + ".c");
             fs.writeFileSync(cfile, code, 'utf8');
+            let hcode = cBackend.getHeaderCode();
+            let hfile = path.join(this.objFilePath, this.objFileName + ".h");
+            fs.writeFileSync(hfile, hcode, 'utf8');
         }
-
     }
 
     /**
