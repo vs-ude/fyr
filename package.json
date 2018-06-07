@@ -8,7 +8,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build:parser": "pegjs -o lib/parser.js src/parser.pegjs",
     "build:js": "tsc",
-    "build": "npm run build:parser && npm run build:js",
+    "build:lib": "gcc -o pkg/darwin-x64/fyr.o -O3 -c pkg/darwin-x64/fyr.c",
+    "build": "npm run build:parser && npm run build:js && && npm run build:lib",
     "clean": "rm lib/*"
   },
   "keywords": [
