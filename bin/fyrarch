@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+
+"use strict"
+
+let os = require("os");
+let process = require("process");
+
+let architecture = os.platform() + "-" + os.arch();
+process.stdout.write(architecture);
