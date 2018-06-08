@@ -1110,6 +1110,10 @@ export class CBackend implements backend.Backend {
         this.localVariables.push(v);
     }
 
+    public hasMainFunction(): boolean {
+        return !!this.mainFunction;
+    }
+    
     private pkg: Package;
     private optimizer: Optimizer;
     private stackifier: Stackifier;

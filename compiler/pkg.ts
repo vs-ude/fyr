@@ -94,7 +94,8 @@ export class Package {
         this.objFileName = packagePaths[packagePaths.length - 1];
         packagePaths.splice(packagePaths.length - 1, 1);
         this.objFilePath = path.join(fyrPath, "pkg", architecture, packagePaths.join(path.sep));
-
+        this.binFilePath = path.join(fyrPath, "pkg", architecture);
+        this.binFileName = this.objFileName;
         Package.packagesByPath.set(pkgPath, this);
 
         // Determine all filenames
@@ -117,6 +118,8 @@ export class Package {
         let parsedName = path.parse(name);
         this.objFileName = parsedName.name;
         this.objFilePath = paths.join(path.sep);
+        this.binFileName = parsedName.name;
+        this.binFilePath = paths.join(path.sep);
     }
 
     /**
@@ -205,6 +208,12 @@ export class Package {
             let hcode = cBackend.getHeaderCode();
             let hfile = path.join(this.objFilePath, this.objFileName + ".h");
             fs.writeFileSync(hfile, hcode, 'utf8');
+
+            this.hasMain = cBackend.hasMainFunction();
+
+            if (this.isImported && this.hasMain) {
+                throw new ImportError("Package " + this.pkgPath + " has been imported as a library, but contains a main function", null, this.pkgPath);
+            }
         }
     }
 
@@ -217,7 +226,9 @@ export class Package {
             for (let p of Package.fyrPaths) {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
-            child_process.execFileSync("gcc", includes.concat(["-O3", "-Iexamples", "-o", ofile, "-c", cfile]));
+            let args = includes.concat(["-O3", "-o", ofile, "-c", cfile]);
+            console.log("gcc", args.join(" "));
+            child_process.execFileSync("gcc", args);
         }
     }
 
@@ -257,13 +268,35 @@ export class Package {
     }
 
     public static generateCodeForPackages(backend: "C" | "WASM" | null, disableNullCheck: boolean) {
+        // Generate code (in the case of "C" this is source code)
         for(let p of Package.packages) {
             p.generateCode(backend, disableNullCheck);
         }
 
+        // Generate object files (in the case of "C")
         for(let p of Package.packages) {
             p.generateObjectFiles(backend);
         }
+
+        // Linking
+        for(let p of Package.packages) {
+            if (!p.isImported && p.hasMain) {
+                if (backend == "C") {
+                    // List of all object files
+                    let oFiles: Array<string> = [];
+                    // Always include fyr.o
+                    oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr.o"));
+                    for(let importPkg of Package.packages) {
+                        oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
+                    }
+                    let bFile = path.join(p.binFilePath, p.binFileName);
+                    let args = ["-o", bFile].concat(oFiles);
+                    console.log("gcc", args.join(" "));
+                    child_process.execFileSync("gcc", args);
+                }
+            }
+        }
+
     }
 
     public static getFyrPaths(): Array<string> {
@@ -307,6 +340,7 @@ export class Package {
                 continue;
             }
             let pkg = new Package();
+            pkg.isImported = true;
             pkg.findSources(p, pkgPath);
             pkg.loadSources();
             return pkg;
@@ -327,7 +361,12 @@ export class Package {
     public codegen: CodeGenerator;
     public objFilePath: string;
     public objFileName: string;
+    public binFilePath: string;
+    public binFileName: string;
+    // A compiler-builtin package
     public isInternal: boolean;
+    public isImported: boolean;
+    public hasMain: boolean;
 
     private static packagesByPath: Map<string, Package> = new Map<string, Package>();
     private static packages: Array<Package> = [];
