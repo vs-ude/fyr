@@ -223,6 +223,8 @@ export class Package {
             let cfile = path.join(this.objFilePath, this.objFileName + ".c");
             let ofile = path.join(this.objFilePath, this.objFileName + ".o");
             let includes: Array<string> = [];
+            // Make fyr.h discoverable
+            includes.push("-I" + path.join(Package.fyrBase, "src", "runtime"));
             for (let p of Package.fyrPaths) {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
@@ -245,6 +247,19 @@ export class Package {
         packagePaths.splice(packagePaths.length - 1, 1);
         let subs = ["pkg", architecture].concat(packagePaths);
 
+        for(let sub of subs) {
+            try {
+                p = path.join(p, sub);
+                fs.mkdirSync(p);
+            } catch(e) {
+                if (e.code !== "EEXIST") {
+                    throw new ImportError(("Cannot create directory " + p).red, null, this.pkgPath);
+                }
+            }
+        }                
+
+        // Generate the bin directory
+        subs = ["bin", architecture];
         for(let sub of subs) {
             try {
                 p = path.join(p, sub);
