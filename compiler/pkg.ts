@@ -290,36 +290,42 @@ export class Package {
         }
     }
 
-    public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, disableNullCheck: boolean) {
+    public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
         for(let p of Package.packages) {
             p.generateCode(backend, emitIR, disableNullCheck);
         }
 
-        // Generate object files (in the case of "C")
-        for(let p of Package.packages) {
-            p.generateObjectFiles(backend);
-        }
+        // Create native executable?
+        if (emitNative) {
+            if (backend !== "C") {
+                throw "Implementation error";
+            }
+            
+            // Generate object files
+            for(let p of Package.packages) {
+                p.generateObjectFiles(backend);
+            }
 
-        // Linking
-        for(let p of Package.packages) {
-            if (!p.isImported && p.hasMain) {
-                if (backend == "C") {
-                    // List of all object files
-                    let oFiles: Array<string> = [];
-                    // Always include fyr.o
-                    oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr.o"));
-                    for(let importPkg of Package.packages) {
-                        oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
+            // Run the linker
+            for(let p of Package.packages) {
+                if (!p.isImported && p.hasMain) {
+                    if (backend == "C") {
+                        // List of all object files
+                        let oFiles: Array<string> = [];
+                        // Always include fyr.o
+                        oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr.o"));
+                        for(let importPkg of Package.packages) {
+                            oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
+                        }
+                        let bFile = path.join(p.binFilePath, p.binFileName);
+                        let args = ["-o", bFile].concat(oFiles);
+                        console.log("gcc", args.join(" "));
+                        child_process.execFileSync("gcc", args);
                     }
-                    let bFile = path.join(p.binFilePath, p.binFileName);
-                    let args = ["-o", bFile].concat(oFiles);
-                    console.log("gcc", args.join(" "));
-                    child_process.execFileSync("gcc", args);
                 }
             }
         }
-
     }
 
     public static getFyrPaths(): Array<string> {
