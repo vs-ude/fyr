@@ -12,6 +12,7 @@ import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
 import {CBackend} from "./backend_c";
+import {DummyBackend} from "./backend_dummy";
 
 export enum SystemCalls {
     heap = -1,
@@ -169,7 +170,7 @@ export class Package {
         this.tc.checkModulePassThree();
     }
 
-    public generateCode(backend: "C" | "WASM" | null, disableNullCheck: boolean) {
+    public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, disableNullCheck: boolean) {
         if (this.isInternal) {
             return;
         }
@@ -185,12 +186,19 @@ export class Package {
         } else if (backend == "WASM") {
             wasmBackend = new Wasm32Backend();
             b = wasmBackend;
+        } else {
+            b = new DummyBackend();
         }
         
         this.codegen = new CodeGenerator(this.tc, b, disableNullCheck);
-        this.codegen.processModule(this.pkgNode);
+        let ircode = this.codegen.processModule(this.pkgNode, emitIR);
 
         this.createObjFilePath();
+
+        if (emitIR) {
+            let irfile = path.join(this.objFilePath, this.objFileName + ".ir");
+            fs.writeFileSync(irfile, ircode, 'utf8');
+        }
 
         if (backend == "WASM") {
             // Generate WAST
@@ -282,10 +290,10 @@ export class Package {
         }
     }
 
-    public static generateCodeForPackages(backend: "C" | "WASM" | null, disableNullCheck: boolean) {
+    public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
         for(let p of Package.packages) {
-            p.generateCode(backend, disableNullCheck);
+            p.generateCode(backend, emitIR, disableNullCheck);
         }
 
         // Generate object files (in the case of "C")

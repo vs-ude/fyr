@@ -180,7 +180,9 @@ export class CBackend implements backend.Backend {
         return name;
     }
 
-    public generateModule() {
+    public generateModule(emitIR: boolean): string {
+        let ircode = "";
+
         let i = new CInclude();
         i.isSystemPath = true;
         i.path = "stdint.h";
@@ -210,16 +212,16 @@ export class CBackend implements backend.Backend {
                 continue;
             }
             this.optimizer.optimizeConstants(f.node);
-//            if (this.emitIR || f.name == this.emitIRFunction) {
-//                console.log('============ OPTIMIZED Constants ===============');
-//                console.log(Node.strainToString("", f.node));
-//            }
+            if (emitIR) {
+                ircode += '============ OPTIMIZED Constants ===============\n';
+                ircode += Node.strainToString("", f.node) + "\n";
+            }
 
             this.optimizer.removeDeadCode(f.node);
-//            if (this.emitIR || f.name == this.emitIRFunction) {
-//                console.log('============ OPTIMIZED Dead code ===============');
-//                console.log(Node.strainToString("", f.node));
-//            }
+            if (emitIR) {
+                ircode += '============ OPTIMIZED Dead code ===============\n';
+                ircode += Node.strainToString("", f.node) + "\n";
+            }
 
             this.currentFunction = f;
             this.returnVariables = [];
@@ -228,10 +230,10 @@ export class CBackend implements backend.Backend {
             this.varStorage = new Map<ssa.Variable, string>();
             this.stackifier.stackifyStep(f.node, null);
 
-//            if (this.emitIR || f.name == this.emitIRFunction) {
-//                console.log('============ STACKIFIED code ===============');
-//                console.log(Node.strainToString("", f.node));
-//            }
+            if (emitIR) {
+                ircode += '============ STACKIFIED code ===============\n';
+                ircode += Node.strainToString("", f.node) + "\n";
+            }
 
             this.analyzeVariableStorage(f.node, f.node.blockPartner);
 
@@ -295,6 +297,8 @@ export class CBackend implements backend.Backend {
             main.body.push(r);
             this.module.elements.push(main);
         }
+
+        return ircode;
     }
 
     public addFunctionToTable(f: Function, index: number) {
@@ -1113,7 +1117,7 @@ export class CBackend implements backend.Backend {
     public hasMainFunction(): boolean {
         return !!this.mainFunction;
     }
-    
+
     private pkg: Package;
     private optimizer: Optimizer;
     private stackifier: Stackifier;

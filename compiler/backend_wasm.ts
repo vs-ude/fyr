@@ -141,7 +141,9 @@ export class Wasm32Backend implements backend.Backend {
         this.funcs.push({node: n, wf: f, isExported: isExported});
     }
 
-    public generateModule() {
+    public generateModule(emitIR: boolean): string {
+        let ircode = "";
+
         // Generate WASM code for all globals
         let index = this.customglobalVariablesIndex;
         for(let v of this.globalVariables) {
@@ -170,18 +172,18 @@ export class Wasm32Backend implements backend.Backend {
         // Generate WASM code for all functions
         for(let f of this.funcs) {
             this.optimizer.optimizeConstants(f.node);
-//            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
-//                console.log('============ OPTIMIZED Constants ===============');
-//                console.log(Node.strainToString("", f.node));
-//            }
+            if (emitIR) {
+                ircode += '============ OPTIMIZED Constants ===============\n';
+                ircode += Node.strainToString("", f.node) + "\n";
+            }
 
             this.optimizer.removeDeadCode(f.node);
-//            if (this.emitIR || f.wf.name == "$" + this.emitIRFunction) {
-//                console.log('============ OPTIMIZED Dead code ===============');
-//                console.log(Node.strainToString("", f.node));
-//            }
+            if (emitIR) {
+                ircode += '============ OPTIMIZED Dead code ===============\n';
+                ircode += Node.strainToString("", f.node) + "\n";
+            }
 
-            this.generateFunction(f.node, f.wf);
+            ircode += this.generateFunction(f.node, f.wf, emitIR);
             if (f.isExported) {
                 let wfExport = new wasm.Function();
                 wfExport.isExported = true;
@@ -215,9 +217,11 @@ export class Wasm32Backend implements backend.Backend {
         this.module.memorySize = this.module.textSize() + this.heapSize + this.stackSize;
 
         this.heapGlobalVariable.initial = [new wasm.Constant("i32", this.module.textSize())];
+
+        return ircode;
     }
 
-    private generateFunction(n: Node, f: wasm.Function) {
+    private generateFunction(n: Node, f: wasm.Function, emitIR: boolean): string {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
@@ -246,12 +250,14 @@ export class Wasm32Backend implements backend.Backend {
         this.wf = f;
 
         if (n.type.callingConvention == "fyrCoroutine") {
-            return this.generateAsyncFunction(n, f);
+            return this.generateAsyncFunction(n, f, emitIR);
         }
-        return this.generateSyncFunction(n, f);
+        return this.generateSyncFunction(n, f, emitIR);
     }
 
-    private generateSyncFunction(n: Node, wf: wasm.Function) {
+    private generateSyncFunction(n: Node, wf: wasm.Function, emitIR): string {
+        let ircode = "";
+
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
@@ -300,6 +306,17 @@ export class Wasm32Backend implements backend.Backend {
         }
         // Add the local variables to WASM
         this.wf.locals = this.wf.locals.concat(locals.locals);
+
+        if (emitIR) {
+            ircode += '============ STACKIFIED code ===============\n';
+            ircode += Node.strainToString("", n) + "\n";
+            for(let v of this.varStorage.keys()) {
+                let s = this.varStorage.get(v);
+                ircode += v.name + " -> " + s.storageType.toString() + " " +  s.offset.toString() + "\n";
+            }
+            ircode += "sp -> local " + this.spLocal.toString() + "\n";
+            ircode += "bp -> local " + this.bpLocal.toString() + "\n";
+        }
 
 /*        if (this.emitIR || this.emitIRFunction == wf.name) {
             console.log("========= Stackified ==========");
@@ -354,10 +371,12 @@ export class Wasm32Backend implements backend.Backend {
 
         this.wf.statements = code;
 
-        return this.wf;
+        return ircode;
     }
 
-    private generateAsyncFunction(n: Node, wf: wasm.Function) {
+    private generateAsyncFunction(n: Node, wf: wasm.Function, emitIR: boolean): string {
+        let ircode = "";
+
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
             throw "Implementation error";
         }
@@ -365,8 +384,10 @@ export class Wasm32Backend implements backend.Backend {
         this.wfIsAsync = true;
 
         this.tr.transform(n);
-//        console.log("========= State Machine ==========");
-//        console.log(Node.strainToString("", n));
+        if (emitIR) {
+            ircode += "========= State Machine ==========\n";
+            ircode += Node.strainToString("", n) + "\n";
+        }
 
         // Make room to store function index, sp and step upon async calls.
         this.varsFrame.addFields(this.varsFrameHeader);
@@ -404,6 +425,19 @@ export class Wasm32Backend implements backend.Backend {
             }
         }
         this.wf.locals = this.wf.locals.concat(locals.locals);
+
+        if (emitIR) {
+            ircode += '============ STACKIFIED code ===============\n';
+            ircode += Node.strainToString("", n) + "\n";
+            for(let v of this.varStorage.keys()) {
+                let s = this.varStorage.get(v);
+                ircode += v.name + " -> " + s.storageType.toString() + " " +  s.offset.toString() + "\n";
+            }
+            ircode += "sp -> local " + this.spLocal.toString() + "\n";
+            ircode += "bp -> local " + this.bpLocal.toString() + "\n";
+            ircode += "step -> local " + this.stepLocal + "\n";
+            ircode += "varsFrame = " + this.varsFrame.toDetailedString() + "\n";
+        }
 
 /*        if (this.emitIR || this.emitIRFunction == wf.name) {
             console.log("========= Stackified ==========");
@@ -624,7 +658,7 @@ export class Wasm32Backend implements backend.Backend {
             this.module.funcTable.push(this.wf);
         }
 
-        return this.wf;
+        return ircode
     }
 
     /**

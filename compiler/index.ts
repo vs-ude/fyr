@@ -20,6 +20,9 @@ function compileModules() {
         console.log(("Only one code emit path can be selected".red));
         return;
     }
+    if (!program.emitC && !program.emitWasm && !program.emitIr) {
+        program.disableCodegen = true;
+    }
 
     var args: Array<object | string> = Array.prototype.slice.call(arguments, 0);
     if (args.length <= 1) {
@@ -135,20 +138,19 @@ function compileModules() {
         } else if (program.emitC) {
             backend = "C";
         }
-        Package.generateCodeForPackages(backend, program.disableNullCheck);
+        Package.generateCodeForPackages(backend, program.emitIr, program.disableNullCheck);
     }
 }
 
 program
-	.version(pkgJson.version, '-v, --version', "Output version")
+	.version(pkgJson.version, '-v, --version', "Output vemitersion")
 	.usage('[options] [command] <module ...>')
-    .option('-r, --emit-ir', "Emit IR code on stdout")
-    .option('-f, --emit-ir-function <name>', "Emit IR code on stdout for one function only", null)
+    .option('-r, --emit-ir', "Emit IR code")
     .option('-w, --emit-wasm', "Emit WASM code")
-    .option('-N, --disable-null-check', "Do not check for null pointers")
     .option('-c, --emit-c', "Emit C code")
+    .option('-N, --disable-null-check', "Do not check for null pointers")
     .option('-T, --disable-runtime', "Do not include the standard runtime")
-    .option('-G, --disable-codegen', "Do not generate IR code, just perform syntax and typechecks")
+    .option('-G, --disable-codegen', "Do not generate any code, just perform syntax and typechecks")
 
 program
     .command('compile')

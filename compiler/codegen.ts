@@ -68,7 +68,7 @@ export class CodeGenerator {
         this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i32", "i32"], "i32", "system");
     }
 
-    public processModule(mnode: Node) {
+    public processModule(mnode: Node, emitIR: boolean): string {
         // Iterate over all files and import all functions, but import each function not more than once
         for(let fnode of mnode.statements) {
             for(let name of fnode.scope.elements.keys()) {
@@ -167,10 +167,8 @@ export class CodeGenerator {
             }
         }
 
-        if (this.backend) {
-            // Generate WASM code for the module
-            this.backend.generateModule();
-        }
+        // Generate code for the module
+        return this.backend.generateModule(emitIR);
     }
 
     public getSSAType(t: Type): ssa.Type | ssa.StructType | ssa.PointerType {
@@ -3641,7 +3639,6 @@ export class CodeGenerator {
         return data;
     }
 
-    private optimizer: ssa.Optimizer;
     private backend: backend.Backend;
     private tc: TypeChecker;
     private imports: Map<string, backend.FunctionImport>;
