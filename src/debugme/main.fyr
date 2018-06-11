@@ -1,0 +1,12 @@
+type List struct {
+    value int
+    next *List
+}
+
+export func main() int {
+    var l *List = {value: 1}
+    l.next = {value: 43}
+    l.value = 42
+    l = {value: 44}
+    return l.value
+}

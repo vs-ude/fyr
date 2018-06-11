@@ -353,7 +353,7 @@ export class CodeGenerator {
         return b.node;
     }
 
-    public processScopeVariables(b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope) {
+    public processScopeVariables(b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope): void {
         // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
@@ -369,7 +369,7 @@ export class CodeGenerator {
         }
     }
 
-    public freeScopeVariables(ignoreVariables: Array<Variable | FunctionParameter>, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope) {
+    public freeScopeVariables(ignoreVariables: Array<Variable | FunctionParameter>, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope): void {
         // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
@@ -381,6 +381,8 @@ export class CodeGenerator {
                 if (!v) {
                     throw "Implementation error";
                 }
+                this.callDestructorOnVariable(e.type, v, b);
+                /*
                 let t = RestrictedType.strip(e.type);
                 if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
                     this.callDestructor(t.elementType, v, 0, b, false, "free");
@@ -392,11 +394,12 @@ export class CodeGenerator {
                     let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
                     this.callDestructor(t, obj, 0, b, true, "no");
                 }
+                */
             }
         }
     }
 
-    public processStatement(f: Function, scope: Scope, snode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, blocks: {body: ssa.Node, outer: ssa.Node} | null) {
+    public processStatement(f: Function, scope: Scope, snode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, blocks: {body: ssa.Node, outer: ssa.Node} | null): void {
         switch(snode.op) {
             case "comment":
                 break;
@@ -538,7 +541,7 @@ export class CodeGenerator {
                             throw "TODO"                        
                         }
                     }
-                    var processAssignment = (node: Node, type: Type, rhsIsTakeExpr: boolean, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer) => {
+                    var processAssignment = (node: Node, type: Type, rhsIsTakeExpr: boolean, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer | ssa.Variable) => {
                         if (node.op == "tuple") {
                             if (!(type instanceof TupleType)) {
                                 throw "Implementation error";
@@ -547,15 +550,31 @@ export class CodeGenerator {
                             for(let i = 0; i < node.parameters.length; i++) {
                                 let p = node.parameters[i];
                                 if (p.op == "tuple" || p.op == "array" || p.op == "object") {
-                                    let eoffset = stype.fieldOffset(stype.fields[i][0]);
-                                    destCount = processAssignment(p, type.types[i], rhsIsTakeExpr, destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
+                                    throw "TODO";
+                                    // let eoffset = stype.fieldOffset(stype.fields[i][0]);
+                                    // destCount = processAssignment(p, type.types[i], rhsIsTakeExpr, destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
                                 } else {
                                     let elementType = type.types[i];
                                     let etype: ssa.Type | ssa.StructType | ssa.PointerType = stype.fields[i][1];
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;
-                                    let val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
+                                    // Assigning to an owning pointer? -> destruct the LHS before assigning the RHS
+                                    if (!this.tc.isPureValue(snode.lhs.type)) {
+                                        // The 'dest != rhs' covers the case of assigning a variable to itself without a take expression
+                                        if (dest instanceof ssa.Pointer) {
+                                            this.callDestructorOnPointer(snode.lhs.type, dest, b);
+                                        } else {
+                                            this.callDestructorOnVariable(snode.lhs.type, dest, b);
+                                        }
+                                    }
+
+                                    let val: ssa.Variable;
+                                    if (source instanceof ssa.Pointer) {
+                                        val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
+                                    } else {
+                                        val = source;
+                                    }
                                     // Reference counting to pointers
                                     if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
@@ -597,17 +616,11 @@ export class CodeGenerator {
                     } else {
                         val = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type) as ssa.Variable;
                     }
-                    let ptr: ssa.Pointer;
-                    if (val instanceof ssa.Pointer) {
-                        ptr = val;
-                    } else {
-                        ptr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "ptr", [val]), 0);
-                    }
                     let rhsIsTakeExpr = this.tc.isTakeExpression(snode.rhs);
-                    processAssignment(snode.lhs, snode.rhs.type, rhsIsTakeExpr, destinations, 0, ptr);
+                    processAssignment(snode.lhs, snode.rhs.type, rhsIsTakeExpr, destinations, 0, val);
                     if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                         // Fill the RHS with zeros
-                        this.processFillZeros(ptr, snode.rhs.type, b);
+                        this.processFillZeros(val, snode.rhs.type, b);
                     }                                
                 } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
                     // TODO: Ownership transfer
@@ -638,6 +651,14 @@ export class CodeGenerator {
                         rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars);
                     } else {
                         rhs = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
+                    }
+                    // Assigning to an owning pointer? -> destruct the LHS before assigning the RHS
+                    if (!this.tc.isPureValue(snode.lhs.type)) {
+                        if (dest instanceof ssa.Pointer) {
+                            this.callDestructorOnPointer(snode.lhs.type, dest, b);
+                        } else {
+                            this.callDestructorOnVariable(snode.lhs.type, dest, b);
+                        }
                     }
                     let data: ssa.Variable | number;
                     if (rhs instanceof ssa.Pointer) {
@@ -3334,7 +3355,7 @@ export class CodeGenerator {
     /**
      * pointer is the address of a value and t is the type of the value being pointed to.
      */
-    private callDestructor(typ: Type, pointer: ssa.Variable, offset: number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref") {
+    private callDestructor(typ: Type, pointer: ssa.Variable | number, offset: number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref") {
         if (!avoidNullCheck) {
             let cond = b.assign(b.tmp(), "ne", "addr", [pointer, 0]);
             b.ifBlock(cond);
@@ -3415,6 +3436,42 @@ export class CodeGenerator {
         }
         if (!avoidNullCheck) {
             b.end();
+        }
+    }
+
+    private callDestructorOnPointer(type: Type, pointer: ssa.Pointer, b: ssa.Builder): void {
+        let t = RestrictedType.strip(type);
+        if (this.tc.isPureValue(t)) {
+            return;
+        }
+        if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
+            let v = b.assign(b.tmp(), "load", this.getSSAType(type), [pointer.variable, pointer.offset]);
+            this.callDestructor(t.elementType, v, 0, b, false, "free");
+        } else if (t instanceof PointerType && (t.mode == "reference")) {
+            let v = b.assign(b.tmp(), "load", this.getSSAType(type), [pointer.variable, pointer.offset]);
+            this.callDestructor(t.elementType, v, 0, b, false, "decref");
+        } else if (t == TypeChecker.t_string) {
+            let v = b.assign(b.tmp(), "load", this.getSSAType(type), [pointer.variable, pointer.offset]);
+            this.callDestructor(t, v, 0, b, false, "decref");
+        } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
+            this.callDestructor(t, pointer.variable, pointer.offset, b, true, "no");
+        }
+    }
+
+    private callDestructorOnVariable(type: Type, v: ssa.Variable, b: ssa.Builder): void {        
+        let t = RestrictedType.strip(type);
+        if (this.tc.isPureValue(t)) {
+            return;
+        }
+        if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
+            this.callDestructor(t.elementType, v, 0, b, false, "free");
+        } else if (t instanceof PointerType && (t.mode == "reference")) {
+            this.callDestructor(t.elementType, v, 0, b, false, "decref");
+        } else if (t == TypeChecker.t_string) {
+            this.callDestructor(t, v, 0, b, false, "decref");
+        } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
+            let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
+            this.callDestructor(t, obj, 0, b, true, "no");
         }
     }
 
