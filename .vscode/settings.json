@@ -11,5 +11,6 @@
     "npm.enableScriptExplorer": true,
     "files.associations": {
         "stdio.h": "c"
-    }
+    },
+    "C_Cpp.default.includePath": [ "${workspaceFolder}/pkg/darwin-x64" ]
 }

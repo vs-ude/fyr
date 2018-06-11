@@ -30,7 +30,7 @@ export class Function implements backend.FunctionImport {
 }
 
 export class DummyBackend {
-    importFunction(name: string, from: string | Package, type: ssa.FunctionType): FunctionImport {
+    importFunction(name: string, from: string | Package, type: ssa.FunctionType): backend.FunctionImport {
         let f = new FunctionImport();
         f.index = this.funcs.length;
         f.name = name;
@@ -46,7 +46,7 @@ export class DummyBackend {
         return v;
     }
     
-    declareFunction(name: string): Function {
+    declareFunction(name: string): backend.Function {
         let f = new Function();
         f.index = this.funcs.length;
         f.name = name;
@@ -54,19 +54,27 @@ export class DummyBackend {
         return f;
     }
 
-    declareInitFunction(name: string): Function {
+    declareInitFunction(name: string): backend.Function {
         let f = new Function();
         f.index = this.funcs.length;
         f.name = "init";
         this.funcs.push(f);
+        this.initFunction = f;
         return f;
     }
 
-    defineFunction(n: ssa.Node, f: Function, isExported: boolean) {
+    getInitFunction(): backend.Function {
+        return this.initFunction;
+    }
+
+    defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean) {
+        if (!(f instanceof Function)) {
+            throw "implementation error";
+        }
         f.node = n;
     }
 
-    generateModule(emitIR: boolean): string {
+    generateModule(emitIR: boolean, initPackages: Array<Package> | null): string {
         let ircode = "";
 
         if (emitIR) {
@@ -83,4 +91,5 @@ export class DummyBackend {
     }
 
     public funcs: Array<Function | FunctionImport> = [];
+    public initFunction: Function;
 }

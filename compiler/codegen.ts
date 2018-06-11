@@ -1,10 +1,10 @@
-import {Location, Node, NodeOp, AstFlags} from "./ast"
-import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, ObjectLiteralType, TupleLiteralType, ArrayLiteralType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, BasicType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
+import {Node, AstFlags} from "./ast"
+import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
 import * as tc from "./typecheck"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
-import { tmpdir } from "os";
+import {Package} from "./pkg"
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
@@ -68,7 +68,7 @@ export class CodeGenerator {
         this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i32", "i32"], "i32", "system");
     }
 
-    public processModule(mnode: Node, emitIR: boolean): string {
+    public processModule(mnode: Node, emitIR: boolean, initPackages: Array<Package> | null): string {
         // Iterate over all files and import all functions, but import each function not more than once
         for(let fnode of mnode.statements) {
             for(let name of fnode.scope.elements.keys()) {
@@ -149,7 +149,7 @@ export class CodeGenerator {
         }
         this.backend.defineFunction(b.node, wf, false);
 
-        // Generate IR code for all functions and initialization of global variables
+        // Generate IR code for all functions
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
@@ -168,7 +168,7 @@ export class CodeGenerator {
         }
 
         // Generate code for the module
-        return this.backend.generateModule(emitIR);
+        return this.backend.generateModule(emitIR, initPackages);
     }
 
     public getSSAType(t: Type): ssa.Type | ssa.StructType | ssa.PointerType {

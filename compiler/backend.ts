@@ -17,6 +17,10 @@ export interface Backend {
     declareFunction(name: string): Function;
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean);
-    generateModule(emitIR: boolean): string;
+    generateModule(emitIR: boolean, initPackages: Array<Package> | null): string;
     addFunctionToTable(f: Function, index: number);
+    /**
+     * Returns the init function unless it is empty or missing.
+     */
+    getInitFunction(): Function | null;
 }

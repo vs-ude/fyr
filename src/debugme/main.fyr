@@ -1,3 +1,7 @@
+import . {
+    func puts(#const char) int
+} from "<stdio.h>"
+
 type List struct {
     value int
     next *List
@@ -8,5 +12,15 @@ export func main() int {
     l.next = {value: 43}
     l.value = 42
     l = {value: 44}
+    let str = printList(newList())
+    puts(<#const char>str)
     return l.value
+}
+
+func newList() *List {
+    return {value: 13}
+}
+
+func printList(l &List) string {
+    return "Just kidding";
 }

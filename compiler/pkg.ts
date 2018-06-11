@@ -67,8 +67,11 @@ export enum SystemCalls {
 let architecture = os.platform() + "-" + os.arch();
 
 export class Package {
-    constructor() {
+    constructor(mainPackage: boolean = false) {
         this.tc = new tc.TypeChecker();
+        if (mainPackage) {
+            Package.mainPackage = this;
+        }
         Package.packages.push(this);
     }
 
@@ -170,7 +173,7 @@ export class Package {
         this.tc.checkModulePassThree();
     }
 
-    public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, disableNullCheck: boolean) {
+    public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, initPackages: Array<Package> | null,  disableNullCheck: boolean) {
         if (this.isInternal) {
             return;
         }
@@ -191,7 +194,7 @@ export class Package {
         }
         
         this.codegen = new CodeGenerator(this.tc, b, disableNullCheck);
-        let ircode = this.codegen.processModule(this.pkgNode, emitIR);
+        let ircode = this.codegen.processModule(this.pkgNode, emitIR, initPackages);
 
         this.createObjFilePath();
 
@@ -223,6 +226,8 @@ export class Package {
                 throw new ImportError("Package " + this.pkgPath + " has been imported as a library, but contains a main function", null, this.pkgPath);
             }
         }
+
+        this.hasInitFunction = (b.getInitFunction() != null);
     }
 
     public generateObjectFiles(backend: "C" | "WASM" | null) {
@@ -292,8 +297,18 @@ export class Package {
 
     public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
+        let initPackages: Array<Package> = [];
         for(let p of Package.packages) {
-            p.generateCode(backend, emitIR, disableNullCheck);
+            if (p == Package.mainPackage) {
+                continue;
+            }
+            p.generateCode(backend, emitIR, null, disableNullCheck);
+            if (p.hasInitFunction) {
+                initPackages.push(p);
+            }
+        }
+        if (Package.mainPackage) {
+            Package.mainPackage.generateCode(backend, emitIR, initPackages, disableNullCheck);
         }
 
         // Create native executable?
@@ -301,7 +316,7 @@ export class Package {
             if (backend !== "C") {
                 throw "Implementation error";
             }
-            
+
             // Generate object files
             for(let p of Package.packages) {
                 p.generateObjectFiles(backend);
@@ -396,7 +411,13 @@ export class Package {
     public isInternal: boolean;
     public isImported: boolean;
     public hasMain: boolean;
+    public hasInitFunction: boolean;
 
+    /**
+     * The package we are generating an executable or library for or null if
+     * no such target is being built;
+     */
+    public static mainPackage: Package | null;
     private static packagesByPath: Map<string, Package> = new Map<string, Package>();
     private static packages: Array<Package> = [];
     private static fyrPaths: Array<string>;

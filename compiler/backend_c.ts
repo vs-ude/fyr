@@ -76,7 +76,7 @@ export class CBackend implements backend.Backend {
         this.operatorMap.set("ge_u", ">=");
     }
 
-    public importFunction(name: string, from: string | Package, type: ssa.FunctionType): FunctionImport {
+    public importFunction(name: string, from: string | Package, type: ssa.FunctionType): backend.FunctionImport {
         if (type.callingConvention == "native") {
             if (typeof(from) != "string") {
                 throw "Implementation error";
@@ -127,7 +127,7 @@ export class CBackend implements backend.Backend {
         return v;
     }
 
-    public declareFunction(name: string): Function {
+    public declareFunction(name: string): backend.Function {
         let f = new Function();
         f.name = name;
         f.func.returnType = new CType("void");
@@ -136,7 +136,7 @@ export class CBackend implements backend.Backend {
         return f;
     }
 
-    public declareInitFunction(name: string): Function {
+    public declareInitFunction(name: string): backend.Function {
         let f = new Function();
         f.name = name;
         f.func.returnType = new CType("void");
@@ -146,7 +146,14 @@ export class CBackend implements backend.Backend {
         return f;
     }
 
-    public defineFunction(n: ssa.Node, f: Function, isExported: boolean) {
+    public getInitFunction(): Function {
+        if (this.initFunction && this.initFunction.node.next.length == 0) {
+            return null;
+        }
+        return this.initFunction;
+    }
+
+    public defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean) {
         if (!(f instanceof Function)) {
             throw "Implementation error";
         }        
@@ -180,7 +187,7 @@ export class CBackend implements backend.Backend {
         return name;
     }
 
-    public generateModule(emitIR: boolean): string {
+    public generateModule(emitIR: boolean, initPackages: Array<Package> | null): string {
         let ircode = "";
 
         let i = new CInclude();
@@ -209,6 +216,10 @@ export class CBackend implements backend.Backend {
 
         for(let f of this.funcs) {
             if (f instanceof FunctionImport) {
+                continue;
+            }
+            // Do not generate empty init functions
+            if (f == this.initFunction && f.node.next.length == 0) {
                 continue;
             }
             this.optimizer.optimizeConstants(f.node);
@@ -284,10 +295,27 @@ export class CBackend implements backend.Backend {
             p.type = new CType("char**");
             main.parameters.push(p);
 
-            if (this.initFunction) {
+            // Call the init function
+            if (this.initFunction && this.initFunction.node.next.length != 0) {
                 let call = new CFunctionCall();
                 call.funcExpr = new CConst(this.initFunction.func.name);
                 main.body.push(call);
+            }
+
+            // Call the init function of imported packages
+            if (initPackages) {
+                for (let p of initPackages) {
+                    let name = "init";
+                    if (!p.pkgPath) {
+                        throw "Implementation error";
+                    }
+                    name = p.pkgPath + "/" + name;                    
+                    name = this.mangleName(name);
+                    name = "s_" + name;
+                    let call = new CFunctionCall();
+                    call.funcExpr = new CConst(name);
+                    main.body.push(call);                
+                }
             }
 
             let call = new CFunctionCall();

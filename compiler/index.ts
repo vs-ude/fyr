@@ -63,7 +63,7 @@ function compileModules() {
                     let pkgPath = p.substring(test.length, p.length - 1);
                     let packagePaths: Array<string> = pkgPath.split(path.sep);
                     packagePaths.splice(packagePaths.length - 1, 1);
-                    pkg = new Package();
+                    pkg = new Package(true);
                     pkg.findSources(fyrPath, pkgPath);                    
                     break;
                 }
@@ -78,7 +78,7 @@ function compileModules() {
                         files.push(path.join(p, f));
                     }
                 }
-                pkg = new Package();
+                pkg = new Package(true);
                 pkg.setSources(files);
             }
         }
@@ -91,7 +91,7 @@ function compileModules() {
             let file = args[i];
             files.push(file as string);
         }
-        pkg = new Package();
+        pkg = new Package(true);
         pkg.setSources(files);
     }
 
