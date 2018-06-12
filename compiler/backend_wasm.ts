@@ -1284,32 +1284,19 @@ export class Wasm32Backend implements backend.Backend {
                         }
                     }
                 }
-                // Call the function
-                if (n.args[0] < 0) {
-                    if (n.args[0] == SystemCalls.appendSlice) {
-                        code.push(new wasm.GetLocal(this.spLocal));
-                        code.push(new wasm.Call(this.sliceAppendFunctionIndex));
-                    } else if (n.args[0] == SystemCalls.growSlice) {
-                        code.push(new wasm.GetLocal(this.spLocal));
-                        code.push(new wasm.Call(this.growSliceFunctionIndex));                        
-                    } else {
-                        throw "Implementation error";
-                    }
-                } else {
-                    if (n.type.callingConvention == "fyr" || n.type.callingConvention == "fyrCoroutine") {
-                        // Put SP on wasm stack
-                        code.push(new wasm.GetLocal(this.spLocal));
-                        if (n.kind == "call_indirect") {
-                            paramTypes.push("i32");
-                        }
-                    }
+                if (n.type.callingConvention == "fyr" || n.type.callingConvention == "fyrCoroutine") {
+                    // Put SP on wasm stack
+                    code.push(new wasm.GetLocal(this.spLocal));
                     if (n.kind == "call_indirect") {
-                        this.emitAssign("s32", n.args[0], "wasmStack", 0, code);
-                        let typeName = this.module.addFunctionType(paramTypes, []);
-                        code.push(new wasm.CallIndirect(typeName));
-                    } else {
-                        code.push(new wasm.Call(n.args[0] as number | string));
+                        paramTypes.push("i32");
                     }
+                }
+                if (n.kind == "call_indirect") {
+                    this.emitAssign("s32", n.args[0], "wasmStack", 0, code);
+                    let typeName = this.module.addFunctionType(paramTypes, []);
+                    code.push(new wasm.CallIndirect(typeName));
+                } else {
+                    code.push(new wasm.Call(n.args[0] as number | string));
                 }
                 // Assign
                 if (n.assign) {
@@ -1984,15 +1971,6 @@ export class Wasm32Backend implements backend.Backend {
                     code.push(new wasm.GetLocal(this.spLocal));
                 } else if (n.args[0] == SystemCalls.trap) {
                     code.push(new wasm.Unreachable());
-                } else if (n.args[0] == SystemCalls.copy) {
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.copyFunctionIndex));                    
-                } else if (n.args[0] == SystemCalls.makeString) {
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.makeStringFunctionIndex));                    
-                } else if (n.args[0] == SystemCalls.concatString) {
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.concatStringFunctionIndex));                    
                 } else if (n.args[0] == SystemCalls.compareString) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.compareStringFunctionIndex));

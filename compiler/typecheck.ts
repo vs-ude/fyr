@@ -6627,7 +6627,7 @@ export class TypeChecker {
         return new Group(kind, "return");
     }
 
-    // Returns true ff the expression yields ownership of the object it is pointing to.
+    // Returns true if the expression yields ownership of the object it is pointing to.
     // Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
     public isTakeExpression(enode: Node): boolean {
         if (enode.op == "clone" || enode.op == "take" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
@@ -6635,7 +6635,12 @@ export class TypeChecker {
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.
         // Hence it behaves like a take expression.
-        if (enode.type == TypeChecker.t_string && (enode.op == ":" || enode.op == "+")) {
+        // Adding a string, or castig a slice to a string creates a new string, too. Hence, it behaves like a take expression
+        if (enode.type == TypeChecker.t_string && (enode.op == ":" || enode.op == "+" || enode.op == "typeCast")) {
+            return true;
+        }
+        // Casting a string to a slice returns a new slice. Hence, it behaves like a take expression
+        if (this.isSlice(enode.type) && enode.op == "typeCast") {
             return true;
         }
         return false;

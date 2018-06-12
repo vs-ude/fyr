@@ -24,3 +24,7 @@ func newList() *List {
 func printList(l &List) string {
     return "Just" + " " + "kidding"
 }
+
+func gimmeString() string {
+    return gimmeString() + gimmeString()
+}

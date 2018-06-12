@@ -5,6 +5,7 @@ import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
 import {Package} from "./pkg"
+import { RSA_PKCS1_PSS_PADDING } from "constants";
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
@@ -53,10 +54,7 @@ export class CodeGenerator {
         this.mapHead.addField("size", "i32")
         this.mapHead.addField("free", "i32")
         this.mapHead.addField("freeList", "addr")
-        this.copyFunctionType = new ssa.FunctionType(["addr", "addr", "i32"], null, "system");
-        this.makeStringFunctionType = new ssa.FunctionType(["addr", "i32"], "ptr", "system");
         this.compareStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "i32", "system");
-        this.concatStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
         this.createMapFunctionType = new ssa.FunctionType(["addr", "i32", "addr"], "ptr", "system");
         this.setMapFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
         this.lookupMapFunctionType = new ssa.FunctionType(["addr", "addr"], "ptr", "system");
@@ -2916,10 +2914,32 @@ export class CodeGenerator {
                     // Convert unsafe pointer to string
                     return expr;
                 } else if (t == TypeChecker.t_string && t2 instanceof SliceType) {
-                    let head = b.assign(b.tmp(), "addr_of", "addr", [expr]);
-                    let ptr = b.assign(b.tmp(), "load", "addr", [head, this.localSlicePointer.fieldOffset("data_ptr")]);
-                    let l = b.assign(b.tmp(), "load", "sint", [head, this.localSlicePointer.fieldOffset("data_length")]);
-                    return b.call(b.tmp(), this.makeStringFunctionType, [SystemCalls.makeString, ptr, l]);
+                    // Convert a slice to a string?
+                    let ptr: ssa.Variable;
+                    let l: ssa.Variable;
+                    if (t2.mode == "local_reference") {
+                        ptr = b.assign(b.tmp(), "member", "addr", [expr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                        l = b.assign(b.tmp(), "member", "sint", [expr, this.localSlicePointer.fieldOffset("data_length")]);
+                    } else {
+                        let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        ptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                        head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldOffset("data_length")]);
+                    }
+                    if (!this.disableNullCheck) {
+                        let cond = b.assign(b.tmp(), "eq", "i8", [ptr, 0]);
+                        b.ifBlock(cond);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
+                    // Make room for the terminating 0 character
+                    l = b.assign(b.tmp(), "add", "sint", [l, 1]);
+                    let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [l, 1]);
+                    b.assign(b.mem, "memcpy", null, [newptr, ptr, l]);
+                    if (this.tc.isTakeExpression(enode.rhs)) {
+                        this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
+                    }
+                    return newptr;
                 } else if ((t == TypeChecker.t_bool || t == TypeChecker.t_rune || this.tc.isIntNumber(t)) && (t2 == TypeChecker.t_bool || t2 == TypeChecker.t_rune || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
@@ -2938,13 +2958,15 @@ export class CodeGenerator {
                     return expr;
                 } else if (t instanceof SliceType && t.getElementType() == TypeChecker.t_byte && t2 == TypeChecker.t_string) {
                     // Convert string to a slice
-                    let sizePointer = b.assign(b.tmp(), "sub", "addr", [expr, ssa.sizeOf("sint")]);
-                    let size = b.assign(b.tmp(), "load", "sint", [sizePointer, 0]);
-                    let src = b.assign(b.tmp(), "add", "i32", [expr, 4]);
-                    let mem = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
-                    b.call(null, this.copyFunctionType, [SystemCalls.copy, mem, src, size]);
-                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, mem, size]);
+                    let size = b.assign(b.tmp(), "len_str", "sint", [expr]);                    
+                    let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
+                    b.assign(b.mem, "memcpy", null, [newptr, expr, size]);
+                    if (this.tc.isTakeExpression(enode.rhs)) {
+                        this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
+                    }
+                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [newptr, size, newptr]);
                 } else if (t2 == TypeChecker.t_null) {
+                    // Convert null to a pointer type
                     return expr;
                 } else if (this.tc.isComplexOrType(t2)) {
                     return this.processUnboxInterface(t, expr, b);
@@ -3755,9 +3777,7 @@ export class CodeGenerator {
     private ifaceHeaderSlice: ssa.StructType;
     private mapHead: ssa.StructType;
     private disableNullCheck: boolean;
-    private concatStringFunctionType: ssa.FunctionType;
     private compareStringFunctionType: ssa.FunctionType;
-    private makeStringFunctionType: ssa.FunctionType;
     private createMapFunctionType: ssa.FunctionType;
     private setMapFunctionType: ssa.FunctionType;
     private hashStringFunctionType: ssa.FunctionType;
@@ -3767,7 +3787,6 @@ export class CodeGenerator {
     private lookupNumericMapFunctionType: ssa.FunctionType;
     private removeNumericMapKeyFunctionType: ssa.FunctionType;
     private decodeUtf8FunctionType: ssa.FunctionType;
-    private copyFunctionType: ssa.FunctionType;
     private interfaceTableNames: Array<string> = [];
     private interfaceTableIndex: Map<string, number> = new Map<string, number>();
     private interfaceTableLength: number = 0;
