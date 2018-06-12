@@ -20,6 +20,5 @@ playground
 backup
 pkg/*
 src/**/*.o
-src/**/*.h
-src/**/*.c
+src/**/*.ir
 src/testme/testme
