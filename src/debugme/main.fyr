@@ -22,5 +22,5 @@ func newList() *List {
 }
 
 func printList(l &List) string {
-    return "Just kidding";
+    return "Just" + " " + "kidding"
 }

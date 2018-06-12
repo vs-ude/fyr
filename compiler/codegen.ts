@@ -726,7 +726,32 @@ export class CodeGenerator {
                 }
                 let p2 = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                 if (snode.lhs.type == TypeChecker.t_string) {
-                    b.call(dest, this.concatStringFunctionType, [SystemCalls.concatString, p1, p2]);
+                    if (!this.disableNullCheck) {
+                        let cond = b.assign(b.tmp(), "eq", "addr", [p1, 0]);
+                        b.ifBlock(cond);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
+                    let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
+                    if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
+                        let cond = b.assign(b.tmp(), "eq", "addr", [p2, 0]);
+                        b.ifBlock(cond);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
+                    let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
+                    let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
+                    let lplus = b.assign(b.tmp(), "add", "sint", [l, 1]);
+                    let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [lplus, 1]);
+                    b.assign(b.mem, "memcpy", null, [ptr, p1, l1, 1]);
+                    let ptr2 = b.assign(b.tmp(), "add", "addr", [ptr, l1]);
+                    b.assign(b.mem, "memcpy", null, [ptr2, p2, l2, 1]);
+                    this.callDestructorOnVariable(TypeChecker.t_string, p1, b, true);
+                    // Decref p2 if necessary
+                    if (this.tc.isTakeExpression(snode.rhs)) {
+                        this.callDestructorOnVariable(TypeChecker.t_string, p2 as ssa.Variable, b, true);
+                    }
+                    dest = ptr;
                 } else if (storage == "f32" || storage == "f64") {
                     if (snode.op == "+=") {
                         b.assign(dest, "add", storage, [p1, p2]);
@@ -2028,8 +2053,20 @@ export class CodeGenerator {
                 let t = this.tc.stripType(enode.type);
                 if (t == TypeChecker.t_string) {
                     let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
-                    let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
+                    if (!this.disableNullCheck && !(p1 as ssa.Variable).isConstant) {
+                        let cond = b.assign(b.tmp(), "eq", "addr", [p1, 0]);
+                        b.ifBlock(cond);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
                     let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
+                    let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
+                    if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
+                        let cond = b.assign(b.tmp(), "eq", "addr", [p2, 0]);
+                        b.ifBlock(cond);
+                        b.assign(null, "trap", null, []);
+                        b.end();
+                    }
                     let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
                     let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
                     let lplus = b.assign(b.tmp(), "add", "sint", [l, 1]);
@@ -2037,6 +2074,13 @@ export class CodeGenerator {
                     b.assign(b.mem, "memcpy", null, [ptr, p1, l1, 1]);
                     let ptr2 = b.assign(b.tmp(), "add", "addr", [ptr, l1]);
                     b.assign(b.mem, "memcpy", null, [ptr2, p2, l2, 1]);
+                    // Decref p1 and p2 if necessary
+                    if (this.tc.isTakeExpression(enode.lhs)) {
+                        this.callDestructorOnVariable(TypeChecker.t_string, p1 as ssa.Variable, b, true);
+                    }
+                    if (this.tc.isTakeExpression(enode.rhs)) {
+                        this.callDestructorOnVariable(TypeChecker.t_string, p2 as ssa.Variable, b, true);
+                    }
                     return ptr;
                 }
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
@@ -3458,17 +3502,17 @@ export class CodeGenerator {
         }
     }
 
-    private callDestructorOnVariable(type: Type, v: ssa.Variable, b: ssa.Builder): void {        
+    private callDestructorOnVariable(type: Type, v: ssa.Variable, b: ssa.Builder, avoidNullCheck: boolean = false): void {        
         let t = RestrictedType.strip(type);
         if (this.tc.isPureValue(t)) {
             return;
         }
         if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
-            this.callDestructor(t.elementType, v, 0, b, false, "free");
+            this.callDestructor(t.elementType, v, 0, b, avoidNullCheck, "free");
         } else if (t instanceof PointerType && (t.mode == "reference")) {
-            this.callDestructor(t.elementType, v, 0, b, false, "decref");
+            this.callDestructor(t.elementType, v, 0, b, avoidNullCheck, "decref");
         } else if (t == TypeChecker.t_string) {
-            this.callDestructor(t, v, 0, b, false, "decref");
+            this.callDestructor(t, v, 0, b, avoidNullCheck, "decref");
         } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
             let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
             this.callDestructor(t, obj, 0, b, true, "no");
