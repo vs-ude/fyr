@@ -5,7 +5,6 @@ import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
 import {Package} from "./pkg"
-import { RSA_PKCS1_PSS_PADDING } from "constants";
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {

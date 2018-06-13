@@ -1,5 +1,4 @@
 import path = require('path');
-import colors = require('colors');
 import process = require("process");
 import fs = require("fs");
 import child_process = require("child_process");
@@ -7,7 +6,7 @@ import os = require("os");
 import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
-import {Function, FunctionParameter, FunctionType, PolymorphFunctionType, GenericParameter, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
+import {Function, FunctionParameter, FunctionType, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
 import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
@@ -435,53 +434,40 @@ export class ImportError {
     public path: string;
 }
 
-var systemPkg: Package;
-var mathPkg: Package;
-
-function makeMathFunction(name: string, paramCount: number, call32: SystemCalls, call64: SystemCalls, tc: TypeChecker): Function {
-    var abs: Function = new Function();
-    abs.name = name;
-    let gt = new PolymorphFunctionType();
-    gt.name = name;
-    gt.callingConvention = "system";
-    let gp = new GenericParameter();
-    gp.name = "V";
-    gt.genericParameters.push(gp);
-    for(let i = 0; i < paramCount; i++) {
-        let p = new FunctionParameter();
-        p.name = "value" + i.toString();
-        p.type = gp;
-        gt.parameters.push(p);
-    }
-    gt.returnType = gp;
-    // float
+function makeMathFunction64(name: string, paramCount: number, call: SystemCalls, tc: TypeChecker): Function {
+    var f: Function = new Function();
+    f.name = name;
     let t = new FunctionType();
     t.callingConvention = "system";
     t.name = name;
-    t.returnType = TypeChecker.t_float;
-    t.systemCallType = call32;
-    for(let i = 0; i < paramCount; i++) {
-        let p = new FunctionParameter();
-        p.name = "value" + i.toString();
-        p.type = TypeChecker.t_float;
-        t.parameters.push(p);
-    }
-    gt.instances.push(t);
-    // double
-    t = new FunctionType();
-    t.callingConvention = "system";
-    t.name = name;
     t.returnType = TypeChecker.t_double;
-    t.systemCallType = call64;
+    t.systemCallType = call;
     for(let i = 0; i < paramCount; i++) {
         let p = new FunctionParameter();
         p.name = "value" + i.toString();
         p.type = TypeChecker.t_double;
         t.parameters.push(p);
     }
-    gt.instances.push(t);
-    abs.type = gt;
-    return abs
+    f.type = t;
+    return f
+}
+
+function makeMathFunction32(name: string, paramCount: number, call: SystemCalls, tc: TypeChecker): Function {
+    var f: Function = new Function();
+    f.name = name;
+    let t = new FunctionType();
+    t.callingConvention = "system";
+    t.name = name;
+    t.returnType = TypeChecker.t_float;
+    t.systemCallType = call;
+    for(let i = 0; i < paramCount; i++) {
+        let p = new FunctionParameter();
+        p.name = "value" + i.toString();
+        p.type = TypeChecker.t_float;
+        t.parameters.push(p);
+    }
+    f.type = t;
+    return f
 }
 
 let initialized = false;
@@ -491,8 +477,8 @@ function initPackages() {
         return;
     }
     initialized = true;
-    systemPkg = new Package();
-    systemPkg.scope = new Scope();
+    let systemPkg = new Package();
+    systemPkg.scope = new Scope(null);
     systemPkg.isInternal = true;
     systemPkg.pkgPath = "fyr/system";
     systemPkg.fyrPath = Package.fyrBase;
@@ -598,28 +584,45 @@ function initPackages() {
     systemPkg.scope.registerElement(coroutine.name, coroutine);
     Package.registerPackage(systemPkg);
 
-    mathPkg = new Package();
-    mathPkg.scope = new Scope();
+    let mathPkg = new Package();
+    mathPkg.scope = new Scope(null);
     mathPkg.isInternal = true;
-    mathPkg.pkgPath = "fyr/math";
+    mathPkg.pkgPath = "math";
     mathPkg.fyrPath = Package.fyrBase;
-    let abs = makeMathFunction("abs", 1, SystemCalls.abs32, SystemCalls.abs64, mathPkg.tc);
+    let abs = makeMathFunction64("abs", 1, SystemCalls.abs64, mathPkg.tc);
     mathPkg.scope.registerElement(abs.name, abs);
-    let sqrt = makeMathFunction("sqrt", 1, SystemCalls.sqrt32, SystemCalls.sqrt64, mathPkg.tc);
+    let sqrt = makeMathFunction64("sqrt", 1, SystemCalls.sqrt64, mathPkg.tc);
     mathPkg.scope.registerElement(sqrt.name, sqrt);
-    let trunc = makeMathFunction("trunc", 1, SystemCalls.trunc32, SystemCalls.trunc64, mathPkg.tc);
+    let trunc = makeMathFunction64("trunc", 1, SystemCalls.trunc64, mathPkg.tc);
     mathPkg.scope.registerElement(trunc.name, trunc);
-    let nearest = makeMathFunction("nearest", 1, SystemCalls.nearest32, SystemCalls.nearest64, mathPkg.tc);
+    let nearest = makeMathFunction64("nearest", 1, SystemCalls.nearest64, mathPkg.tc);
     mathPkg.scope.registerElement(nearest.name, nearest);
-    let ceil = makeMathFunction("ceil", 1, SystemCalls.sqrt32, SystemCalls.sqrt64, mathPkg.tc);
+    let ceil = makeMathFunction64("ceil", 1, SystemCalls.sqrt64, mathPkg.tc);
     mathPkg.scope.registerElement(ceil.name, ceil);
-    let floor = makeMathFunction("floor", 1, SystemCalls.floor32, SystemCalls.floor64, mathPkg.tc);
+    let floor = makeMathFunction64("floor", 1, SystemCalls.floor64, mathPkg.tc);
     mathPkg.scope.registerElement(floor.name, floor);
-    let min = makeMathFunction("min", 2, SystemCalls.min32, SystemCalls.min64, mathPkg.tc);
-    mathPkg.scope.registerElement(min.name, min);
-    let max = makeMathFunction("max", 2, SystemCalls.max32, SystemCalls.max64, mathPkg.tc);
-    mathPkg.scope.registerElement(max.name, max);
-    let copysign = makeMathFunction("copysign", 2, SystemCalls.copysign32, SystemCalls.copysign64, mathPkg.tc);
+    let copysign = makeMathFunction64("copysign", 2, SystemCalls.copysign64, mathPkg.tc);
     mathPkg.scope.registerElement(copysign.name, copysign);
     Package.registerPackage(mathPkg);
+
+    let math32Pkg = new Package();
+    math32Pkg.scope = new Scope(null);
+    math32Pkg.isInternal = true;
+    math32Pkg.pkgPath = "math32";
+    math32Pkg.fyrPath = Package.fyrBase;
+    let abs32 = makeMathFunction32("abs", 1, SystemCalls.abs32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(abs.name, abs32);
+    let sqrt32 = makeMathFunction32("sqrt", 1, SystemCalls.sqrt32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(sqrt.name, sqrt32);
+    let trunc32 = makeMathFunction32("trunc", 1, SystemCalls.trunc32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(trunc.name, trunc32);
+    let nearest32 = makeMathFunction32("nearest", 1, SystemCalls.nearest32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(nearest.name, nearest32);
+    let ceil32 = makeMathFunction32("ceil", 1, SystemCalls.sqrt32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(ceil.name, ceil32);
+    let floor32 = makeMathFunction32("floor", 1, SystemCalls.floor32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(floor.name, floor32);
+    let copysign32 = makeMathFunction32("copysign", 2, SystemCalls.copysign32, math32Pkg.tc);
+    math32Pkg.scope.registerElement(copysign.name, copysign32);
+    Package.registerPackage(math32Pkg);
 }

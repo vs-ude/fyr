@@ -6,7 +6,6 @@ import program = require('commander');
 import colors = require('colors');
 import parser = require("./parser");
 import typecheck = require("./typecheck");
-import codegen = require("./codegen");
 import ast = require("./ast");
 import {Package, ImportError} from "./pkg";
 

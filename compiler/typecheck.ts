@@ -833,11 +833,6 @@ export class FunctionType extends Type {
 //    public callingConvention: CallingConvention = "fyrCoroutine";
 }
 
-export class PolymorphFunctionType extends FunctionType {
-    public instances: Array<FunctionType> = [];
-    public genericParameters: Array<GenericParameter> = [];
-    public node: Node;
-}
 
 // TODO: Rename generic
 export class GenericParameter extends Type {
@@ -4098,19 +4093,6 @@ export class TypeChecker {
                     let f = this.instantiateTemplateFunction(t, types, enode.loc);
                     enode.type = f.type.returnType;
                     enode.lhs.type = f.type;
-                } else if (t instanceof PolymorphFunctionType) {
-                    var ok = false;
-                    for(let it of t.instances) {
-                        if (this.checkFunctionArguments(it, enode.parameters, scope, enode.loc, false)) {
-                            ok = true;
-                            enode.lhs.type = it;
-                            enode.type = it.returnType;
-                            break;
-                        }                        
-                    }
-                    if (!ok) {
-                        throw new TypeError("Parameters match no instance of the polymorphic function " + t.name, enode.loc);
-                    }
                 } else if (t instanceof FunctionType) {
                     this.checkFunctionArguments(t, enode.parameters, scope, enode.loc);                    
                     enode.type = t.returnType;

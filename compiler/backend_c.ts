@@ -1,5 +1,5 @@
-import {SMTransformer, Optimizer, Stackifier, Type, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind} from "./ssa";
-import {Package, SystemCalls} from "./pkg";
+import {Optimizer, Stackifier, StructType, FunctionType, Variable, Node} from "./ssa";
+import {Package} from "./pkg";
 import * as backend from "./backend";
 import * as ssa from "./ssa"
 import path = require("path");
