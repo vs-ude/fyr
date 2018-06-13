@@ -759,6 +759,26 @@ export class CBackend implements backend.Backend {
             c.args.push(this.emitExpr(n.args[0]));
             c.args.push(this.emitExpr(n.args[1]));
             return c;
+        } else if (n.kind == "popcnt") {
+            let c = new CFunctionCall();
+            // TODO: Non-standard. What about longs?
+            c.funcExpr = new CConst("__builtin_popcount");
+            c.args.push(this.emitExpr(n.args[0]));
+            return c;
+        } else if (n.kind == "clz") {
+            let c = new CFunctionCall();
+            // TODO: Non-standard. What about longs?
+            // TODO: This should be sign agnostic
+            c.funcExpr = new CConst("__builtin_clz");
+            c.args.push(this.emitExpr(n.args[0]));
+            return c;
+        } else if (n.kind == "ctz") {
+            let c = new CFunctionCall();
+            // TODO: Non-standard. What about longs?
+            // TODO: This should be sign agnostic
+            c.funcExpr = new CConst("__builtin_ctz");
+            c.args.push(this.emitExpr(n.args[0]));
+            return c;
         } else if (n.kind == "div_s" || n.kind == "shr_s" || n.kind == "rem_s" || n.kind == "lt_s" || n.kind == "gt_s" || n.kind == "le_s" || n.kind == "ge_s") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
                 throw "Implementation error"
