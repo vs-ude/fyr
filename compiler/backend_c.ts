@@ -657,6 +657,18 @@ export class CBackend implements backend.Backend {
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
+        } else if (n.kind == "copysign") {
+            let c = new CFunctionCall();
+            if (n.type == "f32") {
+                c.funcExpr = new CConst("copysignf");
+            } else if (n.type == "f64") {
+                c.funcExpr = new CConst("copysign");
+            } else {
+                throw "Implementation error";
+            }
+            this.includeMathHeaderFile();
+            c.args.push(this.emitExpr(n.args[0]));
+            return c;
         } else if (n.kind == "ceil") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
