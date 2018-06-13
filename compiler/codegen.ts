@@ -53,7 +53,6 @@ export class CodeGenerator {
         this.mapHead.addField("size", "i32")
         this.mapHead.addField("free", "i32")
         this.mapHead.addField("freeList", "addr")
-        this.compareStringFunctionType = new ssa.FunctionType(["ptr", "ptr"], "i32", "system");
         this.createMapFunctionType = new ssa.FunctionType(["addr", "i32", "addr"], "ptr", "system");
         this.setMapFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
         this.lookupMapFunctionType = new ssa.FunctionType(["addr", "addr"], "ptr", "system");
@@ -2515,6 +2514,30 @@ export class CodeGenerator {
                     result = b.assign(b.tmp(), "abs", "f32", [args[0]]);
                 } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.abs64) {
                     result = b.assign(b.tmp(), "abs", "f64", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.floor32) {
+                    result = b.assign(b.tmp(), "floor", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.floor64) {
+                    result = b.assign(b.tmp(), "floor", "f64", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.ceil32) {
+                    result = b.assign(b.tmp(), "ceil", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.ceil64) {
+                    result = b.assign(b.tmp(), "ceil", "f64", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.sqrt32) {
+                    result = b.assign(b.tmp(), "sqrt", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.sqrt64) {
+                    result = b.assign(b.tmp(), "sqrt", "f64", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.trunc32) {
+                    result = b.assign(b.tmp(), "trunc", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.trunc64) {
+                    result = b.assign(b.tmp(), "trunc", "f64", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.nearest32) {
+                    result = b.assign(b.tmp(), "nearest", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.nearest64) {
+                    result = b.assign(b.tmp(), "nearest", "f64", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.copysign32) {
+                    result = b.assign(b.tmp(), "copysign", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.copysign64) {
+                    result = b.assign(b.tmp(), "copysign", "f64", [args[0]]);
                 } else {
                     throw "TODO: call a lambda function"
                 }
@@ -3785,7 +3808,6 @@ export class CodeGenerator {
     private ifaceHeaderSlice: ssa.StructType;
     private mapHead: ssa.StructType;
     private disableNullCheck: boolean;
-    private compareStringFunctionType: ssa.FunctionType;
     private createMapFunctionType: ssa.FunctionType;
     private setMapFunctionType: ssa.FunctionType;
     private hashStringFunctionType: ssa.FunctionType;
