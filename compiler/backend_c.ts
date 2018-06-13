@@ -636,27 +636,35 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "abs") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("abs_f32");
+                c.funcExpr = new CConst("fabsf");
+            } else if (n.type == "f64") {
+                c.funcExpr = new CConst("fabs");
             } else {
-                c.funcExpr = new CConst("abs_f64");
+                throw "Implementation error";
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "sqrt") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("sqrt_f32");
+                c.funcExpr = new CConst("sqrtf");
+            } else if (n.type == "f64") {
+                c.funcExpr = new CConst("sqrt");
             } else {
-                c.funcExpr = new CConst("sqrt_f64");
+                throw "Implementation error";
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "ceil") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
                 c.funcExpr = new CConst("ceilf");
-            } else {
+            } else if (n.type == "f64") {
                 c.funcExpr = new CConst("ceil");
+            } else {
+                throw "Implementation error";
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -665,8 +673,10 @@ export class CBackend implements backend.Backend {
             let c = new CFunctionCall();
             if (n.type == "f32") {
                 c.funcExpr = new CConst("floorf");
-            } else {
+            } else if (n.type == "f64") {
                 c.funcExpr = new CConst("floor");
+            } else {
+                throw "Implementation error";
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -675,18 +685,24 @@ export class CBackend implements backend.Backend {
             let c = new CFunctionCall();
             if (n.type == "f32") {
                 c.funcExpr = new CConst("trunc_f32");
-            } else {
+            } else if (n.type == "f64") {
                 c.funcExpr = new CConst("trunc_f64");
+            } else {
+                throw "Implementation error";
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "nearest") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("nearest_f32");
+                c.funcExpr = new CConst("roundf");
+            } else if (n.type == "f64") {
+                c.funcExpr = new CConst("round");
             } else {
-                c.funcExpr = new CConst("nearest_f64");
+                throw "Implementation error";
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "min") {
