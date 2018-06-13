@@ -59,7 +59,7 @@ let architecture = os.platform() + "-" + os.arch();
 
 export class Package {
     constructor(mainPackage: boolean = false) {
-        this.tc = new tc.TypeChecker();
+        this.tc = new tc.TypeChecker(this);
         if (mainPackage) {
             Package.mainPackage = this;
         }

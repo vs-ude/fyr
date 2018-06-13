@@ -1585,7 +1585,7 @@ enum GroupCheckFlags {
 }
 
 export class TypeChecker {
-    constructor() {
+    constructor(pkg: Package) {
         if (!TypeChecker.t_bool) {
             TypeChecker.t_bool = new BasicType("bool");
             TypeChecker.t_float = new BasicType("float");
@@ -1619,7 +1619,7 @@ export class TypeChecker {
             TypeChecker.t_error.methods.set("toError", toError);
             this.ifaces.push(TypeChecker.t_error);
         }
-
+        this.pkg = pkg;
         this.globalGroup = new Group(GroupKind.Bound, "$global");
     }
 
@@ -4628,7 +4628,6 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between tuple literal and " + t.toString(), loc);                
             case "object":
                 if (this.isMap(t)) {
-                    let mapType = this.stripType(t) as MapType;
                     let valueType = this.mapValueType(t);
                     let keyType = this.mapKeyType(t);
                     if (!node.parameters || node.parameters.length == 0) {
@@ -6652,6 +6651,7 @@ export class TypeChecker {
     public structs: Array<StructType> = [];
     public templateTypeInstantiations: Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>> = new Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>>();
     public templateFunctionInstantiations: Map<TemplateType, Array<Function>> = new Map<TemplateType, Array<Function>>();
+    public pkg: Package;
 
     private typedefs: Array<Typedef> = [];
     private functions: Array<Function> = [];

@@ -2428,8 +2428,6 @@ export class CodeGenerator {
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {
                     args.push(findex);
-//                } else if (t.callingConvention == "system") {
-//                    args.push(t.systemCallType);
                 }
 
                 if (objPtr !== null) {
