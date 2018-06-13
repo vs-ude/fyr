@@ -1964,16 +1964,10 @@ export class Wasm32Backend implements backend.Backend {
                     code.push(new wasm.Constant("i32", 1 << 16));
                 } else if (n.args[0] == SystemCalls.defaultStackSize) {
                     code.push(new wasm.Constant("i32", this.stackSize));
-                } else if (n.args[0] == SystemCalls.garbageCollect) {
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.garbageCollectFunctionIndex));
                 } else if (n.args[0] == SystemCalls.stackPointer) {
                     code.push(new wasm.GetLocal(this.spLocal));
                 } else if (n.args[0] == SystemCalls.trap) {
                     code.push(new wasm.Unreachable());
-                } else if (n.args[0] == SystemCalls.compareString) {
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.compareStringFunctionIndex));
                 } else if (n.args[0] == SystemCalls.createMap) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.createMapFunctionIndex));

@@ -22,7 +22,7 @@ export enum SystemCalls {
     pageSize = -5,
     // Returns the default size for a stack
     defaultStackSize = -6,
-    garbageCollect = -7,
+//    garbageCollect = -7,
     // The current SP
     stackPointer = -8,
 //    appendSlice = -9,
@@ -30,7 +30,7 @@ export enum SystemCalls {
 //    copy = -11,
 //    makeString = -12,
 //    concatString = -13,
-    compareString = -14,
+//    compareString = -14,
     createMap = -15,
     setMap = -16,
     hashString = -17,
@@ -542,14 +542,6 @@ function initPackages() {
     defaultStackSize.type.systemCallType = SystemCalls.defaultStackSize;
     defaultStackSize.type.returnType = TypeChecker.t_uint;
     systemPkg.scope.registerElement(defaultStackSize.name, defaultStackSize);
-    var garbageCollect: Function = new Function();
-    garbageCollect.name = "garbageCollect";
-    garbageCollect.type = new FunctionType();
-    garbageCollect.type.callingConvention = "system";
-    garbageCollect.type.name = "garbageCollect";
-    garbageCollect.type.systemCallType = SystemCalls.garbageCollect;
-    garbageCollect.type.returnType = TypeChecker.t_void;
-    systemPkg.scope.registerElement(garbageCollect.name, garbageCollect);
     var stackPointer: Function = new Function();
     stackPointer.name = "stackPointer";
     stackPointer.type = new FunctionType();
