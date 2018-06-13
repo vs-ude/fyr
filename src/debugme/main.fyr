@@ -2,6 +2,8 @@ import . {
     func puts(#const char) int
 } from "<stdio.h>"
 
+import "fyr/math"
+
 type List struct {
     value int
     next *List
@@ -31,4 +33,12 @@ func gimmeString() string {
 
 func cmpString(s1 string, s2 string) bool {
     return s1 == s2
+}
+
+func abs1() float {
+    return math.abs(<float>1.2)
+}
+
+func abs2(d double) double {
+    return math.abs(d)
 }

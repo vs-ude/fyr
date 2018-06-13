@@ -360,6 +360,8 @@ export class Package {
     }
     
     public static resolve(pkgPath: string, loc: ast.Location): Package | null {
+        initPackages();
+
         if (Package.packagesByPath.has(pkgPath)) {
             return Package.packagesByPath.get(pkgPath);
         }
@@ -385,6 +387,11 @@ export class Package {
         throw new ImportError("Unknown package \"" + pkgPath + "\"", loc, pkgPath);
     }
     
+    // Used for system defined packages
+    public static registerPackage(p: Package) {
+        Package.packagesByPath.set(p.pkgPath, p);
+    }
+
     public pkgNode: ast.Node;
     // The path name of the package, e.g. "network/http".
     public pkgPath: string;
@@ -477,8 +484,15 @@ function makeMathFunction(name: string, paramCount: number, call32: SystemCalls,
     return abs
 }
 
+let initialized = false;
+
 function initPackages() {
+    if (initialized) {
+        return;
+    }
+    initialized = true;
     systemPkg = new Package();
+    systemPkg.scope = new Scope();
     systemPkg.isInternal = true;
     systemPkg.pkgPath = "fyr/system";
     systemPkg.fyrPath = Package.fyrBase;
@@ -582,8 +596,10 @@ function initPackages() {
     coroutine.type.systemCallType = SystemCalls.coroutine;
     coroutine.type.returnType = new UnsafePointerType(TypeChecker.t_void);
     systemPkg.scope.registerElement(coroutine.name, coroutine);
+    Package.registerPackage(systemPkg);
 
     mathPkg = new Package();
+    mathPkg.scope = new Scope();
     mathPkg.isInternal = true;
     mathPkg.pkgPath = "fyr/math";
     mathPkg.fyrPath = Package.fyrBase;
@@ -605,4 +621,5 @@ function initPackages() {
     mathPkg.scope.registerElement(max.name, max);
     let copysign = makeMathFunction("copysign", 2, SystemCalls.copysign32, SystemCalls.copysign64, mathPkg.tc);
     mathPkg.scope.registerElement(copysign.name, copysign);
+    Package.registerPackage(mathPkg);
 }

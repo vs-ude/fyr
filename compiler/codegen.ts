@@ -2337,6 +2337,7 @@ export class CodeGenerator {
                     f = e;
                     t = f.type;                
                 } else if (enode.lhs.op == "." && enode.lhs.lhs.type instanceof PackageType) {
+                    // Calling a function of some package?
                     let pkg = enode.lhs.lhs.type.pkg;
                     let name = enode.lhs.name.value;
                     let e = pkg.scope.resolveElement(name);
@@ -2346,7 +2347,7 @@ export class CodeGenerator {
                     f = e;
                     t = f.type;                    
                 } else if (enode.lhs.op == ".") {
-                    // Calling a method
+                    // Calling a member function?
                     let ltype = this.tc.stripType(enode.lhs.lhs.type);
                     let objType: Type;
                     if (ltype instanceof PointerType) {
@@ -2429,9 +2430,10 @@ export class CodeGenerator {
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {
                     args.push(findex);
-                } else if (t.callingConvention == "system") {
-                    args.push(t.systemCallType);
+//                } else if (t.callingConvention == "system") {
+//                    args.push(t.systemCallType);
                 }
+
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
                     let data: ssa.Variable | number;
@@ -2447,6 +2449,8 @@ export class CodeGenerator {
                         decrefArgs.push([enode.lhs.lhs, dataAndRef[1], targetType]);
                     }                
                 }                
+
+                // Compute arguments
                 if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
                     // TODO: If the last parameter is volatile, the alloc is not necessary.
                     let elementType = this.getSSAType((t.lastParameter().type as SliceType).getElementType());
@@ -2508,9 +2512,10 @@ export class CodeGenerator {
                     } else {
                         result = b.callIndirect(b.tmp(), ft, args);
                     }
-                } else if (t.callingConvention == "system") {
-                    let ft = this.getSSAFunctionType(t);
-                    result = b.call(b.tmp(), ft, args);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.abs32) {
+                    result = b.assign(b.tmp(), "abs", "f32", [args[0]]);
+                } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.abs64) {
+                    result = b.assign(b.tmp(), "abs", "f64", [args[0]]);
                 } else {
                     throw "TODO: call a lambda function"
                 }

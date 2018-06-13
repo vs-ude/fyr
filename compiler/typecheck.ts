@@ -1,8 +1,5 @@
-import {Node, NodeOp, Location, AstFlags} from "./ast"
-import { Package } from "./pkg";
-import { doesNotThrow } from "assert";
-import { isUndefined } from "util";
-import { Pointer } from "./ssa";
+import {Node, Location, AstFlags} from "./ast"
+import { Package, SystemCalls } from "./pkg";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -831,7 +828,7 @@ export class FunctionType extends Type {
     public callingConvention: CallingConvention = "fyr";
     public objectType: Type;
     // Only used when the callingConvention is "system"
-    public systemCallType: number;
+    public systemCallType: SystemCalls;
 // Enable this line to measure coroutines
 //    public callingConvention: CallingConvention = "fyrCoroutine";
 }
