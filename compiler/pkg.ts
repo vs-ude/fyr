@@ -7,7 +7,7 @@ import os = require("os");
 import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
-import {Variable, Function, FunctionParameter, FunctionType, PolymorphFunctionType, GenericParameter, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
+import {Function, FunctionParameter, FunctionType, PolymorphFunctionType, GenericParameter, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
 import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
@@ -22,15 +22,8 @@ export enum SystemCalls {
     pageSize = -5,
     // Returns the default size for a stack
     defaultStackSize = -6,
-//    garbageCollect = -7,
     // The current SP
     stackPointer = -8,
-//    appendSlice = -9,
-//    growSlice = -10,
-//    copy = -11,
-//    makeString = -12,
-//    concatString = -13,
-//    compareString = -14,
     createMap = -15,
     setMap = -16,
     hashString = -17,
