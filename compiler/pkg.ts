@@ -57,7 +57,6 @@ export enum SystemCalls {
     min64 = -38,
     copysign32 = -39,
     copysign64 = -49,
-    trap = -50,
     decodeUtf8 = -51,
     continueCoroutine = -52,
     scheduleCoroutine = -53,
@@ -550,14 +549,6 @@ function initPackages() {
     stackPointer.type.systemCallType = SystemCalls.stackPointer;
     stackPointer.type.returnType = new UnsafePointerType(TypeChecker.t_void);
     systemPkg.scope.registerElement(stackPointer.name, stackPointer);
-    var trap: Function = new Function();
-    trap.name = "trap";
-    trap.type = new FunctionType();
-    trap.type.callingConvention = "system";
-    trap.type.name = "trap";
-    trap.type.systemCallType = SystemCalls.trap;
-    trap.type.returnType = TypeChecker.t_void;
-    systemPkg.scope.registerElement(trap.name, trap);
     var continueCoroutine: Function = new Function();
     continueCoroutine.name = "continueCoroutine";
     continueCoroutine.type = new FunctionType();
