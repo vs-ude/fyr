@@ -941,12 +941,7 @@ export class CBackend implements backend.Backend {
             let call = new CFunctionCall();
             call.funcExpr = new CConst("memcmp");
             call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), this.emitExpr(n.args[2])];
-            if (!this.module.hasInclude("string.h", true)) {
-                let inc = new CInclude();
-                inc.isSystemPath = true;
-                inc.path = "strings.h";
-                this.module.includes.push(inc);
-            }
+            this.includeStringHeaderFile();
             return call;
         }
         throw "Implementation error " + n.kind;
@@ -957,6 +952,15 @@ export class CBackend implements backend.Backend {
             let inc = new CInclude();
             inc.isSystemPath = true;
             inc.path = "math.h";
+            this.module.includes.push(inc);
+        }
+    }
+
+    private includeStringHeaderFile() {
+        if (!this.module.hasInclude("string.h", true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = true;
+            inc.path = "string.h";
             this.module.includes.push(inc);
         }
     }
@@ -1091,12 +1095,7 @@ export class CBackend implements backend.Backend {
                 size.lExpr = this.emitExpr(n.args[2]);
                 size.rExpr = this.emitExpr(n.args[3]);
                 call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), size];
-                if (!this.module.hasInclude("string.h", true)) {
-                    let inc = new CInclude();
-                    inc.isSystemPath = true;
-                    inc.path = "strings.h";
-                    this.module.includes.push(inc);
-                }
+                this.includeStringHeaderFile();
                 code.push(call);
                 n = n.next[0];
             } else if (n.kind == "memmove") {
@@ -1107,12 +1106,7 @@ export class CBackend implements backend.Backend {
                 size.lExpr = this.emitExpr(n.args[2]);
                 size.rExpr = this.emitExpr(n.args[3]);
                 call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), size];
-                if (!this.module.hasInclude("string.h", true)) {
-                    let inc = new CInclude();
-                    inc.isSystemPath = true;
-                    inc.path = "strings.h";
-                    this.module.includes.push(inc);
-                }
+                this.includeStringHeaderFile();
                 code.push(call);
                 n = n.next[0];
             } else if (n.kind == "set_member") {
