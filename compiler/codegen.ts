@@ -3127,20 +3127,24 @@ export class CodeGenerator {
         let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
         let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
         if (t == TypeChecker.t_string) {
-            let cmp = b.call(b.tmp(), this.compareStringFunctionType, [SystemCalls.compareString, p1, p2]);
+            let cond = b.assign(b.tmp(), "eq", "i8", [p1, p2]);
+            let l1 = b.assign(b.tmp(), "len_arr", "sint", [p1]);
+            let l2 = b.assign(b.tmp(), "len_arr", "sint", [p2]);
+            let l = b.assign(b.tmp(), "min", "sint", [l1, l2])
+            let cmp = b.assign(b.tmp(), "memcmp", "sint", [p1, p2, l]);
             switch(opcode) {
                 case "eq":
-                    return b.assign(b.tmp(), "eqz", "i32", [cmp]);
+                    return b.assign(b.tmp(), "eqz", "sint", [cmp]);
                 case "ne":
-                    return b.assign(b.tmp(), "ne", "i32", [cmp, 0]);
+                    return b.assign(b.tmp(), "ne", "sint", [cmp, 0]);
                 case "lt":
-                    return b.assign(b.tmp(), "lt_s", "i32", [cmp, 0]);
+                    return b.assign(b.tmp(), "lt_s", "sint", [cmp, 0]);
                 case "le":
-                    return b.assign(b.tmp(), "le_s", "i32", [cmp, 0]);
+                    return b.assign(b.tmp(), "le_s", "sint", [cmp, 0]);
                 case "gt":
-                    return b.assign(b.tmp(), "gt_s", "i32", [cmp, 0]);
+                    return b.assign(b.tmp(), "gt_s", "sint", [cmp, 0]);
                 case "ge":
-                    return b.assign(b.tmp(), "ge_s", "i32", [cmp, 0]);
+                    return b.assign(b.tmp(), "ge_s", "sint", [cmp, 0]);
             }
             throw "Implementation error " + opcode;
         } else {

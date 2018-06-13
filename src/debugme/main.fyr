@@ -28,3 +28,7 @@ func printList(l &List) string {
 func gimmeString() string {
     return gimmeString() + gimmeString()
 }
+
+func cmpString(s1 string, s2 string) bool {
+    return s1 == s2
+}

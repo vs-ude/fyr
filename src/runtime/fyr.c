@@ -109,3 +109,11 @@ inline int_t fyr_len_arr(addr_t ptr) {
     }
     return *(((int_t*)ptr)-1);
 }
+
+inline int_t fyr_len_str(addr_t ptr) {
+    if (ptr == 0) {
+        return 0;
+    }
+    // -1, because the trailing 0 does not count
+    return (*(((int_t*)ptr)-1)) - 1;
+}

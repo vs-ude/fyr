@@ -654,19 +654,21 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "ceil") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("ceil_f32");
+                c.funcExpr = new CConst("ceilf");
             } else {
-                c.funcExpr = new CConst("ceil_f64");
+                c.funcExpr = new CConst("ceil");
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "floor") {
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("floor_f32");
+                c.funcExpr = new CConst("floorf");
             } else {
-                c.funcExpr = new CConst("floor_f64");
+                c.funcExpr = new CConst("floor");
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "trunc") {
@@ -688,22 +690,44 @@ export class CBackend implements backend.Backend {
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "min") {
+            if (n.type != "f32" && n.type != "f64") {
+                let c = new CTypeCast();
+                c.type = this.mapType(n.type);
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("fyr_min");
+                call.args.push(this.emitExpr(n.args[0]));
+                call.args.push(this.emitExpr(n.args[1]));
+                c.expr = call;
+                return c;
+            }
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("min_f32");
+                c.funcExpr = new CConst("fminf");
             } else {
-                c.funcExpr = new CConst("min_f64");
+                c.funcExpr = new CConst("fmin");
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             c.args.push(this.emitExpr(n.args[1]));
             return c;
         } else if (n.kind == "max") {
+            if (n.type != "f32" && n.type != "f64") {
+                let c = new CTypeCast();
+                c.type = this.mapType(n.type);
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("fyr_max");
+                call.args.push(this.emitExpr(n.args[0]));
+                call.args.push(this.emitExpr(n.args[1]));
+                c.expr = call;
+                return c;
+            }
             let c = new CFunctionCall();
             if (n.type == "f32") {
-                c.funcExpr = new CConst("max_f32");
+                c.funcExpr = new CConst("fmaxf");
             } else {
-                c.funcExpr = new CConst("max_f64");
+                c.funcExpr = new CConst("fmax");
             }
+            this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
             c.args.push(this.emitExpr(n.args[1]));
             return c;
@@ -862,17 +886,31 @@ export class CBackend implements backend.Backend {
                 return new CConst(CString.toUTF8Array(v.constantValue).length.toString());
             }
             let call = new CFunctionCall();
-            call.funcExpr = new CConst("fyr_len_arr");
+            call.funcExpr = new CConst("fyr_len_str");
             call.args = [this.emitExpr(v)];
-            // Subtract one, because the trailing zero does not count
-            let s = new CBinary();
-            s.operator = "-";
-            s.lExpr = call;
-            s.rExpr = new CConst("1");
-            return s;
+            return call;
+        } else if (n.kind == "memcmp") {
+            let call = new CFunctionCall();
+            call.funcExpr = new CConst("memcmp");
+            call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), this.emitExpr(n.args[2])];
+            if (!this.module.hasInclude("string.h", true)) {
+                let inc = new CInclude();
+                inc.isSystemPath = true;
+                inc.path = "strings.h";
+                this.module.includes.push(inc);
+            }
+            return call;
         }
-
         throw "Implementation error " + n.kind;
+    }
+
+    private includeMathHeaderFile() {
+        if (!this.module.hasInclude("math.h", true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = true;
+            inc.path = "math.h";
+            this.module.includes.push(inc);
+        }
     }
 
     private emitCode(start: Node, end: Node | null, code: Array<CNode>): void {
