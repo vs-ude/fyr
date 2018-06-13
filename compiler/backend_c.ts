@@ -466,8 +466,6 @@ export class CBackend implements backend.Backend {
             return new CConst(n.toString());
         }
         if (typeof(n) == "string") {
-            // TODO: Proper string escape, no size information
-            // return new CConst("\"" + n + "\"");            
             let s = this.module.addString(n);
             let addr = new CUnary();
             addr.operator = "&";
@@ -1269,6 +1267,9 @@ export class CModule {
         }
         let str = "#include \"" + headerFile + "\"\n";
         str += "\n";     
+        for(let s of this.strings.values()) {
+            str += s.toString() + "\n\n";
+        }
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) { } else if (c instanceof CFunction) str += c.toString() + "\n\n"; else str += c.toString() + ";\n\n"});
         return str;
     }
@@ -1283,9 +1284,6 @@ export class CModule {
         }
 
         str += this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
-        for(let s of this.strings.values()) {
-            str += s.toString() + "\n\n";
-        }
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + ";\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
 
