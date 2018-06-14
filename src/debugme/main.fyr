@@ -43,3 +43,7 @@ func abs1() float {
 func abs2() double {
     return math.abs(1.2)
 }
+
+func length(arr [100]int) (l int, e int) {
+    return len(arr), 0
+}

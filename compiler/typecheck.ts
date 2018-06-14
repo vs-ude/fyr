@@ -554,6 +554,9 @@ export class InterfaceType extends Type {
         return null;
     }
 
+    // Package the type has been defined in.
+    // For global types sich as "int" the package is undefined.
+    public pkg?: Package;
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
@@ -645,6 +648,9 @@ export class StructType extends Type {
         return false;
     }
 
+    // Package the type has been defined in.
+    // For global types sich as "int" the package is undefined.
+    public pkg?: Package;
     public extends: StructType;
     public implements: Array<InterfaceType> = [];
     // Fields of the struct, ordered by their appearance in the code
@@ -1802,6 +1808,7 @@ export class TypeChecker {
     private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, mode?: "default" | "parameter" | "variable"): InterfaceType {
         if (!iface) {
             iface = new InterfaceType();
+            iface.pkg = this.pkg;
             iface.loc = tnode.loc;
             this.ifaces.push(iface);
         }
@@ -1905,6 +1912,7 @@ export class TypeChecker {
     private createStructType(tnode: Node, scope: Scope, s?: StructType, mode?: "default" | "parameter" | "variable"): Type {
         if (!s) {
             s = new StructType();
+            s.pkg = this.pkg;
             s.loc = tnode.loc;
             this.structs.push(s);
         }
@@ -2418,6 +2426,7 @@ export class TypeChecker {
             scope.registerType(t.name, tmpl, tnode.loc);
         } else if (t.node.rhs.op == "structType") {
             let s = new StructType();
+            s.pkg = this.pkg;
             s.loc = t.node.loc;
             s.name = t.name;
             this.structs.push(s);
@@ -2425,6 +2434,7 @@ export class TypeChecker {
             scope.registerType(t.name, s, tnode.loc);
         } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
             let iface = new InterfaceType();
+            iface.pkg = this.pkg;
             iface.loc = t.node.loc;
             iface.name = t.name;
             this.ifaces.push(iface);
@@ -2894,7 +2904,8 @@ export class TypeChecker {
                                 this.checkIsAssignableNode(lt.types[j-i], r, scope);
                             }
                         } else {
-                            this.checkIsAssignableType(v.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc, "assign", true);
+                            let t = new TupleType(rtypeStripped.types.slice(i));
+                            this.checkIsAssignableType(v.type, t, vnode.loc, "assign", true);
                         }
                     }
                     break;
@@ -3103,7 +3114,8 @@ export class TypeChecker {
                             this.checkIsAssignableNode(p.lhs.type.types[j-i], r, scope);
                         }
                     } else {
-                        this.checkIsAssignableType(p.lhs.type, new TupleType(rtypeStripped.types.slice(i)), vnode.loc, "assign", true);
+                        let t = new TupleType(rtypeStripped.types.slice(i));
+                        this.checkIsAssignableType(p.lhs.type, t, vnode.loc, "assign", true);
                     }
                     break;
                 } else {

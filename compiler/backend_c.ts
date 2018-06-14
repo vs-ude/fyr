@@ -3,6 +3,7 @@ import {Package} from "./pkg";
 import * as backend from "./backend";
 import * as ssa from "./ssa"
 import path = require("path");
+import {createHash} from "crypto";
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -272,13 +273,20 @@ export class CBackend implements backend.Backend {
         }
 
         for(let t of this.namedStructs.values()) {
-            let ct = new CType("struct " + t.name + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
+            let mangledName: string;
+            if (t.pkg) {
+                mangledName = this.mangleName(t.pkg.pkgPath + "/" + t.name);
+            } else {
+                mangledName = this.mangleName(t.name);
+            }
+
+            let ct = new CType("#ifndef S_" + mangledName + "\n#define S_" + mangledName + "\nstruct " + mangledName + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
                 let t = this.mapType(c[1]).toString();
                 if (c[2] > 1) {
                     return "    " + t + " " + c[0] + "[" + c[2].toString() + "];\n"
                 }
                 return "    " + this.mapType(c[1]).toString() + " " + c[0] + ";\n";
-            }).join("") + "}")
+            }).join("") + "};\n#endif")
             this.module.elements.unshift(ct);
         }
 
@@ -341,28 +349,53 @@ export class CBackend implements backend.Backend {
         return this.module.getHeaderCode(this.pkg);
     }
 
+    private typecode(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): string {
+        if (t instanceof ssa.StructType) {
+            let str = "{";
+            for(let f of t.fields) {
+                str += "[" + f[2].toString() + "]" + this.typecode(f[1]) + ",";
+            }
+            str += "}";
+            return str;          
+        }
+        return this.mapType(t).code;
+    }
+
+    private mangledTypecode(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): string {
+        let str = this.typecode(t);
+        let hash = createHash("md5");
+        hash.update(str);
+        return hash.digest("hex");
+    }
+
     private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false): CType {
         if (t instanceof ssa.StructType) {
             if (t.name) {
-                if (!this.namedStructs.has(t.name)) {
-                    this.namedStructs.set(t.name, t);
+                let mangledName: string;
+                if (t.pkg) {
+                    mangledName = this.mangleName(t.pkg.pkgPath + "/" + t.name);
+                } else {
+                    mangledName = this.mangleName(t.name);
                 }
-                return new CType("struct " + t.name);
-            }
-            let str = " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
-                let t = this.mapType(c[1], cstyle).toString();
-                if (c[2] > 1) {
-                    return "    " + t + " field" + i.toString() + "[" + c[2].toString() + "];\n"
+                if (!this.namedStructs.has(mangledName)) {
+                    this.namedStructs.set(mangledName, t);
                 }
-                return "    " + this.mapType(c[1], cstyle).toString() + " field" + i.toString() + ";\n";
-            }).join("") + "}";
-            if (this.anonymousStructs.has(str)) {
-                return new CType("struct " + this.anonymousStructs.get(str));
+                return new CType("struct " + mangledName);
             }
-            let name = "ta_struct" + this.anonymousStructs.size.toString();
-            this.anonymousStructs.set(str, name);
-            str = "struct " + name + str;
-            this.module.elements.unshift(new CType(str));
+            let name = "ta_struct" + this.mangledTypecode(t);
+            if (!this.anonymousStructs.has(name)) {
+                let str = "#ifndef S_" + name + "\n";
+                str += "#define S_" + name + "\n";
+                str +=  "struct " + name + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
+                    let t = this.mapType(c[1], cstyle).toString();
+                    if (c[2] > 1) {
+                        return "    " + t + " field" + i.toString() + "[" + c[2].toString() + "];\n"
+                    }
+                    return "    " + this.mapType(c[1], cstyle).toString() + " field" + i.toString() + ";\n";
+                }).join("") + "};\n#endif\n";
+                this.anonymousStructs.add(name);
+                this.module.elements.unshift(new CType(str));
+            }
             return new CType("struct " + name);
         }
         if (t instanceof ssa.PointerType) {
@@ -1242,7 +1275,7 @@ export class CBackend implements backend.Backend {
     private varStorage: Map<ssa.Variable, string>;
     private globalStorage: Map<ssa.Variable, string> = new Map<ssa.Variable, string>();
     private namedStructs: Map<string, ssa.StructType> = new Map<string, ssa.StructType>();
-    private anonymousStructs: Map<string, string> = new Map<string, string>();
+    private anonymousStructs: Set<string> = new Set<string>();
 }
 
 export class CInclude {
@@ -1284,7 +1317,7 @@ export class CModule {
         }
 
         str += this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
-        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + ";\n\n";});
+        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + "\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
 
         if (mangledName) {

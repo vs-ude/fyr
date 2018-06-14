@@ -245,6 +245,7 @@ export class CodeGenerator {
                     }
                 }
             }
+            s.pkg = t.pkg;
             return s;
         }
         if (t instanceof ArrayType) {
