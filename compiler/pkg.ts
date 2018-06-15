@@ -282,10 +282,12 @@ export class Package {
 
     public static checkTypesForPackages() {
         for(let p of Package.packages) {
+//            console.log("Type checking phase 1", p.pkgPath, "...");
             p.checkPackagePassTwo();
         }
 
         for(let p of Package.packages) {
+//            console.log("Type checking phase 2", p.pkgPath, "...");
             p.checkPackagePassThree();
         }
     }

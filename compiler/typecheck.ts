@@ -2161,6 +2161,9 @@ export class TypeChecker {
 
         // Check whether the template instantiation is consistent with the template parameter types.
         // Register the template parameters as types.
+        // Non-exported templates can see package variables via t.parentScope. Exported templates cannot do this.
+        // TODO: Need a vanilla scope
+        // let scope = new Scope(t.node.op == "export_func" ? null : t.parentScope);
         let scope = new Scope(t.parentScope);
         for(let i = 0; i < t.templateParameterNames.length; i++) {
             if (t.templateParameterTypes[i]) {
@@ -2185,7 +2188,7 @@ export class TypeChecker {
         // Create a copy the template AST and parse the template function's type signature.
         // Store the type, so that the same template instantiation does not occur twice.
         let node = t.node.clone();
-        let f = this.createFunction(node, scope, t.registerScope, true);
+        let f = this.createFunction(node, scope, this.moduleNode.scope, true);
         if (!(f instanceof Function)) {
             throw "Implementation error";
         }
@@ -4107,6 +4110,7 @@ export class TypeChecker {
                         types.push(tt);
                     }
                     let f = this.instantiateTemplateFunction(t, types, enode.loc);
+//                    console.log("Instantiate template", f.name);
                     enode.type = f.type.returnType;
                     enode.lhs.type = f.type;
                 } else if (t instanceof FunctionType) {
@@ -6643,7 +6647,7 @@ export class TypeChecker {
     public hasTemplateInstantiations(): boolean {
         return (this.templateFunctionInstantiations.size != 0 || this.templateTypeInstantiations.size != 0);
     }
-    
+
     public static t_bool: Type;
     public static t_float: Type;
     public static t_double: Type;

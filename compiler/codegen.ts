@@ -2347,9 +2347,20 @@ export class CodeGenerator {
                     let pkg = enode.lhs.lhs.type.pkg;
                     let name = enode.lhs.name.value;
                     let e = pkg.scope.resolveElement(name);
+                    if (e instanceof TemplateFunction) {
+                        if (!(enode.lhs.type instanceof TemplateFunctionType)) {
+                            throw "Implementation error";
+                        }
+                        name += "<";
+                        for(let g of enode.lhs.type.templateParameterTypes) {
+                            name += g.toString() + ",";
+                        }
+                        name += ">";
+                        e = scope.resolveElement(name);
+                    }
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
-                    }
+                    }    
                     f = e;
                     t = f.type;                    
                 } else if (enode.lhs.op == ".") {
