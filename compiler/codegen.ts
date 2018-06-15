@@ -1832,7 +1832,13 @@ export class CodeGenerator {
             case "int":
                 return parseInt(enode.value);
             case "float":
-                return parseFloat(enode.value);
+            {
+                let v = new ssa.Variable();
+                v.type = "f32";
+                v.isConstant = true;
+                v.constantValue = parseFloat(enode.value);
+                return v;;
+            }
             case "rune":
                 return enode.numValue;
             case "bool":

@@ -493,7 +493,6 @@ export class CBackend implements backend.Backend {
         return c;
     }
 
-    // TODO: Remove tx
     private emitExprIntern(n: number | string | ssa.Variable | ssa.Node, generateConstants: boolean = false): CNode {
         if (typeof(n) == "number") {
             return new CConst(n.toString());
@@ -525,6 +524,9 @@ export class CBackend implements backend.Backend {
             if (n.isConstant && typeof(n.constantValue) == "string") {
                 return this.emitExprIntern(n.constantValue);
             } else if (n.isConstant && typeof(n.constantValue) == "number") {
+                if (n.type == "f32") {
+                    return new CConst(n.constantValue.toString() + "f");                    
+                }
                 return this.emitExprIntern(n.constantValue);
             } else if (n.isConstant) {
                 if (!(n.type instanceof StructType)) {

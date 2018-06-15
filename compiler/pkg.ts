@@ -290,7 +290,7 @@ export class Package {
         // Generate code (in the case of "C" this is source code)
         let initPackages: Array<Package> = [];
         for(let p of Package.packages) {
-            if (p == Package.mainPackage) {
+            if (p == Package.mainPackage || p.isInternal) {
                 continue;
             }
             p.generateCode(backend, emitIR, null, disableNullCheck);
@@ -310,6 +310,9 @@ export class Package {
 
             // Generate object files
             for(let p of Package.packages) {
+                if (p.isInternal) {
+                    continue;                    
+                }
                 p.generateObjectFiles(backend);
             }
 
@@ -322,6 +325,9 @@ export class Package {
                         // Always include fyr.o
                         oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr.o"));
                         for(let importPkg of Package.packages) {
+                            if (importPkg.isInternal) {
+                                continue;
+                            }
                             oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
                         }
                         let bFile = path.join(p.binFilePath, p.binFileName);
