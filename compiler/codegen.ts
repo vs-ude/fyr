@@ -5,6 +5,7 @@ import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
 import {Package} from "./pkg"
+import {createHash} from "crypto";
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
@@ -64,7 +65,7 @@ export class CodeGenerator {
         this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i32", "i32"], "i32", "system");
     }
 
-    public processModule(mnode: Node, emitIR: boolean, initPackages: Array<Package> | null): string {
+    public processModule(mnode: Node, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         // Iterate over all files and import all functions, but import each function not more than once
         for(let fnode of mnode.statements) {
             for(let name of fnode.scope.elements.keys()) {
@@ -143,7 +144,7 @@ export class CodeGenerator {
                 b.assign(g, "copy", this.getSSAType(v.type), [expr]);
             }
         }
-        this.backend.defineFunction(b.node, wf, false);
+        this.backend.defineFunction(b.node, wf, false, false);
 
         // Generate IR code for all functions
         for(let name of scope.elements.keys()) {
@@ -164,7 +165,7 @@ export class CodeGenerator {
         }
 
         // Generate code for the module
-        return this.backend.generateModule(emitIR, initPackages);
+        return this.backend.generateModule(emitIR, initPackages, duplicateCodePackages);
     }
 
     public getSSAType(t: Type): ssa.Type | ssa.StructType | ssa.PointerType {
@@ -345,7 +346,7 @@ export class CodeGenerator {
 //            console.log(ssa.Node.strainToString("", b.node));                
 //        }
 
-        this.backend.defineFunction(b.node, wf, f.isExported);
+        this.backend.defineFunction(b.node, wf, f.isExported, f.isTemplateInstance);
 
         return b.node;
     }
@@ -3304,13 +3305,20 @@ export class CodeGenerator {
         return false;
     }
 
+    private mangleDestructorName(t: Type): string {
+        let str = "dtr_" + t.toTypeCodeString();
+        let hash = createHash("md5");
+        hash.update(str);
+        return hash.digest("hex");
+    }
+
     private generateSliceDestructor(t: SliceType): backend.Function {
         let tc = this.typecode(t).toString();
         let bf = this.destructors.get(tc);
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.destructors.size).toString();
+        let dtrName = this.mangleDestructorName(t);
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
@@ -3346,7 +3354,7 @@ export class CodeGenerator {
         b.end();
         */
         b.end();
-        this.backend.defineFunction(dtrNode, bf, false);
+        this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
     }
 
@@ -3356,7 +3364,7 @@ export class CodeGenerator {
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.destructors.size).toString();
+        let dtrName = this.mangleDestructorName(t);
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
@@ -3370,7 +3378,7 @@ export class CodeGenerator {
             i++;
         }
         b.end();
-        this.backend.defineFunction(dtrNode, bf, false);
+        this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
     }
 
@@ -3380,7 +3388,7 @@ export class CodeGenerator {
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.destructors.size).toString() + "_" + t.name;
+        let dtrName = this.mangleDestructorName(t);
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
@@ -3392,7 +3400,7 @@ export class CodeGenerator {
             this.callDestructor(f.type, pointer, st.fieldOffset(f.name), b, true, "no");
         }
         b.end();
-        this.backend.defineFunction(dtrNode, bf, false);
+        this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
     }
 
@@ -3403,7 +3411,7 @@ export class CodeGenerator {
         if (bf) {
             return bf;
         }
-        let dtrName = "dtr_" + (this.destructors.size).toString();
+        let dtrName = this.mangleDestructorName(t);
         let dtrType = new ssa.FunctionType(["addr", "sint"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
@@ -3424,7 +3432,7 @@ export class CodeGenerator {
         b.end();
         b.end();
         b.end();
-        this.backend.defineFunction(dtrNode, bf, false);
+        this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
     }
 
@@ -3436,7 +3444,7 @@ export class CodeGenerator {
         }
 
         let elementType = RestrictedType.strip(t.elementType);
-        let dtrName = "dtr_" + (this.destructors.size).toString();
+        let dtrName = this.mangleDestructorName(t);
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
         bf = this.backend.declareFunction(dtrName);
@@ -3450,7 +3458,7 @@ export class CodeGenerator {
             this.callDestructor(t.elementType, obj, 0, b, false, "decref");
         }
         b.end();
-        this.backend.defineFunction(dtrNode, bf, false);
+        this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;    
     }
 
@@ -3796,6 +3804,10 @@ export class CodeGenerator {
         }            
 
         return data;
+    }
+
+    public hasDestructors(): boolean {
+        return this.destructors.size != 0;
     }
 
     private backend: backend.Backend;

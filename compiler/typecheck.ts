@@ -77,6 +77,7 @@ export class Function implements ScopeElement {
     public loc: Location;
     public importFromModule: string;
     public isExported: boolean;
+    public isTemplateInstance: boolean;
 }
 
 // FunctionParameter is the parameter of a function inside a function's body.
@@ -1991,6 +1992,7 @@ export class TypeChecker {
     }
     
     private instantiateTemplateType(t: TemplateType, types: Array<Type>, loc: Location, mode: "default" | "parameter" | "variable"): Type {
+        // Check whether the template has already been instantiated with these type parameters
         let a = this.templateTypeInstantiations.get(t);
         if (a) {
             for(let s of a) {
@@ -2096,8 +2098,9 @@ export class TypeChecker {
             scope.registerType(t.templateParameterNames[i], s.templateParameterTypes[i]);
         }
         let node = m.node.clone();        
-        let f = this.createFunction(node, scope, t.registerScope);
+        let f = this.createFunction(node, scope, t.registerScope);        
         if (f instanceof Function) {
+            f.isTemplateInstance = true;
             this.checkFunctionBody(f);
         }
         return f;
@@ -2189,6 +2192,7 @@ export class TypeChecker {
         if (!(f.type instanceof TemplateFunctionType)) {
             throw "Implementation error";
         }
+        f.isTemplateInstance = true;
         f.type.base = t;
         f.type.templateParameterTypes = types;
         if (a) {
@@ -6636,6 +6640,10 @@ export class TypeChecker {
         return false;
     }
 
+    public hasTemplateInstantiations(): boolean {
+        return (this.templateFunctionInstantiations.size != 0 || this.templateTypeInstantiations.size != 0);
+    }
+    
     public static t_bool: Type;
     public static t_float: Type;
     public static t_double: Type;

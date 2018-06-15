@@ -140,11 +140,11 @@ export class Wasm32Backend implements backend.Backend {
         return this.module.initFunction;
     }
 
-    public defineFunction(n: Node, f: wasm.Function, isExported: boolean) {
+    public defineFunction(n: Node, f: wasm.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         this.funcs.push({node: n, wf: f, isExported: isExported});
     }
 
-    public generateModule(emitIR: boolean, initPackages: Array<Package> | null): string {
+    public generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         let ircode = "";
 
         // Generate WASM code for all globals

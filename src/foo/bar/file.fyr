@@ -3,3 +3,37 @@ let x = square(42)
 export func square(x int) int {
     return x * x
 }
+
+export func minimum(a int, b int) int {
+    return min(a, b)
+}
+
+type LinkedList<T> struct {
+    next *LinkedList<T>
+    value T
+}
+
+func LinkedList.setValue(x T) {
+    this.value = x
+}
+
+func LinkedList.getValue() T {
+    return this.value
+}
+
+func min<T is int8 | uint8 | int16 | uint16 | int32 | uint32 | int64 | uint64 | double | float>(x T, y T) T {
+     if (x < y) {
+         return x
+     }
+     return y
+}
+
+func indexOf<V>(data const &[]V, value V) int {
+    for(var i = 0; i < len(data); i++) {
+        if (data[i] == value) {
+            return i
+        }
+    }
+    return -1
+}
+

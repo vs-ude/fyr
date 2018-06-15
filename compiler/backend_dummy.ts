@@ -67,14 +67,14 @@ export class DummyBackend {
         return this.initFunction;
     }
 
-    defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean) {
+    defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         if (!(f instanceof Function)) {
             throw "implementation error";
         }
         f.node = n;
     }
 
-    generateModule(emitIR: boolean, initPackages: Array<Package> | null): string {
+    generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         let ircode = "";
 
         if (emitIR) {

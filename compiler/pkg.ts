@@ -164,7 +164,7 @@ export class Package {
         this.tc.checkModulePassThree();
     }
 
-    public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, initPackages: Array<Package> | null,  disableNullCheck: boolean) {
+    public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package>,  disableNullCheck: boolean) {
         if (this.isInternal) {
             return;
         }
@@ -185,7 +185,7 @@ export class Package {
         }
         
         this.codegen = new CodeGenerator(this.tc, b, disableNullCheck);
-        let ircode = this.codegen.processModule(this.pkgNode, emitIR, initPackages);
+        let ircode = this.codegen.processModule(this.pkgNode, emitIR, initPackages, duplicateCodePackages);
 
         this.createObjFilePath();
 
@@ -276,6 +276,10 @@ export class Package {
         }                
     }
 
+    public hasTemplateInstantiations(): boolean {
+        return this.tc.hasTemplateInstantiations();
+    }
+
     public static checkTypesForPackages() {
         for(let p of Package.packages) {
             p.checkPackagePassTwo();
@@ -289,17 +293,22 @@ export class Package {
     public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
         let initPackages: Array<Package> = [];
+        // Packages that contain (possibly duplicate) code in their header file
+        let duplicateCodePackages: Array<Package> = [];
         for(let p of Package.packages) {
             if (p == Package.mainPackage || p.isInternal) {
                 continue;
             }
-            p.generateCode(backend, emitIR, null, disableNullCheck);
+            p.generateCode(backend, emitIR, null, null, disableNullCheck);
             if (p.hasInitFunction) {
                 initPackages.push(p);
             }
+            if (p.tc.hasTemplateInstantiations() || p.codegen.hasDestructors()) {
+                duplicateCodePackages.push(p);
+            }
         }
         if (Package.mainPackage) {
-            Package.mainPackage.generateCode(backend, emitIR, initPackages, disableNullCheck);
+            Package.mainPackage.generateCode(backend, emitIR, initPackages, duplicateCodePackages, disableNullCheck);
         }
 
         // Create native executable?
@@ -614,7 +623,7 @@ function initPackages() {
     let math32Pkg = new Package();
     math32Pkg.scope = new Scope(null);
     math32Pkg.isInternal = true;
-    math32Pkg.pkgPath = "math32";
+    math32Pkg.pkgPath = "math/math32";
     math32Pkg.fyrPath = Package.fyrBase;
     let abs32 = makeMathFunction32("abs", 1, SystemCalls.abs32, math32Pkg.tc);
     math32Pkg.scope.registerElement(abs.name, abs32);

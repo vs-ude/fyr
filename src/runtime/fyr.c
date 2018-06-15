@@ -51,21 +51,21 @@ void fyr_free_arr(addr_t ptr) {
     }
 }
 
-inline bool fyr_isnull(addr_t ptr) {
+bool fyr_isnull(addr_t ptr) {
     return *(((int_t*)ptr) - 1) <= 0;
 }
 
-inline bool fyr_isnull_arr(addr_t ptr) {
+bool fyr_isnull_arr(addr_t ptr) {
     return *(((int_t*)ptr) - 2) <= 0;
 }
 
-inline addr_t fyr_incref(addr_t ptr) {
+addr_t fyr_incref(addr_t ptr) {
     int_t* iptr = ((int_t*)ptr) - 1;
     (*iptr)++;
     return ptr;
 }
 
-inline addr_t fyr_incref_arr(addr_t ptr) {
+addr_t fyr_incref_arr(addr_t ptr) {
     int_t* iptr = ((int_t*)ptr) - 2;
     (*iptr)++;
     return ptr;
@@ -103,17 +103,31 @@ void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
     }
 }
 
-inline int_t fyr_len_arr(addr_t ptr) {
+int_t fyr_len_arr(addr_t ptr) {
     if (ptr == 0) {
         return 0;
     }
     return *(((int_t*)ptr)-1);
 }
 
-inline int_t fyr_len_str(addr_t ptr) {
+int_t fyr_len_str(addr_t ptr) {
     if (ptr == 0) {
         return 0;
     }
     // -1, because the trailing 0 does not count
     return (*(((int_t*)ptr)-1)) - 1;
+}
+
+int_t fyr_min(int_t a, int_t b) {
+    if (a < b) {
+        return a;
+    }
+    return b;
+}
+
+int_t fyr_max(int_t a, int_t b) {
+    if (a > b) {
+        return a;
+    }
+    return b;
 }

@@ -1,5 +1,5 @@
 import "foo/bar"
 
 export func main() int {
-    return bar.square(4)
+    return bar.square(4) + bar.min(1,3)
 }

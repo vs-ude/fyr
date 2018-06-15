@@ -3,7 +3,7 @@ import . {
 } from "<stdio.h>"
 
 import "math"
-import "math32"
+import "math/math32"
 
 type List struct {
     value int

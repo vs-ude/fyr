@@ -16,8 +16,8 @@ export interface Backend {
     declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable;
     declareFunction(name: string): Function;
     declareInitFunction(name: string): Function;
-    defineFunction(n: ssa.Node, f: Function, isExported: boolean);
-    generateModule(emitIR: boolean, initPackages: Array<Package> | null): string;
+    defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean);
+    generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string;
     addFunctionToTable(f: Function, index: number);
     /**
      * Returns the init function unless it is empty or missing.

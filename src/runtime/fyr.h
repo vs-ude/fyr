@@ -23,17 +23,5 @@ void fyr_decref(addr_t ptr, fyr_dtr_t dtr);
 void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr);
 int_t fyr_len_arr(addr_t ptr);
 int_t fyr_len_str(addr_t ptr);
-
-inline int_t fyr_min(int_t a, int_t b) {
-    if (a < b) {
-        return a;
-    }
-    return b;
-}
-
-inline int_t fyr_max(int_t a, int_t b) {
-    if (a > b) {
-        return a;
-    }
-    return b;
-}
+int_t fyr_min(int_t a, int_t b);
+int_t fyr_max(int_t a, int_t b);

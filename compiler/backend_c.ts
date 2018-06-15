@@ -154,10 +154,11 @@ export class CBackend implements backend.Backend {
         return this.initFunction;
     }
 
-    public defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean) {
+    public defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         if (!(f instanceof Function)) {
             throw "Implementation error";
         }        
+        f.func.isPossibleDuplicate = isPossibleDuplicate;
         let name = f.name;
         if (this.pkg.pkgPath) {
             name = this.pkg.pkgPath + "/" + name;
@@ -169,6 +170,7 @@ export class CBackend implements backend.Backend {
             this.mainFunction = f;
             f.func.name = "f_" + name;        
             f.isExported = true;
+            this.module.isExecutable = true;
         } else if (isExported) {
             f.func.name = name;
             f.isExported = true;
@@ -188,7 +190,7 @@ export class CBackend implements backend.Backend {
         return name;
     }
 
-    public generateModule(emitIR: boolean, initPackages: Array<Package> | null): string {
+    public generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         let ircode = "";
 
         let i = new CInclude();
@@ -203,6 +205,18 @@ export class CBackend implements backend.Backend {
         i.isSystemPath = false;
         i.path = "fyr.h";
         this.module.includes.push(i);
+
+        // Include the header files of all packages that need to run their initializer or that contain possibly duplicated code.
+        if (initPackages) {
+            for(let p of initPackages) {
+                this.includePackageHeaderFile(p);
+            }
+        }
+        if (duplicateCodePackages) {
+            for(let p of duplicateCodePackages) {
+                this.includePackageHeaderFile(p);
+            }
+        }
 
         for(let v of this.globalVariables) {
             let cv = new CVar();
@@ -998,6 +1012,16 @@ export class CBackend implements backend.Backend {
         }
     }
 
+    private includePackageHeaderFile(p: Package) {
+        let headerFile = p.pkgPath + ".h";
+        if (!this.module.hasInclude(headerFile, true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = false;
+            inc.path = headerFile;
+            this.module.includes.push(inc);
+        }
+    }
+
     private emitCode(start: Node, end: Node | null, code: Array<CNode>): void {
         let n = start;
         for( ; n && n != end; ) {
@@ -1294,18 +1318,31 @@ export class CInclude {
 
 export class CModule {
     public getImplementationCode(pkg: Package): string {
+        let str: string = "";
+        if (this.isExecutable) {
+            str += "#define FYR_COMPILE_MAIN\n\n";
+        }
         let headerFile: string;
         if (pkg.pkgPath) {
             headerFile = pkg.pkgPath + ".h";
         } else {
             headerFile = path.join(pkg.objFilePath, pkg.objFileName + ".h");
         }
-        let str = "#include \"" + headerFile + "\"\n";
+        str += "#include \"" + headerFile + "\"\n";
         str += "\n";     
         for(let s of this.strings.values()) {
             str += s.toString() + "\n\n";
         }
-        this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) { } else if (c instanceof CFunction) str += c.toString() + "\n\n"; else str += c.toString() + ";\n\n"});
+        for(let c of this.elements) {
+            if (c instanceof CType) {                
+            } else if (c instanceof CFunction) {
+                if (!c.isPossibleDuplicate) {
+                    str += c.toString() + "\n\n";
+                }
+            } else {
+                str += c.toString() + ";\n\n"
+            }
+        }
         return str;
     }
 
@@ -1321,6 +1358,14 @@ export class CModule {
         str += this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + "\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
+
+        for(let c of this.elements) {
+            if (c instanceof CFunction && c.isPossibleDuplicate) {
+                str += "\n#ifdef FYR_COMPILE_MAIN\n"
+                str += c.toString() + "\n";
+                str += "#endif\n"
+            }
+        }
 
         if (mangledName) {
             str += "\n#endif\n";
@@ -1349,6 +1394,7 @@ export class CModule {
     public includes: Array<CInclude> = [];
     public strings: Map<string, CString> = new Map<string, CString>();
     public elements: Array<CStruct | CFunction | CVar | CComment | CType> = [];
+    public isExecutable: boolean;
 }
 
 export abstract class CNode {
@@ -1439,6 +1485,7 @@ export class CFunction extends CNode {
     public returnType: CType;
     public parameters: Array<CFunctionParameter> = [];
     public body: Array<CNode> = [];
+    public isPossibleDuplicate: boolean;
 }
 
 export class CFunctionParameter {
