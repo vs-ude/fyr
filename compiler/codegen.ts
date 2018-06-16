@@ -3321,10 +3321,9 @@ export class CodeGenerator {
     }
 
     private mangleDestructorName(t: Type): string {
-        let str = "dtr_" + t.toTypeCodeString();
         let hash = createHash("md5");
-        hash.update(str);
-        return hash.digest("hex");
+        hash.update(t.toTypeCodeString());
+        return "dtr_" + hash.digest("hex");
     }
 
     private generateSliceDestructor(t: SliceType): backend.Function {
