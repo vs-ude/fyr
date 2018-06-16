@@ -103,7 +103,10 @@ function compileModules() {
     try {
         pkg.loadSources();
     } catch(ex) {
-        if (ex instanceof parser.SyntaxError) {
+        if (ex instanceof typecheck.TypeError) {
+            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+            return;
+        } else if (ex instanceof parser.SyntaxError) {
             console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
         } else if (ex instanceof ImportError) {

@@ -1,6 +1,6 @@
-import . {
+import . from "<stdio.h>" {
     func puts(#const char) int
-} from "<stdio.h>"
+} 
 
 import "math"
 import "math/math32"

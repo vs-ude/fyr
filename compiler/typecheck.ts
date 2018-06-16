@@ -2665,8 +2665,9 @@ export class TypeChecker {
                 // Syntax of the kind: import (id1, id2, ...) "path/to/module"
                 for(let pnode of inode.lhs.parameters) {
                     if (p.scope.elements.has(pnode.value)) {
-                        var el = p.scope.elements.get(pnode.value);
+                        var el = p.scope.elements.get(pnode.value);                        
                         scope.registerElement(pnode.value, el, pnode.loc);
+                        scope.setGroup(el, new Group(GroupKind.Free));
                     } else if (p.scope.types.has(pnode.value)) {
                         // Do nothing by intention
                     } else {
@@ -2680,6 +2681,7 @@ export class TypeChecker {
                 for(var key of p.scope.elements.keys()) {
                     var el = p.scope.elements.get(key);
                     scope.registerElement(key, el, inode.loc);
+                    scope.setGroup(el, new Group(GroupKind.Free));
                 }
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                

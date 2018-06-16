@@ -47,7 +47,7 @@ typedef
     }
 
 import
-  = "import" [ \t]+ a:importAs? [ \t]* m:(string / importWasm) [ \t]* "\n" [ \t]* {
+  = "import" [ \t]+ a:importAs? [ \t]* m:(importWasm / string) [ \t]* "\n" [ \t]* {
       if (m.op == "importWasm") {
           if (!a || a.op == "identifierList") {
               expected("Either . or an identifier");
@@ -59,18 +59,18 @@ import
     }
 
 importAs
-  = "." {
+  = "." [ \t]+ "from" [ \t]+ {
         return new ast.Node({loc: fl(location()), op: "."});
     }
-  / i:identifier [ \t]+ {
+  / i:identifier [ \t]+ "from" [ \t]+ {
         return i;
     }
-  / "(" [ \t]* i:identifierList [ \t]* ")" [ \t]* {
+  / "{" [ \t]* i:identifierList [ \t]* "}" [ \t]* "from" [ \t]+ {
         return new ast.Node({loc: fl(location()), op: "identifierList", parameters: i});
     }
 
 importWasm
-  = "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" [ \t]* "from" [ \t]* i:string {
+  = i:string [ \t]* "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" {
         if (i == "") {
             expected("A non-empty string describing the imported namespace")
         }
