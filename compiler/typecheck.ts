@@ -18,16 +18,6 @@ export class ImportedPackage implements ScopeElement {
         this.type = new PackageType(name, pkg, loc);
     }
 
-/*    public addElement(name: string, element: ScopeElement, loc: Location) {
-        this.scope.registerElement(name, element, loc);
-        (this.type as PackageType).elements.set(name, element.type);
-    }
-
-    public addType(name: string, type: Type, loc: Location) {
-        this.scope.registerType(name, type, loc);
-        (this.type as PackageType).types.set(name, type);
-    }
-*/
     public name: string;
     public type: Type;
     public loc: Location;
@@ -1541,18 +1531,6 @@ export class PackageType extends Type {
         throw "Implementation error";
     }
 
-    /*
-    public resolveType(name: string, loc: Location): Type {
-        let t = this.types.get(name);
-        if (!t) {
-            throw new TypeError("Unknown identifier " + name + " in package " + this.name, loc);
-        }
-        return t;
-    }
-    */
-
-//    public elements: Map<string, Type> = new Map<string, Type>();
-//    public types: Map<string, Type> = new Map<string, Type>();
     public pkg: Package;
 }
 
@@ -1646,13 +1624,16 @@ export class TypeChecker {
         }
         if (tnode.op == "basicType") {
             if (tnode.nspace) {
-                let p = scope.resolveType(tnode.nspace);
-                if (!(p instanceof PackageType)) {
+                let p = scope.resolveElement(tnode.nspace);
+                if (!p) {
+                    throw new TypeError("Unknown package " + tnode.nspace, tnode.loc);
+                }
+                if (!(p.type instanceof PackageType)) {
                     throw new TypeError(tnode.nspace + " is not a package", tnode.loc);                
                 }
-                let t =  p.pkg.scope.resolveType(tnode.value);
+                let t =  p.type.pkg.scope.resolveType(tnode.value);
                 if (!t) {
-                    throw new TypeError("Unknown type " + tnode.value + " in package " + p.pkg.pkgPath, tnode.loc);
+                    throw new TypeError("Unknown type " + tnode.value + " in package " + p.type.pkg.pkgPath, tnode.loc);
                 }
                 return t;
             }
@@ -1764,9 +1745,24 @@ export class TypeChecker {
             }
             return new MapType(k, v);
         } else if (tnode.op == "genericType") {
-            let baset = scope.resolveType(tnode.lhs.value);
-            if (!baset) {
-                throw new TypeError("Unknown type " + tnode.lhs.value, tnode.loc);
+            let baset: Type;
+            if (tnode.nspace) {
+                let p = scope.resolveElement(tnode.nspace);
+                if (!p) {
+                    throw new TypeError("Unknown package " + tnode.nspace, tnode.loc);
+                }
+                if (!(p.type instanceof PackageType)) {
+                    throw new TypeError(tnode.nspace + " is not a package", tnode.loc);                
+                }
+                baset =  p.type.pkg.scope.resolveType(tnode.lhs.value);
+                if (!baset) {
+                    throw new TypeError("Unknown type " + tnode.lhs.value + " in package " + p.type.pkg.pkgPath, tnode.loc);
+                }
+            } else {
+                baset = scope.resolveType(tnode.lhs.value);
+                if (!baset) {
+                    throw new TypeError("Unknown type " + tnode.lhs.value, tnode.loc);
+                }
             }
             if (!(baset instanceof TemplateType)) {
                 throw new TypeError("Type " + baset.toString() + " is not a template type", tnode.loc);

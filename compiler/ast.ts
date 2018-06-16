@@ -32,6 +32,7 @@ export type NodeConfig = {
     readonly genericParameters?: Array<Node>;
     readonly groupName?: Node;
     readonly flags?: AstFlags;
+    readonly nspace?: string;
 }
 
 export type LocationPoint = {
@@ -95,6 +96,9 @@ export class Node {
             }
             if (config.flags !== undefined) {
                 this.flags = config.flags;
+            }
+            if (config.nspace !== undefined) {
+                this.nspace = config.nspace;
             }
         }
     }

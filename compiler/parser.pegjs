@@ -285,6 +285,7 @@ primitiveType
       if (g) {
           return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i, nspace: nspace});
       } 
+      i.nspace = nspace;
       i.op = "basicType";
       return i;
     }

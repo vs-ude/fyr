@@ -1273,7 +1273,11 @@ export class CBackend implements backend.Backend {
             if (typeof(v.constantValue) == "string" || typeof(v.constantValue) == "number") {
                 return;
             }    
-            name = "s_" + name;
+            if (name.substr(0, 1) == "%") {
+                name = "s_" + name.substr(1);
+            } else {
+                name = "s_" + name;
+            }
         } else {
             name = "v_" + name;
         }

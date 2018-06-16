@@ -37,3 +37,6 @@ func indexOf<V>(data const &[]V, value V) int {
     return -1
 }
 
+type Dummy struct {
+    value int
+}
