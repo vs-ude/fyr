@@ -100,7 +100,7 @@ export class CodeGenerator {
                     if (t instanceof PointerType) {
                         t = RestrictedType.strip(t.elementType);
                     }
-                    name = this.tc.qualifiedTypeName(RestrictedType.strip(t)) + "." + name;
+                    name = TypeChecker.mangledTypeName(RestrictedType.strip(t)) + "." + name;
                 }
                 let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
@@ -2318,11 +2318,7 @@ export class CodeGenerator {
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
                             throw "Implementation error";
                         }
-                        let name = enode.lhs.value + "<";
-                        for(let g of enode.lhs.type.templateParameterTypes) {
-                            name += g.toString() + ",";
-                        }
-                        name += ">";
+                        let name = e.type.pkg.pkgPath + "/" + enode.lhs.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
                         e = scope.resolveElement(name);
                     }
                     if (!(e instanceof Function)) {
@@ -2331,11 +2327,16 @@ export class CodeGenerator {
                     f = e;
                     t = f.type;
                 } else if (enode.lhs.op == "genericInstance") {
-                    let name = enode.lhs.lhs.value + "<";
-                    for(let g of enode.lhs.genericParameters) {
-                        name += g.type.toString() + ",";
+                    // Lookup the template function
+                    let tmplFunc = scope.resolveElement(enode.lhs.lhs.value);
+                    if (!(tmplFunc instanceof TemplateFunction)) {
+                        throw "Implementation error";
                     }
-                    name += ">";
+                    let types: Array<Type> = [];
+                    for(let g of enode.lhs.genericParameters) {
+                        types.push(g.type);
+                    }
+                    let name = tmplFunc.type.pkg.pkgPath + "/" + enode.lhs.lhs.value + TypeChecker.mangleTemplateParameters(types);
                     let e = scope.resolveElement(name);
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
@@ -2347,15 +2348,18 @@ export class CodeGenerator {
                     let pkg = enode.lhs.lhs.type.pkg;
                     let name = enode.lhs.name.value;
                     let e = pkg.scope.resolveElement(name);
-                    if (e instanceof TemplateFunction) {
+                    if (e instanceof TemplateFunction) {                        
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
                             throw "Implementation error";
                         }
+                        /*
                         name += "<";
                         for(let g of enode.lhs.type.templateParameterTypes) {
                             name += g.toString() + ",";
                         }
                         name += ">";
+                        */
+                        let name = e.type.pkg.pkgPath + "/" + enode.lhs.name.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
                         e = scope.resolveElement(name);
                     }
                     if (!(e instanceof Function)) {
@@ -2416,7 +2420,7 @@ export class CodeGenerator {
                         if (methodObjType instanceof PointerType) {
                             methodObjType = RestrictedType.strip(methodObjType.elementType);
                         }    
-                        let methodName = this.tc.qualifiedTypeName(methodObjType) + "." + enode.lhs.name.value;
+                        let methodName = TypeChecker.mangledTypeName(methodObjType) + "." + enode.lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
                             throw "Implementation error";

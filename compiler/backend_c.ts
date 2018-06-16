@@ -160,8 +160,10 @@ export class CBackend implements backend.Backend {
         }        
         f.func.isPossibleDuplicate = isPossibleDuplicate;
         let name = f.name;
-        if (this.pkg.pkgPath) {
-            name = this.pkg.pkgPath + "/" + name;
+        if (!isPossibleDuplicate) {
+            if (this.pkg.pkgPath) {
+                name = this.pkg.pkgPath + "/" + name;
+            }
         }
         name = this.mangleName(name);
         if (f == this.initFunction) {
@@ -1361,9 +1363,11 @@ export class CModule {
 
         for(let c of this.elements) {
             if (c instanceof CFunction && c.isPossibleDuplicate) {
-                str += "\n#ifdef FYR_COMPILE_MAIN\n"
+                str += "\n#ifdef FYR_COMPILE_MAIN\n";
+                str += "#ifndef " + c.name + "_H\n";
+                str += "#define " + c.name + "_H\n";
                 str += c.toString() + "\n";
-                str += "#endif\n"
+                str += "#endif\n#endif\n";
             }
         }
 
