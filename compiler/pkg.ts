@@ -136,6 +136,8 @@ export class Package {
             } catch(e) {
                 throw new ImportError(("Cannot read file " + file).red, null, this.pkgPath);
             }
+            // Remove windows line ending
+            code = code.replace(/\r/g, "");
             let f = parser.parse(code);
             this.pkgNode.statements.push(f);
         }

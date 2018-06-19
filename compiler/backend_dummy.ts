@@ -1,6 +1,7 @@
 import * as ssa from "./ssa"
 import {Package} from "./pkg"
 import * as backend from "./backend"
+import {InterfaceType, StructType} from "./typecheck"
 
 export class FunctionImport implements backend.Function {
     getIndex(): number {
@@ -88,6 +89,10 @@ export class DummyBackend {
     }
 
     addFunctionToTable(f: Function, index: number) {        
+    }
+
+    addInterfaceDescriptor(name: string, table: Array<backend.Function | backend.FunctionImport>): number {        
+        return 0;
     }
 
     public funcs: Array<Function | FunctionImport> = [];

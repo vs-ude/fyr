@@ -1609,7 +1609,7 @@ export class TypeChecker {
         this.globalGroup = new Group(GroupKind.Bound, "$global");
     }
 
-    public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" | "parameter_toplevel" = "default"): Type {
+    public createType(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" | "variable_toplevel" | "parameter_toplevel" = "default"): Type {
         let t = this.createTypeIntern(tnode, scope, mode);
         if (tnode.groupName) {
             t.groupName = tnode.groupName.value;
@@ -1617,10 +1617,13 @@ export class TypeChecker {
         return t;
     }
 
-    private createTypeIntern(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" | "parameter_toplevel" = "default"): Type {
+    private createTypeIntern(tnode: Node, scope: Scope, mode: "default" | "parameter" | "variable" | "variable_toplevel" | "parameter_toplevel" = "default"): Type {
         let originalMode = mode;
         if (mode == "parameter_toplevel") {
             mode = "parameter";
+        }
+        if (mode == "variable_toplevel") {
+            mode = "variable";
         }
         if (tnode.op == "basicType") {
             if (tnode.nspace) {
@@ -1675,6 +1678,9 @@ export class TypeChecker {
             return new PointerType(c, "local_reference");
         } else if (tnode.op == "unsafePointerType") {
             let t = this.createType(tnode.rhs, scope, mode);
+            if (this.isInterface(t)) {
+                throw new TypeError("Unsafe pointers to interfaces are not possible", tnode.loc);
+            }
             return new UnsafePointerType(t);
         } else if (tnode.op == "sliceType") {            
             let t = this.createType(tnode.rhs, scope, mode);
@@ -1780,6 +1786,9 @@ export class TypeChecker {
         } else if (tnode.op == "structType") {
             return this.createStructType(tnode, scope, null, mode);
         } else if (tnode.op == "interfaceType") {
+            if (originalMode == "parameter_toplevel" || originalMode == "variable_toplevel") {
+                throw new TypeError("Interface types are not allowed in this place. Use a pointer to an interface instead", tnode.loc);
+            }
             let iface: Type = this.createInterfaceType(tnode, scope, null, mode);
             return new PointerType(iface, "strong");
         }
@@ -2423,7 +2432,7 @@ export class TypeChecker {
                 throw new TypeError("Variable declaration of " + vnode.value + " without type information", vnode.loc);
             }
         } else {
-            v.type = this.createType(vnode.rhs, scope, "variable");
+            v.type = this.createType(vnode.rhs, scope, "variable_toplevel");
             this.checkVariableType(v.type, vnode.loc);
         }
         if (v.name != "_") {
@@ -4158,7 +4167,7 @@ export class TypeChecker {
                 let t = new TupleLiteralType(types);
                 enode.type = t;
                 if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope, "variable");
+                    let ct = this.createType(enode.lhs, scope, "variable_toplevel");
                     this.unifyLiterals(ct, enode, scope, enode.loc);
                 }
                 break;
@@ -4181,7 +4190,7 @@ export class TypeChecker {
                 let t = new ArrayLiteralType(types);
                 enode.type = t;
                 if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope, "variable");
+                    let ct = this.createType(enode.lhs, scope, "variable_toplevel");
                     if (this.isArray(ct) && enode.parameters && enode.parameters.length > 0 && enode.parameters[enode.parameters.length - 1].op == "unary...") {
                         let p = enode.parameters[enode.parameters.length - 1];
                         if (p.rhs.op != "int") {
@@ -4204,7 +4213,7 @@ export class TypeChecker {
                 let t = new ObjectLiteralType(types);
                 enode.type = t;
                 if (enode.lhs) {
-                    let ct = this.createType(enode.lhs, scope, "variable");
+                    let ct = this.createType(enode.lhs, scope, "variable_toplevel");
                     this.unifyLiterals(ct, enode, scope, enode.loc);
                 }
                 break;
@@ -4303,7 +4312,7 @@ export class TypeChecker {
             case "is":
             {
                 this.checkExpression(enode.lhs, scope);
-                let t = this.createType(enode.rhs, scope, "variable");
+                let t = this.createType(enode.rhs, scope, "variable_toplevel");
                 enode.rhs.type = t
                 if (this.isOrType(enode.lhs.type)) {
                     let ot = this.stripType(enode.lhs.type) as OrType;
@@ -4328,7 +4337,7 @@ export class TypeChecker {
             }
             case "typeCast":
             {
-                let t = this.createType(enode.lhs, scope, "variable");
+                let t = this.createType(enode.lhs, scope, "variable_toplevel");
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
                 // TODO: Casts remove restrictions
@@ -4879,12 +4888,12 @@ export class TypeChecker {
         } else if (to == TypeChecker.t_any) {
             // Everything can be asssigned to the empty interface
             return true;
-        } else if (to instanceof InterfaceType) {
+        } else if (to instanceof InterfaceType && mode == "pointer") {
             if (from instanceof InterfaceType) {
                 // Check two interfaces (which are not the same InterfaceType objects)
                 let fromMethods = from.getAllMethods();
                 let toMethods = to.getAllMethods();
-                if ((mode == "assign" && fromMethods.size >= toMethods.size) || fromMethods.size == toMethods.size) {
+                if (fromMethods.size >= toMethods.size) {
                     let ok = true;
                     for(let entry of toMethods.entries()) {
                         if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false)) {
@@ -4899,7 +4908,7 @@ export class TypeChecker {
                         return true;
                     }
                 }
-            } else if (from instanceof StructType && mode == "pointer") {
+            } else if (from instanceof StructType) {
                 let toMethods = to.getAllMethods();
                 let fromMethods = from.getAllMethodsAndFields();
                 let ok = true;

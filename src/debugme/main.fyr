@@ -47,3 +47,21 @@ func abs2() double {
 func length(arr [100]int) (l int, e int) {
     return len(arr), 0
 }
+
+type SomeStruct struct {
+    value int
+}
+
+func SomeStruct.mul() int {
+    this.value *= 2
+    return this.value
+}
+
+type SomeIface interface {
+    func mul() int
+}
+
+func dodo() {
+    let s *SomeStruct = {}
+    let i *SomeIface = s
+}

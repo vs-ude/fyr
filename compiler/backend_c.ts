@@ -4,6 +4,7 @@ import * as backend from "./backend";
 import * as ssa from "./ssa"
 import path = require("path");
 import {createHash} from "crypto";
+import * as tc from "./typecheck";
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -17,6 +18,7 @@ export class FunctionImport implements backend.FunctionImport {
     }
 
     public index: number;
+    // The C-name of the function
     public name: string;
     public pkg?: Package;
 }
@@ -35,10 +37,17 @@ export class Function implements backend.Function {
     }
 
     public index: number;
+    // The name of the function (not the C-encoding of the name).
     public name: string;
     public func: CFunction;
     public node: ssa.Node;
     public isExported: boolean;
+}
+
+class InterfaceDescriptor {
+    name: CConst;
+    // A list of C-encoded function names which make up the table.
+    table: Array<CConst>;
 }
 
 export class CBackend implements backend.Backend {
@@ -355,6 +364,25 @@ export class CBackend implements backend.Backend {
 
     public addFunctionToTable(f: Function, index: number) {
         throw "TODO";
+    }
+
+    public addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number {        
+        let namesTable: Array<CConst> = [];
+        for (let f of table) {
+            if (f instanceof Function) {
+                namesTable.push(new CConst(f.func.name));
+            } else {
+                namesTable.push(new CConst(f.name));
+            }
+        }
+        let hash = createHash("md5");
+        hash.update(name);
+        let d = new InterfaceDescriptor;
+        d.name = new CConst("t_" + hash.digest("hex"));
+        d.table = namesTable;
+        let index = this.module.ifaceDescriptors.length;
+        this.module.ifaceDescriptors.push(d);
+        return index;
     }
 
     public getImplementationCode(): string {
@@ -992,6 +1020,21 @@ export class CBackend implements backend.Backend {
             call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), this.emitExpr(n.args[2])];
             this.includeStringHeaderFile();
             return call;
+        } else if (n.kind == "table_iface") {
+            let idx = n.args[0];
+            if (typeof(idx) != "number") {
+                throw "Implementation error";
+            }
+            if (idx < 0 || idx >= this.module.ifaceDescriptors.length) {
+                throw "Implementation error";
+            }
+            let addr = new CUnary();
+            addr.operator = "&";
+            addr.expr = this.module.ifaceDescriptors[idx].name;
+            let cast = new CTypeCast();
+            cast.type = new CType("addr_t");
+            cast.expr = addr;
+            return cast;
         }
         throw "Implementation error " + n.kind;
     }
@@ -1375,6 +1418,21 @@ export class CModule {
             }
         }
 
+        for(let d of this.ifaceDescriptors) {
+            str += "#ifndef " + d.name.code + "_H\n";
+            str += "#define " + d.name.code + "_H\n";
+            str += "#ifdef FYR_COMPILE_MAIN\n";
+            str += "addr_t " + d.name.code + "[" + d.table.length + "] = {\n";
+            for(let f of d.table) {
+                str += "    (addr_t)" + f.code + ",\n";
+            }
+            str += "};\n";
+            str += "#else\n";
+            str += "extern addr_t " + d.name.code + "[" + d.table.length + "];\n";
+            str += "#endif\n";
+            str += "#endif\n";
+        }
+
         if (mangledName) {
             str += "\n#endif\n";
         }
@@ -1402,6 +1460,7 @@ export class CModule {
     public includes: Array<CInclude> = [];
     public strings: Map<string, CString> = new Map<string, CString>();
     public elements: Array<CStruct | CFunction | CVar | CComment | CType> = [];
+    public ifaceDescriptors: Array<InterfaceDescriptor> = [];
     public isExecutable: boolean;
 }
 

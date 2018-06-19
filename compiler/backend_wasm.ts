@@ -3,6 +3,7 @@ import {SystemCalls, Package} from "./pkg"
 import {SMTransformer, Optimizer, Stackifier, Type, PointerType, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "./ssa"
 import * as backend from "./backend"
 import {BinaryBuffer} from "./binarybuffer"
+import * as tc from "./typecheck"
 
 export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap" | "global_strings";
 
@@ -85,6 +86,10 @@ export class Wasm32Backend implements backend.Backend {
 
     public getCode(): string {
         return this.module.toWast("");
+    }
+
+    public addInterfaceDescriptor(name: string, table: Array<backend.Function | backend.FunctionImport>): number {        
+        throw "TODO";
     }
 
     public addFunctionToTable(f: backend.Function, index: number) {

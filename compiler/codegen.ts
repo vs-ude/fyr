@@ -19,16 +19,17 @@ export class CodeGenerator {
         this.localSlicePointer.addField("data_ptr", "addr");
         this.localSlicePointer.addField("data_length", "sint");
 
-        this.strongSlicePointer = new ssa.StructType();
-        this.strongSlicePointer.name = "strongSlice";
-        this.strongSlicePointer.addField("base", this.localSlicePointer);
-        this.strongSlicePointer.addField("array_ptr", "addr");
+        this.slicePointer = new ssa.StructType();
+        this.slicePointer.name = "strongSlice";
+        this.slicePointer.addField("base", this.localSlicePointer);
+        this.slicePointer.addField("array_ptr", "addr");
 
         this.ifaceHeader = new ssa.StructType();
         this.ifaceHeader.name = "iface";
-        this.ifaceHeader.addField("typecode", "i32");
-        this.ifaceHeader.addField("pointer", "ptr");
-        this.ifaceHeader.addField("value", "i64");
+        this.ifaceHeader.addField("pointer", "addr");
+        this.ifaceHeader.addField("typecode", "addr");
+
+        /*
         this.ifaceHeader32 = new ssa.StructType();
         this.ifaceHeader32.name = "iface";
         this.ifaceHeader32.addField("typecode", "i32");
@@ -47,7 +48,9 @@ export class CodeGenerator {
         this.ifaceHeaderSlice = new ssa.StructType();
         this.ifaceHeaderSlice.name = "iface";
         this.ifaceHeaderSlice.addField("typecode", "i32");
-        this.ifaceHeaderSlice.addField("value", this.strongSlicePointer);
+        this.ifaceHeaderSlice.addField("value", this.slicePointer);
+        */
+
         this.mapHead = new ssa.StructType();
         this.mapHead.name = "mapHead";
         this.mapHead.addField("nextHead", "ptr")
@@ -203,9 +206,17 @@ export class CodeGenerator {
             return "i32";
         }
         if (t instanceof RestrictedType && t.elementType instanceof tc.PointerType) {
+            // Const pointer to an interface?
+            if (this.tc.isInterface(t.elementType)) {
+                return this.ifaceHeader;
+            }
             return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
         }
         if (t instanceof tc.PointerType) {
+            // Pointer to an interface?
+            if (this.tc.isInterface(t)) {
+                return this.ifaceHeader;
+            }
             return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
         }
         if (t instanceof RestrictedType && t.elementType instanceof tc.UnsafePointerType) {
@@ -224,7 +235,7 @@ export class CodeGenerator {
             if (t.mode == "local_reference") {
                 return this.localSlicePointer;
             }
-            return this.strongSlicePointer;
+            return this.slicePointer;
         }
         if (t instanceof MapType) {
             return "ptr";
@@ -858,13 +869,13 @@ export class CodeGenerator {
                         }
                         if (sliceHeader instanceof ssa.Variable) {
                             if (t.mode != "local_reference") {
-                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.strongSlicePointer.fieldIndexByName("base")]);
+                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
                                 ptr = b.assign(b.tmp(), "member", "addr", [base, this.localSlicePointer.fieldIndexByName("data_ptr")]);    
                             } else {
                                 ptr = b.assign(b.tmp(), "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             }
                             if (t.mode != "local_reference") {
-                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.strongSlicePointer.fieldIndexByName("base")]);
+                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
                                 len = b.assign(b.tmp(), "member", "sint", [base, this.localSlicePointer.fieldIndexByName("data_length")]);
                             } else {
                                 len = b.assign(b.tmp(), "member", "sint", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_length")]);
@@ -1195,9 +1206,9 @@ export class CodeGenerator {
                         dest_data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         dest_count = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                     } else {
-                        let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         dest_data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         dest_count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
                 } else {
@@ -1217,9 +1228,9 @@ export class CodeGenerator {
                         src_data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         src_count = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                     } else {
-                        let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         src_data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         src_count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
                 } else {
@@ -1251,13 +1262,13 @@ export class CodeGenerator {
                     if (objType.mode == "local_reference") {
                         throw "Implementation error";
                     }
-                    dest_array = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
-                    let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                    dest_array = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
+                    let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     dest_data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                    tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                    tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     dest_count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                 } else {
-                    dest_array = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
+                    dest_array = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr")]);
                     dest_data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                     dest_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                 }
@@ -1292,9 +1303,9 @@ export class CodeGenerator {
                                 src_data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                                 src_count = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                             } else {
-                                let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                                let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                                 src_data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                                tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                                tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                                 src_count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                             }
                         } else {
@@ -1324,10 +1335,10 @@ export class CodeGenerator {
                     if (objType.mode == "local_reference") {
                         throw "Implementation error";
                     }
-                    let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                    let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     b.assign(b.mem, "set_member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length"), dest_count]);
                 } else {
-                    b.assign(b.mem, "store", "sint", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("data_length"), dest_count]);
+                    b.assign(b.mem, "store", "sint", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("data_length"), dest_count]);
                 }
                 break;
             }
@@ -1388,9 +1399,9 @@ export class CodeGenerator {
                         data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         len = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                     } else {
-                        let tmp1 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let tmp1 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         data_ptr = b.assign(b.tmp(), "member", "addr", [tmp1, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        let tmp2 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let tmp2 = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         len = b.assign(b.tmp(), "member", "sint", [tmp2, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
                     let t = this.getSSAType(ltype);
@@ -1704,53 +1715,28 @@ export class CodeGenerator {
         return false;
     }
 
-    private createInterfaceTable(scope: Scope, s: StructType): number {
-        let methods = new Map<string, number>();
-        let t = new PointerType(s, "strong");
-        let offset = this.interfaceTableLength;
-        let minOffset = 0xffffff;
-        let maxOffset = -1;
-        for(let iface of this.tc.ifaces) {
-            if (this.tc.checkIsAssignableType(iface, t, null, "assign", false)) {
-                for(let m of iface.getAllMethods().values()) {
-                    if (methods.has(m.name)) {
-                        continue;
-                    }
-                    let index: number = -1;
-                    if (this.interfaceTableIndex.has(m.name)) {
-                        index = this.interfaceTableIndex.get(m.name);
-                    } else {
-                        index = this.interfaceTableNames.length;
-                        this.interfaceTableNames.push(m.name);
-                        this.interfaceTableIndex.set(m.name, index);
-                    }
-                    methods.set(m.name, index);
-                    minOffset = Math.min(minOffset, index);
-                    maxOffset = Math.max(maxOffset, index);
-                }
-            }
+    private createInterfaceTable(ifacePointer: PointerType, s: StructType): Array<backend.Function | backend.FunctionImport> {
+        let iface = RestrictedType.strip(ifacePointer.elementType);
+        if (!(iface instanceof InterfaceType)) {
+            throw "Implementation error";
         }
-        if (methods.size != 0) {
-            let tableStart = offset - minOffset;
-            for(let m of methods.keys()) {
-                let index = methods.get(m);
-                let method = s.method(m);
-                let methodObjType = RestrictedType.strip(method.objectType);
-                let methodName = methodObjType.name + "." + m;
-                let f = scope.resolveElement(methodName);
-                if (!(f instanceof Function)) {
-                    throw "Implementation error";
-                }
-                let wf = this.funcs.get(f);
-                if (wf.isImported()) {
-                    throw "Implementation error";
-                }
-                this.backend.addFunctionToTable(wf, tableStart + index);
+        let table: Array<backend.Function | backend.FunctionImport> = [];
+        table.push(this.generatePointerDestructor(ifacePointer));
+        for(let m of iface.getAllMethods().keys()) {
+            let method = s.method(m);
+            let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as tc.PointerType).elementType);
+            if (!(methodObjType instanceof tc.StructType)) {
+                throw "Implementation error";
             }
-            this.interfaceTableLength = Math.max(this.interfaceTableLength, maxOffset - minOffset + 1);
-            return tableStart;
+            let methodName = methodObjType.pkg.pkgPath + "/" + methodObjType.name + "." + m;
+            let f = s.pkg.scope.resolveElement(methodName);
+            if (!(f instanceof Function)) {
+                throw "Implementation error";
+            }
+            let wf = this.funcs.get(f);
+            table.push(wf);
         }
-        return 0;
+        return table;
     }                
 
     public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
@@ -1758,7 +1744,35 @@ export class CodeGenerator {
         // Convert a normal slice to a local-reference slice
         if (this.tc.isSlice(enode.type) && !TypeChecker.isLocalReference(enode.type) && this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
             v = b.assign(b.tmp(), "member", this.localSlicePointer, [v, 0]);
+        } else if (this.tc.isInterface(targetType) && !this.tc.isInterface(enode.type)) {
+            // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
+            let typecode = targetType.toTypeCodeString();
+            let descriptor: number;
+            if (this.ifaceDescriptors.has(typecode)) {
+                descriptor = this.ifaceDescriptors.get(typecode);
+            } else {
+                if (!this.tc.isSafePointer(enode.type)) {
+                    throw "Implementation error";
+                }
+                let structType = RestrictedType.strip((RestrictedType.strip(enode.type) as PointerType).elementType);
+                let ifaceType = RestrictedType.strip((RestrictedType.strip(targetType) as PointerType).elementType);
+                let mode = (RestrictedType.strip(targetType) as PointerType).mode;
+                if (!(structType instanceof StructType)) {
+                    throw "Implementation error";
+                }
+                if (!(ifaceType instanceof InterfaceType)) {
+                    throw "Implementation error";
+                }
+                        let table = this.createInterfaceTable((RestrictedType.strip(targetType) as PointerType), structType);
+                let name = mode.toString() + "::" + ifaceType.toTypeCodeString() + "::" + structType.toTypeCodeString();
+                descriptor = this.backend.addInterfaceDescriptor(name, table);
+                this.ifaceDescriptors.set(typecode, descriptor);
+            }
+            let d = b.assign(b.tmp(), "table_iface", "addr", [descriptor]);
+            v = b.assign(b.tmp(), "struct", this.ifaceHeader, [v, d]);
         }
+        // TODO: Encode data for an any
+        /*
         if ((this.tc.isInterface(targetType) || this.tc.isComplexOrType(targetType)) && !this.tc.isInterface(enode.type) && !this.tc.isComplexOrType(enode.type)) {
             // TODO: Do not use instanceof here
             if (this.tc.isUnsafePointer(enode.type)) {
@@ -1795,9 +1809,11 @@ export class CodeGenerator {
         } else if (!this.tc.isInterface(targetType) && !this.tc.isComplexOrType(targetType) && (this.tc.isInterface(enode.type) || this.tc.isComplexOrType(enode.type))) {
             return this.processUnboxInterface(targetType, v, b);
         }
+        */
         return v;
     }
 
+    /*
     private processUnboxInterface(targetType: Type, v: number | ssa.Variable, b: ssa.Builder): ssa.Variable | number {        
         let addr = b.assign(b.tmp("addr"), "addr_of", "addr", [v]);
         if (this.tc.isUnsafePointer(targetType)) {
@@ -1805,7 +1821,7 @@ export class CodeGenerator {
         } else if (this.tc.isSafePointer(targetType) || this.tc.isString(targetType)) {
             return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
         } else if (this.tc.isSlice(targetType)) {
-            return b.assign(b.tmp(), "load", this.strongSlicePointer, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
+            return b.assign(b.tmp(), "load", this.slicePointer, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
         } else if (this.tc.isArray(targetType)) {
             // TODO: Copy to allocated area
             throw "TODO";
@@ -1825,6 +1841,7 @@ export class CodeGenerator {
             throw "Implementation error";
         }                
     }
+    */
 
     private processExpressionIntern(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
         switch(enode.op) {
@@ -1975,7 +1992,7 @@ export class CodeGenerator {
                         let v = this.processLiteralArgument(f, scope, p, t.getElementType(), b, vars);
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
                     }
-                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [ptr, count, ptr]);
+                    return b.assign(b.tmp(), "struct", this.slicePointer, [ptr, count, ptr]);
                 } else if (t instanceof ArrayType) {
                     let st = this.getSSAType(t); // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
@@ -2629,7 +2646,7 @@ export class CodeGenerator {
                         data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                         len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                         if (!TypeChecker.isLocalReference(enode.type)) {
-                            array_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
+                            array_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr")]);
                         }
                     } else {
                         if (t.mode == "local_reference") {
@@ -2637,11 +2654,11 @@ export class CodeGenerator {
                             len = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                         } else {
                             if (!TypeChecker.isLocalReference(enode.type)) {
-                                array_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
+                                array_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
                             }
-                            let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                             data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                            tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                            tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                             len = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                         }
                     }
@@ -2694,7 +2711,7 @@ export class CodeGenerator {
 //                    if (TypeChecker.isReference(enode.type) && !this.tc.isTakeExpression(enode.lhs)) {
 //                        b.assign(null, "incref_arr", null, [array_ptr]);
 //                    }
-                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [data_ptr, l, array_ptr]);
+                    return b.assign(b.tmp(), "struct", this.slicePointer, [data_ptr, l, array_ptr]);
                 } else if (t == TypeChecker.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, TypeChecker.t_string);
                     let len = b.assign(b.tmp(), "len_str", "sint", [ptr]);
@@ -2969,9 +2986,9 @@ export class CodeGenerator {
                         ptr = b.assign(b.tmp(), "member", "addr", [expr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         l = b.assign(b.tmp(), "member", "sint", [expr, this.localSlicePointer.fieldOffset("data_length")]);
                     } else {
-                        let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
                         ptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
                         l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldOffset("data_length")]);
                     }
                     if (!this.disableNullCheck) {
@@ -3012,12 +3029,13 @@ export class CodeGenerator {
                     if (this.tc.isTakeExpression(enode.rhs)) {
                         this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
                     }
-                    return b.assign(b.tmp(), "struct", this.strongSlicePointer, [newptr, size, newptr]);
+                    return b.assign(b.tmp(), "struct", this.slicePointer, [newptr, size, newptr]);
                 } else if (t2 == TypeChecker.t_null) {
                     // Convert null to a pointer type
                     return expr;
                 } else if (this.tc.isComplexOrType(t2)) {
-                    return this.processUnboxInterface(t, expr, b);
+                    throw "TODO: Unpack complex or type"
+//                    return this.processUnboxInterface(t, expr, b);
                 } else {
                     throw "TODO: conversion not implemented";
                 }
@@ -3064,7 +3082,7 @@ export class CodeGenerator {
                         if (objType.mode == "local_reference") {
                             return b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                         }
-                        let base = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let base = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         return b.assign(b.tmp(), "member", "sint", [base, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
                     return b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
@@ -3094,9 +3112,9 @@ export class CodeGenerator {
                     }
                     let arrayPointer: ssa.Variable;
                     if (head_addr instanceof ssa.Variable) {
-                        arrayPointer = b.assign(b.tmp(), "member", "addr", [head_addr, this.strongSlicePointer.fieldIndexByName("array_ptr")]);
+                        arrayPointer = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
                     } else {
-                        arrayPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.strongSlicePointer.fieldOffset("array_ptr")]);
+                        arrayPointer = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr")]);
                     }
                     return b.assign(b.tmp(), "len_arr", "sint", [arrayPointer]);
                 }
@@ -3124,7 +3142,7 @@ export class CodeGenerator {
                         data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         count = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                     } else {
-                        let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.strongSlicePointer.fieldIndexByName("base")]);
+                        let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
@@ -3134,7 +3152,7 @@ export class CodeGenerator {
                 }
                 let mem = b.assign(b.tmp(), "alloc_arr", "addr", [count, size]);
                 b.assign(null, "memcpy", null, [mem, data_ptr, count, size]);
-                return b.assign(b.tmp(), "struct", this.strongSlicePointer, [mem, count, mem]);
+                return b.assign(b.tmp(), "struct", this.slicePointer, [mem, count, mem]);
             }
             case "sizeof":
             {
@@ -3457,7 +3475,6 @@ export class CodeGenerator {
             return bf;
         }
 
-        let elementType = RestrictedType.strip(t.elementType);
         let dtrName = this.mangleDestructorName(t);
         let dtrType = new ssa.FunctionType(["addr"], null);
         let b = new ssa.Builder();
@@ -3480,15 +3497,23 @@ export class CodeGenerator {
      * pointer is the address of a value and t is the type of the value being pointed to.
      */
     private callDestructor(typ: Type, pointer: ssa.Variable | number, offset: number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref") {
+        let t = RestrictedType.strip(typ);
         if (!avoidNullCheck) {
-            let cond = b.assign(b.tmp(), "ne", "addr", [pointer, 0]);
+            let cond: ssa.Variable;
+            if (t instanceof InterfaceType) {
+                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+                cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
+            } else {
+                cond = b.assign(b.tmp(), "ne", "i8", [pointer, 0]);
+            }
             b.ifBlock(cond);
         }
         let dtr: backend.Function;
         let obj = pointer;
         if (!this.tc.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
-            let t = RestrictedType.strip(typ);
-            if (t instanceof PointerType) {
+            if (t instanceof InterfaceType) {
+                // TODO
+            } else if (t instanceof PointerType) {
                 if (free == "decref") {
                     if (offset) {
                         obj = b.assign(b.tmp(), "add", "addr", [pointer, offset]);
@@ -3548,12 +3573,16 @@ export class CodeGenerator {
         if (free == "free") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
                 b.assign(null, "free_arr", null, [obj]);
+            } else if (t instanceof InterfaceType) {
+                // TODO
             } else {
                 b.assign(null, "free", null, [obj]);
             }
         } else if (free == "decref") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
                 b.assign(null, "decref_arr", null, [obj, dtr ? dtr.getIndex() : -1]);
+            } else if (t instanceof InterfaceType) {
+                // TODO
             } else {
                 b.assign(null, "decref", null, [obj, dtr ? dtr.getIndex() : -1]);
             }
@@ -3829,14 +3858,13 @@ export class CodeGenerator {
     private imports: Map<string, backend.FunctionImport>;
     private funcs: Map<Function, backend.Function | backend.FunctionImport> = new Map<Function, backend.Function | backend.FunctionImport>();
     private globalVars = new Map<ScopeElement, ssa.Variable>();
-    private strongSlicePointer: ssa.StructType;
+    private slicePointer: ssa.StructType;
     private localSlicePointer: ssa.StructType;
-    // private sliceHeader: ssa.StructType;
     private ifaceHeader: ssa.StructType;
-    private ifaceHeader32: ssa.StructType;
+    /*private ifaceHeader32: ssa.StructType;
     private ifaceHeaderFloat: ssa.StructType;
     private ifaceHeaderDouble: ssa.StructType;
-    private ifaceHeaderSlice: ssa.StructType;
+    private ifaceHeaderSlice: ssa.StructType; */
     private mapHead: ssa.StructType;
     private disableNullCheck: boolean;
     private createMapFunctionType: ssa.FunctionType;
@@ -3854,5 +3882,6 @@ export class CodeGenerator {
     private typeCodeMap: Map<string,number> = new Map<string, number>();
     private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
     private structs: Map<StructType, ssa.StructType> = new Map<StructType, ssa.StructType>();
+    private ifaceDescriptors: Map<string, number> = new Map<string, number>();
 }
 

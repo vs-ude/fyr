@@ -1,5 +1,6 @@
 import * as ssa from "./ssa"
 import {Package} from "./pkg"
+import {InterfaceType, StructType} from "./typecheck"
 
 export interface FunctionImport {
     getIndex(): number;
@@ -19,6 +20,7 @@ export interface Backend {
     defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean);
     generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string;
     addFunctionToTable(f: Function, index: number);
+    addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number;
     /**
      * Returns the init function unless it is empty or missing.
      */
