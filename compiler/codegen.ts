@@ -463,12 +463,7 @@ export class CodeGenerator {
                             } else {
                                 rhs = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
                             }
-                            let data: ssa.Variable | number;
-                            if (rhs instanceof ssa.Pointer) {
-                                data = b.assign(b.tmp(), "load", t, [rhs.variable, rhs.offset]);
-                            } else {
-                                data = rhs;
-                            }
+                            let data = this.autoConvertData(rhs, snode.lhs.type, snode.rhs.type, b);
                             if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                                 // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                 data = b.assign(b.tmp(), "incref", "addr", [data]);
@@ -1721,7 +1716,7 @@ export class CodeGenerator {
             throw "Implementation error";
         }
         let table: Array<backend.Function | backend.FunctionImport> = [];
-        table.push(this.generatePointerDestructor(ifacePointer));
+        table.push(this.generatePointerDestructor(new PointerType(s, ifacePointer.mode)));
         for(let m of iface.getAllMethods().keys()) {
             let method = s.method(m);
             let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as tc.PointerType).elementType);
@@ -1739,22 +1734,28 @@ export class CodeGenerator {
         return table;
     }                
 
-    public processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
-        let v = this.processExpressionIntern(f, scope, enode, b, vars);
+    public autoConvertData(data: ssa.Variable | number | ssa.Pointer, targetType: Type, fromType: Type, b: ssa.Builder): ssa.Variable | number {
+        let v: ssa.Variable | number;
+        if (data instanceof ssa.Pointer) {
+            v = b.assign(b.tmp(), "load", this.getSSAType(fromType), [data.variable, data.offset]);
+        } else {
+            v = data;
+        }
+
         // Convert a normal slice to a local-reference slice
-        if (this.tc.isSlice(enode.type) && !TypeChecker.isLocalReference(enode.type) && this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+        if (this.tc.isSlice(fromType) && !TypeChecker.isLocalReference(fromType) && this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
             v = b.assign(b.tmp(), "member", this.localSlicePointer, [v, 0]);
-        } else if (this.tc.isInterface(targetType) && !this.tc.isInterface(enode.type)) {
+        } else if (this.tc.isInterface(targetType) && !this.tc.isInterface(fromType)) {
             // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
             let typecode = targetType.toTypeCodeString();
             let descriptor: number;
             if (this.ifaceDescriptors.has(typecode)) {
                 descriptor = this.ifaceDescriptors.get(typecode);
             } else {
-                if (!this.tc.isSafePointer(enode.type)) {
+                if (!this.tc.isSafePointer(fromType)) {
                     throw "Implementation error";
                 }
-                let structType = RestrictedType.strip((RestrictedType.strip(enode.type) as PointerType).elementType);
+                let structType = RestrictedType.strip((RestrictedType.strip(fromType) as PointerType).elementType);
                 let ifaceType = RestrictedType.strip((RestrictedType.strip(targetType) as PointerType).elementType);
                 let mode = (RestrictedType.strip(targetType) as PointerType).mode;
                 if (!(structType instanceof StructType)) {
@@ -1843,7 +1844,7 @@ export class CodeGenerator {
     }
     */
 
-    private processExpressionIntern(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
+    private processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         switch(enode.op) {
             case "null":
                 return 0;
