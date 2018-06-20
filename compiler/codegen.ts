@@ -27,7 +27,7 @@ export class CodeGenerator {
         this.ifaceHeader = new ssa.StructType();
         this.ifaceHeader.name = "iface";
         this.ifaceHeader.addField("pointer", "addr");
-        this.ifaceHeader.addField("typecode", "addr");
+        this.ifaceHeader.addField("table", "addr");
 
         /*
         this.ifaceHeader32 = new ssa.StructType();
@@ -3482,7 +3482,12 @@ export class CodeGenerator {
         let dtr: backend.Function;
         if (!this.tc.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
             if (t instanceof InterfaceType) {
-                // TODO
+                if (free != "decref") {
+                    let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+                    let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
+                    let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+                    b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
+                }
             } else if (t instanceof PointerType) {
                 if (free == "decref") {
                     dtr = this.generatePointerDestructor(t);
@@ -3537,7 +3542,9 @@ export class CodeGenerator {
                 b.assign(null, "decref_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
             } else if (t instanceof InterfaceType) {
                 let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                // TODO
+                let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
+                let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+                b.assign(null, "decref", null, [pointer, dtrPtr]);
             } else {
                 b.assign(null, "decref", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }

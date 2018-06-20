@@ -668,7 +668,37 @@ export class CBackend implements backend.Backend {
             if (!(n.type instanceof FunctionType)) {
                 throw "Implementation error"
             }
-            throw "TODO";
+            let c = new CFunctionCall();
+            let f = this.funcs[n.args[0] as number];
+            let cast = new CTypeCast();
+            let rt: CType;
+            if (n.type.result) {
+                rt = this.mapType(n.type.result);
+            }
+            let params: Array<CType> = [];
+            for(let p of n.type.params) {
+                params.push(this.mapType(p));
+            }
+            let t = new CFunctionType(rt, params);
+            cast.type = t;
+            cast.expr = this.emitExpr(n.args[0]);
+            c.funcExpr = cast;
+            for(let i = 1; i < n.args.length; i++) {
+                let a = n.args[i];
+                let e = this.emitExpr(a);
+                if (f instanceof FunctionImport) {
+                    let ctype = this.mapType(n.type.params[i-1], true);
+                    let fyrtype = this.mapType(n.type.params[i-1]);
+                    if (ctype != fyrtype) {
+                        let tcast = new CTypeCast();
+                        tcast.type = ctype;
+                        tcast.expr = e;
+                        e = tcast;
+                    }
+                }
+                c.args.push(e);
+            }
+            return c;
         } else if (n.kind == "copy") {
             if (n.type instanceof FunctionType) {
                 throw "Implementation error"
@@ -932,17 +962,19 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "decref") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_decref");
-            if (typeof(n.args[1]) != "number") {
-                throw "Implementation error";
-            }
             if (n.args[1] === -1) {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
-            } else {
+            } else if (typeof(n.args[1]) == "number") {
                 let f = this.funcs[n.args[1] as number];
                 if (f instanceof FunctionImport) {
                     throw "Implementation error";
                 }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
+            } else {
+                let cast = new CTypeCast();
+                cast.type = new CType("fyr_dtr_t");
+                cast.expr = this.emitExpr(n.args[1]);
+                m.args = [this.emitExpr(n.args[0]), cast];    
             }
             return m;
         } else if (n.kind == "incref") {
@@ -1575,6 +1607,23 @@ export class CType {
     public code: string;
 }
     
+export class CFunctionType extends CType {
+    constructor (returnType: CType, parameters: Array<CType>) {
+        let str = "";
+        if (returnType) {
+            str += returnType.code;
+        } else {
+            str += "void";
+        }
+        str += "(*)(";
+        if (parameters) {
+            str += parameters.map(function(p :CType) { return p.code; }).join(",");
+        }
+        str += ")"
+        super(str);
+    }
+}
+
 export class CReturn extends CNode {
     public toString(indent: string = ""): string {
         if (this.expr) {
