@@ -3480,7 +3480,6 @@ export class CodeGenerator {
             b.ifBlock(cond);
         }
         let dtr: backend.Function;
-        let obj = pointer;
         if (!this.tc.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
             if (t instanceof InterfaceType) {
                 // TODO
@@ -3497,26 +3496,26 @@ export class CodeGenerator {
             } else if (t instanceof StructType) {
                 dtr = this.generateStructDestructor(t);
                 if (free != "decref") {
-                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t instanceof ArrayType) {
                 dtr = this.generateArrayDestructor(t);
                 if (free != "decref") {
                     let size: number | ssa.Variable = t.size;
                     if (t.size < 0) {
-                        size = b.assign(b.tmp(), "load", "sint", [obj, -ssa.sizeOf("sint")]);
+                        size = b.assign(b.tmp(), "load", "sint", [pointer, -ssa.sizeOf("sint")]);
                     }
-                    b.call(null, new ssa.FunctionType(["addr", "sint"], null), [dtr.getIndex(), obj, size]);
+                    b.call(null, new ssa.FunctionType(["addr", "sint"], null), [dtr.getIndex(), pointer, size]);
                 }
             } else if (t instanceof TupleType) {
                 dtr = this.generateTupleDestructor(t);
                 if (free != "decref") {
-                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t instanceof SliceType) {
                 dtr = this.generateSliceDestructor(t);
                 if (free != "decref") {
-                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), obj]);
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t == TypeChecker.t_string) {
                 // Do nothing by intention, because strings are not explicitly destructed. They are always reference counted.
@@ -3526,19 +3525,21 @@ export class CodeGenerator {
         }
         if (free == "free") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
-                b.assign(null, "free_arr", null, [obj]);
+                b.assign(null, "free_arr", null, [pointer]);
             } else if (t instanceof InterfaceType) {
-                // TODO
+                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+                b.assign(null, "free", null, [realPointer]);
             } else {
-                b.assign(null, "free", null, [obj]);
+                b.assign(null, "free", null, [pointer]);
             }
         } else if (free == "decref") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
-                b.assign(null, "decref_arr", null, [obj, dtr ? dtr.getIndex() : -1]);
+                b.assign(null, "decref_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
             } else if (t instanceof InterfaceType) {
+                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
                 // TODO
             } else {
-                b.assign(null, "decref", null, [obj, dtr ? dtr.getIndex() : -1]);
+                b.assign(null, "decref", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         }
         if (!avoidNullCheck) {
