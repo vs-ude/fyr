@@ -371,8 +371,10 @@ export class CBackend implements backend.Backend {
         for (let f of table) {
             if (f instanceof Function) {
                 namesTable.push(new CConst(f.func.name));
-            } else {
+            } else if (f instanceof FunctionImport) {
                 namesTable.push(new CConst(f.name));
+            } else {
+                namesTable.push(new CConst("0"));
             }
         }
         let hash = createHash("md5");

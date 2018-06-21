@@ -1715,7 +1715,11 @@ export class CodeGenerator {
             throw "Implementation error";
         }
         let table: Array<backend.Function | backend.FunctionImport> = [];
-        table.push(this.generatePointerDestructor(new PointerType(s, ifacePointer.mode)));
+        if (this.tc.isPureValue(s)) {
+            table.push(null);
+        } else {
+            table.push(this.generateStructDestructor(s));
+        }
         for(let m of iface.getAllMethods().keys()) {
             let method = s.method(m);
             let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as tc.PointerType).elementType);
@@ -1763,7 +1767,7 @@ export class CodeGenerator {
                 if (!(ifaceType instanceof InterfaceType)) {
                     throw "Implementation error";
                 }
-                        let table = this.createInterfaceTable((RestrictedType.strip(targetType) as PointerType), structType);
+                let table = this.createInterfaceTable((RestrictedType.strip(targetType) as PointerType), structType);
                 let name = mode.toString() + "::" + ifaceType.toTypeCodeString() + "::" + structType.toTypeCodeString();
                 descriptor = this.backend.addInterfaceDescriptor(name, table);
                 this.ifaceDescriptors.set(typecode, descriptor);
@@ -2369,13 +2373,6 @@ export class CodeGenerator {
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
                             throw "Implementation error";
                         }
-                        /*
-                        name += "<";
-                        for(let g of enode.lhs.type.templateParameterTypes) {
-                            name += g.toString() + ",";
-                        }
-                        name += ">";
-                        */
                         let name = e.type.pkg.pkgPath + "/" + enode.lhs.name.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
                         e = scope.resolveElement(name);
                     }
@@ -2390,13 +2387,15 @@ export class CodeGenerator {
                     let objType: Type;
                     if (ltype instanceof PointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
-                        objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
-                        if (!this.disableNullCheck && !this.isThis(objPtr)) {
-                            let check = b.assign(b.tmp("i32"), "eqz", "addr", [objPtr]);
-                            b.ifBlock(check);
-                            b.assign(null, "trap", null, []);
-                            b.end();
-                        }        
+                        if (!(objType instanceof InterfaceType)) {
+                            objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
+                            if (!this.disableNullCheck && !this.isThis(objPtr)) {
+                                let check = b.assign(b.tmp("i32"), "eqz", "addr", [objPtr]);
+                                b.ifBlock(check);
+                                b.assign(null, "trap", null, []);
+                                b.end();
+                            }        
+                        }
                     } else if (ltype instanceof UnsafePointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
                         objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
@@ -2411,22 +2410,6 @@ export class CodeGenerator {
                             let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
                             objPtr = b.assign(b.tmp(), "addr_of", "addr", [value]);
                         }
-                    } else if (ltype instanceof InterfaceType) {
-                        objType = ltype;
-                        let ifacePtr: ssa.Pointer;
-                        if (this.isLeftHandSide(enode.lhs.lhs)) {
-                            let p = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
-                            if (p instanceof ssa.Variable) {
-                                ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [p]), 0);
-                            } else {
-                                ifacePtr = p;
-                            }
-                        } else {
-                            let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
-                            ifacePtr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [value]), 0);
-                        }                        
-                        objPtr = b.assign(b.tmp(), "load", "addr", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("pointer")]);
-                        findex = b.assign(b.tmp(), "load", "s32", [ifacePtr.variable, ifacePtr.offset + this.ifaceHeader.fieldOffset("value")]);
                     } else {
                         throw "Implementation error"
                     }
@@ -2445,13 +2428,30 @@ export class CodeGenerator {
                         f = e;
                         t = f.type;
                     } else if (objType instanceof InterfaceType) {
-                        let name = enode.lhs.name.value;
-                        let method = objType.method(name);
-                        t = method;
-                        let findex2 = this.interfaceTableIndex.get(name);
-                        if (findex2 != 0) {
-                            findex = b.assign(b.tmp(), "add", "s32", [findex, findex2]);
+                        let iface: ssa.Pointer | ssa.Variable;
+                        if (this.isLeftHandSide(enode.lhs.lhs)) {
+                            iface = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        } else {
+                            iface = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype) as ssa.Variable;
                         }
+                        let table: ssa.Variable;
+                        if (iface instanceof ssa.Pointer) {
+                            objPtr = b.assign(b.tmp(), "load", "addr", [iface.variable, iface.offset + this.ifaceHeader.fieldOffset("pointer")]);
+                            table = b.assign(b.tmp(), "load", "addr", [iface.variable, iface.offset + this.ifaceHeader.fieldOffset("table")]);
+                        } else {
+                            objPtr = b.assign(b.tmp(), "member", "addr", [iface, this.ifaceHeader.fieldIndexByName("pointer")]);
+                            table = b.assign(b.tmp(), "member", "addr", [iface, this.ifaceHeader.fieldIndexByName("table")]);
+                        }
+                        if (!this.disableNullCheck) {
+                            let cond = b.assign(b.tmp(), "ne", "i8", [objPtr, 0]);
+                            b.ifBlock(cond);
+                            b.assign(null, "trap", null, []);
+                            b.end();
+                        }
+                        let name = enode.lhs.name.value;
+                        let idx = objType.methodIndex(name);
+                        findex = b.assign(b.tmp(), "load", "addr", [table, (idx + 1) * ssa.sizeOf("addr")]);
+                        t = objType.method(name);
                     } else {
                         throw "Implementation error";
                     }
@@ -3464,6 +3464,31 @@ export class CodeGenerator {
         return bf;    
     }
 
+    private generateInterfaceDestructor(): backend.Function {
+        let tc = "interface{}";
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+
+        let dtrName = "dtr_interface";
+        let dtrType = new ssa.FunctionType(["addr", "addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let realPointer = b.declareParam("addr", "realPointer");
+        let table = b.declareParam("addr", "table");
+        this.destructors.set(tc, bf);
+        let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+        let cond = b.assign(b.tmp(), "ne", "i8", [dtrPtr, 0]);
+        b.ifBlock(cond);
+        b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
+        b.end();
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false, true);
+        return bf;    
+    }
+
     /**
      * pointer is the address of a value and t is the type of the value being pointed to.
      */
@@ -3485,8 +3510,8 @@ export class CodeGenerator {
                 if (free != "decref") {
                     let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
                     let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
-                    let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
-                    b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
+                    let dtr = this.generateInterfaceDestructor();
+                    b.call(null, new ssa.FunctionType(["addr", "addr"], null), [dtr.getIndex(), realPointer, table]);
                 }
             } else if (t instanceof PointerType) {
                 if (free == "decref") {
@@ -3544,7 +3569,7 @@ export class CodeGenerator {
                 let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
                 let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
                 let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
-                b.assign(null, "decref", null, [pointer, dtrPtr]);
+                b.assign(null, "decref", null, [realPointer, dtrPtr]);
             } else {
                 b.assign(null, "decref", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
@@ -3842,9 +3867,6 @@ export class CodeGenerator {
     private lookupNumericMapFunctionType: ssa.FunctionType;
     private removeNumericMapKeyFunctionType: ssa.FunctionType;
     private decodeUtf8FunctionType: ssa.FunctionType;
-    private interfaceTableNames: Array<string> = [];
-    private interfaceTableIndex: Map<string, number> = new Map<string, number>();
-    private interfaceTableLength: number = 0;
     private typeCodeMap: Map<string,number> = new Map<string, number>();
     private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
     private structs: Map<StructType, ssa.StructType> = new Map<StructType, ssa.StructType>();

@@ -61,7 +61,8 @@ type SomeIface interface {
     func mul() int
 }
 
-func dodo() {
+func dodo() int {
     let s *SomeStruct = {}
     let i *SomeIface = s
+    return i.mul()
 }

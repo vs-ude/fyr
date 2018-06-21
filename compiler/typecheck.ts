@@ -546,12 +546,34 @@ export class InterfaceType extends Type {
         return null;
     }
 
+    public methodIndex(name: string): number {
+        this.sortMethodNames();
+        let index = this.sortedMethodNames.indexOf(name);
+        if (index == -1) {
+            throw "Implementation error " + name;
+        }
+        return index;
+    }
+
+    private sortMethodNames() {
+        if (this.sortedMethodNames.length != 0) {
+            return;
+        }
+        let all = this.getAllMethods();
+        for(let name of all.keys()) {
+            this.sortedMethodNames.push(name);
+        }
+        this.sortedMethodNames.sort();
+    }
+
     // Package the type has been defined in.
     // For global types sich as "int" the package is undefined.
     public pkg?: Package;
     public extendsInterfaces: Array<Type | InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
+    private sortedMethodNames: Array<string> = [];
+
     // Required during recursive checking
     public _markChecked: boolean = false;
 }
