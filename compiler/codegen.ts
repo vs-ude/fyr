@@ -1715,12 +1715,15 @@ export class CodeGenerator {
             throw "Implementation error";
         }
         let table: Array<backend.Function | backend.FunctionImport> = [];
-        if (this.tc.isPureValue(s)) {
-            table.push(null);
-        } else {
-            table.push(this.generateStructDestructor(s));
+        let dtr: backend.Function = null;
+        if (!this.tc.isPureValue(s)) {
+            dtr = this.generateStructDestructor(s);
         }
-        for(let m of iface.getAllMethods().keys()) {
+        for(let m of iface.sortedMethodNames) {
+            if (m == "__dtr__") {
+                table.push(dtr);
+                continue;
+            }
             let method = s.method(m);
             let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as tc.PointerType).elementType);
             if (!(methodObjType instanceof tc.StructType)) {
@@ -2450,7 +2453,7 @@ export class CodeGenerator {
                         }
                         let name = enode.lhs.name.value;
                         let idx = objType.methodIndex(name);
-                        findex = b.assign(b.tmp(), "load", "addr", [table, (idx + 1) * ssa.sizeOf("addr")]);
+                        findex = b.assign(b.tmp(), "load", "addr", [table, idx * ssa.sizeOf("addr")]);
                         t = objType.method(name);
                     } else {
                         throw "Implementation error";

@@ -512,6 +512,18 @@ export class InterfaceType extends Type {
         return base;
     }
 
+    public hasBaseType(b: InterfaceType): boolean {
+        for(let i of this.extendsInterfaces) {
+            if (i == b) {
+                return true;
+            }
+            if (i.hasBaseType(b)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public toString(): string {
         if (this.name) {
             return this.name;
@@ -559,20 +571,32 @@ export class InterfaceType extends Type {
         if (this.sortedMethodNames.length != 0) {
             return;
         }
-        let all = this.getAllMethods();
-        for(let name of all.keys()) {
-            this.sortedMethodNames.push(name);
+        for(let i = 0; i < this.extendsInterfaces.length; i++) {
+            let iface = this.extendsInterfaces[i];
+            if (iface instanceof InterfaceType) {
+                iface.sortMethodNames();
+            }
+            this.sortedMethodNames = this.sortedMethodNames.concat(iface.sortedMethodNames);
         }
-        this.sortedMethodNames.sort();
+
+        if (this.sortedMethodNames.length == 0) {
+            this.sortedMethodNames.push("__dtr__");
+        }
+        let names: Array<string> = [];
+        for(let name of this.methods.keys()) {
+            names.push(name);
+        }
+        names.sort();
+        this.sortedMethodNames = this.sortedMethodNames.concat(names);
     }
 
     // Package the type has been defined in.
     // For global types sich as "int" the package is undefined.
     public pkg?: Package;
-    public extendsInterfaces: Array<Type | InterfaceType> = [];
+    public extendsInterfaces: Array<InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
-    private sortedMethodNames: Array<string> = [];
+    public sortedMethodNames: Array<string> = [];
 
     // Required during recursive checking
     public _markChecked: boolean = false;
@@ -4912,23 +4936,9 @@ export class TypeChecker {
             return true;
         } else if (to instanceof InterfaceType && mode == "pointer") {
             if (from instanceof InterfaceType) {
-                // Check two interfaces (which are not the same InterfaceType objects)
-                let fromMethods = from.getAllMethods();
-                let toMethods = to.getAllMethods();
-                if (fromMethods.size >= toMethods.size) {
-                    let ok = true;
-                    for(let entry of toMethods.entries()) {
-                        if (!fromMethods.has(entry[0]) || !this.checkTypeEquality(fromMethods.get(entry[0]), entry[1], loc, false)) {
-                            ok = false;
-                            if (doThrow) {
-                                throw new TypeError("Incompatible method signature for " + entry[0] + " in types " + from.toString() + " and " + to.toString(), loc);
-                            }
-                            break;
-                        }
-                    }    
-                    if (ok) {
-                        return true;
-                    }
+                // Check two interfaces
+                if (from == to || from.hasBaseType(to)) {
+                    return true;
                 }
             } else if (from instanceof StructType) {
                 let toMethods = to.getAllMethods();
