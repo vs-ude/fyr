@@ -4373,9 +4373,9 @@ export class TypeChecker {
                         throw new TypeError("Type " + t.toString() + " is not part of " + ot.toString(), enode.rhs.loc);
                     }
                 } else {
-                    this.checkIsInterface(enode.lhs);                
-                    if (this.isInterface(t)) {
-                        throw new TypeError("Interface cannot be contained by another interface", enode.loc);
+                    this.checkIsInterface(enode.lhs);
+                    if (!this.isSafePointer(t) || !this.isStruct(RestrictedType.strip((RestrictedType.strip(t) as PointerType).elementType))) {
+                        throw new TypeError("Interface can only contain pointers to structs, but not " + t.toString(), enode.loc);
                     }
                 }
                 enode.type = TypeChecker.t_bool;

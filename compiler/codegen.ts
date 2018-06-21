@@ -1709,11 +1709,7 @@ export class CodeGenerator {
         return false;
     }
 
-    private createInterfaceTable(ifacePointer: PointerType, s: StructType): Array<backend.Function | backend.FunctionImport> {
-        let iface = RestrictedType.strip(ifacePointer.elementType);
-        if (!(iface instanceof InterfaceType)) {
-            throw "Implementation error";
-        }
+    private createInterfaceTable(iface: InterfaceType, s: StructType): Array<backend.Function | backend.FunctionImport> {
         let table: Array<backend.Function | backend.FunctionImport> = [];
         let dtr: backend.Function = null;
         if (!this.tc.isPureValue(s)) {
@@ -1740,6 +1736,20 @@ export class CodeGenerator {
         return table;
     }                
 
+    private createInterfaceDescriptor(ifaceType: InterfaceType, structType: StructType): number {
+        // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
+        let typecode = RestrictedType.strip(ifaceType).toTypeCodeString() + "::" + RestrictedType.strip(structType).toTypeCodeString();
+        let descriptor: number;
+        if (this.ifaceDescriptors.has(typecode)) {
+            descriptor = this.ifaceDescriptors.get(typecode);
+        } else {
+            let table = this.createInterfaceTable(ifaceType, structType);
+            descriptor = this.backend.addInterfaceDescriptor(typecode, table);
+            this.ifaceDescriptors.set(typecode, descriptor);
+        }
+        return descriptor;
+    }
+
     public autoConvertData(data: ssa.Variable | number | ssa.Pointer, targetType: Type, fromType: Type, b: ssa.Builder): ssa.Variable | number {
         let v: ssa.Variable | number;
         if (data instanceof ssa.Pointer) {
@@ -1753,28 +1763,18 @@ export class CodeGenerator {
             v = b.assign(b.tmp(), "member", this.localSlicePointer, [v, 0]);
         } else if (this.tc.isInterface(targetType) && !this.tc.isInterface(fromType)) {
             // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
-            let typecode = targetType.toTypeCodeString();
-            let descriptor: number;
-            if (this.ifaceDescriptors.has(typecode)) {
-                descriptor = this.ifaceDescriptors.get(typecode);
-            } else {
-                if (!this.tc.isSafePointer(fromType)) {
-                    throw "Implementation error";
-                }
-                let structType = RestrictedType.strip((RestrictedType.strip(fromType) as PointerType).elementType);
-                let ifaceType = RestrictedType.strip((RestrictedType.strip(targetType) as PointerType).elementType);
-                let mode = (RestrictedType.strip(targetType) as PointerType).mode;
-                if (!(structType instanceof StructType)) {
-                    throw "Implementation error";
-                }
-                if (!(ifaceType instanceof InterfaceType)) {
-                    throw "Implementation error";
-                }
-                let table = this.createInterfaceTable((RestrictedType.strip(targetType) as PointerType), structType);
-                let name = mode.toString() + "::" + ifaceType.toTypeCodeString() + "::" + structType.toTypeCodeString();
-                descriptor = this.backend.addInterfaceDescriptor(name, table);
-                this.ifaceDescriptors.set(typecode, descriptor);
+            if (!this.tc.isSafePointer(fromType)) {
+                throw "Implementation error";
             }
+            let structType = RestrictedType.strip((RestrictedType.strip(fromType) as PointerType).elementType);
+            let ifaceType = RestrictedType.strip((RestrictedType.strip(targetType) as PointerType).elementType);
+            if (!(structType instanceof StructType)) {
+                throw "Implementation error";
+            }
+            if (!(ifaceType instanceof InterfaceType)) {
+                throw "Implementation error";
+            }
+            let descriptor = this.createInterfaceDescriptor(ifaceType, structType);
             let d = b.assign(b.tmp(), "table_iface", "addr", [descriptor]);
             v = b.assign(b.tmp(), "struct", this.ifaceHeader, [v, d]);
         }
@@ -2894,23 +2894,40 @@ export class CodeGenerator {
             }
             case "is":
             {
-                let rtypecode = this.typecode(enode.rhs.type);
+                let rtype = RestrictedType.strip(enode.rhs.type);
+                let ltype = RestrictedType.strip(enode.lhs.type);
                 if (this.tc.isStringOrType(enode.lhs.type)) {
-                    let ltypecode = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);                    
-                    return b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
-                }
-                let ifaceAddr: ssa.Variable | ssa.Pointer;
-                if (this.isLeftHandSide(enode.lhs)) {
-                    ifaceAddr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    let ltypecode = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);    
+                    throw "TODO"                
+                    // return b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
+                } else if (this.tc.isInterface(ltype)) {
+                    let ifaceAddr: ssa.Variable | ssa.Pointer;
+                    if (this.isLeftHandSide(enode.lhs)) {
+                        ifaceAddr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
+                    } else {
+                        ifaceAddr = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type) as ssa.Variable;
+                    }
+                    let ifaceType = RestrictedType.strip((ltype as tc.PointerType).elementType);
+                    if (!(ifaceType instanceof InterfaceType)) {
+                        throw "Implementation error";
+                    }
+                    let structType = RestrictedType.strip((rtype as tc.PointerType).elementType);
+                    if (!(structType instanceof tc.StructType)) {
+                        throw "Implementation error";
+                    }
+                    let table: ssa.Variable;
+                    if (ifaceAddr instanceof ssa.Variable) {
+                        table = b.assign(b.tmp(), "member", "addr", [ifaceAddr, this.ifaceHeader.fieldIndexByName("table")]);
+                    } else {
+                        table = b.assign(b.tmp(), "load", "addr", [ifaceAddr.variable, ifaceAddr.offset + this.ifaceHeader.fieldIndexByName("table")]);
+                    }
+                    let descriptor = this.createInterfaceDescriptor(ifaceType, structType);
+                    let table2 = b.assign(b.tmp(), "table_iface", "addr", [descriptor]);
+                    let cmp = b.assign(b.tmp(), "eq", "i8", [table, table2]);
+                    return cmp;
                 } else {
-                    ifaceAddr = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type) as ssa.Variable;
+                    throw "TODO: OrType"
                 }
-                if (ifaceAddr instanceof ssa.Variable) {
-                    ifaceAddr = new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [ifaceAddr]), 0);
-                }
-                let ltypecode = b.assign(b.tmp(), "load", "i32", [ifaceAddr.variable, ifaceAddr.offset + this.ifaceHeader.fieldOffset("typecode")]);
-                let cmp = b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
-                return cmp;
             }
             case "typeCast":
             {
