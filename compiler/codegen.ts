@@ -1711,10 +1711,7 @@ export class CodeGenerator {
 
     private createInterfaceTable(iface: InterfaceType, s: StructType): Array<backend.Function | backend.FunctionImport> {
         let table: Array<backend.Function | backend.FunctionImport> = [];
-        let dtr: backend.Function = null;
-        if (!this.tc.isPureValue(s)) {
-            dtr = this.generateStructDestructor(s);
-        }
+        let dtr: backend.Function = this.generateStructDestructor(s);
         for(let m of iface.sortedMethodNames) {
             if (m == "__dtr__") {
                 table.push(dtr);
@@ -2921,9 +2918,9 @@ export class CodeGenerator {
                     } else {
                         table = b.assign(b.tmp(), "load", "addr", [ifaceAddr.variable, ifaceAddr.offset + this.ifaceHeader.fieldIndexByName("table")]);
                     }
-                    let descriptor = this.createInterfaceDescriptor(ifaceType, structType);
-                    let table2 = b.assign(b.tmp(), "table_iface", "addr", [descriptor]);
-                    let cmp = b.assign(b.tmp(), "eq", "i8", [table, table2]);
+                    let dtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+                    let dtr2 = b.assign(b.tmp(), "addr_of_func", "addr", [this.generateStructDestructor(structType).getIndex()]);
+                    let cmp = b.assign(b.tmp(), "eq", "i8", [dtr, dtr2]);
                     return cmp;
                 } else {
                     throw "TODO: OrType"
@@ -3500,10 +3497,10 @@ export class CodeGenerator {
         let table = b.declareParam("addr", "table");
         this.destructors.set(tc, bf);
         let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
-        let cond = b.assign(b.tmp(), "ne", "i8", [dtrPtr, 0]);
-        b.ifBlock(cond);
+//        let cond = b.assign(b.tmp(), "ne", "i8", [dtrPtr, 0]);
+//        b.ifBlock(cond);
         b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
-        b.end();
+//        b.end();
         b.end();
         this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;    

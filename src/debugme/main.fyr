@@ -64,5 +64,8 @@ type SomeIface interface {
 func dodo() int {
     let s *SomeStruct = {}
     let i *SomeIface = s
+    if (i is *SomeStruct) {
+        return 0
+    }
     return i.mul()
 }

@@ -1069,6 +1069,22 @@ export class CBackend implements backend.Backend {
             cast.type = new CType("addr_t");
             cast.expr = addr;
             return cast;
+        } else if (n.kind == "addr_of_func") {
+            let idx = n.args[0];
+            if (typeof(idx) != "number") {
+                throw "Implementation error";
+            }
+            let f = this.funcs[idx];
+            let c: CConst;
+            if (f instanceof FunctionImport) {
+                c = new CConst(f.name);
+            } else {
+                c = new CConst(f.func.name);
+            }
+            let cast = new CTypeCast();
+            cast.type = this.mapType("addr");
+            cast.expr = c;
+            return cast;
         }
         throw "Implementation error " + n.kind;
     }
