@@ -1472,13 +1472,13 @@ export class CModule {
             str += "#ifndef " + d.name.code + "_H\n";
             str += "#define " + d.name.code + "_H\n";
             str += "#ifdef FYR_COMPILE_MAIN\n";
-            str += "addr_t " + d.name.code + "[" + d.table.length + "] = {\n";
+            str += "const addr_t " + d.name.code + "[" + d.table.length + "] = {\n";
             for(let f of d.table) {
                 str += "    (addr_t)" + f.code + ",\n";
             }
             str += "};\n";
             str += "#else\n";
-            str += "extern addr_t " + d.name.code + "[" + d.table.length + "];\n";
+            str += "extern const addr_t " + d.name.code + "[" + d.table.length + "];\n";
             str += "#endif\n";
             str += "#endif\n";
         }

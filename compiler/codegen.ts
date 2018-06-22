@@ -1712,7 +1712,7 @@ export class CodeGenerator {
     private createInterfaceTable(iface: InterfaceType, s: StructType): Array<backend.Function | backend.FunctionImport> {
         let table: Array<backend.Function | backend.FunctionImport> = [];
         let dtr: backend.Function = this.generateStructDestructor(s);
-        for(let m of iface.sortedMethodNames) {
+        for(let m of iface.sortMethodNames()) {
             if (m == "__dtr__") {
                 table.push(dtr);
                 continue;

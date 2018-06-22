@@ -567,9 +567,9 @@ export class InterfaceType extends Type {
         return index;
     }
 
-    private sortMethodNames() {
+    public sortMethodNames(): Array<string> {
         if (this.sortedMethodNames.length != 0) {
-            return;
+            return this.sortedMethodNames;
         }
         for(let i = 0; i < this.extendsInterfaces.length; i++) {
             let iface = this.extendsInterfaces[i];
@@ -588,6 +588,7 @@ export class InterfaceType extends Type {
         }
         names.sort();
         this.sortedMethodNames = this.sortedMethodNames.concat(names);
+        return this.sortedMethodNames;
     }
 
     // Package the type has been defined in.
@@ -596,7 +597,7 @@ export class InterfaceType extends Type {
     public extendsInterfaces: Array<InterfaceType> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
-    public sortedMethodNames: Array<string> = [];
+    private sortedMethodNames: Array<string> = [];
 
     // Required during recursive checking
     public _markChecked: boolean = false;
