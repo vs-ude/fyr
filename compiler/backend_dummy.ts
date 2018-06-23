@@ -88,10 +88,14 @@ export class DummyBackend {
         return ircode;
     }
 
-    addFunctionToTable(f: Function, index: number) {        
-    }
+//    addFunctionToTable(f: Function, index: number) {        
+//    }
 
     addInterfaceDescriptor(name: string, table: Array<backend.Function | backend.FunctionImport>): number {        
+        return 0;
+    }
+
+    addSymbol(name: string): number {
         return 0;
     }
 

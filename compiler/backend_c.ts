@@ -362,8 +362,11 @@ export class CBackend implements backend.Backend {
         return ircode;
     }
 
-    public addFunctionToTable(f: Function, index: number) {
-        throw "TODO";
+    public addSymbol(name: string): number {
+        let c = new CConst("sym_" + this.mangleName(name));
+        this.module.symbols.set(name, c);
+        this.symbols.push(name);
+        return this.symbols.length - 1;
     }
 
     public addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number {        
@@ -1085,6 +1088,16 @@ export class CBackend implements backend.Backend {
             cast.type = this.mapType("addr");
             cast.expr = c;
             return cast;
+        } else if (n.kind == "symbol") {
+            let idx = n.args[0];
+            if (typeof(idx) != "number") {
+                throw "Implementation error";
+            }
+            if (idx < 0 || idx >= this.symbols.length) {
+                throw "Implementation error";
+            }            
+            let name = this.symbols[idx];
+            return this.module.symbols.get(name);
         }
         throw "Implementation error " + n.kind;
     }
@@ -1401,6 +1414,7 @@ export class CBackend implements backend.Backend {
     private globalStorage: Map<ssa.Variable, string> = new Map<ssa.Variable, string>();
     private namedStructs: Map<string, ssa.StructType> = new Map<string, ssa.StructType>();
     private anonymousStructs: Set<string> = new Set<string>();
+    private symbols: Array<string> = [];
 }
 
 export class CInclude {
@@ -1483,6 +1497,18 @@ export class CModule {
             str += "#endif\n";
         }
 
+        for(let s of this.symbols.keys()) {
+            let c = this.symbols.get(s);
+            str += "#ifndef SYM_" + c.code + "_H\n";
+            str += "#define SYM_" + c.code + "_H\n";
+            str += "#ifdef FYR_COMPILE_MAIN\n";
+            str += "const addr_t " + c.code + " = (const addr_t)(const char*)\"" + s + "\";\n";
+            str += "#else\n";
+            str += "extern const addr_t " + c.code + ";\n";
+            str += "#endif\n";
+            str += "#endif\n";
+        }
+
         if (mangledName) {
             str += "\n#endif\n";
         }
@@ -1511,6 +1537,7 @@ export class CModule {
     public strings: Map<string, CString> = new Map<string, CString>();
     public elements: Array<CStruct | CFunction | CVar | CComment | CType> = [];
     public ifaceDescriptors: Array<InterfaceDescriptor> = [];
+    public symbols: Map<string, CConst> = new Map<string, CConst>();
     public isExecutable: boolean;
 }
 

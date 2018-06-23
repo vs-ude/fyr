@@ -307,7 +307,7 @@ export class Package {
             if (p.hasInitFunction) {
                 initPackages.push(p);
             }
-            if (p.tc.hasTemplateInstantiations() || p.codegen.hasDestructors()) {
+            if (p.tc.hasTemplateInstantiations() || p.codegen.hasDestructors() || p.codegen.hasSymbols()) {
                 duplicateCodePackages.push(p);
             }
         }

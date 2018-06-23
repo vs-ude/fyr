@@ -92,11 +92,17 @@ export class Wasm32Backend implements backend.Backend {
         throw "TODO";
     }
 
+    /*
     public addFunctionToTable(f: backend.Function, index: number) {
         if (!(f instanceof wasm.Function)) {
             throw "Implementation error";
         }
         return this.module.addFunctionToTable(f, index);
+    }
+    */
+
+    public addSymbol(name: string): number {
+        throw "TODO";
     }
 
     public importFunction(name: string, from: string | Package, type: FunctionType): backend.FunctionImport {

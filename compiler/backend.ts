@@ -19,8 +19,9 @@ export interface Backend {
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean);
     generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string;
-    addFunctionToTable(f: Function, index: number);
+//    addFunctionToTable(f: Function, index: number);
     addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number;
+    addSymbol(name: string): number;
     /**
      * Returns the init function unless it is empty or missing.
      */

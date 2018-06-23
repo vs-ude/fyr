@@ -281,7 +281,7 @@ export class CodeGenerator {
         }
         if (t instanceof OrType) {
             if (t.stringsOnly()) {
-                return "addr";
+                return ssa.symbolType;
             }
             return this.ifaceHeader;
         }
@@ -1856,10 +1856,14 @@ export class CodeGenerator {
             case "float":
             {
                 let v = new ssa.Variable();
-                v.type = "f32";
+                if (enode.type == TypeChecker.t_float) {
+                    v.type = "f32";
+                } else {
+                    v.type = "f64";
+                }
                 v.isConstant = true;
                 v.constantValue = parseFloat(enode.value);
-                return v;;
+                return v;
             }
             case "rune":
                 return enode.numValue;
@@ -1867,12 +1871,23 @@ export class CodeGenerator {
                 return enode.value == "true" ? 1 : 0;
             case "str":
             {
-                let v = new ssa.Variable();
-                v.isConstant = true;
-                v.constantValue = enode.value;
-                v.type = "addr";
-                return v;
-                // return this.backend.addString(enode.value);
+                if (this.tc.isStringLiteralType(enode.type)) {
+                    let idx: number;
+                    let sl = RestrictedType.strip(enode.type) as StringLiteralType;
+                    if (this.symbols.has(sl.name)) {
+                        idx = this.symbols.get(sl.name);
+                    } else {
+                        idx = this.backend.addSymbol(sl.name);
+                        this.symbols.set(sl.name, idx);
+                    }
+                    return b.assign(b.tmp(), "symbol", ssa.symbolType, [idx]);
+                } else {
+                    let v = new ssa.Variable();
+                    v.isConstant = true;
+                    v.constantValue = enode.value;
+                    v.type = "addr";
+                    return v;
+                }
             }
             case "object":
             {
@@ -3861,6 +3876,10 @@ export class CodeGenerator {
         return this.destructors.size != 0;
     }
 
+    public hasSymbols(): boolean {
+        return this.symbols.size != 0;
+    }
+
     private backend: backend.Backend;
     private tc: TypeChecker;
     private imports: Map<string, backend.FunctionImport>;
@@ -3888,5 +3907,6 @@ export class CodeGenerator {
     private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
     private structs: Map<StructType, ssa.StructType> = new Map<StructType, ssa.StructType>();
     private ifaceDescriptors: Map<string, number> = new Map<string, number>();
+    private symbols: Map<string, number> = new Map<string, number>();
 }
 

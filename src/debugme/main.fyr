@@ -69,3 +69,9 @@ func dodo() int {
     }
     return i.mul()
 }
+
+type colors "red" | "green" | "yellow"
+
+func isGreen(c colors) bool {
+    return c == "green"
+}
