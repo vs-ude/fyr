@@ -3689,7 +3689,12 @@ export class CodeGenerator {
         if (this.tc.isSafePointer(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no") {
-                b.assign(null, 'incref', "addr", [rhsData]);
+                if (this.tc.isInterface(targetType)) {
+                    let ptr = b.assign(b.tmp(), "member", "addr", [rhsData, this.ifaceHeader.fieldIndexByName("pointer")]);
+                    b.assign(null, "incref", "addr", [ptr]);
+                } else {
+                    b.assign(null, 'incref', "addr", [rhsData]);
+                }
                 decrefVar = rhsData as ssa.Variable;
             } else if (result[1]) {
                 result[1].localReferenceCount++;    
