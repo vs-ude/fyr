@@ -466,7 +466,12 @@ export class CodeGenerator {
                             let data = this.autoConvertData(rhs, snode.lhs.type, snode.rhs.type, b);
                             if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                                 // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                                data = b.assign(b.tmp(), "incref", "addr", [data]);
+                                if (this.tc.isInterface(snode.lhs.type)) {
+                                    let ptr = b.assign(b.tmp(), "member", "addr", [data, this.ifaceHeader.fieldIndexByName("pointer")]);
+                                    b.assign(null, "incref", "addr", [ptr]);
+                                } else {
+                                    data = b.assign(b.tmp(), "incref", "addr", [data]);
+                                }
                             } else if (this.tc.isString(snode.lhs.type) && !this.tc.isTakeExpression(snode.rhs)) {
                                 data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                             }
@@ -582,7 +587,12 @@ export class CodeGenerator {
                                     // Reference counting to pointers
                                     if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                                        val = b.assign(b.tmp(), "incref", "addr", [val]);
+                                        if (this.tc.isInterface(p.type)) {
+                                            let ptr = b.assign(b.tmp(), "member", "addr", [val, this.ifaceHeader.fieldIndexByName("pointer")]);
+                                            b.assign(null, "incref", "addr", [ptr]);
+                                        } else {
+                                            val = b.assign(b.tmp(), "incref", "addr", [val]);
+                                        }
                                     } else if (this.tc.isString(p.type) && !rhsIsTakeExpr) {
                                         val = b.assign(b.tmp(), "incref_arr", "addr", [val]);
                                     }
@@ -673,7 +683,12 @@ export class CodeGenerator {
                     // Reference counting for pointers
                     if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                        data = b.assign(b.tmp(), "incref", "addr", [data]);
+                        if (this.tc.isInterface(snode.lhs.type)) {
+                            let ptr = b.assign(b.tmp(), "member", "addr", [data, this.ifaceHeader.fieldIndexByName("pointer")]);
+                            b.assign(null, "incref", "addr", [ptr]);
+                        } else {
+                            data = b.assign(b.tmp(), "incref", "addr", [data]);
+                        }
                     } else if (this.tc.isString(snode.lhs.type) && !this.tc.isTakeExpression(snode.rhs)) {
                         data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }

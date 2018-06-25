@@ -57,15 +57,41 @@ func SomeStruct.mul() int {
     return this.value
 }
 
+func SomeStruct.add() int {
+    this.value += 2
+    return this.value
+}
+
+func SomeStruct.print() {
+}
+
 type SomeIface interface {
     func mul() int
 }
 
+type PrintIface interface {
+    func print()
+}
+
+type BetterIface interface {
+    extends SomeIface
+    extends PrintIface
+    func add() int
+}
+
 func dodo() int {
     let s *SomeStruct = {}
-    let i *SomeIface = s
-    if (i is *SomeStruct) {
+    let b *BetterIface = s
+    if (!(b is *SomeStruct)) {
         return 0
+    }
+    let p ~PrintIface = b
+    if (!(p is *SomeStruct)) {
+        return -1
+    }
+    let i *SomeIface = b
+    if (!(i is *SomeStruct)) {
+        return -2
     }
     return i.mul()
 }
