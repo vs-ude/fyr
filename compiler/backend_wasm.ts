@@ -269,7 +269,7 @@ export class Wasm32Backend implements backend.Backend {
         return this.generateSyncFunction(n, f, emitIR);
     }
 
-    private generateSyncFunction(n: Node, wf: wasm.Function, emitIR): string {
+    private generateSyncFunction(n: Node, wf: wasm.Function, emitIR: boolean): string {
         let ircode = "";
 
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
@@ -2053,9 +2053,9 @@ export class Wasm32Backend implements backend.Backend {
             } else {
                 if (n.kind == "call_indirect") {
                     this.emitAssign("s32", n.args[0], "wasmStack", 0, code);
-                    let resultTypes = [];
+                    let resultTypes: Array<wasm.StackType> = [];
                     if (n.type.result) {
-                        resultTypes.push(n.type.result);
+                        resultTypes.push(this.stackTypeOf(n.type.result));
                     }
                     let typeName = this.module.addFunctionType(paramTypes, resultTypes);
                     code.push(new wasm.CallIndirect(typeName));

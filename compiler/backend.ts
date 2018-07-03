@@ -17,7 +17,7 @@ export interface Backend {
     declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable;
     declareFunction(name: string): Function;
     declareInitFunction(name: string): Function;
-    defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean);
+    defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean): void;
     generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string;
 //    addFunctionToTable(f: Function, index: number);
     addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number;

@@ -145,7 +145,7 @@ export class BinaryBuffer {
     }
 
     private resize(size: number) {
-        this.arrayBuf = transferArrayBuffer(this.buf, size);
+        this.arrayBuf = transferArrayBuffer(this.buf.buffer, size);
         this.buf = new Uint8Array(this.arrayBuf)
     }
 
@@ -165,7 +165,7 @@ export class BinaryBuffer {
     private numberFloat64: Float64Array;
 }
 
-function transferArrayBuffer(source, length) {
+function transferArrayBuffer(source: ArrayBuffer, length: number) {
     source = Object(source);
     var dest = new ArrayBuffer(length);
     if (!(source instanceof ArrayBuffer) || !(dest instanceof ArrayBuffer)) {
@@ -184,7 +184,7 @@ function transferArrayBuffer(source, length) {
         });
     }
     return dest;
-    function transferWith(wordSize, source, dest, nextOffset, leftBytes) {
+    function transferWith(wordSize: number, source: ArrayBuffer, dest: ArrayBuffer, nextOffset: number, leftBytes: number) {
         var ViewClass: any = Uint8Array;
         switch (wordSize) {
             case 8:

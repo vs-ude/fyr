@@ -137,7 +137,7 @@ function compileModules() {
 
     // Generate code
     if (!program.disableCodegen) {
-        let backend = null;
+        let backend: "C" | "WASM" | null = null;
         if (program.emitWasm) {
             backend = "WASM";
         } else if (program.emitC) {
@@ -148,7 +148,7 @@ function compileModules() {
 }
 
 program
-	.version(pkgJson.version, '-v, --version', "Output vemitersion")
+	.version(pkgJson.version, '-v, --version')
 	.usage('[options] [command] <module ...>')
     .option('-r, --emit-ir', "Emit IR code")
     .option('-w, --emit-wasm', "Emit WASM code")
