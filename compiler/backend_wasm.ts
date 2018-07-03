@@ -2000,9 +2000,6 @@ export class Wasm32Backend implements backend.Backend {
                 } else if (n.args[0] == SystemCalls.removeNumericMapKey) {
                     code.push(new wasm.GetLocal(this.spLocal));
                     code.push(new wasm.Call(this.removeNumericMapKeyFunctionIndex));
-                } else if (n.args[0] == SystemCalls.decodeUtf8) {
-                    code.push(new wasm.GetLocal(this.spLocal));
-                    code.push(new wasm.Call(this.decodeUtf8FunctionIndex));
                 } else if (n.args[0] == SystemCalls.continueCoroutine) {
                     code.push(new wasm.CallIndirect("$callbackFn"));
                 } else if (n.args[0] == SystemCalls.coroutine) {
@@ -2499,12 +2496,6 @@ export class Wasm32Backend implements backend.Backend {
     private globalVarStorage: Map<Variable, Wasm32Storage>;
     private copyFunctionIndex: string = "$copy";
     private allocFunctionIndex: string = "$alloc";
-    private sliceAppendFunctionIndex: string = "$appendSlice";
-    private garbageCollectFunctionIndex: string = "$garbageCollect";
-    private growSliceFunctionIndex: string = "$growSlice";
-    private makeStringFunctionIndex: string = "$makeString";
-    private compareStringFunctionIndex: string = "$compareString";
-    private concatStringFunctionIndex: string = "$concatString";
     private hashStringFunctionIndex: string = "$hashString";
     private createMapFunctionIndex: string = "$createMap";
     private setMapFunctionIndex: string = "$setMap";
@@ -2513,7 +2504,6 @@ export class Wasm32Backend implements backend.Backend {
     private setNumericMapFunctionIndex: string = "$setNumericMap";
     private lookupNumericMapFunctionIndex: string = "$lookupNumericMap";
     private removeNumericMapKeyFunctionIndex: string = "$removeNumericMapKey";
-    private decodeUtf8FunctionIndex: string = "$decodeUtf8";
     private scheduleCoroutineFunctionIndex: string = "$scheduleCoroutine";
     private currentCoroutineFunctionIndex: string = "$currentCoroutine";
     private createCoroutineFunctionIndex: string = "$createCoroutine";

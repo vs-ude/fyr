@@ -49,7 +49,6 @@ export enum SystemCalls {
     min64 = -38,
     copysign32 = -39,
     copysign64 = -49,
-    decodeUtf8 = -51,
     continueCoroutine = -52,
     scheduleCoroutine = -53,
     coroutine = -54,
@@ -234,7 +233,7 @@ export class Package {
             for (let p of Package.fyrPaths) {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
-            let args = includes.concat(["-O3", "-o", ofile, "-c", cfile]);
+            let args = includes.concat(["-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
             console.log("gcc", args.join(" "));
             child_process.execFileSync("gcc", args);
         }

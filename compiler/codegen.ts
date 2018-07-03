@@ -65,7 +65,7 @@ export class CodeGenerator {
         this.setNumericMapFunctionType = new ssa.FunctionType(["ptr", "i64"], "ptr", "system");
         this.lookupNumericMapFunctionType = new ssa.FunctionType(["addr", "i64"], "ptr", "system");
         this.removeNumericMapKeyFunctionType = new ssa.FunctionType(["addr", "i64"], "i32", "system");
-        this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i32", "i32"], "i32", "system");
+        this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i8", "sint"], "sint", "system");
     }
 
     public processModule(mnode: Node, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
@@ -912,8 +912,12 @@ export class CodeGenerator {
                             let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
                             ptr = b.assign(b.tmp(), "addr_of", "addr", [arr]);
                         }
+                    } else if (t == TypeChecker.t_string) {
+                        // TODO: Incref
+                        ptr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, TypeChecker.t_string) as ssa.Variable;
+                        len = b.assign(b.tmp(), "len_str", "sint", [ptr]);    
                     } else {
-                        throw "TODO string and map"
+                        throw "TODO map"
                     }
                     //
                     // Initialize the counter with 0
@@ -962,6 +966,8 @@ export class CodeGenerator {
                             let storage = this.getSSAType(t.getElementType());
                             b.assign(val, "load", storage, [ptr, 0]);
                         } else if (t == TypeChecker.t_string) {
+                            let p = Package.resolve("unicode/utf8", snode.loc);
+                            let decodeUtf8 = this.backend.importFunction("decodeUtf8", p, this.decodeUtf8FunctionType);    
                             // Get address of value
                             let valAddr: ssa.Variable;
                             if (val instanceof ssa.Variable) {
@@ -980,12 +986,12 @@ export class CodeGenerator {
                             // Increase the counter
                             counter = b.assign(counter, "add", "sint", [counter, 1]);
                             b.assign(ptr, "add", "addr", [ptr, 1]);                            
-                            b.call(state, this.decodeUtf8FunctionType, [SystemCalls.decodeUtf8, valAddr, ch, state]);
+                            b.call(state, this.decodeUtf8FunctionType, [decodeUtf8.getIndex(), valAddr, ch, state]);
                             // Not a complete or illegal unicode char?
                             b.ifBlock(state);
                             // If illegal or end of string -> return 0xfffd      
-                            let illegal = b.assign(b.tmp(), "eq", "sint", [state, 1]);
-                            endcond = b.assign(b.tmp(), "eq", "sint", [counter, len]);
+                            let illegal = b.assign(b.tmp(), "eq", "i8", [state, 1]);
+                            endcond = b.assign(b.tmp(), "eq", "i8", [counter, len]);
                             b.assign(illegal, "or", "i8", [illegal, endcond]);                            
                             b.ifBlock(illegal);
                             // Handle illegal characters

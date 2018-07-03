@@ -5084,6 +5084,8 @@ export class TypeChecker {
             return [TypeChecker.t_int, t.elementType];
         } else if (t instanceof SliceType) {
             return [TypeChecker.t_int, t.getElementType()];
+        } else if (t == TypeChecker.t_string) {
+            return [TypeChecker.t_int, TypeChecker.t_rune];
         }
         throw new TypeError("The type " + t.toString() + " is not enumerable", node.loc);
     }

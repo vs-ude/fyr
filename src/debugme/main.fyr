@@ -101,3 +101,10 @@ type colors "red" | "green" | "yellow"
 func isGreen(c colors) bool {
     return c == "green"
 }
+
+func loopme() {
+    let str = "Hello"
+    for (let ch in str) {
+        
+    }
+}
