@@ -1,6 +1,6 @@
 import . from "<setjmp.h>" {
-    func setjmp(#int) int
-    func longjmp(#int, int)
+    func setjmp(#jmp_buf) int
+    func longjmp(#jmp_buf, int)
 } 
 
 // This is x86-64 specific
