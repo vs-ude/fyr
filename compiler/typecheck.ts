@@ -1842,6 +1842,12 @@ export class TypeChecker {
         throw "Implementation error for type " + tnode.op
     }
 
+    private createArrayType(tnode: Node, scope: Scope, t: ArrayType, mode?: "default" | "parameter" | "variable"): Type {
+        let e = this.createType(tnode.rhs, scope, mode ? mode : "default");
+        t.elementType = e;
+        return t;
+    
+}
     private createOrType(tnode: Node, scope: Scope, t?: OrType, mode?: "default" | "parameter" | "variable"): Type {
         // TODO: Avoid double entries
         if (!t) {
@@ -2530,8 +2536,14 @@ export class TypeChecker {
             newt.name = t.name;
             t.type = newt;
             scope.registerType(t.name, newt, tnode.loc);
+        } else if (t.node.rhs.op == "arrayType") {
+            let newt = new ArrayType(null, parseInt(t.node.rhs.lhs.value));
+            newt.loc = t.node.loc;
+            newt.name = t.name;
+            t.type = newt;
+            scope.registerType(t.name, newt, tnode.loc);
         } else {
-            throw new TypeError("A type must be a struct, interface, union type or an enum", tnode.loc);
+            throw new TypeError("A type must be a struct, interface, array-type, or or-type", tnode.loc);
         }
         return t;
     }
@@ -2819,6 +2831,8 @@ export class TypeChecker {
                 this.createInterfaceType(t.node.rhs, t.scope, t.type);
             } else if (t.type instanceof OrType) {
                 this.createOrType(t.node.rhs, t.scope, t.type);
+            } else if (t.type instanceof ArrayType) {
+                this.createArrayType(t.node.rhs, t.scope, t.type);
             }
         }
 

@@ -264,6 +264,7 @@ export class Package {
         }                
 
         // Generate the bin directory
+        p = this.fyrPath;
         subs = ["bin", architecture];
         for(let sub of subs) {
             try {

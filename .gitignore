@@ -22,3 +22,4 @@ pkg/*
 src/**/*.o
 src/**/*.ir
 src/testme/testme
+bin/darwin*

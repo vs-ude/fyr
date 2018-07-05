@@ -1,0 +1,8 @@
+import . from "<setjmp.h>" {
+    func setjmp(#int) int
+    func longjmp(#int, int)
+} 
+
+// This is x86-64 specific
+type jmp_buf [37]int
+
