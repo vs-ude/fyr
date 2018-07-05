@@ -143,7 +143,28 @@ function compileModules() {
         } else if (program.emitC) {
             backend = "C";
         }
-        Package.generateCodeForPackages(backend, program.emitIr, program.emitNative, program.disableNullCheck);
+        try {
+            // Errors can occur from loading runtime packages.
+            Package.generateCodeForPackages(backend, program.emitIr, program.emitNative, program.disableNullCheck);
+        } catch(ex) {
+            if (ex instanceof typecheck.TypeError) {
+                console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+                return;
+            } else if (ex instanceof parser.SyntaxError) {
+                console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+                return;
+            } else if (ex instanceof ImportError) {
+                if (ex.location) {
+                    console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
+                } else {
+                    console.log((ex.path + ": ".yellow) + ex.message.red);
+                }
+                return
+            } else {
+                console.log(ex);
+                throw ex;
+            }
+        }
     }
 }
 

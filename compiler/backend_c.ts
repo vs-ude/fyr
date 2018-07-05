@@ -44,7 +44,7 @@ export class Function implements backend.Function {
     public isExported: boolean;
 }
 
-class InterfaceDescriptor {
+export class InterfaceDescriptor {
     name: CConst;
     // A list of C-encoded function names which make up the table.
     table: Array<CConst>;

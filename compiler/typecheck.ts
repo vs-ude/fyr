@@ -2757,7 +2757,14 @@ export class TypeChecker {
         }
     }
 
-    // The main function of the Typechecker that checks the types of an entire module.
+    /**
+     * The main function of the Typechecker that checks the types of an entire module.
+     * However, this function just handles all imports and declares typedefs (but does not yet define them).
+     * 
+     * Use checkModulePassTwo() and checkModulePassThree() to  complete type checking.
+     * The reason for splitting type checking in phases is, that each phase is applied to all imported packages first,
+     * before proceeding with the next phase.
+     */
     public checkModule(pkg: Package): Scope {
 
         let scope = new Scope(null);
@@ -2811,6 +2818,10 @@ export class TypeChecker {
         return scope;
     }
 
+    /**
+     * Imports types from other modules, defines typedefs, defines global variables
+     * and declares functions.
+     */
     public checkModulePassTwo() {
         let scope = this.moduleNode.scope;
 
@@ -2865,6 +2876,10 @@ export class TypeChecker {
         }
     }
 
+    /**
+     * Imports functions from other modules, checks interfaces and structs for errors,
+     * checks global variables and checks all function bodies.
+     */
     public checkModulePassThree() {
         let scope = this.moduleNode.scope;
 

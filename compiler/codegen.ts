@@ -1,4 +1,4 @@
-import {Node, AstFlags} from "./ast"
+import {Node, AstFlags, Location} from "./ast"
 import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
 import * as tc from "./typecheck"
 import * as ssa from "./ssa"
@@ -966,7 +966,7 @@ export class CodeGenerator {
                             let storage = this.getSSAType(t.getElementType());
                             b.assign(val, "load", storage, [ptr, 0]);
                         } else if (t == TypeChecker.t_string) {
-                            let p = Package.resolve("unicode/utf8", snode.loc);
+                            let p = this.loadPackage("unicode/utf8", snode.loc);
                             let decodeUtf8 = this.backend.importFunction("decodeUtf8", p, this.decodeUtf8FunctionType);    
                             // Get address of value
                             let valAddr: ssa.Variable;
@@ -3896,6 +3896,18 @@ export class CodeGenerator {
         }            
 
         return data;
+    }
+
+    /**
+     * This function is used to load a package that implements some built-in functionality
+     * like starting a coroutine or decoding a string while iterating over it in a for-loop.
+     * 
+     * Throws SyntaxError, ImportError or TypeError.
+     */
+    private loadPackage(pkgPath: string, loc: Location): Package {
+        let p = Package.resolve(pkgPath, loc);
+        Package.checkTypesForPackages();
+        return p;
     }
 
     public hasDestructors(): boolean {

@@ -117,7 +117,8 @@ export class Package {
     }
 
     /**
-     * Might throw SyntaxError or ImportError
+     * Might throw SyntaxError or ImportError or TypeError.
+     * The function loads the sources, parses them and applies the first phase of type checking.
      */
     public loadSources() {
         if (this.isInternal) {
@@ -148,7 +149,7 @@ export class Package {
     /**
      * Might throw TypeError
      */
-    public checkPackagePassTwo() {
+    public checkTypesPassTwo() {
         if (this.isInternal) {
             return;
         }
@@ -158,7 +159,7 @@ export class Package {
     /**
      * Might throw TypeError
      */
-    public checkPackagePassThree() {
+    public checkTypesPassThree() {
         if (this.isInternal) {
             return;
         }
@@ -282,18 +283,34 @@ export class Package {
         return this.tc.hasTemplateInstantiations();
     }
 
+    /**
+     * The number of packages inside the Package.packages array that have already been type-checked.
+     */
+    private static packagesTypeCheckedPassOne: number = 0;
+    private static packagesTypeCheckedPassTwo: number = 0;
+
+    /**
+     * Checks the types of all packages imported so far.
+     * Calling this function multiple times is ok, as it will not check the same package twice,
+     * but it will check new imported packages.
+     */
     public static checkTypesForPackages() {
-        for(let p of Package.packages) {
+        for(; Package.packagesTypeCheckedPassOne < Package.packages.length; Package.packagesTypeCheckedPassOne++) {
+            let p = Package.packages[Package.packagesTypeCheckedPassOne];
 //            console.log("Type checking phase 1", p.pkgPath, "...");
-            p.checkPackagePassTwo();
+            p.checkTypesPassTwo();
         }
 
-        for(let p of Package.packages) {
+        for(; Package.packagesTypeCheckedPassTwo < Package.packages.length; Package.packagesTypeCheckedPassTwo++) {
+            let p = Package.packages[Package.packagesTypeCheckedPassTwo];
 //            console.log("Type checking phase 2", p.pkgPath, "...");
-            p.checkPackagePassThree();
+            p.checkTypesPassThree();
         }
     }
 
+    /**
+     * Generates C or WASM files and optionally compiles and links these files to create a native executable.
+     */
     public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
         let initPackages: Array<Package> = [];
@@ -377,7 +394,14 @@ export class Package {
         return Package.fyrPaths;
     }
     
-    public static resolve(pkgPath: string, loc: ast.Location): Package | null {
+    /**
+     * @param pkgPath is of the form "/some/fyr/package".
+     * @param loc is the location that is used for reporting an import error.
+     * 
+     * Throws ImportError of the package could not be resolved.
+     * Can throw TypeError or SyntaxError if loading of the sources detecs a syntax error.
+     */
+    public static resolve(pkgPath: string, loc: ast.Location): Package {
         initPackages();
 
         if (Package.packagesByPath.has(pkgPath)) {
