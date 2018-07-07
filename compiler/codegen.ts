@@ -53,19 +53,10 @@ export class CodeGenerator {
 
         this.mapHead = new ssa.StructType();
         this.mapHead.name = "mapHead";
-        this.mapHead.addField("nextHead", "ptr")
-        this.mapHead.addField("size", "i32")
-        this.mapHead.addField("free", "i32")
-        this.mapHead.addField("freeList", "addr")
-        this.createMapFunctionType = new ssa.FunctionType(["addr", "i32", "addr"], "ptr", "system");
-        this.setMapFunctionType = new ssa.FunctionType(["ptr", "ptr"], "ptr", "system");
-        this.lookupMapFunctionType = new ssa.FunctionType(["addr", "addr"], "ptr", "system");
-        this.removeMapKeyFunctionType = new ssa.FunctionType(["addr", "addr"], "i32", "system");
-        this.hashStringFunctionType = new ssa.FunctionType(["addr"], "i64", "system");
-        this.setNumericMapFunctionType = new ssa.FunctionType(["ptr", "i64"], "ptr", "system");
-        this.lookupNumericMapFunctionType = new ssa.FunctionType(["addr", "i64"], "ptr", "system");
-        this.removeNumericMapKeyFunctionType = new ssa.FunctionType(["addr", "i64"], "i32", "system");
-        this.decodeUtf8FunctionType = new ssa.FunctionType(["addr", "i8", "sint"], "sint", "system");
+        this.mapHead.addField("nextHead", "ptr");
+        this.mapHead.addField("size", "i32");
+        this.mapHead.addField("free", "i32");
+        this.mapHead.addField("freeList", "addr");
     }
 
     public processModule(mnode: Node, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
@@ -204,6 +195,18 @@ export class CodeGenerator {
         }
         if (t == TypeChecker.t_rune) {
             return "i32";
+        }
+        if (t == TypeChecker.t_int) {
+            return "sint";
+        }
+        if (t == TypeChecker.t_uint) {
+            return "int";
+        }
+        if (t == TypeChecker.t_char) {
+            return "s8";
+        }
+        if (t == TypeChecker.t_byte) {
+            return "i8";
         }
         if (t instanceof RestrictedType && t.elementType instanceof tc.PointerType) {
             // Const pointer to an interface?
@@ -638,6 +641,7 @@ export class CodeGenerator {
                     }                                
                 } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
                     // TODO: Ownership transfer
+                    /*
                     let mtype: MapType = this.tc.stripType(snode.lhs.lhs.type) as MapType;
                     let m = this.processExpression(f, scope, snode.lhs.lhs, b, vars, mtype);
                     let key = this.processExpression(f, scope, snode.lhs.rhs, b, vars, mtype.keyType);
@@ -655,6 +659,7 @@ export class CodeGenerator {
                         let dest = b.call(b.tmp(), this.setNumericMapFunctionType, [SystemCalls.setNumericMap, m, key64]);
                         b.assign(b.mem, "store", this.getSSAType(mtype.valueType), [dest, 0, value]);
                     }
+                    */
                 } else {
                     let t = this.getSSAType(snode.rhs.type) as ssa.StructType;
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
@@ -966,8 +971,7 @@ export class CodeGenerator {
                             let storage = this.getSSAType(t.getElementType());
                             b.assign(val, "load", storage, [ptr, 0]);
                         } else if (t == TypeChecker.t_string) {
-                            let p = this.loadPackage("unicode/utf8", snode.loc);
-                            let decodeUtf8 = this.backend.importFunction("decodeUtf8", p, this.decodeUtf8FunctionType);    
+                            let [decodeUtf8, decodeUtf8Type] = this.loadFunction("unicode/utf8", "decodeUtf8", snode.loc);
                             // Get address of value
                             let valAddr: ssa.Variable;
                             if (val instanceof ssa.Variable) {
@@ -986,7 +990,7 @@ export class CodeGenerator {
                             // Increase the counter
                             counter = b.assign(counter, "add", "sint", [counter, 1]);
                             b.assign(ptr, "add", "addr", [ptr, 1]);                            
-                            b.call(state, this.decodeUtf8FunctionType, [decodeUtf8.getIndex(), valAddr, ch, state]);
+                            b.call(state, decodeUtf8Type, [decodeUtf8.getIndex(), valAddr, ch, state]);
                             // Not a complete or illegal unicode char?
                             b.ifBlock(state);
                             // If illegal or end of string -> return 0xfffd      
@@ -1938,6 +1942,7 @@ export class CodeGenerator {
                         b.assign(b.mem, "store", st, [ptr, 0, v]);
                         return ptr;
                     } else if (t instanceof MapType) {
+                        /*
                         let entry = new ssa.StructType()
                         entry.name = "map";
                         entry.addField("hashNext", "addr")
@@ -1962,6 +1967,7 @@ export class CodeGenerator {
                             }
                         }
                         return m;
+                        */
                     }
                 } else if (t instanceof StructType) {
                     let st = this.getSSAType(t) as ssa.StructType; // This returns a struct type
@@ -2860,7 +2866,8 @@ export class CodeGenerator {
             case "[":
             {
                 let t = this.tc.stripType(enode.lhs.type);
-                if (t instanceof MapType) {                    
+                if (t instanceof MapType) {           
+                    /*         
                     let m = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     let key = this.processExpression(f, scope, enode.rhs, b, vars, t.keyType);
                     let result: ssa.Variable;
@@ -2882,6 +2889,7 @@ export class CodeGenerator {
                         b.end();
                     }
                     return b.assign(b.tmp(), "load", this.getSSAType(this.tc.stripType(t.valueType)), [result, 0]);
+                    */
                 } else if (t == TypeChecker.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     let st = this.getSSAType(t);
@@ -3910,6 +3918,16 @@ export class CodeGenerator {
         return p;
     }
 
+    private loadFunction(pkgPath: string, name: string, loc: Location): [backend.Function | backend.FunctionImport, ssa.FunctionType] {
+        let p = this.loadPackage(pkgPath, loc);
+        let f = p.scope.elements.get(name);
+        if (!f || !(f instanceof Function)) {
+            throw new tc.TypeError("Function " + name + " does not exist in package " + pkgPath, loc);
+        }
+        let t = this.getSSAFunctionType(f.type);
+        return [this.backend.importFunction(name, p, t), t];
+    }
+
     public hasDestructors(): boolean {
         return this.destructors.size != 0;
     }
@@ -3932,15 +3950,6 @@ export class CodeGenerator {
     private ifaceHeaderSlice: ssa.StructType; */
     private mapHead: ssa.StructType;
     private disableNullCheck: boolean;
-    private createMapFunctionType: ssa.FunctionType;
-    private setMapFunctionType: ssa.FunctionType;
-    private hashStringFunctionType: ssa.FunctionType;
-    private lookupMapFunctionType: ssa.FunctionType;
-    private removeMapKeyFunctionType: ssa.FunctionType;
-    private setNumericMapFunctionType: ssa.FunctionType;
-    private lookupNumericMapFunctionType: ssa.FunctionType;
-    private removeNumericMapKeyFunctionType: ssa.FunctionType;
-    private decodeUtf8FunctionType: ssa.FunctionType;
     private typeCodeMap: Map<string,number> = new Map<string, number>();
     private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
     private structs: Map<StructType, ssa.StructType> = new Map<StructType, ssa.StructType>();

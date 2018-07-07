@@ -467,7 +467,7 @@ export abstract class Type {
  * BasicType represents all built-in types.
  */
 export class BasicType extends Type {
-    constructor(name: "void" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune" | "any" | "string") {
+    constructor(name: "void" | "bool" | "float" | "double" | "null" | "int8" | "uint8" | "int16" | "uint16" | "int32" | "uint32" | "int64" | "uint64" | "rune" | "any" | "string" | "int" | "uint" | "byte" | "char") {
         super();
         this.name = name;
     }
@@ -1625,19 +1625,18 @@ export class TypeChecker {
             TypeChecker.t_double = new BasicType("double");
             TypeChecker.t_null = new BasicType("null");
             TypeChecker.t_int8 = new BasicType("int8");
-            TypeChecker.t_char = TypeChecker.t_int8;
+            TypeChecker.t_char = new BasicType("char");
             TypeChecker.t_int16 = new BasicType("int16");
             TypeChecker.t_int32 = new BasicType("int32");
             TypeChecker.t_int64 = new BasicType("int64");
-            // TODO: Depends on arch
-            TypeChecker.t_int = TypeChecker.t_int64;
+            TypeChecker.t_int = new BasicType("int");
             TypeChecker.t_uint8 = new BasicType("uint8");
-            TypeChecker.t_byte = TypeChecker.t_uint8;
+            TypeChecker.t_byte = new BasicType("byte");
             TypeChecker.t_uint16 = new BasicType("uint16");
             TypeChecker.t_uint32 = new BasicType("uint32");
             TypeChecker.t_uint64 = new BasicType("uint64");
             // TODO: Depends on arch
-            TypeChecker.t_uint = TypeChecker.t_uint64;
+            TypeChecker.t_uint = new BasicType("uint");
             TypeChecker.t_any = new BasicType("any");
             TypeChecker.t_string = new BasicType("string");
             TypeChecker.t_void = new BasicType("void");
@@ -3543,7 +3542,7 @@ export class TypeChecker {
                     if (snode.op == "*=" || snode.op == "/=") {
                         throw new TypeError("'" + snode.op + "' is an invalid operation on pointers", snode.loc);
                     }
-                    this.checkIsInt32Number(snode.rhs);
+                    this.checkIsIntNumber(snode.rhs);
                 } else {
                     this.checkIsNumber(snode.lhs);
                     this.checkIsNumber(snode.rhs);
@@ -3865,7 +3864,7 @@ export class TypeChecker {
                         throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
                     }
                     if (enode.op == "+" || enode.op == "-") {
-                        this.checkIsInt32Number(enode.rhs);
+                        this.checkIsIntNumber(enode.rhs);
                     } else {
                         this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
@@ -3875,7 +3874,7 @@ export class TypeChecker {
                         throw new TypeError("'" + enode.op + "' is an invalid operation on pointers", enode.loc);
                     }
                     if (enode.op == "+" || enode.op == "-") {
-                        this.checkIsInt32Number(enode.lhs);
+                        this.checkIsIntNumber(enode.lhs);
                     } else {
                         this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
@@ -4416,43 +4415,43 @@ export class TypeChecker {
                 let t = this.createType(enode.lhs, scope, "variable_toplevel");
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
-                // TODO: Casts remove restrictions
-                if ((t == TypeChecker.t_float || t == TypeChecker.t_double) && this.isIntNumber(right)) {
+                let left = RestrictedType.strip(t);
+                if ((left == TypeChecker.t_float || left == TypeChecker.t_double) && this.isIntNumber(right)) {
                     // Ints can be converted to floats
                     enode.type = t;
-                } else if (this.isIntNumber(t) && (right == TypeChecker.t_float || right == TypeChecker.t_double)) {
+                } else if (this.isIntNumber(left) && (right == TypeChecker.t_float || right == TypeChecker.t_double)) {
                     // Floats can be converted to ints
                     enode.type = t;
-                } else if (t == TypeChecker.t_float && right == TypeChecker.t_double) {
+                } else if (left == TypeChecker.t_float && right == TypeChecker.t_double) {
                     // Doubles can be converted to floats
                     enode.type = t;
-                } else if (t == TypeChecker.t_double && right == TypeChecker.t_float) {
+                } else if (left == TypeChecker.t_double && right == TypeChecker.t_float) {
                     // Floats can be converted to doubles
                     enode.type = t;
-                } else if (t == TypeChecker.t_rune && this.isUInt32Number(right)) {
-                    // Ints can be converted to floats
+                } else if (left == TypeChecker.t_rune && this.isUInt32Number(right)) {
+                    // Runes can be converted to uint32 
                     enode.type = t;
-                } else if (this.isUInt32Number(t) && right == TypeChecker.t_rune) {
-                    // Floats can be converted to ints
+                } else if (this.isUInt32Number(left) && right == TypeChecker.t_rune) {
+                    // Uint32 can be converted to a rune
                     enode.type = t;
-                } else if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
-                    // Unsafe pointers can be converted to 32-bit integers
-                    enode.type = t;
-                } else if (t instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || this.isString(right) || this.isInt32Number(right))) {
+//                } else if (this.isInt32Number(t) && right instanceof UnsafePointerType) {
+//                    // Unsafe pointers can be converted to 32-bit integers
+//                    enode.type = t;
+                } else if (left instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || this.isString(right) || this.isInt32Number(right))) {
                     // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
                     enode.type = t;
-                } else if ((t == TypeChecker.t_bool || this.isIntNumber(t)) && (right == TypeChecker.t_bool || this.isIntNumber(right)) && t != right) {
+                } else if ((left == TypeChecker.t_bool || this.isIntNumber(left)) && (right == TypeChecker.t_bool || this.isIntNumber(right)) && t != right) {
                     // bool and all integers can be converted into each other
                     enode.type = t;
-                } else if (this.isString(t) && right instanceof UnsafePointerType) {
+                } else if (this.isString(left) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (this.isString(t) && right instanceof SliceType && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
-                    // A slice of bytes can be converted to a string by copying it by copying it.
+                } else if (this.isString(left) && right instanceof SliceType && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
+                    // A slice of chars can be converted to a string by copying it.
                     // Restrictions are irrelevant.
                     enode.type = t;
-                } else if (t instanceof SliceType && (t.getElementType() == TypeChecker.t_byte || t.getElementType() == TypeChecker.t_char) && this.isString(right)) {
-                    // A string can be casted into a sequence of bytes by copying it
+                } else if (left instanceof SliceType && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
+                    // A string can be casted into a sequence of bytes or chars by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
                     let ok = false;
@@ -4661,7 +4660,7 @@ export class TypeChecker {
                 node.type = t;
                 t = this.stripType(t);
                 // TODO: Check range
-                if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
+                if (this.isIntNumber(t)) {
                     return true;
                 }
                 if (t instanceof UnsafePointerType) {
@@ -5212,7 +5211,7 @@ export class TypeChecker {
 
     public checkIsSignedNumber(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64) {
+        if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int || t == TypeChecker.t_char || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64) {
             return true;
         }
         if (doThrow) {
@@ -5223,7 +5222,7 @@ export class TypeChecker {
 
     public checkIsUnsignedNumber(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
+        if (t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
             return true;
         }
         if (doThrow) {
@@ -5272,22 +5271,10 @@ export class TypeChecker {
         }
         return false;
     }
-
-    // TODO: Rename to checkIsAddrInt
-    public checkIsInt32Number(node: Node, doThrow: boolean = true): boolean {
-        let t = this.stripType(node.type);
-        if (t == TypeChecker.t_int32 || t == TypeChecker.t_uint32) {
-            return true;
-        }
-        if (doThrow) {
-            throw new TypeError("Expected an 32-bit integer type, but got " + node.type.toString(), node.loc);
-        }
-        return false;
-    }
     
     public checkIsIntNumberOrUnsafePointer(node: Node, doThrow: boolean = true): boolean {
         let t = this.stripType(node.type);
-        if (t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
+        if (this.isIntNumber(t)) {
             return true;
         }
         if (t instanceof UnsafePointerType) {
@@ -5614,7 +5601,7 @@ export class TypeChecker {
 
     public isNumber(t: Type): boolean {
         t = this.stripType(t);
-        return (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64);
+        return (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64);
     }
 
     public isStruct(t: Type): boolean {
@@ -5706,7 +5693,7 @@ export class TypeChecker {
 
     public isIntNumber(type: Type): boolean {
         type = this.stripType(type);
-        if (type == TypeChecker.t_int8 || type == TypeChecker.t_int16 || type == TypeChecker.t_int32 || type == TypeChecker.t_int64 || type == TypeChecker.t_uint8 || type == TypeChecker.t_uint16 || type == TypeChecker.t_uint32 || type == TypeChecker.t_uint64) {
+        if (type == TypeChecker.t_int || type == TypeChecker.t_uint || type == TypeChecker.t_byte || type == TypeChecker.t_char || type == TypeChecker.t_int8 || type == TypeChecker.t_int16 || type == TypeChecker.t_int32 || type == TypeChecker.t_int64 || type == TypeChecker.t_uint8 || type == TypeChecker.t_uint16 || type == TypeChecker.t_uint32 || type == TypeChecker.t_uint64) {
             return true;
         }
         return false;
@@ -5823,7 +5810,7 @@ export class TypeChecker {
      */
     public isPureValue(t: Type): boolean {
         t = this.stripType(t);
-        if (t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void) {
+        if (t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void) {
             return true;
         }
         if (t instanceof TupleType) {
