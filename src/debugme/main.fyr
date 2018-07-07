@@ -108,3 +108,8 @@ func loopme() {
         
     }
 }
+
+func appendSome() {
+    var slice = []int[1, 2, ...3][:2]
+    append(slice, 3, 4)
+}

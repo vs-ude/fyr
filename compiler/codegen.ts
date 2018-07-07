@@ -1299,12 +1299,20 @@ export class CodeGenerator {
                 }
                 dest_cap = b.assign(b.tmp(), "sub", "sint", [dest_cap, dest_prefix]);
 
-                let offset = dest_count;
-                if (size > 1) {
-                    offset = b.assign(b.tmp(), "mul", "sint", [dest_count, size]);
+                // Compute how much capacity is required, i.e. how large will dest_count become?
+                let required = 0;
+                for(let i = 1; i < snode.parameters.length; i++) {
+                    let p = snode.parameters[i];
+                    if (p.op == "unary...") {
+                        // TODO: Check on fixed size array
+                    } else {
+                        required++;
+                    }
                 }
-                let to = b.assign(b.tmp(), "add", "addr", [dest_data_ptr, offset]);
-        
+                let src_data_ptr_arr: Array<ssa.Variable> = [];
+                let src_count_arr: Array<ssa.Variable> = [];
+                if (required != 0)
+                b.assign(dest_count, "add", "sint", [dest_count, required]);
                 for(let i = 1; i < snode.parameters.length; i++) {
                     let p = snode.parameters[i];
                     if (p.op == "unary...") {
@@ -1331,21 +1339,42 @@ export class CodeGenerator {
                             src_data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                             src_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                         }
-                        let new_data_count = b.assign(b.tmp(), "add", "int", [dest_count, src_count]);
-                        let cond = b.assign(b.tmp(), "gt_u", "i8", [dest_count, dest_cap]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();                        
+                        src_data_ptr_arr.push(src_data_ptr);
+                        src_count_arr.push(src_count);
+                        b.assign(dest_count, "add", "sint", [dest_count, src_count]);
+                    }
+                }
+
+                // Is the array large enough? If not -> trap
+                let cond = b.assign(b.tmp(), "gt", "i8", [dest_count, dest_cap]);
+                b.ifBlock(cond);
+                b.assign(null, "trap", null, []);
+                b.end();                        
+
+                // Move the to-pointer forward
+                let offset = dest_count;
+                if (size > 1) {
+                    offset = b.assign(b.tmp(), "mul", "sint", [dest_count, size]);
+                }
+                let to = b.assign(b.tmp(), "add", "addr", [dest_data_ptr, offset]);
+                        
+                let arr_count = 0;
+                for(let i = 1; i < snode.parameters.length; i++) {
+                    let p = snode.parameters[i];
+                    if (p.op == "unary...") {
+                        let src_data_ptr = src_data_ptr_arr[arr_count];
+                        let src_count = src_count_arr[arr_count];
+                        arr_count++;
                         b.assign(b.mem, "memmove", null, [to, src_data_ptr, src_count, size]);
-                        dest_count = b.assign(b.tmp(), "add", "sint", [dest_count, src_count]);
+                        let addOffset = src_count;
+                        if (size > 1) {
+                            addOffset = b.assign(b.tmp(), "mul", "sint", [src_count, size]);
+                        }                                
+                        b.assign(to, "add", "addr", [to, addOffset]);
                     } else {
-                        let cond = b.assign(b.tmp(), "eq", "i8", [dest_cap, dest_count]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();
                         let src = this.processExpression(f, scope, p, b, vars, objType.getElementType());
                         b.assign(b.mem, "store", elementType, [to, 0, src]);
-                        dest_count = b.assign(b.tmp(), "add", "sint", [dest_count, 1]);
+                        b.assign(to, "add", "addr", [to, size]);
                     }
                 }
 
