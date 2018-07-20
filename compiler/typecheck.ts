@@ -3679,53 +3679,7 @@ export class TypeChecker {
                     throw new TypeError("'copy' requires two slices of the same type", snode.loc);
                 }
                 break;
-            case "append":
-            {
-                if (snode.parameters.length < 2) {
-                    throw new TypeError("'append' expects at least two arguments", snode.loc);
-                }
-                let e: Type;
-                for(let i = 0; i < snode.parameters.length; i++) {
-                    let p = snode.parameters[i];
-                    let expand = false;
-                    if (i > 0) {
-                        if (p.op == "unary...") {
-                            expand = true;
-                            p = p.rhs;
-                        }
-                    }
-                    this.checkExpression(p, scope);
-                    if (i == 0) {
-                        if (!this.isSlice(p.type) || !this.checkIsMutable(p, scope, false)) {
-                            throw new TypeError("First argument to 'append' must be a mutable non-const slice", p.loc);
-                        }
-                        let t = RestrictedType.strip(p.type) as SliceType;
-                        if (this.isConst(t.arrayType)) {
-                            throw new TypeError("First argument to 'append' must be a mutable non-const slice", p.loc);
-                        }
-                        e = t.getElementType();
-                        if (this.isPureValue(e)) {
-                            // Remove constness in case of pure values.
-                            e = RestrictedType.strip(e);
-                        }
-                    } else {
-                        if (expand) {
-                            if (!this.isSlice(p.type)) {
-                                throw new TypeError("'...' must be followed by a slice", p.loc);
-                            }
-                            let e2 = (RestrictedType.strip(p.type) as SliceType).getElementType();
-                            if (this.isPureValue(e)) {
-                                // Remove constness in case of pure values.
-                                e2 = RestrictedType.strip(e2);
-                            }
-                            this.checkTypeEquality(e, e2, p.loc, true);
-                        } else {
-                            this.checkIsAssignableNode(e, p, scope, true);
-                        }
-                    }
-                }
-                break;
-            }
+            case "push": // Push is handled together with tryPush and append which are both expressions
             default:
                 this.checkExpression(snode, scope);
                 if (snode.type instanceof ArrayLiteralType || snode.type instanceof ObjectLiteralType || snode.type instanceof TupleLiteralType) {
@@ -4522,6 +4476,74 @@ export class TypeChecker {
                 enode.lhs.type = this.createType(enode.lhs, scope, "default");
                 enode.type = TypeChecker.t_int;
                 break;
+            case "pop":
+                throw "TODO" 
+            case "push":
+            case "tryPush":
+            case "append":
+            {
+                if (enode.parameters.length < 2) {
+                    throw new TypeError("'append' expects at least two arguments", enode.loc);
+                }
+                let e: Type;
+                for(let i = 0; i < enode.parameters.length; i++) {
+                    let p = enode.parameters[i];
+                    let expand = false;
+                    if (i > 0) {
+                        if (p.op == "unary...") {
+                            expand = true;
+                            p = p.rhs;
+                        }
+                    }
+                    this.checkExpression(p, scope);
+                    if (i == 0) {
+                        if (enode.op == "push" || enode.op == "tryPush") {
+                            this.checkIsMutable(p, scope, true);
+                        }
+                        if (!this.isSlice(p.type)) {
+                            throw new TypeError("First argument to '" + enode.op + "' must be a slice", p.loc);
+                        }
+                        let t = RestrictedType.strip(p.type) as SliceType;
+                        if (this.isConst(t.arrayType)) {
+                            throw new TypeError("First argument to '" + enode.op + "' must be a non-const slice", p.loc);
+                        }
+                        if (enode.op == "append") {
+                            if (!TypeChecker.isUnique(t)) {
+                                throw new TypeError("First argument to 'append' must be an owning pointer", p.loc);
+                            }
+                        }
+                        e = t.getElementType();
+                        if (this.isPureValue(e)) {
+                            // Remove constness in case of pure values.
+                            e = RestrictedType.strip(e);
+                        }
+                    } else {
+                        if (expand) {
+                            if (!this.isSlice(p.type)) {
+                                throw new TypeError("'...' must be followed by a slice", p.loc);
+                            }
+                            let e2 = (RestrictedType.strip(p.type) as SliceType).getElementType();
+                            if (this.isPureValue(e)) {
+                                // Remove constness in case of pure values.
+                                e2 = RestrictedType.strip(e2);
+                            }
+                            this.checkTypeEquality(e, e2, p.loc, true);
+                        } else {
+                            this.checkIsAssignableNode(e, p, scope, true);
+                        }
+                    }
+                }
+                if (enode.op == "append") {
+                    enode.type = enode.parameters[0].type;
+                } else if (enode.op == "tryPush") {
+                    enode.type = TypeChecker.t_bool;
+                } else if (enode.op == "push") {
+                    enode.type = TypeChecker.t_void;
+                } else {
+                    throw "Implementation error";
+                }
+                break;
+            }   
             case "ellipsisId":
             case "unary...":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
@@ -6109,32 +6131,6 @@ export class TypeChecker {
                 this.checkGroupsInExpression(snode.lhs, scope, GroupCheckFlags.None);
                 this.checkGroupsInExpression(snode.rhs, scope, GroupCheckFlags.None);
                 break;
-            case "append":
-            {
-                let group: Group;
-                let ltype: Type;
-                for(let i = 0; i < snode.parameters.length; i++) {                    
-                    let p = snode.parameters[i];
-                    let g = this.checkGroupsInExpression(p.op == "unary..." ? p.rhs : p, scope, GroupCheckFlags.None);
-                    if (i == 0) {
-                        group = g;
-                        ltype = (RestrictedType.strip(p.type) as SliceType).getElementType();
-                    } else {
-                        if (p.op == "unary...") {
-                            if (!this.isPureValue(ltype)) {
-                                // TODO: Could be realized. Might need to zero the slice
-                                throw new TypeError("Appending a slice of pointers is not supported.", p.loc);
-                            }
-                        } else {
-                            // Appending a pointer-like type? Then we must care about the groups involved
-                            if (this.isSafePointer(p.type) || this.isSlice(p.type)) {
-                                this.checkGroupsInSingleAssignment(ltype, group, g, p, false, scope, p.loc);
-                            }
-                        }
-                    }
-                }
-                break;
-            }
                 /*
             case "spawn":
             {
@@ -6151,6 +6147,7 @@ export class TypeChecker {
                 break;
             }
             */
+            case "push":
             default:
                 this.checkGroupsInExpression(snode, scope, GroupCheckFlags.None);
         }
@@ -6614,6 +6611,39 @@ export class TypeChecker {
             case "clone":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);
                 return new Group(GroupKind.Free);
+            case "pop":
+                return this.checkGroupsInExpression(enode.lhs, scope, flags);
+            case "push":
+            case "tryPush":
+            case "append":
+            {
+                let group: Group;
+                let ltype: Type;
+                for(let i = 0; i < enode.parameters.length; i++) {                    
+                    let p = enode.parameters[i];
+                    let g = this.checkGroupsInExpression(p.op == "unary..." ? p.rhs : p, scope, GroupCheckFlags.None);
+                    if (i == 0) {
+                        group = g;
+                        ltype = (RestrictedType.strip(p.type) as SliceType).getElementType();
+                    } else {
+                        if (p.op == "unary...") {
+                            if (!this.isPureValue(ltype)) {
+                                // TODO: Could be realized. Might need to zero the slice
+                                throw new TypeError("Appending a slice of pointers is not supported.", p.loc);
+                            }
+                        } else {
+                            // Appending a pointer-like type? Then we must care about the groups involved
+                            if (this.isSafePointer(p.type) || this.isSlice(p.type)) {
+                                this.checkGroupsInSingleAssignment(ltype, group, g, p, false, scope, p.loc);
+                            }
+                        }
+                    }
+                }
+                if (enode.op == "append") {
+                    return group;                    
+                }
+                return null;
+            }
             default:
                 throw "Implementation error " + enode.op;
         }    
@@ -6707,10 +6737,12 @@ export class TypeChecker {
         return new Group(kind, "return");
     }
 
-    // Returns true if the expression yields ownership of the object it is pointing to.
-    // Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
+    /**
+     * Returns true if the expression yields ownership of the object it is pointing to.
+     * Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
+     */
     public isTakeExpression(enode: Node): boolean {
-        if (enode.op == "clone" || enode.op == "take" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
+        if (enode.op == "clone" || enode.op == "take" || enode.op == "append" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
             return true;
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.

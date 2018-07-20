@@ -471,8 +471,8 @@ statement
   / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2});
     }
-  / "append" [ \t]* "(" [ \t\n]* e: expressionList ")" {
-      return new ast.Node({loc: fl(location()), op: "append", parameters: e});
+  / "push" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+      return new ast.Node({loc: fl(location()), op: "push", parameters: e});
     }    
   / s: simpleStatement { 
       if (s.op == "let_in" || s.op == "var_in") {
@@ -897,7 +897,16 @@ primary
     }
 
 primary2
-  = t: typedLiteral { return t; }
+  = "tryPush" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+      return new ast.Node({loc: fl(location()), op: "tryPush", parameters: e});
+    }    
+  / "append" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+      return new ast.Node({loc: fl(location()), op: "append", parameters: e});
+    }
+  / "pop" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+      return new ast.Node({loc: fl(location()), op: "pop", parameters: e});
+    }       
+  / t: typedLiteral { return t; }
   / c: typeCast { return c; }
   / n: number { return n; }
   / s: string { return s; }

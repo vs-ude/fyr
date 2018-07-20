@@ -109,7 +109,11 @@ func loopme() {
     }
 }
 
-func appendSome() {
+func pushSome() bool {
     var slice = []int[1, 2, ...3][:2]
-    append(slice, 3, 4)
+    push(slice, 3, 4)
+    if (!tryPush(slice, 5, 6, 7)) {
+        return false
+    }
+    return true
 }
