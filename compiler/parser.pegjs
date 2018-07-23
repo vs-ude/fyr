@@ -474,6 +474,10 @@ statement
   / "push" [ \t]* "(" [ \t\n]* e: expressionList ")" {
       return new ast.Node({loc: fl(location()), op: "push", parameters: e});
     }    
+  / "append" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+      return new ast.Node({loc: fl(location()), op: "append", parameters: e});
+    }
+
   / s: simpleStatement { 
       if (s.op == "let_in" || s.op == "var_in") {
           error("'in' is allowed inside a for loop header only", s.loc);
@@ -900,9 +904,6 @@ primary2
   = "tryPush" [ \t]* "(" [ \t\n]* e: expressionList ")" {
       return new ast.Node({loc: fl(location()), op: "tryPush", parameters: e});
     }    
-  / "append" [ \t]* "(" [ \t\n]* e: expressionList ")" {
-      return new ast.Node({loc: fl(location()), op: "append", parameters: e});
-    }
   / "pop" [ \t]* "(" [ \t\n]* e: expressionList ")" {
       return new ast.Node({loc: fl(location()), op: "pop", parameters: e});
     }       

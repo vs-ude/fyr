@@ -88,7 +88,7 @@ export class Package {
         this.objFileName = packagePaths[packagePaths.length - 1];
         packagePaths.splice(packagePaths.length - 1, 1);
         this.objFilePath = path.join(fyrPath, "pkg", architecture, packagePaths.join(path.sep));
-        this.binFilePath = path.join(fyrPath, "pkg", architecture);
+        this.binFilePath = path.join(fyrPath, "bin", architecture);
         this.binFileName = this.objFileName;
         Package.packagesByPath.set(pkgPath, this);
 

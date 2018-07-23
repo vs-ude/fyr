@@ -3680,6 +3680,7 @@ export class TypeChecker {
                 }
                 break;
             case "push": // Push is handled together with tryPush and append which are both expressions
+            case "append":
             default:
                 this.checkExpression(snode, scope);
                 if (snode.type instanceof ArrayLiteralType || snode.type instanceof ObjectLiteralType || snode.type instanceof TupleLiteralType) {
@@ -4534,7 +4535,7 @@ export class TypeChecker {
                     }
                 }
                 if (enode.op == "append") {
-                    enode.type = enode.parameters[0].type;
+                    enode.type = TypeChecker.t_void;
                 } else if (enode.op == "tryPush") {
                     enode.type = TypeChecker.t_bool;
                 } else if (enode.op == "push") {
@@ -6148,6 +6149,7 @@ export class TypeChecker {
             }
             */
             case "push":
+            case "append":
             default:
                 this.checkGroupsInExpression(snode, scope, GroupCheckFlags.None);
         }
