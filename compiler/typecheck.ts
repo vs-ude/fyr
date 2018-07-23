@@ -4575,6 +4575,8 @@ export class TypeChecker {
             }
             */
             this.checkGroupsInSingleAssignment(v.type, scope.resolveGroup(v), null, v.node.rhs, false, scope, v.loc);
+        } else {
+            throw new TypeError("Global variable " + v.name + " must be initialized", v.node.loc);
         }
     }
 
@@ -4592,6 +4594,8 @@ export class TypeChecker {
             }
             if (node.parameters.length == 0) {
                 throw new TypeError("Cannot infer default type of []", node.loc);
+            } else if ((node.flags & AstFlags.FillArray) == AstFlags.FillArray) {
+                throw new TypeError("Cannot infer default type of [constant...]", node.loc);
             } else {
                 let t = node.parameters[0].type;
                 for(let i = 1; i < node.parameters.length; i++) {
@@ -4722,6 +4726,7 @@ export class TypeChecker {
             {
                 if (this.isArray(t)) {
                     let arrayType = this.stripType(t) as ArrayType;
+                    // An array?
                     if (arrayType.size != -1) {
                         // Count array elements
                         let count = 0;
@@ -4730,14 +4735,16 @@ export class TypeChecker {
                             for(var i = 0; i < node.parameters.length; i++) {
                                 let pnode = node.parameters[i];
                                 if (pnode.op == "unary...") {
-                                    count--;
-                                    count += parseInt(pnode.rhs.value);
-                                    break;
+                                    throw new TypeError("Arrays cannot be of variable size", pnode.loc);
                                 }
                             }
                         }
-                        if (count != arrayType.size) {
+                        if (count != arrayType.size && ((node.flags & AstFlags.FillArray) != AstFlags.FillArray) || count > arrayType.size) {
                             throw new TypeError("Mismatch in array size", node.loc);                                                
+                        }
+                    } else {
+                        if ((node.flags & AstFlags.FillArray) == AstFlags.FillArray) {
+                            throw new TypeError("The array fill operator [constant...] is not allowed for slices", node.loc);
                         }
                     }
                     if (node.parameters) {

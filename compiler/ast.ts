@@ -13,7 +13,8 @@ export function currentFile(): string {
 export enum AstFlags {
     None = 0,
     ZeroAfterAssignment = 1,
-    ReferenceObjectMember = 2
+    ReferenceObjectMember = 2,
+    FillArray = 4
 }
 
 export type NodeConfig = {

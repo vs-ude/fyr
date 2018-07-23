@@ -1525,32 +1525,21 @@ export class CodeGenerator {
             }
             buf.push(0);
         } else if (this.tc.isArray(n.type)) {
+            let arrType = RestrictedType.strip(n.type) as ArrayType;
             if (n.parameters) {
                 for(let p of n.parameters) {
                     if (p.op == "unary...") {
-                        continue;
+                        throw "Implementation error";
                     }
                     this.processPureLiteralInternal(p, buf);
                 }
-                let count = 0;
-                for(let i = 0; i < n.parameters.length; i++) {
-                    let p = n.parameters[i];
-                    if (p.op == "unary...") {             
-                        if (p.rhs.op != "int") {
-                            throw "Implementation error";
-                        }
-                        count = parseInt(p.rhs.value);                            
-                        break;
-                    }
-                }
-                if (count > 0) {
-                    let t = RestrictedType.strip(n.type) as ArrayType;
-                    let et  = this.getSSAType(t.elementType);
-                    for(let i = 0; i < count; i++) {
-                        let z = this.generateZero(et);
-                        for(let v of z) {
-                            buf.push(v);
-                        }
+                let count = n.parameters.length;
+                if ((n.flags & AstFlags.FillArray) == AstFlags.FillArray && count < arrType.size) {
+                    // Repeat the last parameter
+                    for(let i = count; i < arrType.size; i++) {
+                        console.log("Oooops", i, count, arrType.size);
+                        let p = n.parameters[n.parameters.length - 1];
+                        this.processPureLiteralInternal(p, buf);
                     }
                 }
             

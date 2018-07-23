@@ -936,7 +936,6 @@ primary2
   / i: identifier {
       return i;
     }
-  / "..." [\t ]* 
   / "(" [ \t\n]* e: expressionList ")" {
       if (e.length == 1) {
           return e[0];
@@ -957,8 +956,8 @@ primary2
   / r:rune { return r; }
 
 array
-  = "[" [ \t\n]* e:expressionList? [ \t\n]* "]" {
-      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
+  = "[" [ \t\n]* e:expressionList? [ \t\n]* z:("..." [ \t\n]*)? "]" {
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e, flags: z ? ast.AstFlags.FillArray : 0});
     }
 
 object
