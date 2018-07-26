@@ -2925,12 +2925,12 @@ export class CodeGenerator {
                     let l: ssa.Variable;
                     if (t2.mode == "local_reference") {
                         ptr = b.assign(b.tmp(), "member", "addr", [expr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        l = b.assign(b.tmp(), "member", "sint", [expr, this.localSlicePointer.fieldOffset("data_length")]);
+                        l = b.assign(b.tmp(), "member", "sint", [expr, this.localSlicePointer.fieldIndexByName("data_length")]);
                     } else {
                         let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
                         ptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
-                        l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldOffset("data_length")]);
+                        l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldIndexByName("data_length")]);
                     }
                     if (!this.disableNullCheck) {
                         let cond = b.assign(b.tmp(), "eq", "i8", [ptr, 0]);
@@ -2939,9 +2939,9 @@ export class CodeGenerator {
                         b.end();
                     }
                     // Make room for the terminating 0 character
-                    l = b.assign(b.tmp(), "add", "sint", [l, 1]);
-                    let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [l, 1]);
-                    b.assign(b.mem, "memcpy", null, [newptr, ptr, l]);
+                    let l2 = b.assign(b.tmp(), "add", "sint", [l, 1]);
+                    let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [l2, 1]);
+                    b.assign(b.mem, "memcpy", null, [newptr, ptr, l, 1]);
                     if (this.tc.isTakeExpression(enode.rhs)) {
                         this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
                     }
@@ -2966,7 +2966,7 @@ export class CodeGenerator {
                     // Convert string to a slice
                     let size = b.assign(b.tmp(), "len_str", "sint", [expr]);                    
                     let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
-                    b.assign(b.mem, "memcpy", null, [newptr, expr, size]);
+                    b.assign(b.mem, "memcpy", null, [newptr, expr, size, 1]);
                     if (this.tc.isTakeExpression(enode.rhs)) {
                         this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
                     }

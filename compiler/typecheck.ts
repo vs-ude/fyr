@@ -4407,7 +4407,7 @@ export class TypeChecker {
                     // A slice of chars can be converted to a string by copying it.
                     // Restrictions are irrelevant.
                     enode.type = t;
-                } else if (left instanceof SliceType && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
+                } else if (left instanceof SliceType && (left.mode == "unique" || left.mode == "strong") && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
                     // A string can be casted into a sequence of bytes or chars by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
