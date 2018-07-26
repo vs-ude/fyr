@@ -4208,7 +4208,9 @@ export class TypeChecker {
                 if (enode.parameters) {
                     for(var i = 0; i < enode.parameters.length; i++) {
                         let p = enode.parameters[i];
-                        if (p.op == "unary...") {
+                        if (p.op == "...") {
+                            // Do nothing by intention
+                        } else if (p.op == "unary...") {
                             this.checkExpression(p.rhs, scope);
                             this.checkIsPlatformIntNumber(p.rhs);
                         } else {
@@ -4590,12 +4592,13 @@ export class TypeChecker {
             }
         } else if (node.type instanceof ArrayLiteralType) {
             for(let pnode of node.parameters) {
+                if (pnode.op == "...") {
+                    throw new TypeError("Cannot infer default type of array literal using the ... operator", pnode.loc);
+                }
                 this.defaultLiteralType(pnode);
             }
             if (node.parameters.length == 0) {
                 throw new TypeError("Cannot infer default type of []", node.loc);
-            } else if ((node.flags & AstFlags.FillArray) == AstFlags.FillArray) {
-                throw new TypeError("Cannot infer default type of [constant...]", node.loc);
             } else {
                 let t = node.parameters[0].type;
                 for(let i = 1; i < node.parameters.length; i++) {
@@ -4730,28 +4733,37 @@ export class TypeChecker {
                     if (arrayType.size != -1) {
                         // Count array elements
                         let count = 0;
+                        let lastParameterIsEllipsis = false;
                         if (node.parameters) {
                             count = node.parameters.length;                        
                             for(var i = 0; i < node.parameters.length; i++) {
                                 let pnode = node.parameters[i];
-                                if (pnode.op == "unary...") {
-                                    throw new TypeError("Arrays cannot be of variable size", pnode.loc);
+                                if (pnode.op == "...") {
+                                    lastParameterIsEllipsis = true;
                                 }
                             }
                         }
-                        if (count != arrayType.size && ((node.flags & AstFlags.FillArray) != AstFlags.FillArray) || count > arrayType.size) {
-                            throw new TypeError("Mismatch in array size", node.loc);                                                
-                        }
-                    } else {
-                        if ((node.flags & AstFlags.FillArray) == AstFlags.FillArray) {
-                            throw new TypeError("The array fill operator [constant...] is not allowed for slices", node.loc);
+                        if (count != arrayType.size) {
+                            if (!lastParameterIsEllipsis || count > arrayType.size ) {
+                                throw new TypeError("Mismatch in array size", node.loc);
+                            } else {
+                                // Note that this literal is incomplete
+                                node.flags |= AstFlags.FillArray;
+                            }
                         }
                     }
                     if (node.parameters) {
                         let elementType = this.arrayElementType(t);
                         for(var i = 0; i < node.parameters.length; i++) {
                             let pnode = node.parameters[i];
+                            node.flags |= (pnode.flags & AstFlags.FillArray);
                             if (pnode.op == "unary...") {
+                                continue;
+                            }
+                            if (pnode.op == "...") {
+                                if (arrayType.size == -1) {
+                                    throw new TypeError("The ... operator is not allowed in slice literals", pnode.loc);
+                                }
                                 continue;
                             }
                             if (!this.checkIsAssignableNode(elementType, pnode, scope, doThrow)) {
@@ -4778,6 +4790,7 @@ export class TypeChecker {
                         if (!this.checkIsAssignableNode(tupleType.types[i], pnode, scope, doThrow)) {
                             return false;
                         }
+                        node.flags |= (pnode.flags & AstFlags.FillArray);
                     }
                     node.type = t;
                     return true;                    
@@ -4799,6 +4812,7 @@ export class TypeChecker {
                             if (!this.checkIsAssignableNode(valueType, pnode.lhs, scope, doThrow)) {
                                 return false;
                             }
+                            node.flags |= (pnode.flags & AstFlags.FillArray);
                         }
                     }
                     node.type = t;
@@ -4808,6 +4822,7 @@ export class TypeChecker {
                     // A struct initialization
                     if (node.parameters) {
                         for(let pnode of node.parameters) {
+                            node.flags |= (pnode.flags & AstFlags.FillArray);
                             let field = structType.field(pnode.name.value);
                             if (!field) {
                                 throw new TypeError("Unknown field " + pnode.name.value + " in " + t.toString(), pnode.name.loc);
@@ -6486,6 +6501,9 @@ export class TypeChecker {
                         let p = enode.parameters[i];                        
                         if (p.op == "unary...") {
                             this.checkGroupsInExpression(p.rhs, scope, flags & GroupCheckFlags.None);
+                            continue;
+                        }
+                        if (p.op == "...") {
                             continue;
                         }
                         let g = this.checkGroupsInExpression(p, scope, flags & GroupCheckFlags.NotIsolateMask);

@@ -247,7 +247,19 @@ export class FunctionType {
     private _stackFrame: StructType;
 }
 
-export type BinaryData = Array<number | string>;
+export class BinaryArray {
+    constructor() {
+        this.data = [];
+    }
+    
+    // This length might be higher than the elements in 'data'.
+    // In this case all array elements missing in 'data' are zero.
+    // For large arrays it would be a waste to fill 'data' with thousands of zeros.
+    public totalLen: number;
+    public data: BinaryData;
+}
+
+export type BinaryData = Array<number | string | BinaryArray>;
 
 export class Variable {
     constructor(name?: string) {

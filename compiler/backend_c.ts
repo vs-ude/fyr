@@ -530,7 +530,7 @@ export class CBackend implements backend.Backend {
         return t == "s8" || t == "s16" || t == "s32" || t == "s64" || t == "sint";
     }
 
-    private emitExpr(n: number | string | ssa.Variable | ssa.Node): CNode {
+    private emitExpr(n: number | string | ssa.BinaryArray | ssa.Variable | ssa.Node): CNode {
         let c = this.emitExprIntern(n);
         if (n instanceof ssa.Node && n.assign && (n.assign.readCount != 0 || n.assign.writeCount != 0)) {
             let e = new CBinary();
@@ -542,7 +542,7 @@ export class CBackend implements backend.Backend {
         return c;
     }
 
-    private emitExprIntern(n: number | string | ssa.Variable | ssa.Node, generateConstants: boolean = false): CNode {
+    private emitExprIntern(n: number | string | ssa.BinaryArray | ssa.Variable | ssa.Node, generateConstants: boolean = false): CNode {
         if (typeof(n) == "number") {
             return new CConst(n.toString());
         }
@@ -560,6 +560,13 @@ export class CBackend implements backend.Backend {
             arr.rExpr = new CConst("0");
             addr.expr = arr;
             return addr;
+        }
+        if (n instanceof ssa.BinaryArray) {
+            let l = new CCompoundLiteral();
+            for(let b of n.data) {
+                l.values.push(this.emitExpr(b));
+            }
+            return l;
         }
         if (n instanceof ssa.Variable) {
             if (this.globalStorage && this.globalStorage.has(n) && !generateConstants) {
@@ -1373,6 +1380,13 @@ export class CBackend implements backend.Backend {
             return;
         }
         let name = v.name;
+        let prefix = "_";
+        for(let v of this.localVariables) {
+            if (v.name == name) {
+                prefix = this.localVariables.length.toString() + "_";
+                break;
+            }
+        }
         if (name.substr(0, 1) == "%" && !v.isConstant) {
             name = "nr_" + name.substr(1);
         } else if (v.isConstant) {
@@ -1380,12 +1394,12 @@ export class CBackend implements backend.Backend {
                 return;
             }    
             if (name.substr(0, 1) == "%") {
-                name = "s_" + name.substr(1);
+                name = "s" + prefix + name.substr(1);
             } else {
-                name = "s_" + name;
+                name = "s" + prefix + name;
             }
         } else {
-            name = "v_" + name;
+            name = "v" + prefix + name;
         }
         this.varStorage.set(v, name);
         this.localVariables.push(v);

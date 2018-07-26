@@ -956,8 +956,19 @@ primary2
   / r:rune { return r; }
 
 array
-  = "[" [ \t\n]* e:expressionList? [ \t\n]* z:("..." [ \t\n]*)? "]" {
-      return new ast.Node({loc: fl(location()), op: "array", parameters: e, flags: z ? ast.AstFlags.FillArray : 0});
+  = "[" [ \t\n]* e:arrayElementList? [ \t\n]* "]" {
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
+    }
+
+arrayElementList
+  = e:expressionList z:([ \t\n]* "," [ \t\n]* "...") {
+      if (z) {
+          e.push(new ast.Node({loc: fl(location()), op: "..."}));
+      }
+      return e;
+    }
+  / "..." {
+      return [new ast.Node({loc: fl(location()), op: "..."})];
     }
 
 object

@@ -1526,24 +1526,20 @@ export class CodeGenerator {
             buf.push(0);
         } else if (this.tc.isArray(n.type)) {
             let arrType = RestrictedType.strip(n.type) as ArrayType;
+            let arrData = new ssa.BinaryArray();
+            arrData.totalLen = arrType.size;
             if (n.parameters) {
                 for(let p of n.parameters) {
                     if (p.op == "unary...") {
                         throw "Implementation error";
                     }
-                    this.processPureLiteralInternal(p, buf);
-                }
-                let count = n.parameters.length;
-                if ((n.flags & AstFlags.FillArray) == AstFlags.FillArray && count < arrType.size) {
-                    // Repeat the last parameter
-                    for(let i = count; i < arrType.size; i++) {
-                        console.log("Oooops", i, count, arrType.size);
-                        let p = n.parameters[n.parameters.length - 1];
-                        this.processPureLiteralInternal(p, buf);
+                    if (p.op == "...") {
+                        continue;
                     }
+                    this.processPureLiteralInternal(p, arrData.data);
                 }
-            
             }
+            buf.push(arrData);
         } else if (this.tc.isTuple(n.type)) {
             for(let p of n.parameters) {
                 this.processPureLiteralInternal(p, buf);
@@ -1911,7 +1907,10 @@ export class CodeGenerator {
                     let count: number | ssa.Variable = enode.parameters.length;
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let p = enode.parameters[i];
-                        if (p.op == "unary..." && typeof(count) == "number") {
+                        if (p.op == "unary...") {
+                            if (typeof(count) != "number") {
+                                throw "Implementation error";
+                            }
                             count--;
                             let dynCount = this.processExpression(f, scope, p.rhs, b, vars, TypeChecker.t_int);
                             if (typeof(dynCount) == "number") {
@@ -1938,25 +1937,11 @@ export class CodeGenerator {
                     let st = this.getSSAType(t); // This returns a struct type
                     let args: Array<string | ssa.Variable | number> = [];
                     for(let i = 0; i < enode.parameters.length; i++) {
+                        if (enode.parameters[i].op == "...") {
+                            continue;
+                        }
                         let v = this.processLiteralArgument(f, scope, enode.parameters[i], t.elementType, b, vars);
                         args.push(v);
-                    }
-                    let count = 0;
-                    for(let i = 0; i < enode.parameters.length; i++) {
-                        let p = enode.parameters[i];
-                        if (p.op == "unary...") {             
-                            if (p.rhs.op != "int") {
-                                throw "Implementation error";
-                            }
-                            let count = parseInt(p.rhs.value);                            
-                            break;
-                        }
-                    }
-                    if (count > 0) {
-                        let et  = this.getSSAType(t.elementType);
-                        for(let i = 0; i < count; i++) {
-                            args = args.concat(this.generateZero(et));
-                        }
                     }
                     return b.assign(b.tmp(), "struct", st, args);
                 }
