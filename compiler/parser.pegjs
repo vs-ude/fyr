@@ -19,6 +19,15 @@
         loc.file = ast.currentFile();
         return loc;
     }
+ 
+    function runesToString(runes) {
+        for(var i = 0, s = ''; i < runes.length; i++) {
+            var h = runes[i].numValue.toString(16);
+            if(h.length < 2) h = '0' + h;
+            s += '%' + h;
+        }
+        return decodeURIComponent(s);
+    }
 }
 
 file
@@ -1054,11 +1063,10 @@ identifier "identifier"
     }
 
 string "string"
-  = '"' s:$stringchar* '"' { return new ast.Node({loc: fl(location()), op: "str", value: s}); }
+  = '"' s:stringchar* '"' { return new ast.Node({loc: fl(location()), op: "str", value: runesToString(s)}); }
 
 stringchar
   = r: runecharSpecial { return r; }
-  / "'" { return "'"; }
   / s:$([^"]) {
       return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: s.charCodeAt(0)});
     }

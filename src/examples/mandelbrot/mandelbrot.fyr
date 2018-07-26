@@ -1,3 +1,6 @@
+import . from "<unistd.h>" {
+    func write(int, #const char, int) int
+} 
 
 // This is the square of the limit that pixels will need to exceed in order to
 // escape from the Mandelbrot set.
@@ -69,5 +72,9 @@ export func main() int {
     }
     // Compute the mandelbrot
     calc()
+    // Write to stdout
+    let header = "P4\n16000 16000\n"
+    write(1, <#const char>header, len(header))
+    write(1, <#const char>&pixels, len(pixels))
     return 0
 }
