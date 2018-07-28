@@ -936,11 +936,17 @@ primary2
   / "clone" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "clone", lhs: e});
     }
-  / "sizeOf" [ \t]* "(" [ \t]* t:type [ \t]* ")" {
+  / "sizeOf" [ \t]* "<" [ \t]* t:type [ \t]* ">" {
       return new ast.Node({loc: fl(location()), op: "sizeof", lhs: t});
     }
-  / "alignedSizeOf" [ \t]* "(" [ \t]* t:type [ \t]* ")" {
+  / "alignedSizeOf" [ \t]* "<" [ \t]* t:type [ \t]* ">" {
       return new ast.Node({loc: fl(location()), op: "aligned_sizeof", lhs: t});
+    }
+  / "max" [ \t]* "<" [ \t]* t:type [ \t]* ">" {
+      return new ast.Node({loc: fl(location()), op: "max", lhs: t});
+    }
+  / "min" [ \t]* "<" [ \t]* t:type [ \t]* ">" {
+      return new ast.Node({loc: fl(location()), op: "min", lhs: t});
     }
   / i: identifier {
       return i;

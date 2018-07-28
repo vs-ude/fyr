@@ -4479,6 +4479,12 @@ export class TypeChecker {
                 enode.lhs.type = this.createType(enode.lhs, scope, "default");
                 enode.type = TypeChecker.t_int;
                 break;
+            case "max":
+            case "min":
+                enode.lhs.type = this.createType(enode.lhs, scope, "default");
+                this.checkIsNumber(enode.lhs, true);
+                enode.type = enode.lhs.type;
+                break;
             case "pop":
                 throw "TODO" 
             case "push":
@@ -6633,7 +6639,9 @@ export class TypeChecker {
                 this.checkGroupsInExpression(enode.lhs, scope, flags);
                 return null;
             case "sizeof":
-            case "aligned_sizeof":                
+            case "aligned_sizeof":
+            case "max":
+            case "min":                
                 return null;
             case "clone":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);

@@ -837,7 +837,35 @@ export class CBackend implements backend.Backend {
             c.args.push(this.emitExpr(n.args[0]));
             return c;
         } else if (n.kind == "min") {
-            if (n.type != "f32" && n.type != "f64") {
+            if (n.args.length == 0) {
+                switch(n.type) {
+                    case "int":
+                        return new CConst("INT_MIN");
+                    case "i8":
+                    case "char":
+                        return new CConst("CHAR_MIN");
+                    case "i16":
+                        return new CConst("INT16_MIN");
+                    case "i32":
+                        return new CConst("INT32_MIN");
+                    case "i64":
+                        return new CConst("INT64_MIN");
+                    case "uint":
+                        return new CConst("UINT_MIN");
+                    case "uint8":
+                    case "byte":
+                        return new CConst("UINT8_MIN");
+                    case "uint16":
+                        return new CConst("UINT16_MIN");
+                    case "uint32":
+                    case "rune":
+                        return new CConst("UINT32_MIN");
+                    case "uint64":
+                        return new CConst("UINT64_MIN");
+                    default:
+                        throw "Implementation error";
+                }
+            } else if (n.type != "f32" && n.type != "f64") {
                 let c = new CTypeCast();
                 c.type = this.mapType(n.type);
                 let call = new CFunctionCall();
@@ -858,7 +886,35 @@ export class CBackend implements backend.Backend {
             c.args.push(this.emitExpr(n.args[1]));
             return c;
         } else if (n.kind == "max") {
-            if (n.type != "f32" && n.type != "f64") {
+            if (n.args.length == 0) {
+                switch(n.type) {
+                    case "int":
+                        return new CConst("INT_MAX");
+                    case "i8":
+                    case "char":
+                        return new CConst("CHAR_MAX");
+                    case "i16":
+                        return new CConst("INT16_MAX");
+                    case "i32":
+                        return new CConst("INT32_MAX");
+                    case "i64":
+                        return new CConst("INT64_MAX");
+                    case "uint":
+                        return new CConst("UINT_MAX");
+                    case "uint8":
+                    case "byte":
+                        return new CConst("UINT8_MAX");
+                    case "uint16":
+                        return new CConst("UINT16_MAX");
+                    case "uint32":
+                    case "rune":
+                        return new CConst("UINT32_MAX");
+                    case "uint64":
+                        return new CConst("UINT64_MAX");
+                    default:
+                        throw "Implementation error";
+                }
+            } else if (n.type != "f32" && n.type != "f64") {
                 let c = new CTypeCast();
                 c.type = this.mapType(n.type);
                 let call = new CFunctionCall();

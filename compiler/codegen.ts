@@ -971,7 +971,7 @@ export class CodeGenerator {
                             let storage = this.getSSAType(t.getElementType());
                             b.assign(val, "load", storage, [ptr, 0]);
                         } else if (t == TypeChecker.t_string) {
-                            let [decodeUtf8, decodeUtf8Type] = this.loadFunction("unicode/utf8", "decodeUtf8", snode.loc);
+                            let [decodeUtf8, decodeUtf8Type] = this.loadFunction("runtime/utf8", "decodeUtf8", snode.loc);
                             // Get address of value
                             let valAddr: ssa.Variable;
                             if (val instanceof ssa.Variable) {
@@ -3286,6 +3286,14 @@ export class CodeGenerator {
                 } else {
                     throw "Implementation error";
                 }
+            }
+            case "min":
+            {
+                return b.assign(b.tmp(), "min", this.getSSAType(enode.lhs.type), []);
+            }
+            case "max":
+            {
+                return b.assign(b.tmp(), "max", this.getSSAType(enode.lhs.type), []);
             }
             case "sizeof":
             {
