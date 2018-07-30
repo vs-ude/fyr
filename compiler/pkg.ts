@@ -144,6 +144,7 @@ export class Package {
 
         // This might load more packages
         this.scope = this.tc.checkModule(this);
+        this.typeCheckPass = 1;
     }
 
     /**
@@ -164,6 +165,16 @@ export class Package {
             return;
         }
         this.tc.checkModulePassThree();
+    }
+
+    /**
+     * Might throw TypeError
+     */
+    public checkTypesPassFour() {
+        if (this.isInternal) {
+            return;
+        }
+        this.tc.checkModulePassFour();
     }
 
     public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package>,  disableNullCheck: boolean) {
@@ -284,27 +295,33 @@ export class Package {
     }
 
     /**
-     * The number of packages inside the Package.packages array that have already been type-checked.
-     */
-    private static packagesTypeCheckedPassOne: number = 0;
-    private static packagesTypeCheckedPassTwo: number = 0;
-
-    /**
      * Checks the types of all packages imported so far.
      * Calling this function multiple times is ok, as it will not check the same package twice,
      * but it will check new imported packages.
      */
     public static checkTypesForPackages() {
-        for(; Package.packagesTypeCheckedPassOne < Package.packages.length; Package.packagesTypeCheckedPassOne++) {
-            let p = Package.packages[Package.packagesTypeCheckedPassOne];
-//            console.log("Type checking phase 1", p.pkgPath, "...");
+        for(let p of Package.packages) {
+            if (p.typeCheckPass >= 2) {
+                continue;
+            }
+            p.typeCheckPass = 2;
             p.checkTypesPassTwo();
         }
 
-        for(; Package.packagesTypeCheckedPassTwo < Package.packages.length; Package.packagesTypeCheckedPassTwo++) {
-            let p = Package.packages[Package.packagesTypeCheckedPassTwo];
-//            console.log("Type checking phase 2", p.pkgPath, "...");
+        for(let p of Package.packages) {
+            if (p.typeCheckPass >= 3) {
+                continue;
+            }
+            p.typeCheckPass = 3;
             p.checkTypesPassThree();
+        }
+
+        for(let p of Package.packages) {
+            if (p.typeCheckPass >= 4) {
+                continue;
+            }
+            p.typeCheckPass = 4;
+            p.checkTypesPassFour();
         }
     }
 
@@ -402,10 +419,15 @@ export class Package {
      * Can throw TypeError or SyntaxError if loading of the sources detecs a syntax error.
      */
     public static resolve(pkgPath: string, loc: ast.Location): Package {
+        // Initialize system defined packages
         initPackages();
 
         if (Package.packagesByPath.has(pkgPath)) {
-            return Package.packagesByPath.get(pkgPath);
+            let p = Package.packagesByPath.get(pkgPath);
+            if (p.typeCheckPass == 0) {
+                throw new ImportError("Cyclic import", loc, pkgPath);
+            }
+            return p;
         }
     
         for(let p of Package.fyrPaths) {
@@ -453,6 +475,8 @@ export class Package {
     public isImported: boolean;
     public hasMain: boolean;
     public hasInitFunction: boolean;
+
+    private typeCheckPass: number = 0;
 
     /**
      * The package we are generating an executable or library for or null if

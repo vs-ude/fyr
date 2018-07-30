@@ -1,0 +1,12 @@
+import . from "<stdio.h>" {
+    func puts(#const char) int
+} 
+
+import "strconv"
+
+export func main() int {
+    let i int = 42
+    let s = strconv.itoa<int>(i)
+    puts(<#const char>s)
+    return 0
+}

@@ -1,5 +1,5 @@
-import "foo/bar"
-import {square, Dummy} from "foo/bar"
+import "debugme/foo/bar"
+import {square, Dummy} from "debugme/foo/bar"
 
 export func main() int {
     var l bar.LinkedList<int> = {}

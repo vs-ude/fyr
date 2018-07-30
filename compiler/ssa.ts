@@ -251,7 +251,7 @@ export class BinaryArray {
     constructor() {
         this.data = [];
     }
-    
+
     // This length might be higher than the elements in 'data'.
     // In this case all array elements missing in 'data' are zero.
     // For large arrays it would be a waste to fill 'data' with thousands of zeros.
@@ -1325,12 +1325,16 @@ export class Stackifier {
                     let a = n.args[i];
                     if (a instanceof Variable && a.readCount == 1) {
                         // Try to inline the computation
-                        let inline = this.findInline(n.prev[0], a, doNotInline, assigned);
+                        let inline: Node = this.findInline(n.prev[0], a, doNotInline, assigned);
                         if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
                             inline.assign.readCount--;
                             inline.assign.writeCount--;
                             inline.assign = null;
-                            n.args[i] = inline;
+                            if (inline.kind == "const") {
+                                n.args[i] = inline.args[0];
+                            } else {    
+                                n.args[i] = inline;
+                            }
                             Node.removeNode(inline);
                         }
 /*                    } else if (a instanceof Variable && a.writeCount == 1) {

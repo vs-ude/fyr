@@ -1545,6 +1545,15 @@ export class OrType extends Type {
         }
         return true;
     }
+
+    public isPureValue(): boolean {
+        for(let t of this.types) {
+            if (TypeChecker.isPureValue(t)) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 export class StringLiteralType extends Type {
@@ -2688,7 +2697,7 @@ export class TypeChecker {
         }
     }
 
-    private importFunctions(inode: Node, scope: Scope) {
+    private importFunctionsAndVariables(inode: Node, scope: Scope) {
         if (inode.rhs.op == "importWasm") {
             let ip: ImportedPackage;
             let importPath: string = inode.rhs.rhs.value;
@@ -2877,16 +2886,16 @@ export class TypeChecker {
 
     /**
      * Imports functions from other modules, checks interfaces and structs for errors,
-     * checks global variables and checks all function bodies.
+     * checks global variables.
      */
     public checkModulePassThree() {
         let scope = this.moduleNode.scope;
 
-        // Iterate over all files and process all imports
+        // Iterate over all files and process all imports for functions and variables
         for(let fnode of this.moduleNode.statements) {
             for (let snode of fnode.statements) {
                 if (snode.op == "import") {
-                    this.importFunctions(snode, fnode.scope);
+                    this.importFunctionsAndVariables(snode, fnode.scope);
                 }
             }
         }
@@ -2901,7 +2910,7 @@ export class TypeChecker {
             this.checkStructType(s);
         }
 
-        // Check variable assignments
+        // Check global variable assignments and determine the type of the global variables
         for(let v of this.globalVariables) {
             // Unique global pointers are subject to their own group.
             // All other global variables belong to the same group.
@@ -2912,7 +2921,12 @@ export class TypeChecker {
             }
             this.checkGlobalVariable(v, scope);
         }
+    }
 
+    /** 
+     * Checks all function bodies
+     */
+    public checkModulePassFour() {
         // Check function bodies
         for(let e of this.functions) {
             this.checkFunctionBody(e);
@@ -3454,7 +3468,9 @@ export class TypeChecker {
                 if (snode.elseBranch) {
                     let s2 = new Scope(scope);
                     snode.elseBranch.scope = s2;
-                    snode.elseBranch.scopeExit = this.checkStatements(snode.elseBranch.statements, s2);
+                    snode.elseBranch.scopeExit = new ScopeExit();
+                    snode.elseBranch.scopeExit.fallthrough = s2;
+                    this.checkStatement(snode.elseBranch, s2, snode.elseBranch.scopeExit);
                     scopeExit.merge(snode.elseBranch.scopeExit);
                     if (!snode.scopeExit.fallthrough && !snode.elseBranch.scopeExit.fallthrough) {
                         scopeExit.fallthrough = null;
@@ -3463,7 +3479,13 @@ export class TypeChecker {
                 return;
             }
             case "else":
-                throw "Implementation error";
+            {
+                for(let i = 0; i < snode.statements.length; i++) {
+                    let st = snode.statements[i];
+                    this.checkStatement(st, scope, scopeExit);
+                }
+                return;
+            }
             case "for":
                 let forScope = new Scope(scope);
                 snode.scope = forScope;
@@ -3962,6 +3984,7 @@ export class TypeChecker {
                 break;
             case "==":
             case "!=":
+            {
                 this.checkExpression(enode.lhs, scope);
                 this.checkExpression(enode.rhs, scope);
                 let tl = this.stripType(enode.lhs.type);
@@ -3973,6 +3996,7 @@ export class TypeChecker {
                     throw new TypeError("Or'ed types cannot be compared", enode.rhs.loc);
                 }
                 if ((enode.lhs.op == "int" || enode.lhs.op == "float") && (enode.rhs.op == "int" || enode.rhs.op == "float")) {
+                    // Compare two number literals
                     // TODO: parse in a BigNumber representation
                     let l: number = parseFloat(enode.lhs.value);
                     let r: number = parseFloat(enode.rhs.value);
@@ -3983,6 +4007,7 @@ export class TypeChecker {
                     }
                     enode.op = "bool";
                 } else if (enode.lhs.op == "str" && enode.rhs.op == "str") {
+                    // Compare two string literals?
                     if (enode.op == "==") {
                         enode.value = (enode.lhs.value == enode.rhs.value) ? "true" : "false";
                     } else {
@@ -3990,17 +4015,19 @@ export class TypeChecker {
                     }
                     enode.op = "bool";                    
                 } else if (enode.lhs.op == "null" && enode.rhs.op == "null") {
+                    // Compare two nulls?
                     enode.value = (enode.op == "==" ? "true" : "false");
                     enode.op = "bool";                    
-                } else if (enode.lhs.op == "int" || enode.lhs.op == "float" || enode.lhs.op == "str" || enode.lhs.op == "null") {
+                } else if (enode.lhs.isUnifyableLiteral()) {
                     this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
-                } else if  (enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str" || enode.rhs.op == "null") {
+                } else if (enode.rhs.isUnifyableLiteral()) {
                     this.unifyLiterals(enode.lhs.type, enode.rhs, scope, enode.loc);
                 } else {
                     this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                 }
                 enode.type = TypeChecker.t_bool;
                 break;
+            }
             case ".":
             {
                 this.checkExpression(enode.lhs, scope);
@@ -4468,7 +4495,7 @@ export class TypeChecker {
                     throw new TypeError("'clone' is only allowed on slices", enode.loc);
                 }
                 let t = RestrictedType.strip(enode.lhs.type) as SliceType;
-                if (!this.isPureValue(t.getElementType())) {
+                if (!TypeChecker.isPureValue(t.getElementType())) {
                     throw new TypeError("'clone' cannot work on slices which contain pointer-like types", enode.loc);
                 }
                 enode.type = new SliceType(t.arrayType, "strong");
@@ -4522,7 +4549,7 @@ export class TypeChecker {
                             }
                         }
                         e = t.getElementType();
-                        if (this.isPureValue(e)) {
+                        if (TypeChecker.isPureValue(e)) {
                             // Remove constness in case of pure values.
                             e = RestrictedType.strip(e);
                         }
@@ -4532,7 +4559,7 @@ export class TypeChecker {
                                 throw new TypeError("'...' must be followed by a slice", p.loc);
                             }
                             let e2 = (RestrictedType.strip(p.type) as SliceType).getElementType();
-                            if (this.isPureValue(e)) {
+                            if (TypeChecker.isPureValue(e)) {
                                 // Remove constness in case of pure values.
                                 e2 = RestrictedType.strip(e2);
                             }
@@ -4696,7 +4723,7 @@ export class TypeChecker {
                 node.type = t;
                 t = this.stripType(t);
                 // TODO: Check range
-                if (this.isIntNumber(t)) {
+                if (this.isNumber(t)) {
                     return true;
                 }
                 if (t instanceof UnsafePointerType) {
@@ -4730,7 +4757,29 @@ export class TypeChecker {
                 if (!doThrow) {
                     return false;
                 }
-                throw new TypeError("Type mismatch between string and " + t.toString(), loc);   
+                throw new TypeError("Type mismatch between string and " + t.toString(), loc);
+            case "rune":
+                node.type = t;
+                t = this.stripType(t);
+                if (t == TypeChecker.t_rune) {
+                    return true;
+                } else if ((t == TypeChecker.t_char || t == TypeChecker.t_int8) && node.numValue <= 127) {
+                    return true;
+                } else if ((t == TypeChecker.t_byte || t == TypeChecker.t_uint8) && node.numValue <= 255) {
+                    return true;
+                } else if (t == TypeChecker.t_uint16 && node.numValue <= 65535) {
+                    return true;
+                } else if (t == TypeChecker.t_int16 && node.numValue <= 32768) {
+                    return true;
+                } else if (t == TypeChecker.t_int32 && node.numValue <= 2147483647) {
+                    return true;
+                } else if (t == TypeChecker.t_uint32 || TypeChecker.t_uint64 || TypeChecker.t_int64) {
+                    return true;
+                }
+                if (!doThrow) {
+                    return false;
+                }
+                throw new TypeError("Type mismatch between rune and " + t.toString(), loc);
             case "array":
             {
                 if (this.isArray(t)) {
@@ -4889,7 +4938,7 @@ export class TypeChecker {
         }
         
         // A const-mismatch can be tolerated if the value is a pure value and if it is being copied.
-        if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode != "assign" || !this.isPureValue(to))) {
+        if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode != "assign" || !TypeChecker.isPureValue(to))) {
             if (doThrow) {
                 throw new TypeError("Mismatch of const restriction on variables", loc);
             }
@@ -5739,7 +5788,7 @@ export class TypeChecker {
 
     public isPlatformIntNumber(type: Type): boolean {
         type = this.stripType(type);
-        return (type == TypeChecker.t_int);
+        return (type == TypeChecker.t_int || type == TypeChecker.t_uint);
     }
 
     public isIntNumber(type: Type): boolean {
@@ -5859,30 +5908,32 @@ export class TypeChecker {
     /**
      * A pure value contains no pointers and can be copied byte by byte.
      */
-    public isPureValue(t: Type): boolean {
-        t = this.stripType(t);
+    public static isPureValue(t: Type): boolean {
+        t = RestrictedType.strip(t);
         if (t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void) {
             return true;
         }
         if (t instanceof TupleType) {
             for(let p of t.types) {
-                if (!this.isPureValue(p)) {
+                if (!TypeChecker.isPureValue(p)) {
                     return false;
                 }
             }
             return true;
         } else if (t instanceof ArrayType) {
-            return this.isPureValue(t.elementType);
+            return TypeChecker.isPureValue(t.elementType);
         } else if (t instanceof StructType) {
             for(let f of t.fields) {
-                if (!this.isPureValue(f.type)) {
+                if (!TypeChecker.isPureValue(f.type)) {
                     return false;
                 }
             }
-            if (t.extends && !this.isPureValue(t.extends)) {
+            if (t.extends && !TypeChecker.isPureValue(t.extends)) {
                 return false;
             }
             return true;
+        } else if (t instanceof OrType) {
+            return t.isPureValue();
         }
         return false;
     }
@@ -6239,7 +6290,7 @@ export class TypeChecker {
         // Assigning a value type? -> Nothing to do.
         // Assigning to a string? -> Nothing to do because strings are not bound to any group
         // Assigning to an unsafe pointer -> Nothing to do. Programmer hopefully knows what he is doing ...
-        if (this.isPureValue(ltype) || this.isString(ltype) || this.isUnsafePointer(ltype)) {
+        if (TypeChecker.isPureValue(ltype) || this.isString(ltype) || this.isUnsafePointer(ltype)) {
             if (lhsVariable) {
                 scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
             }
@@ -6662,7 +6713,7 @@ export class TypeChecker {
                         ltype = (RestrictedType.strip(p.type) as SliceType).getElementType();
                     } else {
                         if (p.op == "unary...") {
-                            if (!this.isPureValue(ltype)) {
+                            if (!TypeChecker.isPureValue(ltype)) {
                                 // TODO: Could be realized. Might need to zero the slice
                                 throw new TypeError("Appending a slice of pointers is not supported.", p.loc);
                             }

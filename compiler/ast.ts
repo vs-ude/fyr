@@ -153,7 +153,7 @@ export class Node {
     }
 
     public isUnifyableLiteral(): boolean {
-        if (this.op == "int" || this.op == "float" || this.op == "str") {
+        if (this.op == "int" || this.op == "float" || this.op == "str" || this.op == "rune") {
             return true;
         }
         if (this.op == "array" || this.op == "object" || this.op == "tuple") {
@@ -193,7 +193,11 @@ export class Node {
         if (this.parameters) {
             n.parameters = [];
             for(let s of this.parameters) {
-                n.parameters.push(s.clone());
+                if (!s) {
+                    n.parameters.push(null);
+                } else {
+                    n.parameters.push(s.clone());
+                }
             }
         }
         if (this.genericParameters) {

@@ -4,7 +4,6 @@ import * as backend from "./backend";
 import * as ssa from "./ssa"
 import path = require("path");
 import {createHash} from "crypto";
-import * as tc from "./typecheck";
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 

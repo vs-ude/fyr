@@ -78,7 +78,7 @@ export class CodeGenerator {
             }
         }
 
-        // Global variables oredered by their appearance in the code
+        // Global variables ordered by their appearance in the code
         let globals: Array<Variable> = [];
         // Declare all functions and global variables
         let scope = mnode.scope;
@@ -148,7 +148,7 @@ export class CodeGenerator {
                     throw "Implementation error";
                 }
                 let wf = this.funcs.get(e) as backend.Function;
-                let n = this.processFunction(e, wf);
+                this.processFunction(e, wf);
             } else if (e instanceof TemplateFunction) {
                 // Do nothing by intention                
             } else if (e instanceof Variable) {
@@ -288,9 +288,13 @@ export class CodeGenerator {
             }
             return this.ifaceHeader;
         }
+        if (t instanceof StringLiteralType) {
+            return ssa.symbolType;
+        }
         if (t instanceof RestrictedType) {
             return this.getSSAType(t.elementType);
         }
+        console.log(t)
         throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
     }
 
@@ -572,7 +576,7 @@ export class CodeGenerator {
                                     let dest = destinations[destCount];
                                     destCount++;
                                     // Assigning to an owning pointer? -> destruct the LHS before assigning the RHS
-                                    if (!this.tc.isPureValue(snode.lhs.type)) {
+                                    if (!TypeChecker.isPureValue(snode.lhs.type)) {
                                         // The 'dest != rhs' covers the case of assigning a variable to itself without a take expression
                                         if (dest instanceof ssa.Pointer) {
                                             this.callDestructorOnPointer(snode.lhs.type, dest, b);
@@ -672,7 +676,7 @@ export class CodeGenerator {
                         rhs = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     }
                     // Assigning to an owning pointer? -> destruct the LHS before assigning the RHS
-                    if (!this.tc.isPureValue(snode.lhs.type)) {
+                    if (!TypeChecker.isPureValue(snode.lhs.type)) {
                         if (dest instanceof ssa.Pointer) {
                             this.callDestructorOnPointer(snode.lhs.type, dest, b);
                         } else {
@@ -2232,6 +2236,10 @@ export class CodeGenerator {
                 let args: Array<ssa.Variable | string | number> = [];
                 let objPtr: ssa.Variable | ssa.Pointer | number | null = null;
                 let striplhs = this.tc.stripType(enode.lhs.type);
+                let lhs = enode.lhs;
+                if (lhs.op == "genericInstance") {
+                    lhs = lhs.lhs;
+                }
                 if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "remove") {
                     /*
                     let objType = this.tc.stripType(enode.lhs.lhs.type);
@@ -2253,23 +2261,24 @@ export class CodeGenerator {
                     } */
                     throw "TODO";
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system") {
+                    // A built-in function. Nothing to do here
                     t = striplhs;
-                } else if (enode.lhs.op == "id") {
+                } else if (lhs.op == "id") {
                     // Calling a named function
-                    let e = scope.resolveElement(enode.lhs.value);
+                    let e = scope.resolveElement(lhs.value);
                     if (e instanceof TemplateFunction) {
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
                             throw "Implementation error";
                         }
-                        let name = e.type.pkg.pkgPath + "/" + enode.lhs.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
-                        e = scope.resolveElement(name);
+                        let name = e.type.pkg.pkgPath + "/" + lhs.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
+                        e = this.tc.pkg.scope.resolveElement(name);
                     }
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
                     }    
                     f = e;
                     t = f.type;
-                } else if (enode.lhs.op == "genericInstance") {
+                /* } else if (enode.lhs.op == "genericInstance") {
                     // Lookup the template function
                     let tmplFunc = scope.resolveElement(enode.lhs.lhs.value);
                     if (!(tmplFunc instanceof TemplateFunction)) {
@@ -2285,32 +2294,32 @@ export class CodeGenerator {
                         throw "Implementation error";
                     }
                     f = e;
-                    t = f.type;                
-                } else if (enode.lhs.op == "." && enode.lhs.lhs.type instanceof PackageType) {
+                    t = f.type;                */
+                } else if (lhs.op == "." && lhs.lhs.type instanceof PackageType) {
                     // Calling a function of some package?
-                    let pkg = enode.lhs.lhs.type.pkg;
-                    let name = enode.lhs.name.value;
+                    let pkg = lhs.lhs.type.pkg;
+                    let name = lhs.name.value;
                     let e = pkg.scope.resolveElement(name);
                     if (e instanceof TemplateFunction) {                        
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
                             throw "Implementation error";
                         }
-                        let name = e.type.pkg.pkgPath + "/" + enode.lhs.name.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
-                        e = scope.resolveElement(name);
+                        let name = e.type.pkg.pkgPath + "/" + lhs.name.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
+                        e = this.tc.pkg.scope.resolveElement(name);
                     }
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
                     }    
                     f = e;
                     t = f.type;                    
-                } else if (enode.lhs.op == ".") {
+                } else if (lhs.op == ".") {
                     // Calling a member function?
-                    let ltype = this.tc.stripType(enode.lhs.lhs.type);
+                    let ltype = this.tc.stripType(lhs.lhs.type);
                     let objType: Type;
                     if (ltype instanceof PointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
                         if (!(objType instanceof InterfaceType)) {
-                            objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
+                            objPtr = this.processExpression(f, scope, lhs.lhs, b, vars, ltype);
                             if (!this.disableNullCheck && !this.isThis(objPtr)) {
                                 let check = b.assign(b.tmp("i32"), "eqz", "addr", [objPtr]);
                                 b.ifBlock(check);
@@ -2320,29 +2329,29 @@ export class CodeGenerator {
                         }
                     } else if (ltype instanceof UnsafePointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
-                        objPtr = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
+                        objPtr = this.processExpression(f, scope, lhs.lhs, b, vars, ltype);
                     } else if (ltype instanceof StructType) {
                         objType = ltype;
-                        if (this.isLeftHandSide(enode.lhs.lhs)) {
-                            objPtr = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        if (this.isLeftHandSide(lhs.lhs)) {
+                            objPtr = this.processLeftHandExpression(f, scope, lhs.lhs, b, vars);
                             if (objPtr instanceof ssa.Variable) {
                                 objPtr = b.assign(b.tmp(), "addr_of", "addr", [objPtr]);
                             }
                         } else {
-                            let value = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype);
+                            let value = this.processExpression(f, scope, lhs.lhs, b, vars, ltype);
                             objPtr = b.assign(b.tmp(), "addr_of", "addr", [value]);
                         }
                     } else {
                         throw "Implementation error"
                     }
                     if (objType instanceof StructType) {
-                        let method = objType.method(enode.lhs.name.value);
+                        let method = objType.method(lhs.name.value);
                         let methodObjType = RestrictedType.strip(method.objectType);
                         methodObjType = RestrictedType.strip(method.objectType);
                         if (methodObjType instanceof PointerType) {
                             methodObjType = RestrictedType.strip(methodObjType.elementType);
                         }    
-                        let methodName = TypeChecker.mangledTypeName(methodObjType) + "." + enode.lhs.name.value;
+                        let methodName = TypeChecker.mangledTypeName(methodObjType) + "." + lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
                             throw "Implementation error";
@@ -2351,10 +2360,10 @@ export class CodeGenerator {
                         t = f.type;
                     } else if (objType instanceof InterfaceType) {
                         let iface: ssa.Pointer | ssa.Variable;
-                        if (this.isLeftHandSide(enode.lhs.lhs)) {
-                            iface = this.processLeftHandExpression(f, scope, enode.lhs.lhs, b, vars);
+                        if (this.isLeftHandSide(lhs.lhs)) {
+                            iface = this.processLeftHandExpression(f, scope, lhs.lhs, b, vars);
                         } else {
-                            iface = this.processExpression(f, scope, enode.lhs.lhs, b, vars, ltype) as ssa.Variable;
+                            iface = this.processExpression(f, scope, lhs.lhs, b, vars, ltype) as ssa.Variable;
                         }
                         let table: ssa.Variable;
                         if (iface instanceof ssa.Pointer) {
@@ -2370,7 +2379,7 @@ export class CodeGenerator {
                             b.assign(null, "trap", null, []);
                             b.end();
                         }
-                        let name = enode.lhs.name.value;
+                        let name = lhs.name.value;
                         let idx = objType.methodIndex(name);
                         findex = b.assign(b.tmp(), "load", "addr", [table, idx * ssa.sizeOf("addr")]);
                         t = objType.method(name);
@@ -2379,7 +2388,7 @@ export class CodeGenerator {
                     }
                 } else {
                     // Calling a lamdba function
-                    t = enode.lhs.type as FunctionType;
+                    t = lhs.type as FunctionType;
                 }
                 
                 let decrefArgs: Array<[Node, ssa.Variable, Type]> = [];
@@ -2772,7 +2781,6 @@ export class CodeGenerator {
                     */
                 } else if (t == TypeChecker.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
-                    let st = this.getSSAType(t);
                     let index: ssa.Variable | number = 0;
                     if (enode.rhs.op == "int") {
                         index = parseInt(enode.rhs.value);
@@ -3646,7 +3654,7 @@ export class CodeGenerator {
             b.ifBlock(cond);
         }
         let dtr: backend.Function;
-        if (!this.tc.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
+        if (!TypeChecker.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
             if (t instanceof InterfaceType) {
                 if (free != "decref") {
                     let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
@@ -3722,7 +3730,7 @@ export class CodeGenerator {
 
     private callDestructorOnPointer(type: Type, pointer: ssa.Pointer, b: ssa.Builder): void {
         let t = RestrictedType.strip(type);
-        if (this.tc.isPureValue(t)) {
+        if (TypeChecker.isPureValue(t)) {
             return;
         }
         if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
@@ -3745,7 +3753,7 @@ export class CodeGenerator {
 
     private callDestructorOnVariable(type: Type, v: ssa.Variable, b: ssa.Builder, avoidNullCheck: boolean = false): void {        
         let t = RestrictedType.strip(type);
-        if (this.tc.isPureValue(t)) {
+        if (TypeChecker.isPureValue(t)) {
             return;
         }
         if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
@@ -3765,7 +3773,7 @@ export class CodeGenerator {
             for(let e of scope.elements.values()) {
                 // FunctionParameters marked with isConst are not destructed by the function but by their caller
                 if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
-                    if (!this.tc.isPureValue(e.type)) {
+                    if (!TypeChecker.isPureValue(e.type)) {
                         return true;
                     }
                 }

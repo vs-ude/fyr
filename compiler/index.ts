@@ -143,10 +143,10 @@ function compileModules() {
         } else if (program.emitC) {
             backend = "C";
         }
-        try {
+//        try {
             // Errors can occur from loading runtime packages.
             Package.generateCodeForPackages(backend, program.emitIr, program.emitNative, program.disableNullCheck);
-        } catch(ex) {
+/*        } catch(ex) {
             if (ex instanceof typecheck.TypeError) {
                 console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
                 return;
@@ -164,7 +164,7 @@ function compileModules() {
                 console.log(ex);
                 throw ex;
             }
-        }
+        }*/
     }
 }
 
