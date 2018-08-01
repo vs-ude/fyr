@@ -6879,7 +6879,7 @@ export class TypeChecker {
 
     private typedefs: Array<Typedef> = [];
     private functions: Array<Function> = [];
-    private globalVariables: Array<Variable> = [];
+    public globalVariables: Array<Variable> = [];
 
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
     private moduleNode: Node;

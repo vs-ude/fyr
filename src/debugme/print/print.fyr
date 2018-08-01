@@ -5,7 +5,7 @@ import . from "<stdio.h>" {
 import "strconv"
 
 export func main() int {
-    let i int = 42
+    let i int = -42123
     let s = strconv.itoa<int>(i)
     puts(<#const char>s)
     return 0

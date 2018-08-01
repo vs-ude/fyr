@@ -6,12 +6,13 @@ import os = require("os");
 import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
-import {Function, FunctionParameter, FunctionType, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
+import {Function, FunctionParameter, FunctionType, TypeChecker, UnsafePointerType, Scope, ScopeElement} from "./typecheck"
 import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
 import {CBackend} from "./backend_c";
 import {DummyBackend} from "./backend_dummy";
+import { Variable } from './ssa';
 
 export enum SystemCalls {
     heap = -1,
@@ -245,7 +246,7 @@ export class Package {
             for (let p of Package.fyrPaths) {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
-            let args = includes.concat(["-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
+            let args = includes.concat(["-g3", "-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
             console.log("gcc", args.join(" "));
             child_process.execFileSync("gcc", args);
         }
@@ -293,6 +294,19 @@ export class Package {
     public hasTemplateInstantiations(): boolean {
         return this.tc.hasTemplateInstantiations();
     }
+
+    /*
+    public globalVariables(): Array<tc.Variable> {
+        return this.tc.globalVariables;
+        let arr: Array<tc.Variable> = [];
+        for(let e of this.scope.elements) {
+            if (e instanceof tc.Variable) {
+                arr.push(e);
+            }
+        }
+        return arr;
+    }
+*/
 
     /**
      * Checks the types of all packages imported so far.
@@ -378,7 +392,7 @@ export class Package {
                             oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
                         }
                         let bFile = path.join(p.binFilePath, p.binFileName);
-                        let args = ["-o", bFile].concat(oFiles);
+                        let args = ["-o", bFile, "-g3"].concat(oFiles);
                         console.log("gcc", args.join(" "));
                         child_process.execFileSync("gcc", args);
                     }

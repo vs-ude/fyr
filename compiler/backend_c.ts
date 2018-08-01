@@ -125,14 +125,17 @@ export class CBackend implements backend.Backend {
         return f;
     }
 
-    public declareGlobalVar(name: string, type: ssa.Type | ssa.StructType): ssa.Variable {
-        name = "g_" + name;
+    public declareGlobalVar(name: string, type: ssa.Type | ssa.StructType, pkg: Package): ssa.Variable {
+        name = "g_" + this.mangleName(pkg.pkgPath + "/" + name);
         let v = new Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
         v.writeCount = 2;        
-        this.globalVariables.push(v);        
-        this.globalStorage.set(v, v.name);
+        this.globalVariables.push(v);      
+        this.globalStorage.set(v, v.name);  
+        if (pkg == this.pkg) {
+            this.importedGlobalVariables.push(v);
+        }
         return v;
     }
 
@@ -228,6 +231,7 @@ export class CBackend implements backend.Backend {
             }
         }
 
+        // Initialize all global variables
         for(let v of this.globalVariables) {
             let cv = new CVar();
             cv.name = v.name;
@@ -236,7 +240,13 @@ export class CBackend implements backend.Backend {
                 cv.type = new CType("const " + cv.type.code);
                 cv.initExpr = this.emitExprIntern(v, true);
             }
-            this.module.elements.push(cv);
+            // Ignore global variables located in other packages
+            if (this.importedGlobalVariables.indexOf(v) == -1) {
+                this.module.elements.push(cv);    
+            }
+            // Export all global variables, because templates might need them
+            let exp = new CExtern(cv);
+            this.module.elements.push(exp);
         }
 
         for(let f of this.funcs) {
@@ -1471,6 +1481,7 @@ export class CBackend implements backend.Backend {
     private initFunction: Function;
     private mainFunction: Function;
     private globalVariables: Array<ssa.Variable> = [];
+    private importedGlobalVariables: Array<ssa.Variable> = [];
     private funcs: Array<Function | FunctionImport> = [];
     private currentFunction: Function;
     private blocks: Map<ssa.Node, string> = new Map<ssa.Node, string>();
@@ -1521,6 +1532,8 @@ export class CModule {
                 if (!c.isPossibleDuplicate) {
                     str += c.toString() + "\n\n";
                 }
+            } else if (c instanceof CExtern) {
+                // Do nothing by intention
             } else {
                 str += c.toString() + ";\n\n"
             }
@@ -1540,16 +1553,6 @@ export class CModule {
         str += this.includes.map(function(c: CInclude) { return c.toString()}).join("\n") + "\n\n";
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CType) str += c.toString() + "\n\n";});
         this.elements.forEach(function(c: CStruct | CFunction | CVar | CComment | CType) {if (c instanceof CFunction) str += c.declaration() + "\n";});
-
-        for(let c of this.elements) {
-            if (c instanceof CFunction && c.isPossibleDuplicate) {
-                str += "\n#ifdef FYR_COMPILE_MAIN\n";
-                str += "#ifndef " + c.name + "_H\n";
-                str += "#define " + c.name + "_H\n";
-                str += c.toString() + "\n";
-                str += "#endif\n#endif\n";
-            }
-        }
 
         for(let d of this.ifaceDescriptors) {
             str += "#ifndef " + d.name.code + "_H\n";
@@ -1578,6 +1581,23 @@ export class CModule {
             str += "#endif\n";
         }
 
+        // Export global variables
+        for(let c of this.elements) {
+            if (c instanceof CExtern) {
+                str += c.toString() + ";\n";
+            }
+        }
+
+        for(let c of this.elements) {
+            if (c instanceof CFunction && c.isPossibleDuplicate) {
+                str += "\n#ifdef FYR_COMPILE_MAIN\n";
+                str += "#ifndef " + c.name + "_H\n";
+                str += "#define " + c.name + "_H\n";
+                str += c.toString() + "\n";
+                str += "#endif\n#endif\n";
+            }
+        }
+
         if (mangledName) {
             str += "\n#endif\n";
         }
@@ -1604,7 +1624,7 @@ export class CModule {
 
     public includes: Array<CInclude> = [];
     public strings: Map<string, CString> = new Map<string, CString>();
-    public elements: Array<CStruct | CFunction | CVar | CComment | CType> = [];
+    public elements: Array<CStruct | CFunction | CVar | CComment | CType | CExtern> = [];
     public ifaceDescriptors: Array<InterfaceDescriptor> = [];
     public symbols: Map<string, CConst> = new Map<string, CConst>();
     public isExecutable: boolean;
@@ -1616,6 +1636,19 @@ export abstract class CNode {
     }
 
     public abstract toString(indent: string): string;
+}
+
+export class CExtern extends CNode {
+    constructor(v: CVar) {
+        super();
+        this.v = v;        
+    }
+
+    public toString(indent: string = ""): string {
+        return indent + "extern " + this.v.toString();
+    }
+
+    public v: CVar;
 }
 
 export class CString extends CNode {

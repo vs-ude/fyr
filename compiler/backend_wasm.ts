@@ -126,7 +126,7 @@ export class Wasm32Backend implements backend.Backend {
         return f;
     }
 
-    public declareGlobalVar(name: string, type: Type | StructType): Variable {
+    public declareGlobalVar(name: string, type: Type | StructType, pkg: Package): Variable {
         let v = new Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away

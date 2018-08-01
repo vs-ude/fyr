@@ -98,10 +98,21 @@ export class CodeGenerator {
                 }
                 let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
+
+                if (e.type instanceof TemplateFunctionType) {
+                    let pkg = e.type.base.pkg;
+                    for(let ge of pkg.tc.globalVariables) {
+                        if (this.globalVars.has(ge)) {
+                            continue;
+                        }
+                        let gv = this.backend.declareGlobalVar(ge.name, this.getSSAType(ge.type), pkg);
+                        this.globalVars.set(ge, gv);
+                    }
+                }
             } else if (e instanceof TemplateFunction) {
                 // Do nothing by intention
             } else if (e instanceof Variable) {
-                let g = this.backend.declareGlobalVar(e.name, this.getSSAType(e.type));
+                let g = this.backend.declareGlobalVar(e.name, this.getSSAType(e.type), this.tc.pkg);
                 this.globalVars.set(e, g);
                 if (e.node.rhs) {
                     globals.push(e);
@@ -2732,7 +2743,7 @@ export class CodeGenerator {
                         }
                     } else {
                         let tmp = ptr2.variable;
-                        let offset = tmp;
+                        let offset = index1;
                         if (size != 1) {
                             offset = b.assign(b.tmp(), "mul", "sint", [tmp, size]);
                         }
