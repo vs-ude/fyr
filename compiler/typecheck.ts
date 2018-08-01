@@ -3453,6 +3453,7 @@ export class TypeChecker {
             {
                 let s = new Scope(scope);
                 snode.scope = s;
+                // Assignment in the if-clause?
                 if (snode.lhs) {
                     let initScopeExit = new ScopeExit();
                     initScopeExit.fallthrough = scope;
@@ -3461,10 +3462,16 @@ export class TypeChecker {
                         throw new TypeError("break, return and continue are not allowed inside the initialization statement of an if clause.", snode.loc);
                     }
                 }
+                // Check the if-clause
                 this.checkExpression(snode.condition, s);
                 this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
+                if (snode.condition.op == "bool" && snode.condition.value == "false") {
+                    // Do not type check the if-clause, because it does not execute
+                    snode.statements = [];
+                }
                 snode.scopeExit = this.checkStatements(snode.statements, s);
                 scopeExit.merge(snode.scopeExit);
+                // Check the else clause
                 if (snode.elseBranch) {
                     let s2 = new Scope(scope);
                     snode.elseBranch.scope = s2;
@@ -3577,6 +3584,27 @@ export class TypeChecker {
                 break;                
             case "<<=":
             case ">>=":
+            {
+                this.checkExpression(snode.lhs, scope);
+                this.checkIsMutable(snode.lhs, scope);
+                this.checkExpression(snode.rhs, scope);
+                this.checkIsUnsignedNumber(snode.rhs, true);
+                if (this.isUnsafePointer(snode.lhs.type)) {
+                    if (snode.rhs.op == "int") {
+                        this.unifyLiterals(TypeChecker.t_uint, snode.rhs, scope, snode.loc);
+                    } else {
+                        this.checkIsAssignableType(TypeChecker.t_uint, snode.rhs.type, snode.loc, "assign", true);
+                    }
+                } else {
+                    this.checkIsIntNumber(snode.lhs);
+                    if (snode.rhs.op == "int" || snode.rhs.op == "float") {
+                        this.unifyLiterals(TypeChecker.t_uint, snode.rhs, scope, snode.loc);
+                    } else {
+                        this.checkIsAssignableType(TypeChecker.t_uint, snode.rhs.type, snode.loc, "assign", true);
+                    }
+                }
+                break;
+            }
             case "%=":
             case "&=":
             case "&^=":
@@ -3897,6 +3925,12 @@ export class TypeChecker {
                         } else {
                             enode.op = "int";
                         }
+                    } else if (enode.op == "<" && this.checkIsUnsignedNumber(enode.lhs, false) && enode.rhs.op == "int" && enode.rhs.value == "0") {
+                        enode.op = "bool";
+                        enode.value = "false";                    
+                    } else if (enode.op == ">" && this.checkIsUnsignedNumber(enode.rhs) && enode.lhs.op == "int" && enode.lhs.value == "0") {
+                        enode.op = "bool";
+                        enode.value = "false";
                     } else if (enode.lhs.op == "int" || enode.lhs.op == "float") {
                         this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
                     } else if (enode.rhs.op == "int" || enode.rhs.op == "float") {
@@ -4449,14 +4483,16 @@ export class TypeChecker {
                     if (!ok) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
                     }
-                } else if (this.checkIsAssignableType(t, right, enode.loc, "assign", false)) {
+                } else if (this.checkIsAssignableType(t, enode.rhs.type, enode.loc, "assign", false)) {
+                    /*
                     // null can be casted, especially when it is assigned to interface{}
                     if (right != TypeChecker.t_null) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
                     }
+                    */
                     enode.type = t;
                 } else {
-                    throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " is not possible", enode.loc);
+                    throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
 //                    throw "TODO: conversion not possible or not implemented";
                 }
                 break;

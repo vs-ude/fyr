@@ -38,9 +38,9 @@ func formatBits<T>(a &[]byte, n T, base Base, neg bool) int {
 			a[i] = smallsString[n99]
 		}
 	} else {
-        var s int = 1
+        var s uint = 1
         var mask T = 1
-        var b = 2
+        var b T = 2
         if (base == "8") {
             s = 3
             mask = 7
@@ -72,7 +72,7 @@ func formatBits<T>(a &[]byte, n T, base Base, neg bool) int {
 export func itoa<T>(n T) string {
     var a [65]byte = [...]
     let neg = n < 0
-    if (neg) {
+    if (n < 0) {
         n = -n
     }
     let i = formatBits<T>(a[:], n, "10", neg)
