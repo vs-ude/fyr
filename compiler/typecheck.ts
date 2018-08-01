@@ -3922,18 +3922,19 @@ export class TypeChecker {
                         if (enode.lhs.op == "float" || enode.rhs.op == "float") {
                             enode.op = "float";
                             enode.lhs.type = TypeChecker.t_double;
+                            enode.rhs.type = TypeChecker.t_double;
                         } else {
                             enode.op = "int";
                         }
                     } else if (enode.op == "<" && this.checkIsUnsignedNumber(enode.lhs, false) && enode.rhs.op == "int" && enode.rhs.value == "0") {
                         enode.op = "bool";
                         enode.value = "false";                    
-                    } else if (enode.op == ">" && this.checkIsUnsignedNumber(enode.rhs) && enode.lhs.op == "int" && enode.lhs.value == "0") {
+                    } else if (enode.op == ">" && this.checkIsUnsignedNumber(enode.rhs, false) && enode.lhs.op == "int" && enode.lhs.value == "0") {
                         enode.op = "bool";
                         enode.value = "false";
-                    } else if (enode.lhs.op == "int" || enode.lhs.op == "float") {
+                    } else if (enode.lhs.op == "int" || enode.lhs.op == "float" || enode.lhs.op == "rune") {
                         this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
-                    } else if (enode.rhs.op == "int" || enode.rhs.op == "float") {
+                    } else if (enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "rune") {
                         this.unifyLiterals(enode.lhs.type, enode.rhs, scope, enode.loc);
                     } else {
                         this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
@@ -4800,16 +4801,22 @@ export class TypeChecker {
                 if (t == TypeChecker.t_rune) {
                     return true;
                 } else if ((t == TypeChecker.t_char || t == TypeChecker.t_int8) && node.numValue <= 127) {
+                    node.value = node.numValue.toString();
                     return true;
                 } else if ((t == TypeChecker.t_byte || t == TypeChecker.t_uint8) && node.numValue <= 255) {
+                    node.value = node.numValue.toString();
                     return true;
                 } else if (t == TypeChecker.t_uint16 && node.numValue <= 65535) {
+                    node.value = node.numValue.toString();
                     return true;
                 } else if (t == TypeChecker.t_int16 && node.numValue <= 32768) {
+                    node.value = node.numValue.toString();
                     return true;
                 } else if (t == TypeChecker.t_int32 && node.numValue <= 2147483647) {
+                    node.value = node.numValue.toString();
                     return true;
                 } else if (t == TypeChecker.t_uint32 || TypeChecker.t_uint64 || TypeChecker.t_int64) {
+                    node.value = node.numValue.toString();
                     return true;
                 }
                 if (!doThrow) {
@@ -5737,7 +5744,7 @@ export class TypeChecker {
 
     public isNumber(t: Type): boolean {
         t = this.stripType(t);
-        return (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64);
+        return (t == TypeChecker.t_rune || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64);
     }
 
     public isStruct(t: Type): boolean {

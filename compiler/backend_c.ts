@@ -200,6 +200,7 @@ export class CBackend implements backend.Backend {
         name = name.replace(/>/g, "_g");
         name = name.replace(/,/g, "_c");
         name = name.replace(/\//g, "_");
+        name = name.replace(/ /g, "_");
         return name;
     }
 
@@ -447,9 +448,9 @@ export class CBackend implements backend.Backend {
                 str +=  "struct " + name + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
                     let t = this.mapType(c[1], cstyle).toString();
                     if (c[2] > 1) {
-                        return "    " + t + " field" + i.toString() + "[" + c[2].toString() + "];\n"
+                        return "    " + t + " " + c[0] + "[" + c[2].toString() + "];\n"
                     }
-                    return "    " + this.mapType(c[1], cstyle).toString() + " field" + i.toString() + ";\n";
+                    return "    " + this.mapType(c[1], cstyle).toString() + " " + c[0] + ";\n";
                 }).join("") + "};\n#endif\n";
                 this.anonymousStructs.add(name);
                 this.module.elements.unshift(new CType(str));
@@ -848,10 +849,12 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "min") {
             if (n.args.length == 0) {
                 switch(n.type) {
-                    case "int":
+                    case "sint":
+                        this.includeLimitsHeaderFile();
                         return new CConst("INT_MIN");
                     case "i8":
                     case "char":
+                        this.includeLimitsHeaderFile();
                         return new CConst("CHAR_MIN");
                     case "i16":
                         return new CConst("INT16_MIN");
@@ -859,7 +862,8 @@ export class CBackend implements backend.Backend {
                         return new CConst("INT32_MIN");
                     case "i64":
                         return new CConst("INT64_MIN");
-                    case "uint":
+                    case "int":
+                        this.includeLimitsHeaderFile();
                         return new CConst("UINT_MIN");
                     case "uint8":
                     case "byte":
@@ -897,10 +901,12 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "max") {
             if (n.args.length == 0) {
                 switch(n.type) {
-                    case "int":
+                    case "sint":
+                        this.includeLimitsHeaderFile();
                         return new CConst("INT_MAX");
                     case "i8":
                     case "char":
+                        this.includeLimitsHeaderFile();
                         return new CConst("CHAR_MAX");
                     case "i16":
                         return new CConst("INT16_MAX");
@@ -908,7 +914,8 @@ export class CBackend implements backend.Backend {
                         return new CConst("INT32_MAX");
                     case "i64":
                         return new CConst("INT64_MAX");
-                    case "uint":
+                    case "int":
+                        this.includeLimitsHeaderFile();
                         return new CConst("UINT_MAX");
                     case "uint8":
                     case "byte":
@@ -1183,6 +1190,15 @@ export class CBackend implements backend.Backend {
         }
     }
 
+    private includeLimitsHeaderFile() {
+        if (!this.module.hasInclude("limits.h", true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = true;
+            inc.path = "limits.h";
+            this.module.includes.push(inc);
+        }
+    }
+
     private includeStringHeaderFile() {
         if (!this.module.hasInclude("string.h", true)) {
             let inc = new CInclude();
@@ -1383,14 +1399,17 @@ export class CBackend implements backend.Backend {
             // Ignore decl_var here. These variables get storage when they are assigned.
             // Parameters and result variables, however, need storage even if they are not being assigned.
             if (n.kind == "decl_result") {
+                let name: string;
                 if (n.assign.name == "$return") {
                     this.currentFunction.func.returnType = this.mapType(n.type);
+                    name = "r_return_0";
                 } else {
-                    resultTypes.push([n.assign.name, n.type as ssa.Type | ssa.StructType]);
+                    name = "r_return_" + resultTypes.length.toString();
+                    resultTypes.push([name, n.type as ssa.Type | ssa.StructType]);
                     this.assignVariableStorage(n.assign);
                 }
                 this.returnVariables.push(n.assign);
-                this.varStorage.set(n.assign, n.assign.name);
+                this.varStorage.set(n.assign, name);
                 n = n.next[0];                
                 continue;
             } else if (n.kind == "decl_param") {

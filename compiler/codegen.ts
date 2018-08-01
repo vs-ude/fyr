@@ -600,7 +600,7 @@ export class CodeGenerator {
                                     if (source instanceof ssa.Pointer) {
                                         val = b.assign(b.tmp(), "load", etype, [source.variable, source.offset + eoffset]);
                                     } else {
-                                        val = source;
+                                        val = b.assign(b.tmp(), "member", etype, [source, i]);
                                     }
                                     // Reference counting to pointers
                                     if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {

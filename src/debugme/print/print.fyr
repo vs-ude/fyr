@@ -8,8 +8,25 @@ export func main() int {
     let i int = -42123
     let s = strconv.itoa<int>(i)
     puts(<#const char>s)
+    var ok bool
+    var i2 int
+    i2, ok = strconv.atoi<int>(s)
+    if (ok && i2 == i) {
+        puts(<#const char>"Ok")
+    } else if (!ok) {
+        puts(<#const char>"Not Ok")
+    }
+
     let u uint = 123456
     let s2 = strconv.itoa<uint>(u)
     puts(<#const char>s2)
+    var u2 uint
+    u2, ok = strconv.atoi<uint>(s2)
+    if (ok && u2 == u) {
+        puts(<#const char>"Ok 2")
+    } else if (!ok) {
+        puts(<#const char>"Not Ok 2")
+    }
+
     return 0
 }
