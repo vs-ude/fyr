@@ -11,7 +11,7 @@ func S.f() {
     this.value = 42
 }
 
-var ptr *S = null
+var ptr *S = {}
 
 export func main() int {
     ptr.f()
