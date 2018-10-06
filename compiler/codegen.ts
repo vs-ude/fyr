@@ -2359,12 +2359,12 @@ export class CodeGenerator {
                         objType = RestrictedType.strip(ltype.elementType);
                         if (!(objType instanceof InterfaceType)) {
                             objPtr = this.processExpression(f, scope, lhs.lhs, b, vars, ltype);
-                            if (!this.disableNullCheck && !this.isThis(objPtr)) {
+                            /* if (!this.disableNullCheck && !this.isThis(objPtr)) {
                                 let check = b.assign(b.tmp("i32"), "eqz", "addr", [objPtr]);
                                 b.ifBlock(check);
                                 b.assign(null, "trap", null, []);
                                 b.end();
-                            }        
+                            }*/      
                         }
                     } else if (ltype instanceof UnsafePointerType) {
                         objType = RestrictedType.strip(ltype.elementType);

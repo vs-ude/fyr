@@ -11,9 +11,14 @@ func S.f() {
     this.value = 42
 }
 
+func S.f2() {
+}
+
 var ptr *S = {}
 
 export func main() int {
     ptr.f()
+    var lptr *S = {}
+    lptr.f2()
     return 0
 }

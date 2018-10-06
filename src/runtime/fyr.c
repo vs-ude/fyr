@@ -131,7 +131,7 @@ void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
 
 void fyr_lock(addr_t ptr) {
     if (ptr == NULL) {
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     int_t* lptr = ((int_t*)ptr) - 2;
     (*lptr)++;
