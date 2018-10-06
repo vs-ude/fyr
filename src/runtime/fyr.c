@@ -1,6 +1,7 @@
 #include "fyr.h"
 #include <stdlib.h>
 #include <limits.h>
+#include <assert.h>
 
 // #include <stdio.h>
 
@@ -32,7 +33,8 @@ void fyr_free(addr_t ptr) {
         // The remaining memory does not need to be destructed.
         *iptr = INT_MIN + *iptr - 1;
         // TODO: Use implementation of realloc that ensures that data does not move while shrinkink
-        (void)realloc(iptr, sizeof(int_t));
+        void* ignore = realloc(iptr, sizeof(int_t));
+        assert(ignore == iptr);
     }
 }
 
@@ -47,7 +49,8 @@ void fyr_free_arr(addr_t ptr) {
         // The remaining memory does not need to be destructed.
         *iptr = INT_MIN + *iptr - 1;
         // TODO: Use implementation of realloc that ensures that data does not move while shrinkink
-        (void)realloc(iptr, sizeof(int_t));
+        void* ignore = realloc(iptr, sizeof(int_t));
+        assert(ignore == iptr);
     }
 }
 
