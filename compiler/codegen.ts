@@ -3937,11 +3937,11 @@ export class CodeGenerator {
             }
             case "unary&":
             {
-                let result = this.functionArgumentIncrefIntern(enode.rhs, scope);
+                let result: object = this.functionArgumentIncrefIntern(enode.rhs, scope);
                 if (result[0] == "one_indirection") {
-                    result[0] == "no";
+                    result[0] = "no";
                 }
-                return result;
+                return result as ["yes" | "one_indirection" | "no", Variable | FunctionParameter];
             }
             case "id":
             {
