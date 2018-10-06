@@ -337,11 +337,15 @@ export class CodeGenerator {
 
         b.define(f.name, this.getSSAFunctionType(f.type));
         // Declare parameters
+        let vthis: ssa.Variable = null;
         for(let name of f.scope.elements.keys()) {
             let e = f.scope.elements.get(name);
             if (e instanceof FunctionParameter) {
                 let v = b.declareParam(this.getSSAType(e.type), name);
                 vars.set(e, v);
+                if (name == "this") {
+                    vthis = v;
+                }
             }
         }
         // Declare result
@@ -358,6 +362,11 @@ export class CodeGenerator {
             let v = b.declareResult(this.getSSAType(f.type.returnType), "$return");
         }
 
+        // Lock the 'this' variable such that the object survives the function call.
+        if (vthis != null) {
+            b.assign(null, "lock", null, [vthis]);
+        }
+
         this.processScopeVariables(b, vars, f.scope);
 
         for(let node of f.node.statements) {
@@ -370,6 +379,16 @@ export class CodeGenerator {
         }
 
         b.end();
+
+        // Unlock the 'this' variable
+        if (vthis != null) {
+            // Unlocking might require calling the destructor, so get one.
+            let dtr: backend.Function;
+            if (!TypeChecker.isPureValue((f.type.objectType as PointerType).elementType)) {
+                dtr = this.generateStructDestructor(RestrictedType.strip((f.type.objectType as PointerType).elementType) as StructType);
+            }
+            b.assign(null, "unlock", null, [vthis, dtr ? dtr.getIndex() : -1]);
+        }
 
 //        if (this.emitIR || f.name == this.emitFunction) {
 //            console.log(ssa.Node.strainToString("", b.node));                
@@ -1136,7 +1155,16 @@ export class CodeGenerator {
                         // Fill the RHS with zeros
                         this.processFillZeros(rhs, snode.lhs.type, b);
                     }                                
-                }    
+                }
+                // Unlock 'this' before returning    
+                if (f.type.objectType) {
+                    let dtr: backend.Function;
+                    let vthis = vars.get(scope.resolveElement("this"));            
+                    if (!TypeChecker.isPureValue((f.type.objectType as PointerType).elementType)) {
+                        dtr = this.generateStructDestructor(RestrictedType.strip((f.type.objectType as PointerType).elementType) as StructType);
+                    }
+                    b.assign(null, "unlock", null, [vthis, dtr ? dtr.getIndex() : -1]);
+                }
                 if (this.scopeNeedsDestructors(scope)) {
                     let s = scope;
                     while (s) {
@@ -3667,30 +3695,30 @@ export class CodeGenerator {
         let dtr: backend.Function;
         if (!TypeChecker.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
             if (t instanceof InterfaceType) {
-                if (free != "decref") {
+                if (free == "no") {
                     let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
                     let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
                     let dtr = this.generateInterfaceDestructor();
                     b.call(null, new ssa.FunctionType(["addr", "addr"], null), [dtr.getIndex(), realPointer, table]);
                 }
             } else if (t instanceof PointerType) {
-                if (free == "decref") {
-                    dtr = this.generatePointerDestructor(t);
-                } else {
+                if (free == "no") {
                     let val = b.assign(b.tmp(), "load", "addr", [pointer, 0]);
                     if (t.mode == "strong" || t.mode == "unique") {
                         this.callDestructor(t.elementType, val, b, false, "free");
                     } else if (t.mode == "reference")
                         this.callDestructor(t.elementType, val, b, false, "decref");
+                } else {
+                    dtr = this.generatePointerDestructor(t);
                 }
             } else if (t instanceof StructType) {
                 dtr = this.generateStructDestructor(t);
-                if (free != "decref") {
+                if (free == "no") {
                     b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t instanceof ArrayType) {
                 dtr = this.generateArrayDestructor(t);
-                if (free != "decref") {
+                if (free == "no") {
                     let size: number | ssa.Variable = t.size;
                     if (t.size < 0) {
                         size = b.assign(b.tmp(), "load", "sint", [pointer, -ssa.sizeOf("sint")]);
@@ -3699,12 +3727,12 @@ export class CodeGenerator {
                 }
             } else if (t instanceof TupleType) {
                 dtr = this.generateTupleDestructor(t);
-                if (free != "decref") {
+                if (free == "no") {
                     b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t instanceof SliceType) {
                 dtr = this.generateSliceDestructor(t);
-                if (free != "decref") {
+                if (free == "no") {
                     b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t == TypeChecker.t_string) {
@@ -3715,12 +3743,14 @@ export class CodeGenerator {
         }
         if (free == "free") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
-                b.assign(null, "free_arr", null, [pointer]);
+                b.assign(null, "free_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
             } else if (t instanceof InterfaceType) {
                 let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                b.assign(null, "free", null, [realPointer]);
+                let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
+                let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+                b.assign(null, "free", null, [realPointer, dtrPtr]);
             } else {
-                b.assign(null, "free", null, [pointer]);
+                b.assign(null, "free", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         } else if (free == "decref") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {

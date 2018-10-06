@@ -1041,7 +1041,20 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "free") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_free");
-            m.args = [this.emitExpr(n.args[0])];
+            if (n.args[1] === -1) {
+                m.args = [this.emitExpr(n.args[0]), new CConst("0")];
+            } else if (typeof(n.args[1]) == "number") {
+                let f = this.funcs[n.args[1] as number];
+                if (f instanceof FunctionImport) {
+                    throw "Implementation error";
+                }
+                m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
+            } else {
+                let cast = new CTypeCast();
+                cast.type = new CType("fyr_dtr_t");
+                cast.expr = this.emitExpr(n.args[1]);
+                m.args = [this.emitExpr(n.args[0]), cast];    
+            }
             return m;
         } else if (n.kind == "decref") {
             let m = new CFunctionCall();
@@ -1066,6 +1079,29 @@ export class CBackend implements backend.Backend {
             m.funcExpr = new CConst("fyr_incref");
             m.args = [this.emitExpr(n.args[0])];
             return m;
+        } else if (n.kind == "unlock") {
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("fyr_unlock");
+            if (n.args[1] === -1) {
+                m.args = [this.emitExpr(n.args[0]), new CConst("0")];
+            } else if (typeof(n.args[1]) == "number") {
+                let f = this.funcs[n.args[1] as number];
+                if (f instanceof FunctionImport) {
+                    throw "Implementation error";
+                }
+                m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
+            } else {
+                let cast = new CTypeCast();
+                cast.type = new CType("fyr_dtr_t");
+                cast.expr = this.emitExpr(n.args[1]);
+                m.args = [this.emitExpr(n.args[0]), cast];    
+            }
+            return m;
+        } else if (n.kind == "lock") {
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("fyr_lock");
+            m.args = [this.emitExpr(n.args[0])];
+            return m;
         } else if (n.kind == "alloc_arr") {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
@@ -1075,7 +1111,20 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "free_arr") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_free_arr");
-            m.args = [this.emitExpr(n.args[0])];
+            if (n.args[1] === -1) {
+                m.args = [this.emitExpr(n.args[0]), new CConst("0")];
+            } else if (typeof(n.args[1]) == "number") {
+                let f = this.funcs[n.args[1] as number];
+                if (f instanceof FunctionImport) {
+                    throw "Implementation error";
+                }
+                m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
+            } else {
+                let cast = new CTypeCast();
+                cast.type = new CType("fyr_dtr_t");
+                cast.expr = this.emitExpr(n.args[1]);
+                m.args = [this.emitExpr(n.args[0]), cast];    
+            }
             return m;
         } else if (n.kind == "decref_arr") {
             let m = new CFunctionCall();
@@ -1552,7 +1601,7 @@ export class CModule {
                     str += c.toString() + "\n\n";
                 }
             } else if (c instanceof CExtern) {
-                // Do nothing by intention
+                str += c.v.toString() + ";\n\n";
             } else {
                 str += c.toString() + ";\n\n"
             }

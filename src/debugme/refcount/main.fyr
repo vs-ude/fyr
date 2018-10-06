@@ -1,0 +1,19 @@
+type S struct {
+    value int
+}
+
+func S.f() {
+    ptr.value = 84
+    ptr = null
+    if (ptr == null) {
+        return
+    }
+    this.value = 42
+}
+
+var ptr *S = null
+
+export func main() int {
+    ptr.f()
+    return 0
+}
