@@ -3808,23 +3808,23 @@ export class CodeGenerator {
         let action: "none" | "decref" | "free" | "unlock" = "none"
         if (this.tc.isSafePointer(targetType) && (targetIsThis || TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if ((result[0] != "no" && result[0] != "no_not_null") || (targetIsThis && result[0] != "no_not_null")) {
+            if ((result[0] != "no" && result[0] != "no_not_null") || (targetIsThis && result[0] == "no")) {
                 if (this.tc.isInterface(targetType)) {
                     let ptr = b.assign(b.tmp(), "member", "addr", [rhsData, this.ifaceHeader.fieldIndexByName("pointer")]);
-                    if (targetIsThis && result[0] != "no_not_null") {
+                    if (targetIsThis && result[0] == "no") {
                         // No null-check necessary, because null-check happened during function-table lookup already
                     } else {
                         b.assign(null, targetIsThis ? "lock" : "incref", "addr", [ptr]);
                     }
                 } else {
-                    if (targetIsThis && result[0] != "no_not_null") {
+                    if (targetIsThis && result[0] == "no") {
                         this.processNullCheck(rhsData, rhsNode.type, b);
                     } else {
                         b.assign(null, targetIsThis ? "lock" : "incref", "addr", [rhsData]);
                     }
                 }
                 decrefVar = rhsData as ssa.Variable;
-                if (targetIsThis && result[0] != "no_not_null") {
+                if (targetIsThis && result[0] == "no") {
                     action = "none";
                 } else {
                     action = targetIsThis ? "unlock" : "decref";
@@ -3832,12 +3832,28 @@ export class CodeGenerator {
             } else if (result[1]) {
                 result[1].localReferenceCount++;    
             }
+            if ((TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type)) && this.tc.isTakeExpression(rhsNode)) {
+                if (action != "none") {
+                    console.log(action)
+                    throw "Implementation error";
+                }
+                action = "free";
+                decrefVar = rhsData as ssa.Variable;
+            }
+            if (TypeChecker.isReference(rhsNode.type) && this.tc.isTakeExpression(rhsNode)) {
+                if (action != "none") {
+                    console.log(action)
+                    throw "Implementation error";
+                }
+                action = "decref";
+                decrefVar = rhsData as ssa.Variable;
+            }
         } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             if (targetIsThis) {
                 throw "Implementation error";
             }
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] != "no") {
+            if (result[0] != "no" && result[0] != "no_not_null") {
                 let st = this.getSSAType(rhsNode.type) as ssa.StructType;
                 let arrayPointer: ssa.Variable;
                 if (rhs instanceof ssa.Pointer) {
@@ -3851,6 +3867,20 @@ export class CodeGenerator {
             } else if (result[1]) {
                 result[1].localReferenceCount++;
             }
+            if ((TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type)) && this.tc.isTakeExpression(rhsNode)) {
+                if (action != "none") {
+                    throw "Implementation error";
+                }
+                action = "free";
+            }
+            if (TypeChecker.isReference(rhsNode.type) && this.tc.isTakeExpression(rhsNode)) {
+                if (action != "none") {
+                    console.log(action)
+                    throw "Implementation error";
+                }
+                action = "decref";
+            }
+            // TODO: Handle Maps here, too
         } else if (this.tc.isString(targetType)) {
             if (targetIsThis) {
                 throw "Implementation error";

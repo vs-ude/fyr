@@ -17,6 +17,14 @@ func S.f2(r const ~S) {
 var ptr *S = {}
 let ptr2 *S = {}
 
+func factory() *S {
+    return {}
+}
+
+func donateRef() ~S {
+    return null
+}
+
 export func main() int {
     // ptr needs locking
     ptr.f()
@@ -31,5 +39,12 @@ export func main() int {
     // lptr needs notnull
     lptr.f2(lptr)
     lptr2.f2(lptr)
+    // Needs free after f()
+    factory().f()
+    // Needs free after f()
+    lptr2.f2({})
+    // Needs decref after f()
+    let lptr3 *S = {}
+    lptr3.f2(donateRef())
     return 0
 }

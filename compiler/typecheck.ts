@@ -4737,7 +4737,7 @@ export class TypeChecker {
             if (!this.unifyLiterals(this.pointerElementType(t), node, scope, loc, doThrow, templateParams, false)) {
                 return false;
             }
-            node.type = t;
+            node.type = new PointerType(this.pointerElementType(t), "strong");
             return true;
         }
 
@@ -4745,7 +4745,7 @@ export class TypeChecker {
             if (!this.unifyLiterals(this.sliceArrayType(t), node, scope, loc, doThrow, templateParams, false)) {
                 return false;
             }
-            node.type = t;
+            node.type = new SliceType(this.sliceArrayType(t) as ArrayType | RestrictedType, "strong");
             return true;
         }
 
