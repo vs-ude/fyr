@@ -3780,7 +3780,15 @@ export class CodeGenerator {
             this.callDestructor(t.elementType, v, b, avoidNullCheck, "decref");
         } else if (t == TypeChecker.t_string) {
             this.callDestructor(t, v, b, avoidNullCheck, "decref");
-        } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
+        } else if (t instanceof SliceType && (t.mode == "strong" || t.mode == "unique")) {
+            let st = this.getSSAType(type) as ssa.StructType;
+            let arrayPointer = b.assign(b.tmp(), "member", "addr", [v, st.fieldIndexByName("array_ptr")]);
+            this.callDestructor(t.arrayType, arrayPointer, b, false, "free");
+        } else if (t instanceof SliceType && t.mode == "reference") {
+            let st = this.getSSAType(type) as ssa.StructType;
+            let arrayPointer = b.assign(b.tmp(), "member", "addr", [v, st.fieldIndexByName("array_ptr")]);
+            this.callDestructor(t.arrayType, arrayPointer, b, false, "decref");
+        } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType) {
             let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
             this.callDestructor(t, obj, b, true, "no");
         }
