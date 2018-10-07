@@ -3919,6 +3919,8 @@ export class CodeGenerator {
         let t = RestrictedType.strip(rhsNode.type);
         if (t instanceof PointerType) {
             t = t.elementType;
+        } else if (t instanceof SliceType) {
+            t = t.arrayType;
         }
         if (action == "free") {
             this.callDestructor(t, decrefVar, b, false, "free");
