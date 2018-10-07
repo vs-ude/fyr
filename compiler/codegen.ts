@@ -770,17 +770,11 @@ export class CodeGenerator {
                 let p2 = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                 if (snode.lhs.type == TypeChecker.t_string) {
                     if (!this.disableNullCheck) {
-                        let cond = b.assign(b.tmp(), "eq", "addr", [p1, 0]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();
+                        b.assign(null, "notnull", null, [p1]);
                     }
                     let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
                     if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
-                        let cond = b.assign(b.tmp(), "eq", "addr", [p2, 0]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();
+                        b.assign(null, "notnull", null, [p2]);
                     }
                     let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
                     let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
@@ -1491,6 +1485,20 @@ export class CodeGenerator {
             }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
+        }
+    }
+
+    private processNullCheck(value: ssa.Variable | number, t: Type, b: ssa.Builder) {
+        if (this.tc.isSafePointer(t)) {
+            if (TypeChecker.isReference(t)) {
+                // References can point to an object that has already been destructed.
+                // Hence, we use notnull_ref to track this.
+                b.assign(null, "notnull_ref", null, [value]);
+            } else {
+                b.assign(null, "notnull", null, [value]);
+            }
+        } else {
+            throw "Implementation error"
         }
     }
 
@@ -3828,13 +3836,13 @@ export class CodeGenerator {
                 if (this.tc.isInterface(targetType)) {
                     let ptr = b.assign(b.tmp(), "member", "addr", [rhsData, this.ifaceHeader.fieldIndexByName("pointer")]);
                     if (targetIsThis && result[0] != "no_not_null") {
-                        b.assign(null, "notnull", null, [ptr]);
+                        this.processNullCheck(ptr, rhsNode.type, b);
                     } else {
                         b.assign(null, targetIsThis ? "lock" : "incref", "addr", [ptr]);
                     }
                 } else {
                     if (targetIsThis && result[0] != "no_not_null") {
-                        b.assign(null, "notnull", null, [rhsData]);
+                        this.processNullCheck(rhsData, rhsNode.type, b);
                     } else {
                         b.assign(null, targetIsThis ? "lock" : "incref", "addr", [rhsData]);
                     }

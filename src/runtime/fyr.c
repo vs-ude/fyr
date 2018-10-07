@@ -88,7 +88,7 @@ bool fyr_isnull_arr(addr_t ptr) {
     return ptr == NULL || *(((int_t*)ptr) - 2) <= 0;
 }
 
-void fyr_notnull(addr_t ptr) {
+void fyr_notnull_ref(addr_t ptr) {
     if (ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0)) {
         exit(EXIT_FAILURE);
     }
