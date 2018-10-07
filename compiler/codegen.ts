@@ -362,11 +362,6 @@ export class CodeGenerator {
             let v = b.declareResult(this.getSSAType(f.type.returnType), "$return");
         }
 
-        // Lock the 'this' variable such that the object survives the function call.
-        if (vthis != null) {
-            b.assign(null, "lock", null, [vthis]);
-        }
-
         this.processScopeVariables(b, vars, f.scope);
 
         for(let node of f.node.statements) {
@@ -379,16 +374,6 @@ export class CodeGenerator {
         }
 
         b.end();
-
-        // Unlock the 'this' variable
-        if (vthis != null) {
-            // Unlocking might require calling the destructor, so get one.
-            let dtr: backend.Function;
-            if (!TypeChecker.isPureValue((f.type.objectType as PointerType).elementType)) {
-                dtr = this.generateStructDestructor(RestrictedType.strip((f.type.objectType as PointerType).elementType) as StructType);
-            }
-            b.assign(null, "unlock", null, [vthis, dtr ? dtr.getIndex() : -1]);
-        }
 
 //        if (this.emitIR || f.name == this.emitFunction) {
 //            console.log(ssa.Node.strainToString("", b.node));                
@@ -1155,15 +1140,6 @@ export class CodeGenerator {
                         // Fill the RHS with zeros
                         this.processFillZeros(rhs, snode.lhs.type, b);
                     }                                
-                }
-                // Unlock 'this' before returning    
-                if (f.type.objectType) {
-                    let dtr: backend.Function;
-                    let vthis = vars.get(scope.resolveElement("this"));            
-                    if (!TypeChecker.isPureValue((f.type.objectType as PointerType).elementType)) {
-                        dtr = this.generateStructDestructor(RestrictedType.strip((f.type.objectType as PointerType).elementType) as StructType);
-                    }
-                    b.assign(null, "unlock", null, [vthis, dtr ? dtr.getIndex() : -1]);
                 }
                 if (this.scopeNeedsDestructors(scope)) {
                     let s = scope;
@@ -2430,7 +2406,6 @@ export class CodeGenerator {
                     t = lhs.type as FunctionType;
                 }
                 
-                let decrefArgs: Array<[Node, ssa.Variable, Type]> = [];
                 if (f) {
                     if (!this.funcs.has(f)) {
                         this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
@@ -2440,6 +2415,7 @@ export class CodeGenerator {
                     args.push(findex);
                 }
 
+                let decrefArgs: Array<[Node, ssa.Variable, "none" | "decref" | "free" | "unlock"]> = [];
                 if (objPtr !== null) {
                     // Add 'this' to the arguments
                     let data: ssa.Variable | number;
@@ -2449,10 +2425,10 @@ export class CodeGenerator {
                         data = objPtr;
                     }
                     let targetType = this.tc.stripType(enode.lhs.lhs.type);
-                    let dataAndRef = this.functionArgumentIncref(objPtr, enode.lhs.lhs, data, targetType, scope, b);
+                    let dataAndRef = this.functionArgumentIncref(objPtr, enode.lhs.lhs, data, targetType, true, scope, b);
                     args.push(dataAndRef[0]);
                     if (dataAndRef[1]) {
-                        decrefArgs.push([enode.lhs.lhs, dataAndRef[1], targetType]);
+                        decrefArgs.push([enode.lhs.lhs, dataAndRef[1], dataAndRef[2]]);
                     }                
                 }                
 
@@ -2494,10 +2470,10 @@ export class CodeGenerator {
                         } else {
                             data = rhs;
                         }     
-                        let dataAndRef = this.functionArgumentIncref(rhs, vnode, data, targetType, scope, b);
+                        let dataAndRef = this.functionArgumentIncref(rhs, vnode, data, targetType, false, scope, b);
                         args.push(dataAndRef[0]);
                         if (dataAndRef[1]) {
-                            decrefArgs.push([vnode, dataAndRef[1], targetType]);
+                            decrefArgs.push([vnode, dataAndRef[1], dataAndRef[2]]);
                         }
                     }
                 }
@@ -2551,7 +2527,7 @@ export class CodeGenerator {
                 }
 
                 for(let decrefArg of decrefArgs) {
-                    this.functionArgumentDecref(decrefArg[1], decrefArg[0], decrefArg[2], scope, b);
+                    this.functionArgumentDecref(decrefArg[1], decrefArg[0], decrefArg[2], b);
                 }
                 return result;
             }
@@ -3680,20 +3656,20 @@ export class CodeGenerator {
     /**
      * pointer is the address of a value and t is the type of the value being pointed to.
      */
-    private callDestructor(typ: Type, pointer: ssa.Variable | number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref") {
+    private callDestructor(typ: Type, pointer: ssa.Variable | number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref" | "unlock") {
         let t = RestrictedType.strip(typ);
-        if (!avoidNullCheck) {
-            let cond: ssa.Variable;
-            if (t instanceof InterfaceType) {
-                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
-            } else {
-                cond = b.assign(b.tmp(), "ne", "i8", [pointer, 0]);
-            }
-            b.ifBlock(cond);
-        }
         let dtr: backend.Function;
         if (!TypeChecker.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
+            if (free == "no" && !avoidNullCheck) {
+                let cond: ssa.Variable;
+                if (t instanceof InterfaceType) {
+                    let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+                    cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
+                } else {
+                    cond = b.assign(b.tmp(), "ne", "i8", [pointer, 0]);
+                }
+                b.ifBlock(cond);
+            }
             if (t instanceof InterfaceType) {
                 if (free == "no") {
                     let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
@@ -3740,6 +3716,14 @@ export class CodeGenerator {
             } else {
                 throw "Implementation error";
             }
+            if (free == "no" && !avoidNullCheck) {
+                b.end();
+            }    
+        }
+        if (!avoidNullCheck && t instanceof InterfaceType) {
+            let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+            let cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
+            b.ifBlock(cond);
         }
         if (free == "free") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
@@ -3751,6 +3735,17 @@ export class CodeGenerator {
                 b.assign(null, "free", null, [realPointer, dtrPtr]);
             } else {
                 b.assign(null, "free", null, [pointer, dtr ? dtr.getIndex() : -1]);
+            }
+        } else if (free == "unlock") {
+            if (this.tc.isArray(typ) || this.tc.isString(typ)) {
+                throw "Implementation error"
+            } else if (t instanceof InterfaceType) {
+                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+                let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
+                let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+                b.assign(null, "unlock", null, [realPointer, dtrPtr]);
+            } else {
+                b.assign(null, "unlock", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         } else if (free == "decref") {
             if (this.tc.isArray(typ) || this.tc.isString(typ)) {
@@ -3764,7 +3759,7 @@ export class CodeGenerator {
                 b.assign(null, "decref", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         }
-        if (!avoidNullCheck) {
+        if (!avoidNullCheck && t instanceof InterfaceType) {
             b.end();
         }
     }
@@ -3827,22 +3822,39 @@ export class CodeGenerator {
         return false;
     }
 
-    private functionArgumentIncref(rhs: ssa.Variable | ssa.Pointer | number, rhsNode: Node, rhsData: ssa.Variable | number, targetType: Type, scope: Scope, b: ssa.Builder): [ssa.Variable | number, ssa.Variable] {
+    private functionArgumentIncref(rhs: ssa.Variable | ssa.Pointer | number, rhsNode: Node, rhsData: ssa.Variable | number, targetType: Type, targetIsThis: boolean, scope: Scope, b: ssa.Builder): [ssa.Variable | number, ssa.Variable, "none" | "decref" | "free" | "unlock"] {
         let decrefVar: ssa.Variable;
-        if (this.tc.isSafePointer(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
+        let action: "none" | "decref" | "free" | "unlock" = "none"
+        if (this.tc.isSafePointer(targetType) && (targetIsThis || TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] != "no") {
+            if ((result[0] != "no" && result[0] != "no_not_null") || (targetIsThis && result[0] != "no_not_null")) {
                 if (this.tc.isInterface(targetType)) {
                     let ptr = b.assign(b.tmp(), "member", "addr", [rhsData, this.ifaceHeader.fieldIndexByName("pointer")]);
-                    b.assign(null, "incref", "addr", [ptr]);
+                    if (targetIsThis && result[0] != "no_not_null") {
+                        b.assign(null, "notnull", null, [ptr]);
+                    } else {
+                        b.assign(null, targetIsThis ? "lock" : "incref", "addr", [ptr]);
+                    }
                 } else {
-                    b.assign(null, 'incref', "addr", [rhsData]);
+                    if (targetIsThis && result[0] != "no_not_null") {
+                        b.assign(null, "notnull", null, [rhsData]);
+                    } else {
+                        b.assign(null, targetIsThis ? "lock" : "incref", "addr", [rhsData]);
+                    }
                 }
                 decrefVar = rhsData as ssa.Variable;
+                if (targetIsThis && result[0] != "no_not_null") {
+                    action = "none";
+                } else {
+                    action = targetIsThis ? "unlock" : "decref";
+                }
             } else if (result[1]) {
                 result[1].localReferenceCount++;    
             }
         } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
+            if (targetIsThis) {
+                throw "Implementation error";
+            }
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no") {
                 let st = this.getSSAType(rhsNode.type) as ssa.StructType;
@@ -3854,10 +3866,14 @@ export class CodeGenerator {
                 }
                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
                 decrefVar = arrayPointer;
+                action = "decref";
             } else if (result[1]) {
                 result[1].localReferenceCount++;
             }
         } else if (this.tc.isString(targetType)) {
+            if (targetIsThis) {
+                throw "Implementation error";
+            }
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no") {
                 if (rhs instanceof ssa.Pointer) {
@@ -3866,6 +3882,7 @@ export class CodeGenerator {
                 } else {
                     decrefVar = b.assign(b.tmp(), "incref_arr", "addr", [rhs]);
                 }
+                action = "decref";
             } else if (result[1]) {
                 result[1].localReferenceCount++;
             }            
@@ -3883,57 +3900,48 @@ export class CodeGenerator {
             this.processFillZeros(rhs, rhsNode.type, b);
         }            
 
-        return [rhsData, decrefVar];
+        return [rhsData, decrefVar, action];
     }
 
-    private functionArgumentDecref(decrefVar: ssa.Variable, rhsNode: Node, targetType: Type, scope: Scope, b: ssa.Builder): void {
-        if (this.tc.isSafePointer(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
-            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] != "no") {
-                this.callDestructorOnVariable(rhsNode.type, decrefVar, b);
-            } else if (result[1]) {
-                result[1].localReferenceCount--;
-            }        
-        } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
-            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] != "no") {
-                let sliceType = RestrictedType.strip(rhsNode.type);
-                let arrayType = RestrictedType.strip(sliceType);
-                this.callDestructorOnVariable(arrayType, decrefVar, b);
-            } else if (result[1]) {
-                result[1].localReferenceCount--;
-            }
-        } else if (this.tc.isString(targetType)) {
-            let result = this.functionArgumentIncrefIntern(rhsNode, scope);
-            if (result[0] != "no") {
-                decrefVar = b.assign(b.tmp(), "decref_arr", "addr", [decrefVar]);
-            } else if (result[1]) {
-                result[1].localReferenceCount++;
-            }            
+    private functionArgumentDecref(decrefVar: ssa.Variable, rhsNode: Node, action: "none" | "decref" | "free" | "unlock", b: ssa.Builder): void {
+        let t = RestrictedType.strip(rhsNode.type);
+        if (t instanceof PointerType) {
+            t = t.elementType;
         }
+        if (action == "free") {
+            this.callDestructor(t, decrefVar, b, false, "free");
+        } else if (action == "unlock") {
+            this.callDestructor(t, decrefVar, b, false, "unlock");
+        } else if (action == "decref") {
+            this.callDestructor(t, decrefVar, b, false, "decref");
+        }        
     }
 
     /**
      * Determines whether the expression enode needs an incref before passing it as argument to a function call.
-     * References to values stored in local variables on the stack do not need an incref, if no pointer to said local variables have been passed as arguments already.
+     * References stored in local variables on the stack do not need an incref, if no pointer to said local variables have been passed as arguments already.
      * The reason is that the callee cannot modify the stack variables of the caller.
      * Furthermore, references to objects owned directly via a strong pointer stored on the stack, do not need incref as well.
-     * The reason is that local variables of the caller are not modified, hence said object must exist, because the local variable holds a strong pointer on it.
+     * The reason is that local variables of the caller are not modified, hence said object must continue exist, because the local variable holds a strong pointer on it.
      */
-    private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "one_indirection" | "no", Variable | FunctionParameter] {
+    private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "one_indirection" | "no" | "no_not_null", Variable | FunctionParameter] {
         if (TypeChecker.isLocalReference(enode.type)) {
-            // Passing on a local reference means no incref/decref.
+            // Passing on a local reference means no incref/decref, because local references must only point to objects
+            // that live as long as the local reference does.
             return ["no", null];
         }
         switch(enode.op) {
             case "null":
+                // null needs no reference counting
             case "object":
             case "array":
+                
             case "(":
+                // Return values of functions come with an increased reference count already.
             case "take":
             case "clone":
-                // Take returns an owning pointer and hence there is no need to increase the reference count.
-                // However, the value must be destructed afterwards.
+                // Take and clone return an owning pointer and hence there is no need to increase the reference count.
+                // However, the value must be destructed afterwards unless ownership is passed to the function.
                 return ["no", null];
             case ".":
             {
@@ -3979,12 +3987,22 @@ export class CodeGenerator {
                 if (!e) {
                     throw "Implementation error";
                 }
-                if ((e instanceof Variable || e instanceof FunctionParameter)) {
-                    return ["no", e];
+                // FunctionParameters of pointer type already guarantee that the object being pointed to exists while the function executes.
+                // No need to refcount again.
+                // When 'this' is being passed we are sure that it is a non-null variable.
+                if (e instanceof FunctionParameter) {
+                    return [e.name == "this" ? "no_not_null" : "no", e];
+                }
+                // Local variables of pointer type already guarantee that the object being pointed to exists while the variable is in scope.
+                // No need to refcount again.
+                // When a 'let' is passed, it is known to be not-null.
+                if (e instanceof Variable && (!e.isGlobal || e.isConst)) {
+                    return [e.isConst ? "no_not_null" : "no", e];
                 }
                 return ["yes", null];
             }
             case "str":
+                // String constants need no reference counting
                 return ["no", null];
         }
         return ["yes", null];

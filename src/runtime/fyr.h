@@ -17,6 +17,7 @@ void fyr_free(addr_t, fyr_dtr_t dtr);
 void fyr_free_arr(addr_t, fyr_dtr_arr_t dtr);
 bool fyr_isnull(addr_t);
 bool fyr_isnull_arr(addr_t);
+void fyr_notnull(addr_t);
 addr_t fyr_incref(addr_t ptr);
 addr_t fyr_incref_arr(addr_t ptr);
 void fyr_decref(addr_t ptr, fyr_dtr_t dtr);

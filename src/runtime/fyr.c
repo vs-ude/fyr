@@ -27,6 +27,10 @@ addr_t fyr_alloc_arr(int_t count, int_t size) {
 }
 
 void fyr_free(addr_t ptr, fyr_dtr_t dtr) {
+    if (ptr == NULL) {
+        return;
+    }
+
     int_t* lptr = ((int_t*)ptr) - 2;
     int_t* iptr = ((int_t*)ptr) - 1;
     if (*iptr == 1) {
@@ -55,6 +59,10 @@ void fyr_free(addr_t ptr, fyr_dtr_t dtr) {
 }
 
 void fyr_free_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
+    if (ptr == NULL) {
+        return;
+    }
+
     int_t* iptr = ((int_t*)ptr) - 2;
     if (*iptr == 1) {
         // No further references, Give up all memory
@@ -73,11 +81,17 @@ void fyr_free_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
 }
 
 bool fyr_isnull(addr_t ptr) {
-    return *(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0;
+    return ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0);
 }
 
 bool fyr_isnull_arr(addr_t ptr) {
-    return *(((int_t*)ptr) - 2) <= 0;
+    return ptr == NULL || *(((int_t*)ptr) - 2) <= 0;
+}
+
+void fyr_notnull(addr_t ptr) {
+    if (ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0)) {
+        exit(EXIT_FAILURE);
+    }
 }
 
 addr_t fyr_incref(addr_t ptr) {
@@ -93,7 +107,12 @@ addr_t fyr_incref_arr(addr_t ptr) {
 }
 
 void fyr_decref(addr_t ptr, fyr_dtr_t dtr) {
+    if (ptr == NULL) {
+        return;
+    }
+    // Number of locks
     int_t* lptr = ((int_t*)ptr) - 2;
+    // Number of references
     int_t* iptr = ((int_t*)ptr) - 1;
     // printf("DECREF %lx\n", (long)iptr);
     if (--(*iptr) == 0) {
@@ -106,6 +125,8 @@ void fyr_decref(addr_t ptr, fyr_dtr_t dtr) {
             free(lptr);
         }
     } else if (*iptr == INT_MIN) {
+        // The owning pointer is gone, and all references are gone, too.
+        // Finally, release all memory, unless someone is holding a lock on the memory
         if (lptr == 0) {
     //        printf("Free refcounter\n");
             // The owning pointer is zero (no freeze) and now all remaining references have been removed.
@@ -116,6 +137,10 @@ void fyr_decref(addr_t ptr, fyr_dtr_t dtr) {
 }
 
 void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
+    if (ptr == NULL) {
+        return;
+    }
+
     int_t* iptr = ((int_t*)ptr) - 2;
     if (--(*iptr) == 0) {
         // Reference count can drop to zero only when the owning pointer has been assigned
@@ -130,7 +155,7 @@ void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
 }
 
 void fyr_lock(addr_t ptr) {
-    if (ptr == NULL) {
+    if (ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0)) {
         exit(EXIT_FAILURE);
     }
     int_t* lptr = ((int_t*)ptr) - 2;

@@ -11,14 +11,25 @@ func S.f() {
     this.value = 42
 }
 
-func S.f2() {
+func S.f2(r const ~S) {
 }
 
 var ptr *S = {}
+let ptr2 *S = {}
 
 export func main() int {
+    // ptr needs locking
     ptr.f()
+    ptr2.f()
     var lptr *S = {}
-    lptr.f2()
+    let lptr2 *S = {}
+    // ptr needs incref
+    // lptr needs notnull
+    lptr.f2(ptr)
+    // lptr needs notnull
+    lptr.f2(ptr2)
+    // lptr needs notnull
+    lptr.f2(lptr)
+    lptr2.f2(lptr)
     return 0
 }
