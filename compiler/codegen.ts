@@ -1452,11 +1452,8 @@ export class CodeGenerator {
                 // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
-                    if (t instanceof PointerType && !this.disableNullCheck && !this.isThis(ptr)) {
-                        let check = b.assign(b.tmp("i8"), "eqz", "addr", [ptr]);
-                        b.ifBlock(check);
-                        b.assign(null, "trap", null, []);
-                        b.end();
+                    if (t instanceof PointerType && !this.disableNullCheck && !this.isThis(ptr)) {                        
+                        b.assign(null, "notnull", null, [ptr]);
                     }
                     let elementType = t.elementType;
                     if (elementType instanceof RestrictedType) {
