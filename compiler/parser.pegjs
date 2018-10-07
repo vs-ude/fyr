@@ -976,7 +976,7 @@ array
     }
 
 arrayElementList
-  = e:expressionList z:([ \t\n]* "," [ \t\n]* "...") {
+  = e:expressionList z:([ \t\n]* "," [ \t\n]* "...")? {
       if (z) {
           e.push(new ast.Node({loc: fl(location()), op: "..."}));
       }
