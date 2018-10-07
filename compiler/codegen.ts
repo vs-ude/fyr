@@ -770,11 +770,11 @@ export class CodeGenerator {
                 let p2 = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                 if (snode.lhs.type == TypeChecker.t_string) {
                     if (!this.disableNullCheck) {
-                        b.assign(null, "notnull", null, [p1]);
+                        b.assign(null, "notnull_ref", null, [p1]);
                     }
                     let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
                     if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
-                        b.assign(null, "notnull", null, [p2]);
+                        b.assign(null, "notnull_ref", null, [p2]);
                     }
                     let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
                     let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
@@ -1294,10 +1294,7 @@ export class CodeGenerator {
                 let t = this.tc.stripType(enode.rhs.type);
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 if (!this.disableNullCheck && !this.isThis(tmp)) {
-                    let check = b.assign(b.tmp("i32"), "eqz", "addr", [tmp]);
-                    b.ifBlock(check);
-                    b.assign(null, "trap", null, []);
-                    b.end();
+                    this.processNullCheck(tmp, t, b);
                 }
                 return new ssa.Pointer(tmp as ssa.Variable, 0);
             }
@@ -2025,18 +2022,12 @@ export class CodeGenerator {
                 if (t == TypeChecker.t_string) {
                     let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     if (!this.disableNullCheck && !(p1 as ssa.Variable).isConstant) {
-                        let cond = b.assign(b.tmp(), "eq", "addr", [p1, 0]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();
+                        b.assign(null, "notnull_ref", null, [p1]);
                     }
                     let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
                     let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                     if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
-                        let cond = b.assign(b.tmp(), "eq", "addr", [p2, 0]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();
+                        b.assign(null, "notnull_ref", null, [p2]);
                     }
                     let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
                     let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
@@ -2340,12 +2331,6 @@ export class CodeGenerator {
                         objType = RestrictedType.strip(ltype.elementType);
                         if (!(objType instanceof InterfaceType)) {
                             objPtr = this.processExpression(f, scope, lhs.lhs, b, vars, ltype);
-                            /* if (!this.disableNullCheck && !this.isThis(objPtr)) {
-                                let check = b.assign(b.tmp("i32"), "eqz", "addr", [objPtr]);
-                                b.ifBlock(check);
-                                b.assign(null, "trap", null, []);
-                                b.end();
-                            }*/      
                         }
                     } else if (ltype instanceof UnsafePointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
@@ -2394,10 +2379,7 @@ export class CodeGenerator {
                             table = b.assign(b.tmp(), "member", "addr", [iface, this.ifaceHeader.fieldIndexByName("table")]);
                         }
                         if (!this.disableNullCheck) {
-                            let cond = b.assign(b.tmp(), "ne", "i8", [objPtr, 0]);
-                            b.ifBlock(cond);
-                            b.assign(null, "trap", null, []);
-                            b.end();
+                            this.processNullCheck(objPtr, ltype, b);
                         }
                         let name = lhs.name.value;
                         let idx = objType.methodIndex(name);
@@ -2959,12 +2941,6 @@ export class CodeGenerator {
                         ptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                         head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
                         l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldIndexByName("data_length")]);
-                    }
-                    if (!this.disableNullCheck) {
-                        let cond = b.assign(b.tmp(), "eq", "i8", [ptr, 0]);
-                        b.ifBlock(cond);
-                        b.assign(null, "trap", null, []);
-                        b.end();
                     }
                     // Make room for the terminating 0 character
                     let l2 = b.assign(b.tmp(), "add", "sint", [l, 1]);
@@ -3836,7 +3812,7 @@ export class CodeGenerator {
                 if (this.tc.isInterface(targetType)) {
                     let ptr = b.assign(b.tmp(), "member", "addr", [rhsData, this.ifaceHeader.fieldIndexByName("pointer")]);
                     if (targetIsThis && result[0] != "no_not_null") {
-                        this.processNullCheck(ptr, rhsNode.type, b);
+                        // No null-check necessary, because null-check happened during function-table lookup already
                     } else {
                         b.assign(null, targetIsThis ? "lock" : "incref", "addr", [ptr]);
                     }
