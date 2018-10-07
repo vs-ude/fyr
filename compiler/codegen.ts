@@ -3505,7 +3505,8 @@ export class CodeGenerator {
         let st = this.getSSAType(t) as ssa.StructType;
         // Load pointer to the underlying array, which is a size-prefixed array
         let arrPointer = b.assign(b.tmp(), "load", "addr", [pointer, st.fieldOffset("array_ptr")]);
-        this.callDestructorOnPointer(new tc.PointerType(t.arrayType, t.mode), new ssa.Pointer(arrPointer, 0), b);
+        this.callDestructor(t.arrayType, arrPointer, b, false, "free");
+        // this.callDestructorOnPointer(new tc.PointerType(t.arrayType, t.mode), new ssa.Pointer(arrPointer, 0), b);
         b.end();
         this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
