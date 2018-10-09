@@ -307,7 +307,28 @@ export class CBackend implements backend.Backend {
             this.module.elements.push(f.func);
         }
 
+        var namedStructs: Array<StructType> = [];
         for(let t of this.namedStructs.values()) {
+            namedStructs.push(t);
+        }
+        for(let pos = 0; pos < namedStructs.length; pos++) {
+            let t = namedStructs[pos];
+            for(let f of t.fields) {
+                let ft = f[1];
+                if (ft instanceof StructType) {
+                    let idx = namedStructs.indexOf(ft);
+                    if (idx != -1 && idx > pos) {
+                        let e = namedStructs[idx];
+                        namedStructs.splice(idx, 1);
+                        namedStructs.splice(pos, 0, e);
+                        pos--;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for(let t of namedStructs) {
             let mangledName: string;
             if (t.pkg) {
                 mangledName = this.mangleName(t.pkg.pkgPath + "/" + t.name);
@@ -322,7 +343,7 @@ export class CBackend implements backend.Backend {
                 }
                 return "    " + this.mapType(c[1]).toString() + " " + c[0] + ";\n";
             }).join("") + "};\n#endif")
-            this.module.elements.unshift(ct);
+            this.module.elements.push(ct);
         }
 
         if (this.mainFunction) {
@@ -429,19 +450,28 @@ export class CBackend implements backend.Backend {
 
     private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false): CType {
         if (t instanceof ssa.StructType) {
+            let mangledName: string;
             if (t.name) {
-                let mangledName: string;
                 if (t.pkg) {
                     mangledName = this.mangleName(t.pkg.pkgPath + "/" + t.name);
                 } else {
                     mangledName = this.mangleName(t.name);
                 }
-                if (!this.namedStructs.has(mangledName)) {
-                    this.namedStructs.set(mangledName, t);
-                }
-                return new CType("struct " + mangledName);
+            } else {
+                // An anonymous struct
+                mangledName = "ta_struct" + this.mangledTypecode(t);
             }
-            let name = "ta_struct" + this.mangledTypecode(t);
+            if (!this.namedStructs.has(mangledName)) {
+                this.namedStructs.set(mangledName, t);
+                for(let f of t.fields) {
+                    if (f[1] instanceof StructType) {
+                        this.mapType(f[1], false);
+                    }
+                }
+            }
+            return new CType("struct " + mangledName);
+//            }
+/*            let name = "ta_struct" + this.mangledTypecode(t);
             if (!this.anonymousStructs.has(name)) {
                 let str = "#ifndef S_" + name + "\n";
                 str += "#define S_" + name + "\n";
@@ -455,7 +485,7 @@ export class CBackend implements backend.Backend {
                 this.anonymousStructs.add(name);
                 this.module.elements.unshift(new CType(str));
             }
-            return new CType("struct " + name);
+            return new CType("struct " + name);*/
         }
         if (t instanceof ssa.PointerType) {
             if (cstyle) {
@@ -1577,7 +1607,7 @@ export class CBackend implements backend.Backend {
     private varStorage: Map<ssa.Variable, string>;
     private globalStorage: Map<ssa.Variable, string> = new Map<ssa.Variable, string>();
     private namedStructs: Map<string, ssa.StructType> = new Map<string, ssa.StructType>();
-    private anonymousStructs: Set<string> = new Set<string>();
+//    private anonymousStructs: Set<string> = new Set<string>();
     private symbols: Array<string> = [];
 }
 
