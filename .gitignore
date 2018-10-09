@@ -7,6 +7,8 @@ examples/*.wast
 examples/*.wat
 examples/codegen*.c
 examples/*.o
+examples/*.c
+examples/*.h
 examples/codegen
 tmp/*
 measurements/**/*.wasm
@@ -21,6 +23,10 @@ backup
 pkg/*
 src/**/*.o
 src/**/*.ir
+src/examples/**/*.c
+src/examples/**/*.h
+src/strconv/*.c
+src/strconv/*.h
 src/testme/testme
 bin/darwin*
 bin/linux*
