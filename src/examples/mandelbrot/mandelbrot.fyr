@@ -14,7 +14,7 @@ let image_Width_And_Height int = 16000
 
 var initial_r [16000]double = [...]
 var initial_i [16000]double = [...]
-// The generated BMP image
+// The generated PBM pixel data
 var pixels [16000 * 16000 / 8]byte = [...]
 // pixel_Group_r and pixel_Group_i store real and imaginary
 // values for each pixel in the current pixel group as we perform
@@ -80,7 +80,7 @@ export func main() int {
     }
     let n2 = write(1, <#const char>&pixels, len(pixels))
     if (n2 != len(pixels)) {
-        
+
     }
     return 0
 }
