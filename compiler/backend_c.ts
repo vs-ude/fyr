@@ -307,9 +307,13 @@ export class CBackend implements backend.Backend {
             this.module.elements.push(f.func);
         }
 
+        // Order the structs, such that all structs used by a field
+        // are already declared. C compilers need it like that.
         var namedStructs: Array<StructType> = [];
-        for(let t of this.namedStructs.values()) {
-            namedStructs.push(t);
+        var mangledNames: Array<string> = [];
+        for(let n of this.namedStructs.keys()) {
+            mangledNames.push(n);
+            namedStructs.push(this.namedStructs.get(n));
         }
         for(let pos = 0; pos < namedStructs.length; pos++) {
             let t = namedStructs[pos];
@@ -318,9 +322,12 @@ export class CBackend implements backend.Backend {
                 if (ft instanceof StructType) {
                     let idx = namedStructs.indexOf(ft);
                     if (idx != -1 && idx > pos) {
-                        let e = namedStructs[idx];
+                        let n = mangledNames[idx];
+                        let s = namedStructs[idx];
                         namedStructs.splice(idx, 1);
-                        namedStructs.splice(pos, 0, e);
+                        namedStructs.splice(pos, 0, s);
+                        mangledNames.splice(idx, 1);
+                        mangledNames.splice(pos, 0, n);
                         pos--;
                         break;
                     }
@@ -328,13 +335,9 @@ export class CBackend implements backend.Backend {
             }
         }
 
-        for(let t of namedStructs) {
-            let mangledName: string;
-            if (t.pkg) {
-                mangledName = this.mangleName(t.pkg.pkgPath + "/" + t.name);
-            } else {
-                mangledName = this.mangleName(t.name);
-            }
+        for(let pos = 0; pos < namedStructs.length; pos++) {            
+            let mangledName = mangledNames[pos];
+            let t = namedStructs[pos];
 
             let ct = new CType("#ifndef S_" + mangledName + "\n#define S_" + mangledName + "\nstruct " + mangledName + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
                 let t = this.mapType(c[1]).toString();

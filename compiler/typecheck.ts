@@ -3588,7 +3588,6 @@ export class TypeChecker {
                 this.checkExpression(snode.lhs, scope);
                 this.checkIsMutable(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
-                this.checkIsUnsignedNumber(snode.rhs, true);
                 if (this.isUnsafePointer(snode.lhs.type)) {
                     if (snode.rhs.op == "int") {
                         this.unifyLiterals(TypeChecker.t_uint, snode.rhs, scope, snode.loc);
@@ -3597,7 +3596,7 @@ export class TypeChecker {
                     }
                 } else {
                     this.checkIsIntNumber(snode.lhs);
-                    if (snode.rhs.op == "int" || snode.rhs.op == "float") {
+                    if (snode.rhs.op == "int") {
                         this.unifyLiterals(TypeChecker.t_uint, snode.rhs, scope, snode.loc);
                     } else {
                         this.checkIsAssignableType(TypeChecker.t_uint, snode.rhs.type, snode.loc, "assign", true);

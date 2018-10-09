@@ -74,7 +74,13 @@ export func main() int {
     calc()
     // Write to stdout
     let header = "P4\n16000 16000\n"
-    write(1, <#const char>header, len(header))
-    write(1, <#const char>&pixels, len(pixels))
+    let n1 = write(1, <#const char>header, len(header))
+    if (n1 != len(header)) {
+
+    }
+    let n2 = write(1, <#const char>&pixels, len(pixels))
+    if (n2 != len(pixels)) {
+        
+    }
     return 0
 }

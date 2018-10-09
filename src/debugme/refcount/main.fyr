@@ -29,6 +29,7 @@ func sliceme(s ~[]int) {
 }
 
 type H struct {
+    value int
     slice []int
 }
 
