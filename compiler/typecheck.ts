@@ -31,6 +31,8 @@ export class Variable implements ScopeElement {
     public isGlobal: boolean;
     // Variables declared with "let" are constant. Their type, however, is unaffected by this. It may be constant or not
     public isConst: boolean;
+    // Variables initialized with "let x = ...not-null..." are statically known to be not null.
+    public isNotNull: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
@@ -2992,6 +2994,9 @@ export class TypeChecker {
                 } else {
                     this.checkIsAssignableType(v.type, rtype, vnode.loc, "assign", true);
                 }
+            }
+            if (isConst && rnode && (rnode.op == "array" || rnode.op == "object")) {
+                v.isNotNull = true;
             }
             vnode.type = v.type;
         } else if (vnode.op == "tuple") {

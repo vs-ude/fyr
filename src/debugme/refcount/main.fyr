@@ -54,6 +54,8 @@ export func main() int {
     // Needs decref after f()
     let lptr3 *S = {}
     lptr3.f2(donateRef())
+    let lptr4 *S = factory()
+    lptr4.f()
     let hptr *H = {}
     sliceme(hptr.slice)
     let s []int = [1, 2]

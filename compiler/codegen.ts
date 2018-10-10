@@ -4019,7 +4019,7 @@ export class CodeGenerator {
                 // No need to refcount again.
                 // When a 'let' is passed, it is known to be not-null.
                 if (e instanceof Variable && (!e.isGlobal || e.isConst)) {
-                    return [e.isConst ? "no_not_null" : "no", e];
+                    return [e.isNotNull ? "no_not_null" : "no", e];
                 }
                 return ["yes", null];
             }
