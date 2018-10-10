@@ -1127,6 +1127,7 @@ export class CodeGenerator {
                         }
                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
+                    // TODO: The same for maps
                     if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.lhs.op == "take")) {
                         if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                             throw "Implementation error";
@@ -1278,7 +1279,12 @@ export class CodeGenerator {
             }
             
             default:
-                this.processExpression(f, scope, snode, b, vars, snode.type);
+            {
+                let value = this.processExpression(f, scope, snode, b, vars, snode.type);     
+                if (value instanceof ssa.Variable) {
+                    this.callDestructorOnVariable(snode.type, value, b);
+                }
+            }
         }
     }
 
