@@ -2706,7 +2706,7 @@ export class TypeChecker {
             let ip: ImportedPackage;
             let importPath: string = inode.rhs.rhs.value;
             if (!inode.lhs) {
-                // Syntax of the kind: import { func ... } from "imports"
+                // Syntax of the kind: import from "imports" { func ... }
                 let importPathElements = importPath.split("/");
                 let name = importPathElements[importPathElements.length - 1];
                 // TODO: Sanitize the name
@@ -2716,7 +2716,7 @@ export class TypeChecker {
                 }
                 ip = e;
             } else if (inode.lhs.op == "id") {
-                // Syntax of the kind: import identifier { func ... } from "imports"
+                // Syntax of the kind: import identifier from "imports" { func ... }
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(inode.lhs.value);
                 if (!(e instanceof ImportedPackage)) {
@@ -2724,7 +2724,7 @@ export class TypeChecker {
                 }
                 ip = e;
             } else if (inode.lhs.op == ".") {
-                // Syntax of the kind: import . { func ... } from "imports"
+                // Syntax of the kind: import . from "imports" { func ... } 
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
             }
@@ -2773,8 +2773,8 @@ export class TypeChecker {
      * The main function of the Typechecker that checks the types of an entire module.
      * However, this function just handles all imports and declares typedefs (but does not yet define them).
      * 
-     * Use checkModulePassTwo() and checkModulePassThree() to  complete type checking.
-     * The reason for splitting type checking in phases is, that each phase is applied to all imported packages first,
+     * Use checkModulePassTwo() and checkModulePassThree() to complete type checking.
+     * The reason for splitting type checking in phases is that each phase is applied to all imported packages first,
      * before proceeding with the next phase.
      */
     public checkModule(pkg: Package): Scope {

@@ -401,9 +401,10 @@ export class CodeGenerator {
     }
 
     public freeScopeVariables(ignoreVariables: Array<Variable | FunctionParameter>, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope): void {
-        // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
+            // Parameters with isConst == true are either "this" or references. In both cases the caller is responsible
+            // for managing the lifetime of the variables.
             if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
                 if (ignoreVariables && ignoreVariables.indexOf(e) != -1) {
                     continue;
@@ -413,19 +414,6 @@ export class CodeGenerator {
                     throw "Implementation error";
                 }
                 this.callDestructorOnVariable(e.type, v, b);
-                /*
-                let t = RestrictedType.strip(e.type);
-                if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
-                    this.callDestructor(t.elementType, v, 0, b, false, "free");
-                } else if (t instanceof PointerType && (t.mode == "reference")) {
-                    this.callDestructor(t.elementType, v, 0, b, false, "decref");
-                } else if (t == TypeChecker.t_string) {
-                    this.callDestructor(t, v, 0, b, false, "decref");
-                } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
-                    let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                    this.callDestructor(t, obj, 0, b, true, "no");
-                }
-                */
             }
         }
     }
@@ -2401,7 +2389,8 @@ export class CodeGenerator {
                 
                 if (f) {
                     if (!this.funcs.has(f)) {
-                        this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
+                        // this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
+                        this.funcs.set(f, this.backend.importFunction(f.name, f.importFromModule, this.getSSAFunctionType(f.type)));
                     }
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {

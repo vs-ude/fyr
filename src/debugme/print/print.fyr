@@ -15,6 +15,8 @@ export func main() int {
         puts(<#const char>"Ok")
     } else if (!ok) {
         puts(<#const char>"Not Ok")
+        let s2 = strconv.itoa<int>(i2)
+        puts(<#const char>s2)
     }
 
     let u uint = 123456

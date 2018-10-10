@@ -36,7 +36,8 @@ func refme(s &*S) {
 }
 
 func retarr() [2]*S {
-    let arr [2]*S = [{}, {}]
+    var varr [2]*S = [{}, {}]
+    let arr = varr
     return arr
 }
 
