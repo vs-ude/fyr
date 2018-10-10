@@ -33,11 +33,13 @@ export class Variable implements ScopeElement {
     public isConst: boolean;
     // Variables initialized with "let x = ...not-null..." are statically known to be not null.
     public isNotNull: boolean;
+    // A variable is referenced with "&v". During code generation we can make some assumptions about when
+    // the value of a variable might change. When a variable is referenced, this is harder to do.
+    public isReferenced: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
     public node: Node;
-    public localReferenceCount: number = 0;
 }
 
 // Function is a named function inside a scope.
@@ -79,8 +81,8 @@ export class FunctionParameter implements ScopeElement {
     public ellipsis: boolean;
     public type: Type;
     public loc: Location;
-    public localReferenceCount: number = 0;
     public isConst: boolean;
+    public isReferenced: boolean;
 }
 
 /**
@@ -5295,8 +5297,10 @@ export class TypeChecker {
             case "id":
                 let element = scope.resolveElement(node.value);
                 if (element instanceof Variable) {
+                    element.isReferenced = true;
                     return true;
                 } else if (element instanceof FunctionParameter) {
+                    element.isReferenced = true;
                     return true;
                 }
                 break;
