@@ -301,7 +301,9 @@ export class CBackend implements backend.Backend {
                 code.push(cv);
             }
 
+            this.currentCFunction = f.func;
             this.emitCode(f.node.next[0], null, code);
+            this.currentCFunction = null;
             f.func.body = code;
 
             this.module.elements.push(f.func);
@@ -590,7 +592,12 @@ export class CBackend implements backend.Backend {
             return new CConst(n.toString());
         }
         if (typeof(n) == "string") {
-            let s = this.module.addString(n);
+            let s: CString;
+            if (this.currentCFunction) {
+                s = this.currentCFunction.addString(n);
+            } else {
+                s = this.module.addString(n);
+            }
             let addr = new CUnary();
             addr.operator = "&";
             let member = new CBinary();
@@ -1612,6 +1619,7 @@ export class CBackend implements backend.Backend {
     private namedStructs: Map<string, ssa.StructType> = new Map<string, ssa.StructType>();
 //    private anonymousStructs: Set<string> = new Set<string>();
     private symbols: Array<string> = [];
+    private currentCFunction: CFunction;
 }
 
 export class CInclude {
@@ -1835,7 +1843,13 @@ export class CStruct extends CNode {
 
 export class CFunction extends CNode {
     public toString(indent: string = ""): string {
-        let str = indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
+        let str = "";
+        for(let s of this.strings.values()) {
+            str += s.toString() + "\n\n";
+        }
+        str += "\n";     
+
+        str += indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
         str += this.body.map(function(c: CNode) { return c.toString(indent + "    ") + ";"}).join("\n");
         return str + "\n" + indent + "}";
     }
@@ -1844,11 +1858,21 @@ export class CFunction extends CNode {
         return this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ");";
     }
 
+    public addString(str: string): CString {
+        if (this.strings.has(str)) {
+            return this.strings.get(str);
+        }
+        let s = new CString(str);
+        this.strings.set(str, s);
+        return s;        
+    }
+
     public name: string;
     public returnType: CType;
     public parameters: Array<CFunctionParameter> = [];
     public body: Array<CNode> = [];
     public isPossibleDuplicate: boolean;
+    public strings: Map<string, CString> = new Map<string, CString>();
 }
 
 export class CFunctionParameter {
