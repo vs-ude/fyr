@@ -3735,6 +3735,11 @@ export class TypeChecker {
                     throw new TypeError("'copy' requires two slices of the same type", snode.loc);
                 }
                 break;
+            case "println":                
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    this.checkExpression(snode.parameters[i], scope);                    
+                }
+                break;
             case "push": // Push is handled together with tryPush and append which are both expressions
             case "append":
             default:
@@ -6278,6 +6283,11 @@ export class TypeChecker {
                 break;
             }
             */
+            case "println":
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    this.checkGroupsInExpression(snode.parameters[i], scope, GroupCheckFlags.None);
+                }
+                break;
             case "push":
             case "append":
             default:

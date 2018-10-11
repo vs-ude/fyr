@@ -6,6 +6,7 @@ import "strconv"
 
 export func main() int {
     let i int = -42123
+    println("Working with \"", i, "\"")
     let s = strconv.itoa<int>(i)
     puts(<#const char>s)
     var ok bool

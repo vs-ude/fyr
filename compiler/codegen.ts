@@ -1265,7 +1265,14 @@ export class CodeGenerator {
                 b.assign(null, "memmove", null, [dest_data_ptr, src_data_ptr, dest_count, size]);
                 break;
             }
-            
+            case "println": {
+                let args: Array<number | ssa.Variable> = [];
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    args.push(this.processExpression(f, scope, snode.parameters[i], b, vars, null));
+                }
+                b.assign(null, "println", null, args);
+                break;
+            }
             default:
             {
                 let value = this.processExpression(f, scope, snode, b, vars, snode.type);     
