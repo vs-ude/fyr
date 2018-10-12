@@ -301,7 +301,9 @@ export class CBackend implements backend.Backend {
                 code.push(cv);
             }
 
+            this.currentCFunction = f.func;
             this.emitCode(f.node.next[0], null, code);
+            this.currentCFunction = null;
             f.func.body = code;
 
             this.module.elements.push(f.func);
@@ -590,7 +592,12 @@ export class CBackend implements backend.Backend {
             return new CConst(n.toString());
         }
         if (typeof(n) == "string") {
-            let s = this.module.addString(n);
+            let s: CString;
+            if (this.currentCFunction) {
+                s = this.currentCFunction.addString(n);
+            } else {
+                s = this.module.addString(n);
+            }
             let addr = new CUnary();
             addr.operator = "&";
             let member = new CBinary();
@@ -1460,6 +1467,108 @@ export class CBackend implements backend.Backend {
                 this.includeStringHeaderFile();
                 code.push(call);
                 n = n.next[0];
+            } else if (n.kind == "println") {
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("printf");
+                let args: Array<CNode> = [null];
+                let f = "\"";
+                for(let i = 0; i < n.args.length; i++) {
+                    let arg = n.args[i];
+                    if (typeof(arg) == "number") {
+                        if (arg < 0) {
+                            f += "%i ";
+                        } else {
+                            f += "%u ";
+                        }
+                        args.push(this.emitExpr(arg));
+                    } else {
+                        if (arg instanceof ssa.Variable && arg.isConstant && typeof(arg.constantValue) == "string") {
+                            f += "%s ";
+                            let s = arg.constantValue;
+                            s = s.replace(/"/g, "\\\"");
+                            args.push(new CConst("\"" + s + "\""));
+                            continue;
+                        }
+                        if (arg instanceof Node && arg.type instanceof FunctionType) {
+                            f += "<func> ";
+                            continue;
+                        }
+                        if (arg.type instanceof StructType) {
+                            f += "<struct> ";
+                            continue;
+                        }
+                        if (arg.type instanceof ssa.PointerType) {
+                            f += "%p ";
+                            args.push(this.emitExpr(arg));
+                        }
+                        switch(arg.type) {
+                            case "i8":
+                            case "i16": {
+                                f += "%PRIu32 ";
+                                let c = new CTypeCast();
+                                c.type = new CType("uint32_t");
+                                c.expr = this.emitExpr(arg);
+                                args.push(c);
+                                break;
+                            }
+                            case "i32":
+                                f += "%PRIu32 ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "i64":
+                                f += "%PRIu64 ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "s8":
+                            case "s16": {
+                                f += "%PRIi32 ";
+                                let c = new CTypeCast();
+                                c.type = new CType("int32_t");
+                                c.expr = this.emitExpr(arg);
+                                args.push(c);
+                                break;
+                            }
+                            case "s32":
+                                f += "%PRIi32 ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "s64":
+                                f += "%PRIi64 ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "ptr":
+                            case "addr":
+                                f += "%p ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "f32": {
+                                f += "%f ";
+                                let c = new CTypeCast();
+                                c.type = new CType("double");
+                                c.expr = this.emitExpr(arg);
+                                args.push(c);
+                                break;
+                            }
+                            case "f64":
+                                f += "%f ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "int":
+                                f += "%u ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                            case "sint":
+                                f += "%i ";
+                                args.push(this.emitExpr(arg));
+                                break;
+                        }
+                    }
+                }
+                f += "\\n\"";
+                args[0] = new CConst(f);
+                call.args = args;
+                code.push(call);
+                n = n.next[0];            
             } else if (n.kind == "set_member") {
                 let m = new CBinary();
                 m.operator = ".";
@@ -1612,6 +1721,7 @@ export class CBackend implements backend.Backend {
     private namedStructs: Map<string, ssa.StructType> = new Map<string, ssa.StructType>();
 //    private anonymousStructs: Set<string> = new Set<string>();
     private symbols: Array<string> = [];
+    private currentCFunction: CFunction;
 }
 
 export class CInclude {
@@ -1835,7 +1945,13 @@ export class CStruct extends CNode {
 
 export class CFunction extends CNode {
     public toString(indent: string = ""): string {
-        let str = indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
+        let str = "";
+        for(let s of this.strings.values()) {
+            str += s.toString() + "\n\n";
+        }
+        str += "\n";     
+
+        str += indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
         str += this.body.map(function(c: CNode) { return c.toString(indent + "    ") + ";"}).join("\n");
         return str + "\n" + indent + "}";
     }
@@ -1844,11 +1960,21 @@ export class CFunction extends CNode {
         return this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ");";
     }
 
+    public addString(str: string): CString {
+        if (this.strings.has(str)) {
+            return this.strings.get(str);
+        }
+        let s = new CString(str);
+        this.strings.set(str, s);
+        return s;        
+    }
+
     public name: string;
     public returnType: CType;
     public parameters: Array<CFunctionParameter> = [];
     public body: Array<CNode> = [];
     public isPossibleDuplicate: boolean;
+    public strings: Map<string, CString> = new Map<string, CString>();
 }
 
 export class CFunctionParameter {

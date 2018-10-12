@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "default" || n == "switch" || n == "case" || n == "select" || n == "component" || n == "let" || n == "map" || n == "take" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "println" || n == "default" || n == "switch" || n == "case" || n == "select" || n == "component" || n == "let" || n == "map" || n == "take" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -969,6 +969,9 @@ primary2
   / o:object { return o; }
   / a:array { return a; }
   / r:rune { return r; }
+  / "println" [ \t]* "(" [ \t\n]* a:arguments? ")" {
+      return new ast.Node({loc: fl(location()), op: "println", parameters: a}); 
+    }
 
 array
   = "[" [ \t\n]* e:arrayElementList? [ \t\n]* "]" {

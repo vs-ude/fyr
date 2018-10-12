@@ -401,9 +401,10 @@ export class CodeGenerator {
     }
 
     public freeScopeVariables(ignoreVariables: Array<Variable | FunctionParameter>, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, scope: Scope): void {
-        // Declare variables
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
+            // Parameters with isConst == true are either "this" or references. In both cases the caller is responsible
+            // for managing the lifetime of the variables.
             if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
                 if (ignoreVariables && ignoreVariables.indexOf(e) != -1) {
                     continue;
@@ -413,19 +414,6 @@ export class CodeGenerator {
                     throw "Implementation error";
                 }
                 this.callDestructorOnVariable(e.type, v, b);
-                /*
-                let t = RestrictedType.strip(e.type);
-                if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
-                    this.callDestructor(t.elementType, v, 0, b, false, "free");
-                } else if (t instanceof PointerType && (t.mode == "reference")) {
-                    this.callDestructor(t.elementType, v, 0, b, false, "decref");
-                } else if (t == TypeChecker.t_string) {
-                    this.callDestructor(t, v, 0, b, false, "decref");
-                } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
-                    let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
-                    this.callDestructor(t, obj, 0, b, true, "no");
-                }
-                */
             }
         }
     }
@@ -1127,6 +1115,7 @@ export class CodeGenerator {
                         }
                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
+                    // TODO: The same for maps
                     if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.lhs.op == "take")) {
                         if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                             throw "Implementation error";
@@ -1276,9 +1265,21 @@ export class CodeGenerator {
                 b.assign(null, "memmove", null, [dest_data_ptr, src_data_ptr, dest_count, size]);
                 break;
             }
-            
+            case "println": {
+                let args: Array<number | ssa.Variable> = [];
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    args.push(this.processExpression(f, scope, snode.parameters[i], b, vars, null));
+                }
+                b.assign(null, "println", null, args);
+                break;
+            }
             default:
-                this.processExpression(f, scope, snode, b, vars, snode.type);
+            {
+                let value = this.processExpression(f, scope, snode, b, vars, snode.type);     
+                if (value instanceof ssa.Variable) {
+                    this.callDestructorOnVariable(snode.type, value, b);
+                }
+            }
         }
     }
 
@@ -2395,7 +2396,8 @@ export class CodeGenerator {
                 
                 if (f) {
                     if (!this.funcs.has(f)) {
-                        this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
+                        // this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
+                        this.funcs.set(f, this.backend.importFunction(f.name, f.importFromModule, this.getSSAFunctionType(f.type)));
                     }
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {
@@ -3838,8 +3840,6 @@ export class CodeGenerator {
                 } else {
                     action = targetIsThis ? "unlock" : "decref";
                 }
-            } else if (result[1]) {
-                result[1].localReferenceCount++;    
             }
             if ((TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type)) && this.tc.isTakeExpression(rhsNode)) {
                 if (action != "none") {
@@ -3873,8 +3873,6 @@ export class CodeGenerator {
                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
                 decrefVar = arrayPointer;
                 action = "decref";
-            } else if (result[1]) {
-                result[1].localReferenceCount++;
             }
             if ((TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type)) && this.tc.isTakeExpression(rhsNode)) {
                 if (action != "none") {
@@ -3903,8 +3901,6 @@ export class CodeGenerator {
                     decrefVar = b.assign(b.tmp(), "incref_arr", "addr", [rhs]);
                 }
                 action = "decref";
-            } else if (result[1]) {
-                result[1].localReferenceCount++;
             }            
         }
 
@@ -3946,7 +3942,7 @@ export class CodeGenerator {
      * Furthermore, references to objects owned directly via a strong pointer stored on the stack, do not need incref as well.
      * The reason is that local variables of the caller are not modified, hence said object must continue exist, because the local variable holds a strong pointer on it.
      */
-    private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "one_indirection" | "no" | "no_not_null", Variable | FunctionParameter] {
+    private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "no" | "no_not_null", Variable | FunctionParameter] {
         if (TypeChecker.isLocalReference(enode.type)) {
             // Passing on a local reference means no incref/decref, because local references must only point to objects
             // that live as long as the local reference does.
@@ -3966,42 +3962,25 @@ export class CodeGenerator {
                 // However, the value must be destructed afterwards unless ownership is passed to the function.
                 return ["no", null];
             case ".":
-            {
-                let lhs = this.functionArgumentIncrefIntern(enode.lhs, scope);
-                if (lhs[0] == "yes") {
-                    return lhs;
-                }
-                let type: Type = RestrictedType.strip(enode.lhs.type);
-                if (this.tc.isStruct(type) || this.tc.isUnsafePointer(type)) {
-                    return lhs;
-                }
-                if (type instanceof PointerType && (type.mode == "unique" || type.mode == "strong") && lhs[0] == "no" && lhs[1].localReferenceCount == 0) {
-                    return ["one_indirection", lhs[1]];
-                }
-                return ["yes", null];
-            }
             case "[":
             {
                 let lhs = this.functionArgumentIncrefIntern(enode.lhs, scope);
                 if (lhs[0] == "yes") {
                     return lhs;
                 }
-                let type: Type = RestrictedType.strip(enode.lhs.type);
-                if (this.tc.isArray(type) || this.tc.isUnsafePointer(type)) {
-                    return lhs;
+                let type: Type = RestrictedType.strip(enode.type);
+                if (this.tc.isUnsafePointer(type)) {
+                    return ["no", null];
                 }
-                if (type instanceof SliceType && (type.mode == "unique" || type.mode == "strong") && lhs[0] == "no" && lhs[1].localReferenceCount == 0) {
-                    return ["one_indirection", lhs[1]];
+                if (this.tc.isStruct(type) || this.tc.isTuple(type) || this.tc.isArray(type)) {
+                    return lhs;
                 }
                 return ["yes", null];
             }
             case "unary&":
             {
-                let result: object = this.functionArgumentIncrefIntern(enode.rhs, scope);
-                if (result[0] == "one_indirection") {
-                    result[0] = "no";
-                }
-                return result as ["yes" | "one_indirection" | "no", Variable | FunctionParameter];
+                let result = this.functionArgumentIncrefIntern(enode.rhs, scope);
+                return ["no", result[1]];
             }
             case "id":
             {
@@ -4013,13 +3992,19 @@ export class CodeGenerator {
                 // No need to refcount again.
                 // When 'this' is being passed we are sure that it is a non-null variable.
                 if (e instanceof FunctionParameter) {
+                    if (e.isReferenced) {
+                        return ["yes", e];
+                    }
                     return [e.name == "this" ? "no_not_null" : "no", e];
                 }
                 // Local variables of pointer type already guarantee that the object being pointed to exists while the variable is in scope.
                 // No need to refcount again.
                 // When a 'let' is passed, it is known to be not-null.
                 if (e instanceof Variable && (!e.isGlobal || e.isConst)) {
-                    return [e.isConst ? "no_not_null" : "no", e];
+                    if (e.isReferenced) {
+                        return ["yes", e];
+                    }
+                    return [e.isNotNull ? "no_not_null" : "no", e];
                 }
                 return ["yes", null];
             }

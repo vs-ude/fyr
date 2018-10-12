@@ -31,11 +31,15 @@ export class Variable implements ScopeElement {
     public isGlobal: boolean;
     // Variables declared with "let" are constant. Their type, however, is unaffected by this. It may be constant or not
     public isConst: boolean;
+    // Variables initialized with "let x = ...not-null..." are statically known to be not null.
+    public isNotNull: boolean;
+    // A variable is referenced with "&v". During code generation we can make some assumptions about when
+    // the value of a variable might change. When a variable is referenced, this is harder to do.
+    public isReferenced: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
     public node: Node;
-    public localReferenceCount: number = 0;
 }
 
 // Function is a named function inside a scope.
@@ -77,8 +81,8 @@ export class FunctionParameter implements ScopeElement {
     public ellipsis: boolean;
     public type: Type;
     public loc: Location;
-    public localReferenceCount: number = 0;
     public isConst: boolean;
+    public isReferenced: boolean;
 }
 
 /**
@@ -2702,7 +2706,7 @@ export class TypeChecker {
             let ip: ImportedPackage;
             let importPath: string = inode.rhs.rhs.value;
             if (!inode.lhs) {
-                // Syntax of the kind: import { func ... } from "imports"
+                // Syntax of the kind: import from "imports" { func ... }
                 let importPathElements = importPath.split("/");
                 let name = importPathElements[importPathElements.length - 1];
                 // TODO: Sanitize the name
@@ -2712,7 +2716,7 @@ export class TypeChecker {
                 }
                 ip = e;
             } else if (inode.lhs.op == "id") {
-                // Syntax of the kind: import identifier { func ... } from "imports"
+                // Syntax of the kind: import identifier from "imports" { func ... }
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(inode.lhs.value);
                 if (!(e instanceof ImportedPackage)) {
@@ -2720,7 +2724,7 @@ export class TypeChecker {
                 }
                 ip = e;
             } else if (inode.lhs.op == ".") {
-                // Syntax of the kind: import . { func ... } from "imports"
+                // Syntax of the kind: import . from "imports" { func ... } 
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
             }
@@ -2769,8 +2773,8 @@ export class TypeChecker {
      * The main function of the Typechecker that checks the types of an entire module.
      * However, this function just handles all imports and declares typedefs (but does not yet define them).
      * 
-     * Use checkModulePassTwo() and checkModulePassThree() to  complete type checking.
-     * The reason for splitting type checking in phases is, that each phase is applied to all imported packages first,
+     * Use checkModulePassTwo() and checkModulePassThree() to complete type checking.
+     * The reason for splitting type checking in phases is that each phase is applied to all imported packages first,
      * before proceeding with the next phase.
      */
     public checkModule(pkg: Package): Scope {
@@ -2992,6 +2996,9 @@ export class TypeChecker {
                 } else {
                     this.checkIsAssignableType(v.type, rtype, vnode.loc, "assign", true);
                 }
+            }
+            if (isConst && rnode && (rnode.op == "array" || rnode.op == "object")) {
+                v.isNotNull = true;
             }
             vnode.type = v.type;
         } else if (vnode.op == "tuple") {
@@ -3726,6 +3733,11 @@ export class TypeChecker {
                 let e2 = RestrictedType.strip(t2.getElementType());
                 if (!this.checkTypeEquality(e, e2, snode.loc, false)) {
                     throw new TypeError("'copy' requires two slices of the same type", snode.loc);
+                }
+                break;
+            case "println":                
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    this.checkExpression(snode.parameters[i], scope);                    
                 }
                 break;
             case "push": // Push is handled together with tryPush and append which are both expressions
@@ -5290,8 +5302,10 @@ export class TypeChecker {
             case "id":
                 let element = scope.resolveElement(node.value);
                 if (element instanceof Variable) {
+                    element.isReferenced = true;
                     return true;
                 } else if (element instanceof FunctionParameter) {
+                    element.isReferenced = true;
                     return true;
                 }
                 break;
@@ -6269,6 +6283,11 @@ export class TypeChecker {
                 break;
             }
             */
+            case "println":
+                for(let i = 0; i < snode.parameters.length; i++) {
+                    this.checkGroupsInExpression(snode.parameters[i], scope, GroupCheckFlags.None);
+                }
+                break;
             case "push":
             case "append":
             default:
