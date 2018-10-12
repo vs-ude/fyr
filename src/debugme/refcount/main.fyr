@@ -85,9 +85,7 @@ export func main() int {
     // Requires a free
     retarr()
 
-    let arr [4]int = [12, 23, ...]
-    arr[2] = 123
-    arr[3] = 234
-
+    let x *S = {}
+    let y = x
     return 0
 }
