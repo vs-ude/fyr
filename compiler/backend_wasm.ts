@@ -756,7 +756,7 @@ export class Wasm32Backend implements backend.Backend {
                 let t = this.stackTypeOf(n.type as Type);
                 this.wf.parameters.push(t);
                 this.varStorage.set(n.assign, s);
-                if (n.assign.gcDiscoverable) {
+                if (false /*n.assign.gcDiscoverable*/) {
                     let index = this.varsFrame.addField("$param" + s.offset.toString(), t);
                     let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
                     this.varGCStorage.set(n.assign, sAlternative);
@@ -818,7 +818,7 @@ export class Wasm32Backend implements backend.Backend {
             }
         }
 
-        if (!v.usedInMultipleSteps && !(v.type instanceof StructType) && !v.gcDiscoverable && !v.addressable) {
+        if (!v.usedInMultipleSteps && !(v.type instanceof StructType) /* && !v.gcDiscoverable */ && !v.addressable) {
             // Non-struct variables (which are not GC-relevant) are stored in local variables.
             let index = locals.allocate(v.type);
             let s: Wasm32Storage = {storageType: "local_var", offset: index};

@@ -1,0 +1,35 @@
+type S struct {
+    value int
+    next *S
+    self ~S
+}
+
+func refme(s ~S) ~S {
+//    s.next = take(g)
+    return s
+}
+
+func factory() ^S {
+    return {}
+}
+
+func refme2(arr ~[]int) {
+
+}
+
+var g *S = {}
+
+export func main() int {
+    var s S = {}
+    var s2 S = {}
+    s.next = &s2
+    s2.next = factory()
+    s2.next = {}
+//    s.next = s2
+    s.self = refme(&s)
+
+    var arr [4]int = [...]
+    refme2(arr[:])
+    
+    return 0
+}

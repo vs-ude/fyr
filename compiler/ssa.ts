@@ -315,9 +315,14 @@ export class Variable {
      */
     public addressable: boolean;
     /**
+     * True for addressable local variables that are pointed to by strong pointers or references.
+     * In this case the variable must provide additional space for storing the reference counters.
+     */
+    public needsRefCounting: boolean;
+    /**
      * True, if the variable holds GC-relevant pointers and thus the GC must be able to find the variable.
      */
-    public gcDiscoverable: boolean;
+//    public gcDiscoverable: boolean;
     /**
      * Internal
      */
@@ -516,9 +521,10 @@ export class Builder {
         return n.assign;
     }
 
-    public declareVar(type: Type | StructType | PointerType, name: string): Variable {
+    public declareVar(type: Type | StructType | PointerType, name: string, needsRefCounting: boolean): Variable {
         let n = new Node(new Variable(name), "decl_var", type, []);
         n.assign.type = type;
+        n.assign.needsRefCounting = needsRefCounting;
         n.assignType = type;
         if (this._current) {
             this._current.next.push(n);
@@ -1018,15 +1024,18 @@ export class Optimizer {
         }
     }
 
+    /*
     public analyzeGCDiscoverability(n: Node) {
         let varsRead = new Set<Variable>();
         this._analyzeGCDiscoverability(n, null, varsRead);
     }
+    */
 
     /**
      * The function traverses the code in reverse order and collects all variables of type "ptr" that are assigned before and read
      * after a GC happens. Thus, the object being pointed to is still in use and must be detectable by the GC.
      */
+    /*
     private _analyzeGCDiscoverability(n: Node, stop: Node, varsRead: Set<Variable>): boolean {
         let doesGC = false;
         for(; n != stop;) {
@@ -1124,8 +1133,9 @@ export class Optimizer {
             }
         }
         return doesGC;
-    }
+    }*/
 }
+
 
 /**
  * Transforms control flow with loop/block/br/br_if/if into a state machine using
@@ -1361,9 +1371,9 @@ export class Stackifier {
 
         // If end of function has been reached, traverse the code in reverse order
         // to mark variables that need to be visible to the GC
-        if (end === null) {
-            this.optimizer.analyzeGCDiscoverability(last);
-        }
+//        if (end === null) {
+//            this.optimizer.analyzeGCDiscoverability(last);
+//        }
     }
 
     private findInline(n: Node, v: Variable, doNotInline: Array<Variable>, assigned: Map<Variable, boolean>): Node {

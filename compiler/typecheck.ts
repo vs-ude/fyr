@@ -10,6 +10,7 @@ export interface ScopeElement {
     loc: Location;
 }
 
+// A packages imported into a scope.
 export class ImportedPackage implements ScopeElement {
     constructor(name: string, pkg: Package, loc: Location) {
         this.name = name;
@@ -18,9 +19,13 @@ export class ImportedPackage implements ScopeElement {
         this.type = new PackageType(name, pkg, loc);
     }
 
+    // Name of the package as used in this scope.
     public name: string;
-    public type: Type;
+    // An instance of PackageType
+    public type: PackageType;
+    // Location of the import
     public loc: Location;
+    // The imported package
     public pkg: Package;
 }
 
@@ -36,6 +41,9 @@ export class Variable implements ScopeElement {
     // A variable is referenced with "&v". During code generation we can make some assumptions about when
     // the value of a variable might change. When a variable is referenced, this is harder to do.
     public isReferenced: boolean;
+    // A variable is referenced with "&v". It can be casted to a reference or strong pointer.
+    // In this case the stack must provide extra space for the (unnecessary) reference counters.
+    public isReferencedWithRefcounting: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
@@ -68,7 +76,9 @@ export class Function implements ScopeElement {
     public unnamedReturnVariable: Variable | null;
     // The scope containing FunctionParameters and local Variables of the function.
     public scope: Scope;
+    // Node that defined the function
     public node: Node;
+    // Location where the function has been defined.
     public loc: Location;
     public importFromModule: string;
     public isExported: boolean;
@@ -136,6 +146,17 @@ export class Scope {
             return null;
         }
         return t;
+    }
+
+    public resolveElementWithScope(name: string): [ScopeElement, Scope] {
+        let t = this.elements.get(name);
+        if (!t) {
+            if (this.parent) {
+                return this.parent.resolveElementWithScope(name);
+            }
+            return [null, null];
+        }
+        return [t, this];
     }
 
     public resolveType(name: string): Type {
@@ -437,15 +458,20 @@ export class Scope {
         return null;
     }
 
+    // The function to which the scope belongs
     public func: Function;
+    // True, if this is the scope of a for loop's body.
     public forLoop: boolean;
+    // The elements defined in the scope
     public elements: Map<string, ScopeElement>;
+    // The types defined in the scope
     public types: Map<string, Type>;
     public canonicalGroups: Map<Group, Group> = new Map<Group, Group>();
     public unavailableGroups: Set<Group> = new Set<Group>();
     public elementGroups: Map<ScopeElement, Group | null> = new Map<ScopeElement, Group | null>();
     public parent: Scope | null = null;
-
+    // When taking addresses of local variables, the resulting pointer belongs to this scope.
+    public group: Group = new Group(GroupKind.Bound);
     // Top-level scopes carry information about the package they belong to.
     public pkg: Package;
 
@@ -4950,6 +4976,7 @@ export class TypeChecker {
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
             case "unary&":
                 if (t instanceof PointerType) {
+//                    if (node.rhs.op == "id") {}
                     let r = this.unifyLiterals(t, node.rhs, scope, loc, doThrow, templateParams);
                     node.type = node.rhs.type;
                     return r;
@@ -4967,6 +4994,41 @@ export class TypeChecker {
     public checkIsAssignableNode(to: Type, from: Node, scope: Scope, doThrow: boolean = true, templateParams: Map<string, Type> = null): boolean {
         if (from.isUnifyableLiteral()) {
             return this.unifyLiterals(to, from, scope, from.loc, doThrow, templateParams);
+        }
+        // "&local" can be a reference or even strong pointer
+        if (from.op == "unary&" && from.rhs.op == "id" && (TypeChecker.isStrong(to) || TypeChecker.isReference(to))) {
+            let element = scope.resolveElement(from.rhs.value);
+            if (!element) {
+                throw "Implementation error";
+            }
+            if (element instanceof Variable) {
+                let ptr = new PointerType(element.type, TypeChecker.isStrong(to) ? "strong" : "reference");
+                if (!this.checkIsAssignableType(to, ptr, from.loc, "assign", doThrow, null, null, templateParams)) {
+                    return false;
+                }
+                from.type = ptr;
+                element.isReferenced = true;
+                element.isReferencedWithRefcounting = true;
+                return true;
+            }
+            throw new TypeError("The & operator can produce a strong pointer or reference on local and global variables only", from.loc);
+        }
+        // For a stack-based array "local", the expression "local[:]" can be a reference or even strong slice pointer
+        if (from.op == ":" && from.lhs.op == "id" && (TypeChecker.isStrong(to) || TypeChecker.isReference(to))) {
+            let element = scope.resolveElement(from.lhs.value);
+            if (!element) {
+                throw "Implementation error";
+            }
+            if (element instanceof Variable && this.isArray(element.type)) {
+                let ptr = new SliceType(element.type as ArrayType | RestrictedType, TypeChecker.isStrong(to) ? "strong" : "reference");
+                if (!this.checkIsAssignableType(to, ptr, from.loc, "assign", doThrow, null, null, templateParams)) {
+                    return false;
+                }
+                from.type = ptr;
+                element.isReferenced = true;
+                element.isReferencedWithRefcounting = true;
+                return true;
+            }
         }
         return this.checkIsAssignableType(to, from.type, from.loc, "assign", doThrow, null, null, templateParams);
     }
@@ -6335,6 +6397,7 @@ export class TypeChecker {
         if (!rnode) {
             throw "Implementation error";
         }
+        // Determine the groups of the LHS and the RHS
         if (!rightGroup) {
             // let isPointer = !this.isPureValue(rnode.type);
             let flags = TypeChecker.hasReferenceOrStrongPointers(rnode.type) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
@@ -6342,22 +6405,32 @@ export class TypeChecker {
         }
         let leftGroup = lnode instanceof Node ? this.checkGroupsInExpression(lnode, scope, GroupCheckFlags.AllowIsolates | GroupCheckFlags.AllowUnavailableVariable) : lnode as Group;
 
+        // What are we assigning to?
         let lhsIsVariable = lnode instanceof Node ? lnode.op == "id" : false;
         let lhsVariable: ScopeElement = null;
+        let lhsVariableScope: Scope = null;
         if (lhsIsVariable) {
-            lhsVariable = scope.resolveElement((lnode as Node).value);
+            [lhsVariable, lhsVariableScope] = scope.resolveElementWithScope((lnode as Node).value);
         }
 
         // Assigning a value type? -> Nothing to do.
         // Assigning to a string? -> Nothing to do because strings are not bound to any group
         // Assigning to an unsafe pointer -> Nothing to do. Programmer hopefully knows what he is doing ...
         if (TypeChecker.isPureValue(ltype) || this.isString(ltype) || this.isUnsafePointer(ltype)) {
+            // When assigning to a variable, set its group such that it becomes available
             if (lhsVariable) {
-                scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
+                if (lhsVariable instanceof Variable && lhsVariable.isReferencedWithRefcounting) {
+//                    console.log("!!!!!!!!!!! Assign with refcount", lhsVariable.name);
+                    scope.setGroup(lhsVariable, lhsVariableScope.group);
+                } else {
+//                    console.log("!!!!!!!!!!! Assign variable without pointers", lhsVariable.name);
+                    scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
+                }
             }
             return;
         }
 
+        // What is assigned?
         let rhsVariableName: string;
         let rhsIsVariable: boolean = false;
         if (rnode.op == "id" || (rnode.op == "take" && rnode.lhs.op == "id")) {
@@ -6374,6 +6447,7 @@ export class TypeChecker {
             }
         }
         let rhsIsTakeExpr = this.isTakeExpression(rnode);
+
         // The right hand side is an expression that evaluates to an isolate, and therefore the group is null
         if (!rightGroup) {
             // The isolate must be taken, even when assigned to a reference
@@ -6388,6 +6462,15 @@ export class TypeChecker {
             rightGroup = new Group(GroupKind.Free);
         }
 
+        let isArrayVariable = function(name: string): boolean {
+            let variable = scope.resolveElement(name);
+            if (!(variable instanceof Variable)) {
+                return false;
+            }
+            return this.isArray(variable.type);
+        };
+
+        // Assigning to a strong or unique pointer? Then the RHS must let go of its ownership
         if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
             if (rhsIsVariable) {
                 // Make the RHS variable unavailable, since the LHS is not the owner and there can be only one owner
@@ -6398,6 +6481,10 @@ export class TypeChecker {
                 rnode.flags |= AstFlags.ZeroAfterAssignment;
             } else if (rhsIsTakeExpr) {
                 // Nothing special todo
+            } else if (rnode.op == "unary&" && rnode.rhs.op == "id") {
+                // Nothing special todo. We are referencing a stack variable and this variable remains accessible
+            } else if (rnode.op == ":" && rnode.lhs.op == "id" && isArrayVariable(rnode.lhs.value)) {
+                // Nothing special todo. We are slicing an array on the stack and this array remains accessible.
             } else {
                 throw new TypeError("Assignment to an owning pointer (or data structure containing an owning pointer) is only allowed from a variable or take expression", loc);
             }
@@ -6410,13 +6497,26 @@ export class TypeChecker {
             }
         }
 
+        // Assigning to a variable for the first time, and the unary& operator has been applied on it to create a reference or strong pointer to a stack variable?
+        if (!leftGroup && lhsIsVariable && lhsVariable instanceof Variable && lhsVariable.isReferencedWithRefcounting) {
+            leftGroup = lhsVariableScope.group;
+            scope.setGroup(lhsVariable, leftGroup);
+        }
+        
         // The if-clause is true when assigning to a variable that is not global.
         // The purpose of ignoring global is that setGroup should not be executed on a global variable.
-        if (lhsIsVariable && (!(lhsVariable instanceof Variable) || !lhsVariable.isGlobal)) {
-            // Set the group of the LHS variable with the RHS group
+        if (lhsIsVariable && (!(lhsVariable instanceof Variable) || (!lhsVariable.isGlobal && !lhsVariable.isReferencedWithRefcounting))) {
+            // Set the group of the LHS variable to the RHS group
+//            console.log("!!!!!!! Assiging left to right", lhsVariable.name);
             scope.setGroup(lhsVariable, rightGroup);
         } else {
+            // Assigning to an expression of type unique pointer?
             if (!leftGroup) {
+//                if (lhsVariable) {
+//                    console.log("!!!!!!! Assigning to an isolate", lhsVariable.name);
+//                } else {
+//                    console.log("!!!!!!! Assigning to an isolate");
+//                }
                 // Check that the RHS group is unbound
                 if (rightGroup.isBound(scope)) {
                     throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
@@ -6429,6 +6529,11 @@ export class TypeChecker {
                 //    throw new TypeError("Two distinct bound groups cannot be merged", loc);
                 //}
                 // Join RHS and LHS
+//                if (lhsVariable) {
+//                    console.log("!!!!!!! Assiging with join", lhsVariable.name);
+//                } else {
+//                    console.log("!!!!!!! Assiging with join");
+//                }
                 scope.joinGroups(leftGroup, rightGroup, loc, true);
             }
         }

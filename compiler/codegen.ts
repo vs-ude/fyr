@@ -393,7 +393,7 @@ export class CodeGenerator {
                     continue;
                 } else {
                     // Create a variable that can be assigned multiple times
-                    let v = b.declareVar(this.getSSAType(e.type), name);
+                    let v = b.declareVar(this.getSSAType(e.type), name, e.isReferencedWithRefcounting);
                     vars.set(e, v);
                 }
             }
@@ -978,7 +978,7 @@ export class CodeGenerator {
                             if (val instanceof ssa.Variable) {
                                 valAddr = b.assign(b.tmp(), "addr_of", "addr", [val]);
                             } else {
-                                let tmp = b.declareVar("sint", "$dummyVar");
+                                let tmp = b.declareVar("sint", "$dummyVar", false);
                                 valAddr = b.assign(b.tmp(), "addr_of", "addr", [tmp]);
                             }
                             // Start computing the next rune with 0, in state 0
@@ -2690,9 +2690,9 @@ export class CodeGenerator {
                     }
                     return result;
                 } else if (t instanceof ArrayType) {
-                    if (!TypeChecker.isLocalReference(enode.type)) {
-                        throw "Implementation error";
-                    }
+//                    if (!TypeChecker.isLocalReference(enode.type)) {
+//                        throw "Implementation error";
+//                    }
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     let len = t.size;
                     if (enode.parameters[0] && index1 !== 0) {
@@ -2751,7 +2751,16 @@ export class CodeGenerator {
                     } else {
                         l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     }
-                    return b.assign(b.tmp(), "struct", this.localSlicePointer, [ptr3, l]);
+                    if (TypeChecker.isLocalReference(enode.type)) {
+                        return b.assign(b.tmp(), "struct", this.localSlicePointer, [ptr3, l]);
+                    }
+                    let arrayPtr: ssa.Variable;
+                    if (ptr2.offset == 0) {
+                        arrayPtr = ptr2.variable;
+                    } else {
+                        arrayPtr = b.assign(b.tmp(), "add", "addr", [ptr2.variable, ptr2.offset]);
+                    }
+                    return b.assign(b.tmp(), "struct", this.slicePointer, [ptr3, l, arrayPtr]);
                 } else {
                     throw "Implementation error";
                 }                

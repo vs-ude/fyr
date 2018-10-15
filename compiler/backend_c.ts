@@ -292,7 +292,7 @@ export class CBackend implements backend.Backend {
                     continue;
                 }
                 let cv = new CVar();
-                cv.type = this.mapType(v.type);
+                cv.type = this.mapType(v.type, false, v.needsRefCounting);
                 cv.name = this.varStorage.get(v);
                 if (v.isConstant) {
                     cv.type = new CType("static " + cv.type.code);
@@ -453,7 +453,17 @@ export class CBackend implements backend.Backend {
         return hash.digest("hex");
     }
 
-    private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false): CType {
+    private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false, needsRefCounting: boolean = false): CType {
+        if (needsRefCounting) {
+            if (t instanceof ssa.FunctionType) {
+                throw "Implementation error";
+            }
+            let s = new ssa.StructType()
+            s.addField("word1", "sint");
+            s.addField("word2", "sint");
+            s.addField("value", t);
+            return this.mapType(s, cstyle, false);
+        }
         if (t instanceof ssa.StructType) {
             let mangledName: string;
             if (t.name) {
@@ -625,6 +635,13 @@ export class CBackend implements backend.Backend {
             }
             if (this.varStorage && this.varStorage.has(n) && !generateConstants) {
                 let name = this.varStorage.get(n);
+                if (n.needsRefCounting) {
+                    let m = new CBinary();
+                    m.operator = ".";
+                    m.lExpr = new CConst(name);
+                    m.rExpr = new CConst("value");
+                    return m;
+                }
                 return new CConst(name);
             }
             if (n.isConstant && typeof(n.constantValue) == "string") {
