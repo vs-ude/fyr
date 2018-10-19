@@ -6843,8 +6843,14 @@ export class TypeChecker {
             }
             case "typeCast":
             {
-                this.checkGroupsInExpression(enode.rhs, scope, flags);
-                break;
+                // Converting a slice of bytes to a string, freezes the slice.
+                // This is similar to assigning the slice to a unique slice.
+                if (enode.type == TypeChecker.t_string && this.isSlice(enode.rhs.type)) {
+                    let g = this.checkGroupsInExpression(enode.rhs, scope, flags);
+                    this.checkGroupsInSingleAssignment(new SliceType(new ArrayType(TypeChecker.t_byte, -1), "unique"), null, g, enode.rhs, false, scope, enode.loc);
+                    return null;
+                }
+                return this.checkGroupsInExpression(enode.rhs, scope, flags);
             }            
             case "take":
                 if ((flags & GroupCheckFlags.NoSideEffects) != 0) {
@@ -6999,7 +7005,7 @@ export class TypeChecker {
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.
         // Hence it behaves like a take expression.
-        // Adding a string, or castig a slice to a string creates a new string, too. Hence, it behaves like a take expression
+        // Adding a string, or casting a slice to a string creates a new string, too. Hence, it behaves like a take expression
         if (enode.type == TypeChecker.t_string && (enode.op == ":" || enode.op == "+" || enode.op == "typeCast")) {
             return true;
         }
