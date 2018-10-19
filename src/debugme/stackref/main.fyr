@@ -31,7 +31,7 @@ export func main() int {
     var arr [4]int = [...]
     refme2(arr[:])
     
-    var buffer ^[]byte = [...100]
+    var buffer *[]byte = [...100]
     let str = <string>buffer
 
     return 0
