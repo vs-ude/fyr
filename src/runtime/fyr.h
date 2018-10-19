@@ -28,3 +28,4 @@ int_t fyr_len_arr(addr_t ptr);
 int_t fyr_len_str(addr_t ptr);
 int_t fyr_min(int_t a, int_t b);
 int_t fyr_max(int_t a, int_t b);
+addr_t fyr_arr_to_str(addr_t array_ptr, addr_t data_ptr, int_t len);

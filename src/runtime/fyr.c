@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <assert.h>
+#include <string.h>
 
 // #include <stdio.h>
 
@@ -204,4 +205,19 @@ int_t fyr_max(int_t a, int_t b) {
         return a;
     }
     return b;
+}
+
+addr_t fyr_arr_to_str(addr_t array_ptr, addr_t data_ptr, int_t len) {
+    if (array_ptr == NULL) {
+        return NULL;
+    }
+    if (array_ptr != data_ptr) {
+        memmove(array_ptr, data_ptr, len);
+    }
+    int *lenptr = ((int_t*)array_ptr)-1;
+    if (len >= *lenptr || ((char*)array_ptr)[len] != 0) {
+        exit(EXIT_FAILURE);
+    }
+    *lenptr = len;
+    return array_ptr;
 }

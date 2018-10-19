@@ -1252,6 +1252,11 @@ export class CBackend implements backend.Backend {
             call.funcExpr = new CConst("fyr_len_str");
             call.args = [this.emitExpr(v)];
             return call;
+        } else if (n.kind == "arr_to_str") {
+            let call = new CFunctionCall();
+            call.funcExpr = new CConst("fyr_arr_to_str");
+            call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), this.emitExpr(n.args[2])];
+            return call;
         } else if (n.kind == "memcmp") {
             let call = new CFunctionCall();
             call.funcExpr = new CConst("memcmp");

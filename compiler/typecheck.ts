@@ -4502,9 +4502,8 @@ export class TypeChecker {
                 } else if (this.isString(left) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (this.isString(left) && right instanceof SliceType && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
-                    // A slice of chars can be converted to a string by copying it.
-                    // Restrictions are irrelevant.
+                } else if (this.isString(left) && right instanceof SliceType && right.mode != "local_reference" && !this.isConst(enode.rhs.type) && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
+                    // A slice of bytes or chars can be converted to a string by copying it.
                     enode.type = t;
                 } else if (left instanceof SliceType && (left.mode == "unique" || left.mode == "strong") && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
                     // A string can be casted into a sequence of bytes or chars by copying it
@@ -4572,7 +4571,7 @@ export class TypeChecker {
                 if (!TypeChecker.isPureValue(t.getElementType())) {
                     throw new TypeError("'clone' cannot work on slices which contain pointer-like types", enode.loc);
                 }
-                enode.type = new SliceType(t.arrayType, "strong");
+                enode.type = new SliceType(t.arrayType, "unique");
                 break;
             }
             case "sizeof":

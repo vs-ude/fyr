@@ -2875,7 +2875,12 @@ export class CodeGenerator {
             {
                 let t = enode.type;
                 let t2 = this.tc.stripType(enode.rhs.type);
-                let expr = this.processExpression(f, scope, enode.rhs, b, vars, t2);
+                let expr: number | ssa.Variable;
+                if (t == TypeChecker.t_string && t2 instanceof SliceType && enode.rhs.op == "clone") {
+                    expr = this.processExpression(f, scope, enode.rhs.lhs, b, vars, t2);
+                } else {
+                    expr = this.processExpression(f, scope, enode.rhs, b, vars, t2);
+                }
                 let s = this.getSSAType(t);
                 let s2 = this.getSSAType(enode.rhs.type);
                 if ((t == TypeChecker.t_float || t == TypeChecker.t_double) && this.tc.isIntNumber(t2)) {
@@ -2941,26 +2946,38 @@ export class CodeGenerator {
                     // Convert unsafe pointer to string
                     return expr;
                 } else if (t == TypeChecker.t_string && t2 instanceof SliceType) {
-                    // Convert a slice to a string?
-                    let ptr: ssa.Variable;
-                    let l: ssa.Variable;
-                    if (t2.mode == "local_reference") {
-                        ptr = b.assign(b.tmp(), "member", "addr", [expr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        l = b.assign(b.tmp(), "member", "sint", [expr, this.localSlicePointer.fieldIndexByName("data_length")]);
-                    } else {
-                        let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
-                        ptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                        head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
-                        l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldIndexByName("data_length")]);
+                    // Convert a cloned slice to a string?
+                    // Then add the trailing 0 while cloning.
+                    if (enode.rhs.op == "clone") {
+                        let ptr: ssa.Variable;
+                        let l: ssa.Variable;
+                        if (t2.mode == "local_reference") {
+                            ptr = b.assign(b.tmp(), "member", "addr", [expr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            l = b.assign(b.tmp(), "member", "sint", [expr, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        } else {
+                            let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
+                            ptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
+                            l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldIndexByName("data_length")]);
+                        }
+                        // Make room for the terminating 0 character
+                        let l2 = b.assign(b.tmp(), "add", "sint", [l, 1]);
+                        let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [l2, 1]);
+                        b.assign(b.mem, "memcpy", null, [newptr, ptr, l, 1]);
+                        return newptr;
                     }
-                    // Make room for the terminating 0 character
-                    let l2 = b.assign(b.tmp(), "add", "sint", [l, 1]);
-                    let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [l2, 1]);
-                    b.assign(b.mem, "memcpy", null, [newptr, ptr, l, 1]);
-                    if (this.tc.isTakeExpression(enode.rhs)) {
-                        this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
+                    // Convert a slice to a string
+                    let arrptr = b.assign(b.tmp(), "member", "addr", [expr, this.slicePointer.fieldIndexByName("array_ptr")]);
+                    let head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
+                    let dataptr = b.assign(b.tmp(), "member", "addr", [head, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                    head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
+                    let l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldIndexByName("data_length")]);
+                    if (enode.rhs.op == "id") {
+                        let zero = b.assign(b.tmp(), "struct", this.slicePointer, [0, 0, 0]);
+                        b.assign(expr as ssa.Variable, "copy", this.slicePointer, [zero]);
                     }
-                    return newptr;
+                    let str = b.assign(b.tmp(), "arr_to_str", "addr", [arrptr, dataptr, l]);
+                    return str;
                 } else if ((t == TypeChecker.t_bool || t == TypeChecker.t_rune || this.tc.isIntNumber(t)) && (t2 == TypeChecker.t_bool || t2 == TypeChecker.t_rune || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
