@@ -14,7 +14,7 @@ colors.red;
 
 var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
-function compileModules() {
+export function compileModules() {
     if (program.emitNative) {
         program.emitC = true;
     }
@@ -168,20 +168,25 @@ function compileModules() {
     }
 }
 
-program
-	.version(pkgJson.version, '-v, --version')
-	.usage('[options] [command] <module ...>')
-    .option('-r, --emit-ir', "Emit IR code")
-    .option('-w, --emit-wasm', "Emit WASM code")
-    .option('-c, --emit-c', "Emit C code")
-    .option('-n, --emit-native', "Emit native executable")
-    .option('-N, --disable-null-check', "Do not check for null pointers")
-    .option('-T, --disable-runtime', "Do not include the standard runtime")
-    .option('-G, --disable-codegen', "Do not generate any code, just perform syntax and typechecks")
+// only parse if this file was required by fyrc
+let binaryPath = process.argv[1];
 
-program
-    .command('compile')
-    .description('Compile Fyr source code')
-	.action( compileModules );
+if (binaryPath.substring(binaryPath.length - 4, binaryPath.length) === 'fyrc') {
+    program
+        .version(pkgJson.version, '-v, --version')
+        .usage('[options] [command] <module ...>')
+        .option('-r, --emit-ir', "Emit IR code")
+        .option('-w, --emit-wasm', "Emit WASM code")
+        .option('-c, --emit-c', "Emit C code")
+        .option('-n, --emit-native', "Emit native executable")
+        .option('-N, --disable-null-check', "Do not check for null pointers")
+        .option('-T, --disable-runtime', "Do not include the standard runtime")
+        .option('-G, --disable-codegen', "Do not generate any code, just perform syntax and typechecks")
 
-program.parse(process.argv);
+    program
+        .command('compile')
+        .description('Compile Fyr source code')
+        .action( compileModules );
+
+    program.parse(process.argv);
+}
