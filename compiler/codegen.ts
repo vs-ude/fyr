@@ -2960,11 +2960,15 @@ export class CodeGenerator {
                             head = b.assign(b.tmp(), "member", this.localSlicePointer, [expr, this.slicePointer.fieldIndexByName("base")]);
                             l = b.assign(b.tmp(), "member", "sint", [head, this.localSlicePointer.fieldIndexByName("data_length")]);
                         }
+                        let str = b.assign(b.tmp(), "copy", "addr", [0]);
+                        let nn = b.assign(b.tmp(), "ne", "i8", [ptr, 0]);
+                        b.ifBlock(nn);    
                         // Make room for the terminating 0 character
                         let l2 = b.assign(b.tmp(), "add", "sint", [l, 1]);
-                        let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [l2, 1]);
-                        b.assign(b.mem, "memcpy", null, [newptr, ptr, l, 1]);
-                        return newptr;
+                        b.assign(str, "alloc_arr", "addr", [l2, 1]);
+                        b.assign(b.mem, "memcpy", null, [str, ptr, l, 1]);
+                        b.end();
+                        return str;
                     }
                     // Convert a slice to a string
                     let arrptr = b.assign(b.tmp(), "member", "addr", [expr, this.slicePointer.fieldIndexByName("array_ptr")]);
@@ -2998,7 +3002,7 @@ export class CodeGenerator {
                     // Convert string to a slice.
                     // Using len_arr assures that the trailing zero is part of the string
                     let slice = b.assign(b.tmp(), "struct", this.slicePointer, [0, 0, 0]);
-                    let nn = b.assign(b.tmp(), "eq", "i8", [expr, 0]);
+                    let nn = b.assign(b.tmp(), "ne", "i8", [expr, 0]);
                     b.ifBlock(nn);
                     let size = b.assign(b.tmp(), "len_arr", "sint", [expr]);                    
                     let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
