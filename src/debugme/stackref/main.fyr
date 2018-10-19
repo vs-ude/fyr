@@ -37,5 +37,7 @@ export func main() int {
     var buffer2 []byte = [65, 66, 67, 0]
     let str2 = <string>clone(buffer2)
 
+    let buffer3 = <[]byte>"Hallo"
+    
     return 0
 }

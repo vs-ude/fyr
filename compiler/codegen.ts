@@ -2995,14 +2995,20 @@ export class CodeGenerator {
                 } else if (t instanceof PointerType && t2 instanceof UnsafePointerType) {
                     return expr;
                 } else if (t instanceof SliceType && t.getElementType() == TypeChecker.t_byte && t2 == TypeChecker.t_string) {
-                    // Convert string to a slice
-                    let size = b.assign(b.tmp(), "len_str", "sint", [expr]);                    
+                    // Convert string to a slice.
+                    // Using len_arr assures that the trailing zero is part of the string
+                    let slice = b.assign(b.tmp(), "struct", this.slicePointer, [0, 0, 0]);
+                    let nn = b.assign(b.tmp(), "eq", "i8", [expr, 0]);
+                    b.ifBlock(nn);
+                    let size = b.assign(b.tmp(), "len_arr", "sint", [expr]);                    
                     let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
                     b.assign(b.mem, "memcpy", null, [newptr, expr, size, 1]);
                     if (this.tc.isTakeExpression(enode.rhs)) {
                         this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
                     }
-                    return b.assign(b.tmp(), "struct", this.slicePointer, [newptr, size, newptr]);
+                    b.assign(slice, "struct", this.slicePointer, [newptr, size, newptr]);
+                    b.end();
+                    return slice;
                 } else if (t2 == TypeChecker.t_null) {
                     // Convert null to a pointer type
                     return expr;

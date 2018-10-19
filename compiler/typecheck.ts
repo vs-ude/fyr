@@ -6849,6 +6849,9 @@ export class TypeChecker {
                     this.checkGroupsInSingleAssignment(new SliceType(new ArrayType(TypeChecker.t_byte, -1), "unique"), null, g, enode.rhs, false, scope, enode.loc);
                     return null;
                 }
+                if (this.isSlice(enode.type) && enode.rhs.type == TypeChecker.t_string) {
+                    return new Group(GroupKind.Free);
+                }
                 return this.checkGroupsInExpression(enode.rhs, scope, flags);
             }            
             case "take":
