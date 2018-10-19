@@ -14,7 +14,7 @@ colors.red;
 
 var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
-export function compileModules() {
+export function compileModules(langserver?: boolean) {
     if (program.emitNative) {
         program.emitC = true;
     }
@@ -98,6 +98,12 @@ export function compileModules() {
 //        files.push(path.join(fyrBase, "runtime/mem.fyr"));
 //        files.push(path.join(fyrBase, "runtime/map.fyr"));
 //    }
+
+    if (langserver) {
+        pkg.loadSources()
+        Package.checkTypesForPackages()
+        process.exit()
+    }
 
     // Load all sources
     try {
