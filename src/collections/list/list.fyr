@@ -1,0 +1,203 @@
+type struct List<T> {
+    first *Element<T>
+    last *Element<T>
+    count int
+}
+
+type struct Element<T> {
+    value T
+    prev ~Element<T>
+    next *Element<T>
+}
+
+type struct Iterator<T> {
+    element ~Element<T>
+}
+
+type struct ConstIterator<T> {
+    element const ~Element<T>
+}
+
+func List.front() Iterator<T> {
+    return {element: this.first}
+}
+
+func const List.constFront() ConstIterator<T> {
+    return {element: this.first}
+}
+
+func List.back() Iterator<T> {
+    return {element: this.last}
+}
+
+func const List.constBack() ConstIterator<T> {
+    return {element: this.last}
+}
+
+func List.peekFront() copy<T> {
+    return copy(this.first)
+}
+
+func const List.constPeekFront() const copy<T> {
+    return copy(this.first)
+}
+
+func List.peek() copy<T> {
+    return copy(this.last)
+}
+
+func const List.constPeek() const copy<T> {
+    return copy(this.last)
+}
+
+func const List.size() int {
+    return this.count
+}
+
+func List.clear() {
+    this.last = null
+    this.first = null
+    this.count = 0
+}
+
+func const List.isEmpty() bool {
+    return this.count == 0
+}
+
+func List.push(value T) {
+    let e *Element<T> = {value: value, prev: this.last}
+    this.last = e
+    this.count++
+    if (this.prev == null) {
+        this.prev = e
+    } else {
+        e.prev.next = e
+    }
+}
+
+func List.pop() T {
+    let e = this.last
+    if (this.last == this.next) {
+        this.last = null
+        this.prev = null
+        this.count = 0
+        return take(e.value)
+    }
+    this.last = this.last.prev
+    this.last.next = null
+    this.count--
+    return take(e.value)    
+}
+
+func List.shift(value T) {
+
+}
+
+func List.unshift() T {
+
+}
+
+func List.at(pos int) copy<T> {
+    let e ~Element<T> = this.first
+    for(let i = 0; i < pos; i++) {
+        e = e.next
+    }
+    return copy(e.value)
+}
+
+func List.erase(it Iterator<T>) Iterator<T> {
+    if (it.element.prev == null) {
+        if (it.element != this.first) {
+            println("Iterator on wrong list")
+        }
+        if (it.element.next == null) {
+            this.last = null
+            this.first = null
+        } else {
+            this.first = take(it.element.next)
+            this.first.prev = null
+        }
+        return {element: this.first}
+    } else if (it.element.next == null) {
+        if (it.element != this.last) {
+            println("Iterator on wrong list")
+        }
+        this.last = take(it.element.prev)
+        this.last.next = null
+        return {}
+    }
+    let prev ~Element<T> = take(it.element.prev)
+    let next ~Element<T> = it.element.next
+    prev.next = take(it.element.next)
+    next.prev = prev
+    return {element: take(next)}
+}
+
+func List.remove(it Iterator<T>) (Iterator<T>, T) {
+    if (it.element.prev == null) {
+        if (it.element != this.first) {
+            println("Iterator on wrong list")
+        }
+        let e = take(this.first)
+        if (it.element.next == null) {
+            this.last = null
+            this.first = null
+        } else {
+            this.first = take(it.element.next)
+            this.first.prev = null
+        }
+        return {element: it.first}, take(e.value)
+    } else if (it.element.next == null) {
+        if (it.element != this.last) {
+            println("Iterator on wrong list")
+        }
+        this.last = take(it.element.prev)
+        let e = take(this.last.next)
+        return {}, take(e.value)
+    }
+    let prev = take(it.element.prev)
+    let next ~Element<T> = it.element.next
+    let e = take(prev.next)
+    prev.next = take(e.next)
+    next.prev = prev
+    return {element: next}, take(e.value)
+}
+
+func List.concat(l &List<T>) {
+    if (this.last == null) {
+        this.prev = take(l.)
+    }
+}
+
+func Iterator.next() {
+    this.element = this.element.next
+}
+
+func Iterator.prev() {
+    this.element = this.element.prev
+}
+
+func Iterator.value() copy<T> {
+    return copy(this.element.value)
+}
+
+func const Iterator.isNull() bool {
+    return this.element == null
+}
+
+
+func ConstIterator.next() {
+    this.element = this.element.next
+}
+
+func ConstIterator.prev() {
+    this.element = this.element.prev
+}
+
+func ConstIterator.value() copy<T> {
+    return copy(this.element.value)
+}
+
+func const ConstIterator.isNull() bool {
+    return this.element == null
+}
