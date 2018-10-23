@@ -130,7 +130,7 @@ func List.erase(it Iterator<T>) Iterator<T> {
     let next ~Element<T> = it.element.next
     prev.next = take(it.element.next)
     next.prev = prev
-    return {element: take(next)}
+    return {element: next}
 }
 
 func List.remove(it Iterator<T>) (Iterator<T>, T) {
@@ -164,9 +164,18 @@ func List.remove(it Iterator<T>) (Iterator<T>, T) {
 }
 
 func List.concat(l &List<T>) {
-    if (this.last == null) {
-        this.prev = take(l.)
+    if (this.first == null) {
+        this.first = take(l.first)
+        this.last = take(l.last)
+        return
     }
+    if (l.first == null) {
+        return
+    }
+    let e = take(l.first)
+    e.prev = take(this.last)
+    e.prev.next = e
+    this.last = take(l.last)
 }
 
 func Iterator.next() {
