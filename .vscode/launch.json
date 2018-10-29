@@ -17,7 +17,11 @@
 			"args": [
 				"-n",
 				"."
-			]
+			],
+			"env": {
+				"FYRBASE": "${workspaceFolder}",
+				"FYRPATH": "${workspaceFolder}",
+			}
 		}
 	]
 }
