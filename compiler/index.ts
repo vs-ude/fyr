@@ -105,50 +105,22 @@ export function constructPkg(config: FyrConfiguration): Package {
 }
 
 export function compile(pkg: Package, config: FyrConfiguration) {
-    // Load all sources
     try {
         pkg.loadSources();
-    } catch(e) {
-        config.errorHandler.handle(e);
-    }
-
-    // TypeCheck the sources
-    try {
         Package.checkTypesForPackages();
+
+        // Generate code
+        if (!config.disableCodegen) {
+            let backend: "C" | "WASM" | null = null;
+            if (config.emitWasm) {
+                backend = "WASM";
+            } else if (config.emitC) {
+                backend = "C";
+            }
+            Package.generateCodeForPackages(backend, config.emitIr, config.emitC, config.disableNullCheck);
+        }
     } catch(e) {
         config.errorHandler.handle(e);
-    }
-
-    // Generate code
-    if (!config.disableCodegen) {
-        let backend: "C" | "WASM" | null = null;
-        if (config.emitWasm) {
-            backend = "WASM";
-        } else if (config.emitC) {
-            backend = "C";
-        }
-//        try {
-            // Errors can occur from loading runtime packages.
-            Package.generateCodeForPackages(backend, config.emitIr, config.emitC, config.disableNullCheck);
-/*        } catch(ex) {
-            if (ex instanceof typecheck.TypeError) {
-                console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-                return;
-            } else if (ex instanceof parser.SyntaxError) {
-                console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-                return;
-            } else if (ex instanceof ImportError) {
-                if (ex.location) {
-                    console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-                } else {
-                    console.log((ex.path + ": ".yellow) + ex.message.red);
-                }
-                return
-            } else {
-                console.log(ex);
-                throw ex;
-            }
-        }*/
     }
 }
 
