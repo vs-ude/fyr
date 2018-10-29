@@ -8,40 +8,58 @@ import parser = require("./parser");
 import typecheck = require("./typecheck");
 import ast = require("./ast");
 import {Package, ImportError} from "./pkg";
+import { FyrConfiguration } from "./config";
 
 // Make TSC not throw out the colors lib
 colors.red;
 
 var pkgJson = JSON.parse(fs.readFileSync(path.join(path.dirname(module.filename), '../package.json'), 'utf8'));
 
-export function compileModules() {
-    if (program.emitNative) {
-        program.emitC = true;
-    }
-    if (program.emitC && program.emitWasm) {
+function runCompiler() {
+    if (program.emitNative && program.emitWasm) {
         console.log(("Only one code emit path can be selected".red));
-        return;
+        process.exit(1);
     }
-    if (!program.emitC && !program.emitWasm && !program.emitIr) {
-        program.disableCodegen = true;
-    }
+    let config = new FyrConfiguration;
+    config.disableCodegen = !(program.emitNative || program.emitWasm);
+    config.emitC = config.emitNative = program.emitNative;
+    config.emitIr = program.emitIr;
 
     var args: Array<object | string> = Array.prototype.slice.call(arguments, 0);
     if (args.length <= 1) {
         console.log(("Missing package or file information").red);
-        return;
+        process.exit(1);
     }
     args = args.splice(args.length -2, 1);
     
-    let fyrPaths = Package.getFyrPaths();
-    if (!fyrPaths) {
-        return;
+    config.fyrPaths = Package.getFyrPaths();
+    if (!config.fyrPaths) {
+        process.exit(1);
+    }
+    config.sourcePath = args;
+
+    let pkg: Package = constructPkg(config);
+
+//    if (!program.disableRuntime) {
+//        files.push(path.join(fyrBase, "runtime/mem.fyr"));
+//        files.push(path.join(fyrBase, "runtime/map.fyr"));
+//    }
+
+    if (config.emitErrors) {
+        console.error("throwing errors")
+        pkg.loadSources()
+        Package.checkTypesForPackages()
+        process.exit()
     }
 
+    compile(pkg, config);
+}
+
+export function constructPkg(config: FyrConfiguration): Package {
     let pkg: Package;
     // Compile a package?
-    if (args.length == 1) {
-        let p = path.resolve(args[0] as string);
+    if (config.sourcePath.length == 1) {
+        let p = path.resolve(config.sourcePath[0] as string);
         if (p[p.length - 1] != path.sep) {
             p += path.sep;
         }
@@ -53,7 +71,7 @@ export function compileModules() {
         }        
         if (isdir) {
             // Is this package located in one of the known pathes. If yes -> put the output in the right location
-            for(let fyrPath of fyrPaths) {
+            for(let fyrPath of config.fyrPaths) {
                 let test = path.join(path.normalize(fyrPath), "src");
                 if (test[test.length - 1] != path.sep) {
                     test += path.sep;
@@ -63,7 +81,7 @@ export function compileModules() {
                     let packagePaths: Array<string> = pkgPath.split(path.sep);
                     packagePaths.splice(packagePaths.length - 1, 1);
                     pkg = new Package(true);
-                    pkg.findSources(fyrPath, pkgPath);                    
+                    pkg.findSources(fyrPath, pkgPath);
                     break;
                 }
             }
@@ -86,27 +104,17 @@ export function compileModules() {
     if (!pkg) {
         let files: Array<string> = [];
         // Determine all source files to compile
-        for(let i = 0; i < args.length; i++) {
-            let file = args[i];
+        for(let i = 0; i < config.sourcePath.length; i++) {
+            let file = config.sourcePath[i];
             files.push(file as string);
         }
         pkg = new Package(true);
         pkg.setSources(files);
     }
+    return pkg;
+}
 
-//    if (!program.disableRuntime) {
-//        files.push(path.join(fyrBase, "runtime/mem.fyr"));
-//        files.push(path.join(fyrBase, "runtime/map.fyr"));
-//    }
-
-/*
-    if (langserver) {
-        pkg.loadSources()
-        Package.checkTypesForPackages()
-        process.exit()
-    }
-*/
-
+export function compile(pkg: Package, config: FyrConfiguration) {
     // Load all sources
     try {
         pkg.loadSources();
@@ -144,16 +152,16 @@ export function compileModules() {
     }*/
 
     // Generate code
-    if (!program.disableCodegen) {
+    if (!config.disableCodegen) {
         let backend: "C" | "WASM" | null = null;
-        if (program.emitWasm) {
+        if (config.emitWasm) {
             backend = "WASM";
-        } else if (program.emitC) {
+        } else if (config.emitC) {
             backend = "C";
         }
 //        try {
             // Errors can occur from loading runtime packages.
-            Package.generateCodeForPackages(backend, program.emitIr, program.emitNative, program.disableNullCheck);
+            Package.generateCodeForPackages(backend, config.emitIr, config.emitC, config.disableNullCheck);
 /*        } catch(ex) {
             if (ex instanceof typecheck.TypeError) {
                 console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
@@ -194,7 +202,7 @@ if (binaryPath.substring(binaryPath.length - 4, binaryPath.length) === 'fyrc') {
     program
         .command('compile')
         .description('Compile Fyr source code')
-        .action( compileModules );
+        .action( runCompiler );
 
     program.parse(process.argv);
 }
