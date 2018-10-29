@@ -4,10 +4,7 @@ import fs = require('fs');
 import path = require('path');
 import program = require('commander');
 import colors = require('colors');
-import parser = require("./parser");
-import typecheck = require("./typecheck");
-import ast = require("./ast");
-import {Package, ImportError} from "./pkg";
+import { Package } from "./pkg";
 import { FyrConfiguration } from "./config";
 
 // Make TSC not throw out the colors lib
@@ -44,13 +41,6 @@ function runCompiler() {
 //        files.push(path.join(fyrBase, "runtime/mem.fyr"));
 //        files.push(path.join(fyrBase, "runtime/map.fyr"));
 //    }
-
-    if (config.emitErrors) {
-        console.error("throwing errors")
-        pkg.loadSources()
-        Package.checkTypesForPackages()
-        process.exit()
-    }
 
     compile(pkg, config);
 }
@@ -118,38 +108,16 @@ export function compile(pkg: Package, config: FyrConfiguration) {
     // Load all sources
     try {
         pkg.loadSources();
-    } catch(ex) {
-        if (ex instanceof typecheck.TypeError) {
-            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;
-        } else if (ex instanceof parser.SyntaxError) {
-            console.log((ast.currentFile() + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;
-        } else if (ex instanceof ImportError) {
-            if (ex.location) {
-                console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            } else {
-                console.log((ex.path + ": ".yellow) + ex.message.red);
-            }
-            return
-        } else {
-            console.log(ex);
-            throw ex;
-        }
+    } catch(e) {
+        config.errorHandler.handle(e);
     }
 
     // TypeCheck the sources
-//    try {
+    try {
         Package.checkTypesForPackages();
-/*    } catch(ex) {
-        if (ex instanceof typecheck.TypeError) {
-            console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
-            return;
-        } else {
-            console.log(ex);
-            throw ex;
-        }
-    }*/
+    } catch(e) {
+        config.errorHandler.handle(e);
+    }
 
     // Generate code
     if (!config.disableCodegen) {

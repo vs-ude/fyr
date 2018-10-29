@@ -1,5 +1,7 @@
 "use strict"
 
+import {ErrorHandler, StdErrorOutput} from "./errorhandler"
+
 export class FyrConfiguration {
 	public emitC: boolean = false;
 	public emitNative: boolean = false;
@@ -8,7 +10,7 @@ export class FyrConfiguration {
 	public disableCodegen: boolean = true;
 	public disableRuntime: boolean = false;
 	public disableNullCheck: boolean = false;
-	public emitErrors: boolean = false;
 	public fyrPaths: string[];
 	public sourcePath: Array<string | object>;
+	public errorHandler: ErrorHandler = new StdErrorOutput;
 }
