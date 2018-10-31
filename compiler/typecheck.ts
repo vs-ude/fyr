@@ -3547,13 +3547,9 @@ export class TypeChecker {
                 scopeExit.merge(snode.scopeExit);
                 // Check the else clause
                 if (snode.elseBranch) {
-                    let s2 = new Scope(scope);
-                    snode.elseBranch.scope = s2;
-                    snode.elseBranch.scopeExit = new ScopeExit();
-                    snode.elseBranch.scopeExit.fallthrough = s2;
-                    this.checkStatement(snode.elseBranch, s2, snode.elseBranch.scopeExit);
+                    this.checkStatement(snode.elseBranch, scope, scopeExit);
                     scopeExit.merge(snode.elseBranch.scopeExit);
-                    if (!snode.scopeExit.fallthrough && !snode.elseBranch.scopeExit.fallthrough) {
+                    if (!snode.scopeExit.fallthrough && !snode.elseBranch.scopeExit.fallthrough && snode.elseBranch.op == "else") {
                         scopeExit.fallthrough = null;
                     }
                 }
@@ -3561,10 +3557,10 @@ export class TypeChecker {
             }
             case "else":
             {
-                for(let i = 0; i < snode.statements.length; i++) {
-                    let st = snode.statements[i];
-                    this.checkStatement(st, scope, scopeExit);
-                }
+                let s = new Scope(scope);
+                snode.scope = s;
+                snode.scopeExit = this.checkStatements(snode.statements, s);
+                scopeExit.merge(snode.scopeExit);
                 return;
             }
             case "for":
@@ -6285,6 +6281,12 @@ export class TypeChecker {
                 break;
             case "continue":
                 break;
+            case "else":
+                snode.scope.resetGroups();
+                for(let st of snode.statements) {
+                    this.checkGroupsInStatement(st, snode.scope);
+                }
+                break;
             case "if":
                 snode.scope.resetGroups();
                 if (snode.lhs) {
@@ -6293,6 +6295,13 @@ export class TypeChecker {
                 this.checkExpression(snode.condition, snode.scope);
                 for(let st of snode.statements) {
                     this.checkGroupsInStatement(st, snode.scope);
+                }                
+                if (snode.elseBranch) {
+                    this.checkGroupsInStatement(snode.elseBranch, scope);
+//                    snode.elseBranch.scope.resetGroups();
+//                    for(let st of snode.elseBranch.statements) {
+//                        this.checkGroupsInStatement(st, snode.elseBranch.scope);
+//                    }
                 }
                 if (snode.scopeExit.breaks) {
                     for (let c of snode.scopeExit.breaks) {
@@ -6305,10 +6314,10 @@ export class TypeChecker {
                     }                    
                 }
                 if (snode.elseBranch) {
-                    snode.elseBranch.scope.resetGroups();
-                    for(let st of snode.elseBranch.statements) {
-                        this.checkGroupsInStatement(st, snode.elseBranch.scope);
-                    }
+//                    snode.elseBranch.scope.resetGroups();
+//                    for(let st of snode.elseBranch.statements) {
+//                        this.checkGroupsInStatement(st, snode.elseBranch.scope);
+//                    }
                     if (snode.elseBranch.scopeExit.breaks) {
                         for (let c of snode.elseBranch.scopeExit.breaks) {
                             c.mergeScopes(scope, "reverted_subsequent");

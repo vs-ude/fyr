@@ -144,7 +144,7 @@ func List.remove(it Iterator<T>) (Iterator<T>, T) {
             this.first = take(it.element.next)
             this.first.prev = null
         }
-        return {element: it.first}, take(e.value)
+        return {element: it.element}, take(e.value)
     } else if (it.element.next == null) {
         if (it.element != this.last) {
             println("Iterator on wrong list")
@@ -161,7 +161,8 @@ func List.remove(it Iterator<T>) (Iterator<T>, T) {
     return {element: next}, take(e.value)
 }
 
-func List.concat(l &List<T>) {
+// func List.concat(l &List<T>) {
+func List.concat(l &List) {
     if (this.first == null) {
         this.first = take(l.first)
         this.last = take(l.last)
@@ -213,7 +214,7 @@ func const Iterator.isNull() bool {
 export func main() int {
     let l List<int> = {}
     l.push(42)
-    for(let it = l.begin(); !it.isNull(); it.next()) {
+    for(let it = l.front(); !it.isNull(); it.next()) {
         println(it.value())
     }
     return 0
