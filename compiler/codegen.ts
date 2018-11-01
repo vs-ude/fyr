@@ -1086,7 +1086,7 @@ export class CodeGenerator {
                             forceIncref = true;
                         }
                     }
-                    if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.lhs.op == "take")) {
+                    if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment/* || snode.lhs.op == "take"*/)) {
                         rhs = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                     } else {
                         rhs = this.processExpression(f, scope, snode.lhs, b, vars, targetType);                            
@@ -1116,7 +1116,7 @@ export class CodeGenerator {
                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
                     }
                     // TODO: The same for maps
-                    if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.lhs.op == "take")) {
+                    if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment/* || snode.lhs.op == "take"*/)) {
                         if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                             throw "Implementation error";
                         }

@@ -214,8 +214,11 @@ func const Iterator.isNull() bool {
 export func main() int {
     let l List<int> = {}
     l.push(42)
+    l.push(43)
     for(let it = l.front(); !it.isNull(); it.next()) {
-        println(it.value())
+        let v int = it.value()
+        println(v)
+//        println(it.value())
     }
     return 0
 }

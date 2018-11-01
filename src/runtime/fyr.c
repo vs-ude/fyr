@@ -96,12 +96,18 @@ void fyr_notnull_ref(addr_t ptr) {
 }
 
 addr_t fyr_incref(addr_t ptr) {
+    if (ptr == NULL) {
+        return NULL;
+    }
     int_t* iptr = ((int_t*)ptr) - 1;
     (*iptr)++;
     return ptr;
 }
 
 addr_t fyr_incref_arr(addr_t ptr) {
+    if (ptr == NULL) {
+        return NULL;
+    }
     int_t* iptr = ((int_t*)ptr) - 2;
     (*iptr)++;
     return ptr;

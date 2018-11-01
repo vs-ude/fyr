@@ -1335,6 +1335,15 @@ export class CBackend implements backend.Backend {
         }
     }
 
+    private includeStdioHeaderFile() {
+        if (!this.module.hasInclude("stdio.h", true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = true;
+            inc.path = "stdio.h";
+            this.module.includes.push(inc);
+        }
+    }
+
     private includePackageHeaderFile(p: Package) {
         let headerFile = p.pkgPath + ".h";
         if (!this.module.hasInclude(headerFile, true)) {
@@ -1490,6 +1499,7 @@ export class CBackend implements backend.Backend {
                 code.push(call);
                 n = n.next[0];
             } else if (n.kind == "println") {
+                this.includeStdioHeaderFile();
                 let call = new CFunctionCall();
                 call.funcExpr = new CConst("printf");
                 let args: Array<CNode> = [null];
@@ -1503,7 +1513,7 @@ export class CBackend implements backend.Backend {
                             f += "%u ";
                         }
                         args.push(this.emitExpr(arg));
-                    } else {
+                    } else if (arg instanceof ssa.Variable || arg instanceof ssa.Node) {
                         if (arg instanceof ssa.Variable && arg.isConstant && typeof(arg.constantValue) == "string") {
                             f += "%s ";
                             let s = arg.constantValue;
@@ -1511,19 +1521,23 @@ export class CBackend implements backend.Backend {
                             args.push(new CConst("\"" + s + "\""));
                             continue;
                         }
-                        if (arg instanceof Node && arg.type instanceof FunctionType) {
+                        let t = arg.type;
+                        if (arg instanceof ssa.Node) {
+                            t = arg.assignType;
+                        }
+                        if (t instanceof FunctionType) {
                             f += "<func> ";
                             continue;
                         }
-                        if (arg.type instanceof StructType) {
+                        if (t instanceof StructType) {
                             f += "<struct> ";
                             continue;
                         }
-                        if (arg.type instanceof ssa.PointerType) {
+                        if (t instanceof ssa.PointerType) {
                             f += "%p ";
                             args.push(this.emitExpr(arg));
                         }
-                        switch(arg.type) {
+                        switch(t) {
                             case "i8":
                             case "i16": {
                                 f += "%PRIu32 ";
