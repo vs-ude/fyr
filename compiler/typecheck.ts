@@ -2175,7 +2175,7 @@ export class TypeChecker {
         }
         let node = t.node.rhs.clone();
 
-        if (t.node.rhs.op == "structType") {
+        if (node.op == "structType") {
             let s = new TemplateStructType();
             s.pkg = this.pkg;
             s.base = t;
@@ -2189,12 +2189,12 @@ export class TypeChecker {
                 this.templateTypeInstantiations.set(t, [s]);
             }
     
-            this.createStructType(t.node.rhs, scope, s);
+            this.createStructType(node, scope, s);
             for(let m of t.methods) {
                 this.instantiateTemplateMemberFunction(t, s, m);
             }
             return s;
-        } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
+        } else if (node.op == "interfaceType" || node.op == "andType") {
             let s = new TemplateInterfaceType();
             s.base = t;
             s.name = t.name;
@@ -2207,9 +2207,9 @@ export class TypeChecker {
                 this.templateTypeInstantiations.set(t, [s]);
             }
     
-            this.createInterfaceType(t.node.rhs, scope, s);
+            this.createInterfaceType(node, scope, s);
             return s;
-        } else if (t.node.rhs.op == "funcType") {
+        } else if (node.op == "funcType") {
             let s = new TemplateFunctionType();
             s.base = t;
             s.name = t.name;
@@ -2223,7 +2223,7 @@ export class TypeChecker {
             }
 
             throw "TODO";
-        } else if (t.node.rhs.op == "orType") {
+        } else if (node.op == "orType") {
             throw "TODO";
         }
         throw "Implementation error";
@@ -2232,12 +2232,12 @@ export class TypeChecker {
     private instantiateTemplateMemberFunction(t: TemplateType, s: TemplateStructType, m: TemplateFunction): Function | TemplateFunction {
         let scope = new Scope(t.parentScope);
         // TODO: Register the fully qualified name, too
-        scope.registerType(s.name, s);
+        // scope.registerType(s.name, s);
         for(let i = 0; i < t.templateParameterNames.length; i++) {
             scope.registerType(t.templateParameterNames[i], s.templateParameterTypes[i]);
         }
         let node = m.node.clone();        
-        let f = this.createFunction(node, scope, this.moduleNode.scope);        
+        let f = this.createFunction(node, scope, this.moduleNode.scope, null, null, s);        
         if (f instanceof Function) {
             f.isTemplateInstance = true;
             this.checkFunctionBody(f);
@@ -2369,7 +2369,7 @@ export class TypeChecker {
         return t.name;
     }
 
-    public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope, templateBase: TemplateType = null, templateParameterTypes: Array<Type> = null): Function | TemplateFunction {
+    public createFunction(fnode: Node, parentScope: Scope, registerScope: Scope, templateBase: TemplateType = null, templateParameterTypes: Array<Type> = null, templateTypeInstance: TemplateStructType = null): Function | TemplateFunction {
         if (!fnode.name) {
             throw new TypeError("Function must be named", fnode.loc);
         }
@@ -2378,7 +2378,14 @@ export class TypeChecker {
         let templateType: TemplateType;
         // A member function?
         if (fnode.lhs) {
-            let obj = this.createType(fnode.lhs, parentScope, "parameter");
+            var obj: Type;
+            if (templateTypeInstance) {
+                let s = new Scope(parentScope);
+                s.registerType(templateTypeInstance.name, templateTypeInstance);
+                obj = this.createType(fnode.lhs, s, "parameter");
+            } else {
+                obj = this.createType(fnode.lhs, parentScope, "parameter");
+            }
             let obj2 = RestrictedType.strip(obj);
             if (obj2.name == "") {
                 throw new TypeError(obj.toString() + " is not a named struct", fnode.lhs.loc);

@@ -161,8 +161,7 @@ func List.remove(it Iterator<T>) (Iterator<T>, T) {
     return {element: next}, take(e.value)
 }
 
-// func List.concat(l &List<T>) {
-func List.concat(l &List) {
+func List.concat(l &List<T>) {
     if (this.first == null) {
         this.first = take(l.first)
         this.last = take(l.last)
