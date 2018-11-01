@@ -3779,29 +3779,23 @@ export class TypeChecker {
                 break;
             }
             case "copy":
-                // copy(a, b)
-                if (snode.rhs) {
-                    this.checkExpression(snode.lhs, scope);
-                    this.checkExpression(snode.rhs, scope);
-                    if (this.isConst(snode.lhs.type)) {
-                        throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);
-                    }
-                    if (!this.isSlice(snode.lhs.type) || !this.isSlice(snode.rhs.type)) {
-                        throw new TypeError("'copy' is only allowed on slices", snode.loc);
-                    }
-                    let t = RestrictedType.strip(snode.lhs.type) as SliceType;
-                    if (this.isConst(t.arrayType)) {
-                        throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);                    
-                    }
-                    let e = RestrictedType.strip(t.getElementType());
-                    let t2 = RestrictedType.strip(snode.rhs.type) as SliceType;
-                    let e2 = RestrictedType.strip(t2.getElementType());
-                    if (!this.checkTypeEquality(e, e2, snode.loc, false)) {
-                        throw new TypeError("'copy' requires two slices of the same type", snode.loc);
-                    }
-                } else {
-                    // copy(a)
-                    this.checkExpression(snode, scope);
+                this.checkExpression(snode.lhs, scope);
+                this.checkExpression(snode.rhs, scope);
+                if (this.isConst(snode.lhs.type)) {
+                    throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);
+                }
+                if (!this.isSlice(snode.lhs.type) || !this.isSlice(snode.rhs.type)) {
+                    throw new TypeError("'copy' is only allowed on slices", snode.loc);
+                }
+                let t = RestrictedType.strip(snode.lhs.type) as SliceType;
+                if (this.isConst(t.arrayType)) {
+                    throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);                    
+                }
+                let e = RestrictedType.strip(t.getElementType());
+                let t2 = RestrictedType.strip(snode.rhs.type) as SliceType;
+                let e2 = RestrictedType.strip(t2.getElementType());
+                if (!this.checkTypeEquality(e, e2, snode.loc, false)) {
+                    throw new TypeError("'copy' requires two slices of the same type", snode.loc);
                 }
                 break;
             case "println":                
@@ -4696,11 +4690,6 @@ export class TypeChecker {
                 }
                 break;
             }   
-            case "copy": {
-                this.checkExpression(enode.lhs, scope);
-                enode.type = this.createCopyType(enode.lhs.type, enode.loc);
-                break;
-            }
             case "ellipsisId":
             case "unary...":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);
@@ -6932,8 +6921,6 @@ export class TypeChecker {
             case "clone":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);
                 return new Group(GroupKind.Free);
-            case "copy":
-                return this.checkGroupsInExpression(enode.lhs, scope, flags);
             case "pop":
                 return this.checkGroupsInExpression(enode.lhs, scope, flags);
             case "push":

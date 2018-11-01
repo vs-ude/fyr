@@ -35,19 +35,19 @@ func const List.constBack() ConstIterator<T> {
 }
 
 func List.peekFront() copy<T> {
-    return copy(this.first.value)
+    return this.first.value
 }
 
 func const List.constPeekFront() const copy<T> {
-    return copy(this.first.value)
+    return this.first.value
 }
 
 func List.peek() copy<T> {
-    return copy(this.last.value)
+    return this.last.value
 }
 
 func const List.constPeek() const copy<T> {
-    return copy(this.last.value)
+    return this.last.value
 }
 
 func const List.size() int {
@@ -100,7 +100,7 @@ func List.at(pos int) copy<T> {
     for(var i = 0; i < pos; i++) {
         e = e.next
     }
-    return copy(e.value)
+    return e.value
 }
 
 func List.erase(it Iterator<T>) Iterator<T> {
@@ -187,7 +187,7 @@ func Iterator.prev() {
 }
 
 func Iterator.value() copy<T> {
-    return copy(this.element.value)
+    return this.element.value
 }
 
 func const Iterator.isNull() bool {
@@ -204,7 +204,7 @@ func const Iterator.isNull() bool {
 //}
 
 //func ConstIterator.value() const copy<T> {
-//    return copy(this.element.value)
+//    return this.element.value
 //}
 
 //func const ConstIterator.isNull() bool {

@@ -480,8 +480,8 @@ statement
       }
       return new ast.Node({loc: fl(location()), op: "spawn", rhs: e});
     }
-  / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* e2:("," [ \t]* expression [ \t]* )? ")" {
-      return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2 ? e2[2] : null});
+  / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2});
     }
   / "push" [ \t]* "(" [ \t\n]* e: expressionList ")" {
       return new ast.Node({loc: fl(location()), op: "push", parameters: e});
@@ -950,9 +950,6 @@ primary2
     }
   / "min" [ \t]* "<" [ \t]* t:type [ \t]* ">" {
       return new ast.Node({loc: fl(location()), op: "min", lhs: t});
-    }
-  / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* ")" {
-      return new ast.Node({loc: fl(location()), op: "copy", lhs: e});
     }
   / i: identifier {
       return i;
