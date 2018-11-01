@@ -2431,7 +2431,7 @@ export class TypeChecker {
             gt.node = fnode;
             gt.parentScope = parentScope;
             gt.registerScope = registerScope;
-            let scope = new Scope(parentScope);
+            // let scope = new Scope(parentScope);
             if (fnode.genericParameters && !templateBase) {
                 for(let g of fnode.genericParameters) {
                     gt.templateParameterTypes.push(g.condition ? g.condition : null);
