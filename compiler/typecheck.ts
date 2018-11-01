@@ -2440,7 +2440,9 @@ export class TypeChecker {
             }
             f.type = gt;
             f.type.loc = fnode.loc;
-            registerScope.registerElement(f.name, f);            
+            if (!templateType) {
+                registerScope.registerElement(f.name, f);
+            }
             // Do not process any further. This is done upon template instantiation
             return f;
         }

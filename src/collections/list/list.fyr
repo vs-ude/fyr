@@ -195,21 +195,22 @@ func const Iterator.isNull() bool {
 }
 
 
-//func ConstIterator.next() {
-//    this.element = this.element.next
-//}
+func ConstIterator.next() {
+    this.element = this.element.next
+}
 
-// func ConstIterator.prev() {
-//    this.element = this.element.prev
-//}
+func ConstIterator.prev() {
+    this.element = this.element.prev
+}
 
-//func ConstIterator.value() const copy<T> {
-//    return this.element.value
-//}
+func ConstIterator.value() const copy<T> {
+    return this.element.value
+}
 
-//func const ConstIterator.isNull() bool {
-//    return this.element == null
-//}
+func const ConstIterator.isNull() bool {
+    return this.element == null
+}
+
 
 export func main() int {
     let l List<int> = {}
