@@ -216,9 +216,7 @@ export func main() int {
     l.push(42)
     l.push(43)
     for(let it = l.front(); !it.isNull(); it.next()) {
-        let v int = it.value()
-        println(v)
-//        println(it.value())
+        println(it.value())
     }
     return 0
 }

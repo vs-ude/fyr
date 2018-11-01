@@ -4,7 +4,8 @@
 #include <assert.h>
 #include <string.h>
 
-// #include <stdio.h>
+#include <stdio.h>
+#define VALGRIND 1
 
 addr_t fyr_alloc(int_t size) {
     // TODO: If int_t is larger than size_t, the size could be shortened.
@@ -45,16 +46,18 @@ void fyr_free(addr_t ptr, fyr_dtr_t dtr) {
             *iptr = 0;
         }
     } else {
-        // printf("REALLOC %lx\n", (long)iptr);
+        // printf("REALLOC %lx %lx\n", (long)*iptr, (long)(INT_MIN + *iptr - 1));
         // References exist. Decrease the reference count and realloc.
         // The remaining memory does not need to be destructed.
-        *iptr = INT_MIN + *iptr - 1;
-        // TODO: Use implementation of realloc that ensures that data does not move while shrinkink
+        *iptr = INT_MIN + *iptr - 1;        
+        // TODO: Use implementation of realloc that ensures that data does not move while shrinking
         if (*lptr == 0) {
             if (dtr) dtr(ptr);
+#ifndef VALGRIND
             // No one holds a lock on it.    
             void* ignore = realloc(lptr, 2 * sizeof(int_t));
             assert(ignore == lptr);
+#endif
         }
     }
 }
@@ -121,21 +124,23 @@ void fyr_decref(addr_t ptr, fyr_dtr_t dtr) {
     int_t* lptr = ((int_t*)ptr) - 2;
     // Number of references
     int_t* iptr = ((int_t*)ptr) - 1;
-    // printf("DECREF %lx\n", (long)iptr);
-    if (--(*iptr) == 0) {
+    // printf("DECREF %lx\n", (long)*iptr);
+    (*iptr)--;
+    if (*iptr == 0) {
         // Reference count can drop to zero only when the owning pointer has been assigned
         // to a frozen pointer and all references have been removed.
         // Hence, a destructor must run.
-        if (lptr == 0) {
+        if (*lptr == 0) {
             if (dtr) dtr(ptr);
             // printf("DECREF FREE %lx\n", (long)iptr);
             free(lptr);
         }
     } else if (*iptr == INT_MIN) {
+        // printf("Min count reached\n");
         // The owning pointer is gone, and all references are gone, too.
         // Finally, release all memory, unless someone is holding a lock on the memory
-        if (lptr == 0) {
-    //        printf("Free refcounter\n");
+        if (*lptr == 0) {
+            // printf("Free refcounter\n");
             // The owning pointer is zero (no freeze) and now all remaining references have been removed.
             // printf("DECREF FREE %lx\n", (long)iptr);
             free(lptr);
