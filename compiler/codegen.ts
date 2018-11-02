@@ -3267,7 +3267,7 @@ export class CodeGenerator {
                     if (head_addr instanceof ssa.Variable) {
                         b.assign(b.mem, "set_member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr"), newArray]);                    
                         let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
-                        b.assign(b.mem, "set_member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr"), newArray]);
+                        b.assign(b.mem, "set_member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr"), newArray]);
                     } else {
                         b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr"), newArray]);
                         b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("array_ptr"), newArray]);
