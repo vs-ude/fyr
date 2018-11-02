@@ -1344,6 +1344,15 @@ export class CBackend implements backend.Backend {
         }
     }
 
+    private includeIntTypesHeaderFile() {
+        if (!this.module.hasInclude("inttypes.h", true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = true;
+            inc.path = "inttypes.h";
+            this.module.includes.push(inc);
+        }
+    }
+
     private includePackageHeaderFile(p: Package) {
         let headerFile = p.pkgPath + ".h";
         if (!this.module.hasInclude(headerFile, true)) {
@@ -1540,37 +1549,43 @@ export class CBackend implements backend.Backend {
                         switch(t) {
                             case "i8":
                             case "i16": {
-                                f += "%PRIu32 ";
+                                f += "%\"PRIu32\" ";
                                 let c = new CTypeCast();
                                 c.type = new CType("uint32_t");
                                 c.expr = this.emitExpr(arg);
                                 args.push(c);
+                                this.includeIntTypesHeaderFile();
                                 break;
                             }
                             case "i32":
-                                f += "%PRIu32 ";
+                                f += "%\"PRIu32\" ";
                                 args.push(this.emitExpr(arg));
+                                this.includeIntTypesHeaderFile();
                                 break;
                             case "i64":
-                                f += "%PRIu64 ";
+                                f += "%\"PRIu64\" ";
                                 args.push(this.emitExpr(arg));
+                                this.includeIntTypesHeaderFile();
                                 break;
                             case "s8":
                             case "s16": {
-                                f += "%PRIi32 ";
+                                f += "%\"PRIi32\" ";
                                 let c = new CTypeCast();
                                 c.type = new CType("int32_t");
                                 c.expr = this.emitExpr(arg);
                                 args.push(c);
+                                this.includeIntTypesHeaderFile();
                                 break;
                             }
                             case "s32":
-                                f += "%PRIi32 ";
+                                f += "%\"PRIi32\" ";
                                 args.push(this.emitExpr(arg));
+                                this.includeIntTypesHeaderFile();
                                 break;
                             case "s64":
-                                f += "%PRIi64 ";
+                                f += "%\"PRIi64\" ";
                                 args.push(this.emitExpr(arg));
+                                this.includeIntTypesHeaderFile();
                                 break;
                             case "ptr":
                             case "addr":

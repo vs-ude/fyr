@@ -96,5 +96,6 @@ export func appendInt<T>(dst []byte, n T, base Base) []byte {
         n = -n
     }
     let i = formatBits<T>(a[:], n, base, neg)
-    return append(dst, ...a[i:])
+    append(dst, ...a[i:])
+	return dst
 }

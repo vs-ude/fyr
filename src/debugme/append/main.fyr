@@ -1,0 +1,9 @@
+
+export func main() int {
+    let arr []byte = [...10]
+    // slice(arr, 0, 0)
+    var slice = arr[0:0]
+    push(slice, 42, 43)
+    println(len(slice), arr[0], arr[1])
+    return 0
+}

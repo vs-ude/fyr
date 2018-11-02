@@ -1,6 +1,7 @@
 import {Node, Location, AstFlags} from "./ast"
 import { Package, SystemCalls } from "./pkg";
 import {createHash} from "crypto";
+import { ENETDOWN } from "constants";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -4638,7 +4639,7 @@ export class TypeChecker {
             case "append":
             {
                 if (enode.parameters.length < 2) {
-                    throw new TypeError("'append' expects at least two arguments", enode.loc);
+                    throw new TypeError("'" + enode.op + "' expects at least two arguments", enode.loc);
                 }
                 let e: Type;
                 for(let i = 0; i < enode.parameters.length; i++) {
@@ -4652,7 +4653,7 @@ export class TypeChecker {
                     }
                     this.checkExpression(p, scope);
                     if (i == 0) {
-                        if (enode.op == "push" || enode.op == "tryPush") {
+                        if (enode.op == "push" || enode.op == "tryPush" || enode.op == "append") {
                             this.checkIsMutable(p, scope, true);
                         }
                         if (!this.isSlice(p.type)) {
@@ -4663,7 +4664,7 @@ export class TypeChecker {
                             throw new TypeError("First argument to '" + enode.op + "' must be a non-const slice", p.loc);
                         }
                         if (enode.op == "append") {
-                            if (!TypeChecker.isUnique(t)) {
+                            if (!TypeChecker.isUnique(t) && !TypeChecker.isStrong(t)) {
                                 throw new TypeError("First argument to 'append' must be an owning pointer", p.loc);
                             }
                         }
