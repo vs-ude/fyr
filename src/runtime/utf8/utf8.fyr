@@ -21,7 +21,7 @@ export func decodeUtf8(codep #uint32, ch byte, state int) int {
     let t = <int>utf8TablePtr[<int>ch]
     if (state == 0) {
         *codep = <uint32>ch & <uint32>(0xff >> <uint>t)
-        return <int>utf8TablePtr[256 + (state << 4) + t]
+        return <int>utf8TablePtr[256 + t]
     }
     *codep = (*codep << 6) | (<uint32>ch & 0x3f)
     return <int>utf8TablePtr[256 + (state << 4) + t]
