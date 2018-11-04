@@ -483,6 +483,12 @@ statement
   / "copy" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "copy", lhs: e, rhs: e2});
     }
+  / "move" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "move", lhs: e, rhs: e2});
+    }
+  / "slice" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* "," [ \t]* e3:expression [ \t]* ")" {
+      return new ast.Node({loc: fl(location()), op: "slice", parameters: [e1, e2, e3]});
+    }
   / "push" [ \t]* "(" [ \t\n]* e: expressionList ")" {
       return new ast.Node({loc: fl(location()), op: "push", parameters: e});
     }    

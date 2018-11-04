@@ -3789,24 +3789,42 @@ export class TypeChecker {
                 break;
             }
             case "copy":
+            case "move":
                 this.checkExpression(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
-                if (this.isConst(snode.lhs.type)) {
-                    throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);
-                }
                 if (!this.isSlice(snode.lhs.type) || !this.isSlice(snode.rhs.type)) {
-                    throw new TypeError("'copy' is only allowed on slices", snode.loc);
+                    throw new TypeError("'" + snode.op + "' is only allowed on slices", snode.loc);
                 }
                 let t = RestrictedType.strip(snode.lhs.type) as SliceType;
-                if (this.isConst(t.arrayType)) {
-                    throw new TypeError("'copy' requires a non-const slice as its first argument", snode.lhs.loc);                    
-                }
                 let e = RestrictedType.strip(t.getElementType());
+                if (this.isConst(snode.lhs.type)) {
+                    throw new TypeError("'" + snode.op + "' requires a non-const slice as its first argument", snode.lhs.loc);
+                }
+                if (this.isConst(t.arrayType)) {
+                    throw new TypeError("'" + snode.op + "' requires a non-const slice as its first argument", snode.lhs.loc);                    
+                }
+                if (snode.op == "move" && !(TypeChecker.isPureValue(e) || this.isConst(e) || e == TypeChecker.t_string) && this.isConst(snode.rhs.type)) {
+                    throw new TypeError("'move' requires a non-const slice as its second argument when slice elements are neither const nor pure values", snode.lhs.loc);
+                }
                 let t2 = RestrictedType.strip(snode.rhs.type) as SliceType;
                 let e2 = RestrictedType.strip(t2.getElementType());
                 if (!this.checkTypeEquality(e, e2, snode.loc, false)) {
-                    throw new TypeError("'copy' requires two slices of the same type", snode.loc);
+                    throw new TypeError("'" + snode.op + "' requires two slices of the same type", snode.loc);
                 }
+                break;
+            case "slice":
+                this.checkExpression(snode.parameters[0], scope);
+                this.checkExpression(snode.parameters[1], scope);
+                this.checkExpression(snode.parameters[2], scope);
+                if (!this.isSlice(snode.parameters[0].type)) {
+                    throw new TypeError("'slice' is only allowed on slices", snode.loc);
+                }
+                if (TypeChecker.isLocalReference(snode.parameters[0].type)) {
+                    throw new TypeError("'slice' is not allowed on local references", snode.loc)
+                }
+                this.checkIsMutable(snode.parameters[0], scope, true);
+                this.checkIsPlatformIntNumber(snode.parameters[1]);
+                this.checkIsPlatformIntNumber(snode.parameters[2]);
                 break;
             case "println":                
                 for(let i = 0; i < snode.parameters.length; i++) {
@@ -6385,8 +6403,14 @@ export class TypeChecker {
                 break;
             }
             case "copy":
+            case "move":
                 this.checkGroupsInExpression(snode.lhs, scope, GroupCheckFlags.None);
                 this.checkGroupsInExpression(snode.rhs, scope, GroupCheckFlags.None);
+                break;
+            case "slice":
+                this.checkGroupsInExpression(snode.parameters[0], scope, GroupCheckFlags.None);
+                this.checkGroupsInExpression(snode.parameters[1], scope, GroupCheckFlags.None);
+                this.checkGroupsInExpression(snode.parameters[2], scope, GroupCheckFlags.None);
                 break;
                 /*
             case "spawn":

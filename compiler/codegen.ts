@@ -1206,6 +1206,7 @@ export class CodeGenerator {
                 break;
             }
             case "copy":
+            case "move":
             {
                 let objType = this.tc.stripType(snode.lhs.type);
                 if (!(objType instanceof SliceType)) {
@@ -1259,7 +1260,12 @@ export class CodeGenerator {
                     src_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                 }
                 let count = b.assign(b.tmp(), "min", "sint", [src_count, dest_count]);
-                b.assign(null, "memmove", null, [dest_data_ptr, src_data_ptr, count, size]);
+                if (snode.op == "copy") {
+                    b.assign(null, "memmove", null, [dest_data_ptr, src_data_ptr, count, size]);
+                } else {
+                    let dtor = this.generateArrayDestructor(RestrictedType.strip(objType.arrayType) as ArrayType);
+                    b.assign(null, "move_arr", null, [dest_data_ptr, src_data_ptr, count, size, dtor.getIndex()]);
+                }
                 break;
             }
             case "println": {
@@ -3198,13 +3204,8 @@ export class CodeGenerator {
                 }
 
                 // Get the address of the destination SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
-                let head_addr: ssa.Variable | ssa.Pointer;
-                if (enode.op == "append") {
-                    head_addr = this.processExpression(f, scope, enode.parameters[0], b, vars, enode.parameters[0].type) as ssa.Variable;
-                } else {
-                    // Push modifies the slice, therefore the slice is a left-hand expression
-                    head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0], b, vars);
-                }
+                // Append and Push modifies the slice, therefore the slice is a left-hand expression
+                let head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0], b, vars);                
                 let dest_data_ptr: ssa.Variable | number;
                 // The current length of the slice
                 let dest_count: ssa.Variable | number;
@@ -3323,9 +3324,72 @@ export class CodeGenerator {
                 } else if (enode.op == "tryPush") {
                     b.end();
                     return cond;
-                } else {
+                }
+                throw "Implementation error";
+            }
+            case "slice": {
+                let objType = this.tc.stripType(enode.parameters[0].type);
+                if (!(objType instanceof SliceType)) {
                     throw "Implementation error";
                 }
+                let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
+                let size = ssa.alignedSizeOf(elementType);
+
+                let offset = this.processExpression(f, scope, enode.parameters[1], b, vars, TypeChecker.t_int);
+                let len = this.processExpression(f, scope, enode.parameters[2], b, vars, TypeChecker.t_int);
+
+                let head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0], b, vars);
+                // The current length of the slice
+                let dest_count: ssa.Variable | number;
+                let dest_array: ssa.Variable | number;
+                let dest_data: ssa.Variable | number;
+                if (head_addr instanceof ssa.Variable) {
+                    if (objType.mode == "local_reference") {
+                        throw "Implementation error";
+                    }
+                    dest_array = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
+                    let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
+                    dest_count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
+                    tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
+                    dest_data = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                } else {
+                    dest_array = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr")]);
+                    dest_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                    dest_data = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                }
+
+                let dest_offset = b.assign(b.tmp(), "sub", "sint", [dest_data, dest_array]);
+                dest_offset = b.assign(b.tmp(), "div", "sint", [dest_offset, size]);
+                dest_offset = b.assign(b.tmp(), "add", "sint", [dest_offset, offset]);
+                let dest_end_offset = b.assign(b.tmp(), "add", "sint", [dest_offset, len]);
+
+                // Test the validity of the arguments
+                let cond0 = b.assign(b.tmp(), "lt", "i8", [len, 0]);
+                let cond1 = b.assign(b.tmp(), "lt", "i8", [dest_offset, 0]);
+                let cond2 = b.assign(b.tmp(), "gt", "i8", [dest_end_offset, dest_count]);
+                let cond3 = b.assign(b.tmp(), "or", "i8", [cond0, cond1]);
+                let cond = b.assign(b.tmp(), "or", "i8", [cond3, cond2]);
+                b.ifBlock(cond);
+                b.assign(null, "trap", null, []);
+                b.end();
+
+                let diff = b.assign(b.tmp(), "mul", "sint", [dest_offset, size]);
+                let data_ptr = b.assign(b.tmp(), "add", "addr", [dest_array, diff]);
+
+                // Update data_ptr and length of the slice
+                if (head_addr instanceof ssa.Variable) {
+                    if (objType.mode == "local_reference") {
+                        throw "Implementation error";
+                    }
+                    let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
+                    b.assign(b.mem, "set_member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length"), len]);
+                    tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
+                    b.assign(b.mem, "set_member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr"), data_ptr]);
+                } else {
+                    b.assign(b.mem, "store", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length"), len]);
+                    b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr"), data_ptr]);
+                }
+                return 0; // void
             }
             case "min":
             {

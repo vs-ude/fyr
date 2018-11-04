@@ -233,3 +233,28 @@ addr_t fyr_arr_to_str(addr_t array_ptr, addr_t data_ptr, int_t len) {
     *lenptr = len;
     return array_ptr;
 }
+
+void fyr_move_arr(addr_t dest, addr_t source, int_t count, int_t size, fyr_dtr_arr_t dtr) {
+    if (dest == source) {
+        return;
+    }
+    // Free the destination where it is overwritten by source. Ignore parts that overlap with source
+    if (dtr) {
+        if (dest < source && dest + count * size > source) {
+            dtr(dest, (int)(source - dest)/size);
+        } else if (source < dest && source + count * size > dest) {
+            dtr(source + count * size, (int)(dest - source)/size);
+        } else {
+            // No overlap
+            dtr(dest, count);            
+        }
+    }
+    memmove(dest, source, count * size);
+    if (dest < source && dest + count * size > source) {
+        memset(dest + count * size, 0, (int)(source - dest));
+    } else if (source < dest && source + count * size > dest) {
+        memset(source, 0, (int)(dest - source));
+    } else {
+        memset(source, 0, count * size);
+    }
+}

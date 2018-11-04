@@ -1507,6 +1507,16 @@ export class CBackend implements backend.Backend {
                 this.includeStringHeaderFile();
                 code.push(call);
                 n = n.next[0];
+            } else if (n.kind == "move_arr") {
+                let f = this.funcs[n.args[4] as number];
+                if (f instanceof FunctionImport) {
+                    throw "Implementation error";
+                }
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("fyr_move_arr");
+                call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), this.emitExpr(n.args[2]), this.emitExpr(n.args[3]), new CConst(f.func.name)];
+                code.push(call);
+                n = n.next[0];            
             } else if (n.kind == "println") {
                 this.includeStdioHeaderFile();
                 let call = new CFunctionCall();
