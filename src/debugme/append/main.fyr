@@ -5,5 +5,13 @@ export func main() int {
     var slice = arr[0:0]
     push(slice, 42, 43)
     println(len(slice), arr[0], arr[1])
+
+    let arr2 []byte = [1,2,3,4,5]
+    move(arr2[1:], arr2)
+    println(arr2[0], arr2[1], arr2[2], arr2[3], arr2[4])
+
+    var s = arr2[2:]
+    slice(s, -1, 3)
+    println(len(s), s[0], s[1], s[2])
     return 0
 }

@@ -3340,7 +3340,6 @@ export class CodeGenerator {
 
                 let head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0], b, vars);
                 // The current length of the slice
-                let dest_count: ssa.Variable | number;
                 let dest_array: ssa.Variable | number;
                 let dest_data: ssa.Variable | number;
                 if (head_addr instanceof ssa.Variable) {
@@ -3349,15 +3348,12 @@ export class CodeGenerator {
                     }
                     dest_array = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
-                    dest_count = b.assign(b.tmp(), "member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length")]);
-                    tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     dest_data = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                 } else {
                     dest_array = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr")]);
-                    dest_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                     dest_data = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                 }
-
+                let dest_array_len = b.assign(b.tmp(), "len_arr", "sint", [dest_array])
                 let dest_offset = b.assign(b.tmp(), "sub", "sint", [dest_data, dest_array]);
                 dest_offset = b.assign(b.tmp(), "div", "sint", [dest_offset, size]);
                 dest_offset = b.assign(b.tmp(), "add", "sint", [dest_offset, offset]);
@@ -3366,7 +3362,7 @@ export class CodeGenerator {
                 // Test the validity of the arguments
                 let cond0 = b.assign(b.tmp(), "lt", "i8", [len, 0]);
                 let cond1 = b.assign(b.tmp(), "lt", "i8", [dest_offset, 0]);
-                let cond2 = b.assign(b.tmp(), "gt", "i8", [dest_end_offset, dest_count]);
+                let cond2 = b.assign(b.tmp(), "gt", "i8", [dest_end_offset, dest_array_len]);
                 let cond3 = b.assign(b.tmp(), "or", "i8", [cond0, cond1]);
                 let cond = b.assign(b.tmp(), "or", "i8", [cond3, cond2]);
                 b.ifBlock(cond);
