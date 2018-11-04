@@ -4549,10 +4549,10 @@ export class TypeChecker {
                 } else if (this.isString(left) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (this.isString(left) && right instanceof SliceType && right.mode != "local_reference" && !this.isConst(enode.rhs.type) && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
-                    // A slice of bytes or chars can be converted to a string by copying it.
+                } else if (this.isString(left) && right instanceof SliceType && !TypeChecker.isLocalReference(right) && !this.isConst(enode.rhs.type) && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
+                    // A slice of bytes or chars can be converted to a string by taking ownership away from the slice
                     enode.type = t;
-                } else if (left instanceof SliceType && (left.mode == "unique" || left.mode == "strong") && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
+                } else if (left instanceof SliceType && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
                     // A string can be casted into a sequence of bytes or chars by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
@@ -6520,13 +6520,13 @@ export class TypeChecker {
             }
             rightGroup = new Group(GroupKind.Free);
         }
-
+        let self = this;
         let isArrayVariable = function(name: string): boolean {
             let variable = scope.resolveElement(name);
             if (!(variable instanceof Variable)) {
                 return false;
             }
-            return this.isArray(variable.type);
+            return self.isArray(variable.type);
         };
 
         // Assigning to a strong or unique pointer? Then the RHS must let go of its ownership

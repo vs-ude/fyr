@@ -226,6 +226,7 @@ addr_t fyr_arr_to_str(addr_t array_ptr, addr_t data_ptr, int_t len) {
         memmove(array_ptr, data_ptr, len);
     }
     int *lenptr = ((int_t*)array_ptr)-1;
+    // Check for a trailing zero
     if (len >= *lenptr || ((char*)array_ptr)[len] != 0) {
         exit(EXIT_FAILURE);
     }

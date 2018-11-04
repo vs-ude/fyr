@@ -69,27 +69,27 @@ func formatBits<T>(a &[]byte, n T, base Base, neg bool) int {
     return i
 }
 
-export func itoa<T>(n T) string {
+export func Itoa<T>(n T) string {
     var a [65]byte = [...]
     let neg = n < 0
     if (n < 0) {
         n = -n
     }
     let i = formatBits<T>(a[:], n, "10", neg)
-    return <string>a[i:]
+    return <string>clone(a[i:])
 }
 
-export func formatInt<T>(n T, base Base) string {
+export func FormatInt<T>(n T, base Base) string {
     var a [65]byte = [...]
     let neg = n < 0
     if (neg) {
         n = -n
     }
     let i = formatBits<T>(a[:], n, base, neg)
-    return <string>a[i:]
+    return <string>clone(a[i:])
 }
 
-export func appendInt<T>(dst []byte, n T, base Base) []byte {
+export func AppendInt<T>(dst []byte, n T, base Base) []byte {
     var a [65]byte = [...]
     let neg = n < 0
     if (neg) {

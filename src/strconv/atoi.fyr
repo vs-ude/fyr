@@ -1,4 +1,4 @@
-func parseInt<T>(s string, base Base | "auto") (T, bool) {
+func ParseInt<T>(s string, base Base | "auto") (T, bool) {
 	let l = len(s)
 	if (l == 0) {
 		return 0, false
@@ -76,6 +76,6 @@ func parseInt<T>(s string, base Base | "auto") (T, bool) {
 	return n, true
 }
 
-func atoi<T>(s string) (T, bool) {
-    return parseInt<T>(s, "auto")
+func Atoi<T>(s string) (T, bool) {
+    return ParseInt<T>(s, "auto")
 }

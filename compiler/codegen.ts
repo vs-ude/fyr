@@ -2877,6 +2877,7 @@ export class CodeGenerator {
                 let t2 = this.tc.stripType(enode.rhs.type);
                 let expr: number | ssa.Variable;
                 if (t == TypeChecker.t_string && t2 instanceof SliceType && enode.rhs.op == "clone") {
+                    t2 = this.tc.stripType(enode.rhs.lhs.type);
                     expr = this.processExpression(f, scope, enode.rhs.lhs, b, vars, t2);
                 } else {
                     expr = this.processExpression(f, scope, enode.rhs, b, vars, t2);

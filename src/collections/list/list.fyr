@@ -18,53 +18,53 @@ type ConstIterator<T> struct {
     element const ~Element<T>
 }
 
-func List.front() Iterator<T> {
+func List.Front() Iterator<T> {
     return {element: this.first}
 }
 
-func const List.constFront() ConstIterator<T> {
+func const List.ConstFront() ConstIterator<T> {
     return {element: this.first}
 }
 
-func List.back() Iterator<T> {
+func List.Back() Iterator<T> {
     return {element: this.last}
 }
 
-func const List.constBack() ConstIterator<T> {
+func const List.ConstBack() ConstIterator<T> {
     return {element: this.last}
 }
 
-func List.peekFront() copy<T> {
+func List.PeekFront() copy<T> {
     return this.first.value
 }
 
-func const List.constPeekFront() const copy<T> {
+func const List.ConstPeekFront() const copy<T> {
     return this.first.value
 }
 
-func List.peek() copy<T> {
+func List.Peek() copy<T> {
     return this.last.value
 }
 
-func const List.constPeek() const copy<T> {
+func const List.ConstPeek() const copy<T> {
     return this.last.value
 }
 
-func const List.size() int {
+func const List.Size() int {
     return this.count
 }
 
-func List.clear() {
+func List.Clear() {
     this.last = null
     this.first = null
     this.count = 0
 }
 
-func const List.isEmpty() bool {
+func const List.IsEmpty() bool {
     return this.count == 0
 }
 
-func List.push(value T) {
+func List.Push(value T) {
     let e *Element<T> = {value: value, prev: this.last}
     let last = take(this.last)
     this.last = e
@@ -76,7 +76,7 @@ func List.push(value T) {
     this.count++
 }
 
-func List.pop() T {
+func List.Pop() T {
     let last = take(this.last)
     if (last == this.first) {
         this.first = null
@@ -89,13 +89,13 @@ func List.pop() T {
     return take(last.value)    
 }
 
-// func List.shift(value T) {
+// func List.Shift(value T) {
 // }
 
-// func List.unshift() T {
+// func List.Unshift() T {
 // }
 
-func List.at(pos int) copy<T> {
+func List.At(pos int) copy<T> {
     var e ~Element<T> = this.first
     for(var i = 0; i < pos; i++) {
         e = e.next
@@ -103,7 +103,7 @@ func List.at(pos int) copy<T> {
     return e.value
 }
 
-func List.erase(it Iterator<T>) Iterator<T> {
+func List.Erase(it Iterator<T>) Iterator<T> {
     if (it.element.prev == null) {
         if (it.element != this.first) {
             println("Iterator on wrong list")
@@ -131,7 +131,7 @@ func List.erase(it Iterator<T>) Iterator<T> {
     return {element: next}
 }
 
-func List.remove(it Iterator<T>) (Iterator<T>, T) {
+func List.Remove(it Iterator<T>) (Iterator<T>, T) {
     if (it.element.prev == null) {
         if (it.element != this.first) {
             println("Iterator on wrong list")
@@ -161,7 +161,7 @@ func List.remove(it Iterator<T>) (Iterator<T>, T) {
     return {element: next}, take(e.value)
 }
 
-func List.concat(l &List<T>) {
+func List.Concat(l &List<T>) {
     if (this.first == null) {
         this.first = take(l.first)
         this.last = take(l.last)
@@ -177,46 +177,46 @@ func List.concat(l &List<T>) {
 }
 
 
-func Iterator.next() {
+func Iterator.Next() {
     this.element = this.element.next
 }
 
-func Iterator.prev() {
+func Iterator.Prev() {
     this.element = this.element.prev
 }
 
-func Iterator.value() copy<T> {
+func Iterator.Value() copy<T> {
     return this.element.value
 }
 
-func const Iterator.isNull() bool {
+func const Iterator.IsNull() bool {
     return this.element == null
 }
 
 
-func ConstIterator.next() {
+func ConstIterator.Next() {
     this.element = this.element.next
 }
 
-func ConstIterator.prev() {
+func ConstIterator.Prev() {
     this.element = this.element.prev
 }
 
-func ConstIterator.value() const copy<T> {
+func ConstIterator.Balue() const copy<T> {
     return this.element.value
 }
 
-func const ConstIterator.isNull() bool {
+func const ConstIterator.IsNull() bool {
     return this.element == null
 }
 
 
 export func main() int {
     let l List<int> = {}
-    l.push(42)
-    l.push(43)
-    for(let it = l.front(); !it.isNull(); it.next()) {
-        println(it.value())
+    l.Push(42)
+    l.Push(43)
+    for(let it = l.Front(); !it.IsNull(); it.Next()) {
+        println(it.Value())
     }
     return 0
 }

@@ -1,0 +1,147 @@
+type Node<T> struct {
+    value T
+    parent ~Node
+    children []*Node
+} 
+
+type Iterator<T> struct {
+    node ~Node<T>
+}
+
+type ChildIterator struct {
+    children ~[]*Node
+    pos int
+}
+
+func Node.Parent() ~Node {
+    return this.parent
+}
+
+func Node.At(pos int) ~Node {
+    return this.children[pos]
+}
+
+func Node.Size() int {
+    return len(this.children)
+}
+
+func Node.IndexOf(node ~Node) int {
+    for(let i, n in this.children) {
+        if (n == node) {
+            return i
+        }
+    }
+    return -1
+}
+
+func Node.Clear() {
+    this.children = null
+}
+
+func Node.Remove(it ChildIterator<T>) (ChildIterator<T>, *Node) {
+    let n = this.RemoveAt(it.pos)
+    return it, n
+}
+
+func Node.Erase(it ChildIterator<T>) ChildIterator<T> {
+    this.RemoveAt(it.pos)
+    return it
+}
+
+func Node.RemoveNode(node ~Node) *Node {
+    let i = this.IndexOf(node)
+    if (i == -1) {
+        return null
+    }
+    return this.RemoveAt(i)
+}
+
+func Node.RemoveAt(int pos) *Node {
+    let n = take(this.children[pos])
+    move(this.children[pos:], this.children[pos + 1:])
+    slice(this.children, 0, len(this.children) - 1)
+    n.parent = null
+    return n
+}
+
+func Node.ReplaceNode(oldNode ~Node, newNode *Node) *Node {
+    let i = this.IndexOf(oldNode)
+    if (i == -1) {
+        return null
+    }
+    return this.ReplaceAt(i, newNode)
+}
+
+func Node.ReplaceAt(int pos, newNode *Node) *Node {
+    newNode.parent = this
+    let n = take(this.children[pos])
+    this.children[pos] = newNode
+    n.parent = null
+    return n
+}
+
+func Node.Append(node *Node) {
+    node.parent = this
+    append(this.children, node)
+}
+
+func Node.InsertAt(int pos, node* Node) {
+    node.parent = this
+    append(this.children, null)
+    move(this.children[pos + 1:], this.children[pos: len(this.children) - 1]);
+}
+
+func Node.Traverse() Iterator<T> {
+    return {node: this}
+}
+
+func Node.First() ChildIterator<T> {
+    return {children: this.children, pos: 0}
+}
+
+func Node.Last() ChildIterator<T> {
+    return {children: this.children, pos: len(this.children) - 1}
+}
+
+
+func ChildIterator.prev() {
+    if (this.pos < 0) {
+        return
+    }
+    this.pos--
+}
+
+func ChildIterator.next() {
+    if (this.pos >= len(this.children)) {
+        return
+    }
+    this.pos++
+}
+
+func ChildIterator.IsNull() bool {
+    return this.pos < 0 || this.pos >= len(this.children)
+}
+
+
+func Iterator.next() {
+    if (this.node == null) {
+        return
+    }
+    if (len(this.node.children) > 0) {
+        this.node = this.node.children[0]
+        return
+    }
+    for(this.node.parent != null) {
+        let i = this.node.parent.IndexOf(this.node) + 1
+        if (i < len(this.node.parent.children)) {
+            this.node = this.node.parent.children[i]
+            return
+        }
+        this.node = this.node.parent
+    }
+    this.node = null
+}
+
+func Iterator.IsNull() bool {
+    return this.node == null
+}
