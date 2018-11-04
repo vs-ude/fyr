@@ -4552,8 +4552,8 @@ export class TypeChecker {
                 } else if (this.isString(left) && right instanceof SliceType && !TypeChecker.isLocalReference(right) && !this.isConst(enode.rhs.type) && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
                     // A slice of bytes or chars can be converted to a string by taking ownership away from the slice
                     enode.type = t;
-                } else if (left instanceof SliceType && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
-                    // A string can be casted into a sequence of bytes or chars by copying it
+                } else if (left instanceof SliceType && (left.mode == "strong" || left.mode == "unique") && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && this.isString(right)) {
+                    // A string can be casted into a unique or owning sequence of bytes or chars by copying it
                     enode.type = t;
                 } else if (this.isComplexOrType(right)) {
                     let ok = false;

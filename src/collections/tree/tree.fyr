@@ -88,7 +88,7 @@ func Node.Append(node *Node) {
 func Node.InsertAt(int pos, node* Node) {
     node.parent = this
     append(this.children, null)
-    move(this.children[pos + 1:], this.children[pos: len(this.children) - 1]);
+    move(this.children[pos + 1:], this.children[pos:]);
 }
 
 func Node.Traverse() Iterator<T> {

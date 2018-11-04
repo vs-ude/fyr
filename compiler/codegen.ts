@@ -1258,11 +1258,8 @@ export class CodeGenerator {
                     src_data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                     src_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                 }
-                let cond = b.assign(b.tmp(), "ne", "i8", [src_count, dest_count]);
-                b.ifBlock(cond);
-                b.assign(null, "trap", null, []);
-                b.end();
-                b.assign(null, "memmove", null, [dest_data_ptr, src_data_ptr, dest_count, size]);
+                let count = b.assign(b.tmp(), "min", "sint", [src_count, dest_count]);
+                b.assign(null, "memmove", null, [dest_data_ptr, src_data_ptr, count, size]);
                 break;
             }
             case "println": {
