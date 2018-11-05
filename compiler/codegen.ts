@@ -3193,8 +3193,8 @@ export class CodeGenerator {
                             src_data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                             src_count = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
                         }
-                        src_data_ptr_arr.push(src_data_ptr);
-                        src_count_arr.push(src_count);
+                        src_data_ptr_arr.unshift(src_data_ptr);
+                        src_count_arr.unshift(src_count);
                         // TODO: incref if the slice if necessary
                         req_count = b.assign(b.tmp(), "add", "sint", [req_count, src_count]);
                     } else {
@@ -3239,7 +3239,7 @@ export class CodeGenerator {
                 }
                 // This is the new target size of the slice
                 req_count = b.assign(b.tmp(), "add", "sint", [req_count, dest_count]);
-                let to: ssa.Variable;
+                let to = b.tmp();
 
                 // Is the array large enough? If not -> trap or return false or resize the array.
                 // Else, let to point to the location where to append.
@@ -3247,13 +3247,13 @@ export class CodeGenerator {
                 if (enode.op == "tryPush") {
                     cond = b.assign(b.tmp(), "le", "i8", [req_count, dest_cap]);
                     b.ifBlock(cond);
-                    to = b.assign(b.tmp(), "add", "addr", [dest_data_ptr, offset]);
+                    b.assign(to, "add", "addr", [dest_data_ptr, offset]);
                 } else if (enode.op == "push") {
                     cond = b.assign(b.tmp(), "gt", "i8", [req_count, dest_cap]);
                     b.ifBlock(cond);
                     b.assign(null, "trap", null, []);
                     b.end();
-                    to = b.assign(b.tmp(), "add", "addr", [dest_data_ptr, offset]);
+                    b.assign(to, "add", "addr", [dest_data_ptr, offset]);
                 } else if (enode.op == "append") {
                     cond = b.assign(b.tmp(), "gt", "i8", [req_count, dest_cap]);
                     b.ifBlock(cond);
@@ -3262,7 +3262,7 @@ export class CodeGenerator {
                     let newCount = b.assign(b.tmp(), "mul", "sint", [dest_cap, 2]);
                     let newCount2 = b.assign(b.tmp(), "max", "sint", [newCount, req_count]);
                     let newArray = b.assign(b.tmp(), "alloc_arr", "addr", [newCount2, size]);
-                    b.assign(null, "memcpy", null, [newArray, dest_data_ptr, dest_count]);
+                    b.assign(null, "memcpy", null, [newArray, dest_data_ptr, dest_count, size]);
                     if (head_addr instanceof ssa.Variable) {
                         b.assign(b.mem, "set_member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr"), newArray]);                    
                         let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
@@ -3271,9 +3271,9 @@ export class CodeGenerator {
                         b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr"), newArray]);
                         b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("array_ptr"), newArray]);
                     }
-                    to = b.assign(b.tmp(), "add", "addr", [newArray, offset]);
+                    b.assign(to, "add", "addr", [newArray, offset]);
                     b.elseBlock();
-                    to = b.assign(b.tmp(), "add", "addr", [dest_data_ptr, offset]);
+                    b.assign(to, "add", "addr", [dest_data_ptr, offset]);
                     b.end();
                 }
                         
@@ -3303,8 +3303,9 @@ export class CodeGenerator {
 
                 if (enode.op == "append") {
                     // Release the old array
-                    b.ifBlock(cond);
-                    b.assign(null, "free_arr", null, [dest_array]);
+                    let dtor = this.generateArrayDestructor(RestrictedType.strip(objType.arrayType) as ArrayType);
+                    b.ifBlock(cond);                    
+                    b.assign(null, "free_arr", null, [dest_array, dtor.getIndex()]);
                     b.end();
                 }
 
