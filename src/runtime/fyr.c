@@ -79,8 +79,10 @@ void fyr_free_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
         *iptr = INT_MIN + *iptr - 1;
         // TODO: Use implementation of realloc that ensures that data does not move while shrinkink
         if (dtr) dtr(ptr, *(((int_t*)ptr) - 1)); 
+#ifndef VALGRIND
         void* ignore = realloc(iptr, sizeof(int_t));
         assert(ignore == iptr);
+#endif
     }
 }
 
