@@ -922,8 +922,8 @@ primary2
   = "tryPush" [ \t]* "(" [ \t\n]* e: expressionList ")" {
       return new ast.Node({loc: fl(location()), op: "tryPush", parameters: e});
     }    
-  / "pop" [ \t]* "(" [ \t\n]* e: expressionList ")" {
-      return new ast.Node({loc: fl(location()), op: "pop", parameters: e});
+  / "pop" [ \t]* "(" [ \t\n]* e: expression ")" {
+      return new ast.Node({loc: fl(location()), op: "pop", lhs: e});
     }       
   / t: typedLiteral { return t; }
   / c: typeCast { return c; }

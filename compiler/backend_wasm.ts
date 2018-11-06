@@ -757,9 +757,11 @@ export class Wasm32Backend implements backend.Backend {
                 this.wf.parameters.push(t);
                 this.varStorage.set(n.assign, s);
                 if (false /*n.assign.gcDiscoverable*/) {
+                    /*
                     let index = this.varsFrame.addField("$param" + s.offset.toString(), t);
                     let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
                     this.varGCStorage.set(n.assign, sAlternative);
+                    */
                 } else if (this.wfIsAsync) {
                     // If the function yields, the heapstack must store the value of the parameter
                     let index = this.varsFrame.addField("$param" + s.offset.toString(), t);

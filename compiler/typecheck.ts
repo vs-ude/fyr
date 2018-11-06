@@ -4650,8 +4650,16 @@ export class TypeChecker {
                 this.checkIsNumber(enode.lhs, true);
                 enode.type = enode.lhs.type;
                 break;
-            case "pop":
-                throw "TODO" 
+            case "pop": {
+                this.checkExpression(enode.lhs, scope);
+                if (!this.isSlice(enode.lhs.type)) {
+                    throw new TypeError("'pop' is only allowed on slices", enode.loc);
+                }
+                this.checkIsMutable(enode.lhs, scope, true);
+                let t = RestrictedType.strip(enode.lhs.type) as SliceType;
+                enode.type = t.getElementType();                
+                break;
+            }
             case "push":
             case "tryPush":
             case "append":
