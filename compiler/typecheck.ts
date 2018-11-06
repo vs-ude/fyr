@@ -7094,7 +7094,7 @@ export class TypeChecker {
      * Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
      */
     public isTakeExpression(enode: Node): boolean {
-        if (enode.op == "clone" || enode.op == "take" || enode.op == "append" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
+        if (enode.op == "clone" || enode.op == "take" || enode.op == "pop" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (TypeChecker.isStrong(enode.type) || TypeChecker.isUnique(enode.type)))) {
             return true;
         }
         // A slice operation on a string creates a new string which already has a reference count of 1.

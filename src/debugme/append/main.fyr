@@ -1,4 +1,9 @@
 
+type Point struct {
+    x int
+    y int
+}
+
 export func main() int {
     let arr []byte = [...10]
     // slice(arr, 0, 0)
@@ -22,5 +27,10 @@ export func main() int {
 
     println(pop(s1), len(s1))
     println(pop(s1), len(s1))
+
+    var points []*Point = [{x: 1, y: 2}, {x: 3, y: 4}]
+    let p1 *Point = pop(points)
+    println(p1.x, p1.y)
+
     return 0
 }
