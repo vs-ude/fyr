@@ -3174,7 +3174,14 @@ export class CodeGenerator {
                 let new_count = b.assign(b.tmp(), "sub", "sint", [dest_count, 1]);
                 let read_addr = b.assign(b.tmp(), "mul", "sint", [size, new_count]);
                 read_addr = b.assign(b.tmp(), "add", "addr", [dest_data_ptr, read_addr]);
-
+                let result = b.assign(b.tmp(), "load", elementType, [read_addr, 0]);
+                // Fill the place with zeros
+                if (elementType instanceof ssa.StructType) {
+                    let tmp = b.assign(b.tmp(), "struct", elementType, this.generateZeroStruct(elementType));
+                    b.assign(b.mem, "store", elementType, [read_addr, 0, tmp]);                        
+                } else {
+                    b.assign(b.mem, "store", elementType, [read_addr, 0, 0]);                            
+                }
                 // Update length of the slice
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
@@ -3185,7 +3192,7 @@ export class CodeGenerator {
                 } else {
                     b.assign(b.mem, "store", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length"), new_count]);
                 }                
-                return b.assign(b.tmp(), "load", elementType, [read_addr, 0]);
+                return result;
             }
             case "push":
             case "tryPush":

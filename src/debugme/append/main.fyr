@@ -30,7 +30,6 @@ export func main() int {
 
     var points []*Point = [{x: 1, y: 2}, {x: 3, y: 4}]
     let p1 *Point = pop(points)
-    println(p1.x, p1.y)
-
+    println(len(points), p1.x, p1.y)
     return 0
 }
