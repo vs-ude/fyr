@@ -26,7 +26,7 @@ func Node.Size() int {
 }
 
 func Node.IndexOf(node ~Node<T>) int {
-    for(let i, n in this.children) {
+    for (let i, n in this.children) {
         if (n == node) {
             return i
         }
