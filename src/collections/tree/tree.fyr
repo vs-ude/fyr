@@ -1,23 +1,23 @@
 type Node<T> struct {
-    value T
-    parent ~Node
-    children []*Node
+    Value T
+    parent ~Node<T>
+    children []*Node<T>
 } 
 
 type Iterator<T> struct {
-    node ~Node<T>
+    Node ~Node<T>
 }
 
-type ChildIterator struct {
-    children ~[]*Node
+type ChildIterator<T> struct {
+    children ~[]*Node<T>
     pos int
 }
 
-func Node.Parent() ~Node {
+func Node.Parent() ~Node<T> {
     return this.parent
 }
 
-func Node.At(pos int) ~Node {
+func Node.At(pos int) ~Node<T> {
     return this.children[pos]
 }
 
@@ -25,7 +25,7 @@ func Node.Size() int {
     return len(this.children)
 }
 
-func Node.IndexOf(node ~Node) int {
+func Node.IndexOf(node ~Node<T>) int {
     for(let i, n in this.children) {
         if (n == node) {
             return i
@@ -38,7 +38,15 @@ func Node.Clear() {
     this.children = null
 }
 
-func Node.Remove(it ChildIterator<T>) (ChildIterator<T>, *Node) {
+func Node.RemoveAt(pos int) *Node<T> {
+    let n = take(this.children[pos])
+    move(this.children[pos:], this.children[pos + 1:])
+    slice(this.children, 0, len(this.children) - 1)
+    n.parent = null
+    return n
+}
+
+func Node.Remove(it ChildIterator<T>) (ChildIterator<T>, *Node<T>) {
     let n = this.RemoveAt(it.pos)
     return it, n
 }
@@ -48,7 +56,7 @@ func Node.Erase(it ChildIterator<T>) ChildIterator<T> {
     return it
 }
 
-func Node.RemoveNode(node ~Node) *Node {
+func Node.RemoveNode(node ~Node<T>) *Node<T> {
     let i = this.IndexOf(node)
     if (i == -1) {
         return null
@@ -56,23 +64,7 @@ func Node.RemoveNode(node ~Node) *Node {
     return this.RemoveAt(i)
 }
 
-func Node.RemoveAt(int pos) *Node {
-    let n = take(this.children[pos])
-    move(this.children[pos:], this.children[pos + 1:])
-    slice(this.children, 0, len(this.children) - 1)
-    n.parent = null
-    return n
-}
-
-func Node.ReplaceNode(oldNode ~Node, newNode *Node) *Node {
-    let i = this.IndexOf(oldNode)
-    if (i == -1) {
-        return null
-    }
-    return this.ReplaceAt(i, newNode)
-}
-
-func Node.ReplaceAt(int pos, newNode *Node) *Node {
+func Node.ReplaceAt(pos int, newNode *Node<T>) *Node<T> {
     newNode.parent = this
     let n = take(this.children[pos])
     this.children[pos] = newNode
@@ -80,19 +72,27 @@ func Node.ReplaceAt(int pos, newNode *Node) *Node {
     return n
 }
 
-func Node.Append(node *Node) {
+func Node.ReplaceNode(oldNode ~Node<T>, newNode *Node<T>) *Node<T> {
+    let i = this.IndexOf(oldNode)
+    if (i == -1) {
+        return null
+    }
+    return this.ReplaceAt(i, newNode)
+}
+
+func Node.Append(node *Node<T>) {
     node.parent = this
     append(this.children, node)
 }
 
-func Node.InsertAt(int pos, node* Node) {
+func Node.InsertAt(pos int, node* Node<T>) {
     node.parent = this
     append(this.children, null)
     move(this.children[pos + 1:], this.children[pos:]);
 }
 
 func Node.Traverse() Iterator<T> {
-    return {node: this}
+    return {Node: this}
 }
 
 func Node.First() ChildIterator<T> {
@@ -104,14 +104,14 @@ func Node.Last() ChildIterator<T> {
 }
 
 
-func ChildIterator.prev() {
+func ChildIterator.Prev() {
     if (this.pos < 0) {
         return
     }
     this.pos--
 }
 
-func ChildIterator.next() {
+func ChildIterator.Next() {
     if (this.pos >= len(this.children)) {
         return
     }
@@ -122,26 +122,58 @@ func ChildIterator.IsNull() bool {
     return this.pos < 0 || this.pos >= len(this.children)
 }
 
+func ChildIterator.Value() copy<T> {
+    return this.children[this.pos].Value
+}
 
-func Iterator.next() {
-    if (this.node == null) {
+func ChildIterator.Node() ~Node<T> {
+    return this.children[this.pos]
+}
+
+
+func Iterator.Next() {
+    if (this.Node == null) {
         return
     }
-    if (len(this.node.children) > 0) {
-        this.node = this.node.children[0]
+    if (len(this.Node.children) > 0) {
+        this.Node = this.Node.children[0]
         return
     }
-    for(this.node.parent != null) {
-        let i = this.node.parent.IndexOf(this.node) + 1
-        if (i < len(this.node.parent.children)) {
-            this.node = this.node.parent.children[i]
+    for(this.Node.parent != null) {
+        let i = this.Node.parent.IndexOf(this.Node) + 1
+        if (i < len(this.Node.parent.children)) {
+            this.Node = this.Node.parent.children[i]
             return
         }
-        this.node = this.node.parent
+        this.Node = this.Node.parent
     }
-    this.node = null
+    this.Node = null
 }
 
 func Iterator.IsNull() bool {
-    return this.node == null
+    return this.Node == null
+}
+
+func Iterator.Value() copy<T> {
+    return this.Node.Value
+}
+
+
+export func main() int {
+    let root *Node<int> = {Value: 42}
+    let child *Node<int> = {Value: 10}
+    child.Append({Value: 11})
+    child.Append({Value: 12})
+    child.Append({Value: 13})
+    root.Append(child)
+    root.Append({Value: 20})
+    root.Append({Value: 30})
+    println(root.Size())
+    for(let it = root.First(); !it.IsNull(); it.Next()) {
+        println(it.Value())
+    }
+    for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
+        println(it.Value())
+    }
+    return 0
 }

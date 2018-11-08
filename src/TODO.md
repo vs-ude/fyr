@@ -6,9 +6,14 @@ A way to make data ummutable. Check reference counting.
 
 ## Language Changes
 
-### Cast from const ^[]byte to string
+## Templates
 
-This should be a O(1) implementation
+Template types without parameters must not be used as types.
+
+~~Pointers with different modes must be comparable.~~
+
+Declare all members of a template instantiation before checking the body.
+Currently the functions must appear in a certain order to make it compile.
 
 ### Global Variables
 

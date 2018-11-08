@@ -2,6 +2,7 @@ import {Node, Location, AstFlags} from "./ast"
 import { Package, SystemCalls } from "./pkg";
 import {createHash} from "crypto";
 import { ENETDOWN } from "constants";
+import { endianness } from "os";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -4156,11 +4157,17 @@ export class TypeChecker {
                     enode.value = (enode.op == "==" ? "true" : "false");
                     enode.op = "bool";                    
                 } else if (enode.lhs.isUnifyableLiteral()) {
+                    if (tr instanceof PointerType || tr instanceof SliceType) {
+                        throw new TypeError("Pointers and literals cannot be compared", enode.loc);
+                    }
                     this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
                 } else if (enode.rhs.isUnifyableLiteral()) {
+                    if (tl instanceof PointerType || tl instanceof SliceType) {
+                        throw new TypeError("Pointers and literals cannot be compared", enode.loc);
+                    }
                     this.unifyLiterals(enode.lhs.type, enode.rhs, scope, enode.loc);
                 } else {
-                    this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
+                    this.checkIsAssignableType(tl, tr, enode.loc, "compare", true);
                 }
                 enode.type = TypeChecker.t_bool;
                 break;
@@ -5107,7 +5114,7 @@ export class TypeChecker {
 
     // TODO: Remove unbox
     // Checks whether the type 'from' can be assigned to the type 'to'.
-    public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equal" | "pointer", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
+    public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equal" | "pointer" | "compare", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
             toRestrictions = {isConst: false};
         }
@@ -5126,7 +5133,7 @@ export class TypeChecker {
         }
         
         // A const-mismatch can be tolerated if the value is a pure value and if it is being copied.
-        if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode != "assign" || !TypeChecker.isPureValue(to))) {
+        if (!toRestrictions.isConst && !!fromRestrictions.isConst && (mode == "pointer" || mode == "equal" || !TypeChecker.isPureValue(to))) {
             if (doThrow) {
                 throw new TypeError("Mismatch of const restriction on variables", loc);
             }
@@ -5142,7 +5149,7 @@ export class TypeChecker {
             }
         }
 
-        if (mode == "pointer") {
+        if (mode == "pointer" || mode == "compare") {
             if (to instanceof StructType && from instanceof StructType && to != from && from.doesExtend(to)) {
                 return true;
             }
@@ -5189,17 +5196,22 @@ export class TypeChecker {
                     }
                 }
             }
+            // TODO: Else check for exact type equality
         } else if (to instanceof PointerType && from == TypeChecker.t_null) {
             // null can be assigned to any pointer type
-            if (mode == "assign") {
+            if (mode == "assign" || mode == "compare") {
+                return true;
+            }
+        } else if (to == TypeChecker.t_null && from instanceof PointerType) {
+            if (mode == "compare") {
                 return true;
             }
         } else if (to instanceof PointerType && from instanceof UnsafePointerType) {
-            if (mode == "assign" && this.checkIsAssignableType(to.elementType, from.elementType, loc, "pointer", false, toRestrictions, fromRestrictions, templateParams)) {
+            if ((mode == "assign" || mode == "compare") && this.checkIsAssignableType(to.elementType, from.elementType, loc, "pointer", false, toRestrictions, fromRestrictions, templateParams)) {
                 return true;
             }
         } else if (to instanceof PointerType && from instanceof PointerType) {
-            if (to.mode == from.mode || (mode == "assign" &&
+            if (mode == "compare" || to.mode == from.mode || (mode == "assign" &&
                 (to.mode == "local_reference" ||
                 (to.mode == "reference" && (from.mode == "strong" || from.mode == "unique")) ||
                 (to.mode == "strong" && from.mode == "unique") ||
@@ -5210,23 +5222,32 @@ export class TypeChecker {
             }
         } else if (to instanceof UnsafePointerType && (from == TypeChecker.t_int || from == TypeChecker.t_uint || from == TypeChecker.t_null)) {
             // integers and null can be assigned to an usafe pointer type
-            if (mode == "assign") {
+            if (mode == "assign" || mode == "compare") {
+                return true;
+            }
+        } else if ((to == TypeChecker.t_int || to == TypeChecker.t_uint || to == TypeChecker.t_null) && from instanceof UnsafePointerType) {
+            // integers and null can be assigned to an usafe pointer type
+            if (mode == "compare") {
                 return true;
             }
         } else if (to instanceof UnsafePointerType && (from instanceof UnsafePointerType || from instanceof PointerType)) {            
             if (to.elementType == TypeChecker.t_void) {
                 // Safe and unsafe pointers to anything can be assigned to #void
-                if (mode == "assign") {
+                if (mode == "assign" || mode == "compare") {
                     return true;
                 }
             }
             if (from.elementType == TypeChecker.t_void) {
                 // #void can be assigned to any unsafe pointer
-                if (mode == "assign") {
+                if (mode == "assign" || mode == "compare") {
                     return true;
                 }
             }
-            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, mode == "assign" ? "pointer" : "equal", false, toRestrictions, fromRestrictions, templateParams)) {
+            if (this.checkIsAssignableType(to.elementType, from.elementType, loc, (mode == "assign" || mode == "compare") ? "pointer" : "equal", false, toRestrictions, fromRestrictions, templateParams)) {
+                return true;
+            }            
+        } else if (to instanceof PointerType && from instanceof UnsafePointerType) {            
+            if (mode == "compare" && this.checkIsAssignableType(to.elementType, from.elementType, loc, "pointer", false, toRestrictions, fromRestrictions, templateParams)) {
                 return true;
             }            
         } else if (to instanceof ArrayType && from instanceof ArrayType) {
@@ -5234,7 +5255,7 @@ export class TypeChecker {
                 return true;
             }
         } else if (to instanceof SliceType && from instanceof SliceType) {
-            if (to.mode == from.mode || (mode == "assign" && 
+            if (mode == "compare" || to.mode == from.mode || (mode == "assign" && 
                 (to.mode == "local_reference" ||
                 (to.mode == "reference" && (from.mode == "strong" || from.mode == "unique")) ||
                 (to.mode == "strong" && from.mode == "unique") ||
@@ -5243,6 +5264,16 @@ export class TypeChecker {
                     return true;
                 }            
             }
+        } else if (to instanceof SliceType && from == TypeChecker.t_null) {
+            // null can be assigned to any pointer type
+            if (mode == "assign" || mode == "compare") {
+                return true;
+            }
+        } else if (to == TypeChecker.t_null && from instanceof SliceType) {
+            // null can be assigned to any pointer type
+            if (mode == "compare") {
+                return true;
+            }
         } else if (to instanceof MapType && from instanceof MapType) {
             if (this.checkIsAssignableType(to.keyType, from.keyType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams) &&
                 this.checkIsAssignableType(to.valueType, from.valueType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
@@ -5250,7 +5281,14 @@ export class TypeChecker {
             }
         } else if (to == TypeChecker.t_any) {
             // Everything can be asssigned to the empty interface
-            return true;
+            if (mode == "assign" || mode == "compare") {
+                return true;
+            }
+        } else if (from == TypeChecker.t_any) {            
+            // Everything can be asssigned to the empty interface
+            if (mode == "compare") {
+                return true;
+            }
         } else if (to instanceof InterfaceType && mode == "pointer") {
             if (from instanceof InterfaceType) {
                 // Check two interfaces
@@ -5287,7 +5325,7 @@ export class TypeChecker {
         if (!doThrow) {
             return false;
         }
-        throw new TypeError("Type " + from.toString() + " cannot be assigned to type " + to.toString(), loc);        
+        throw new TypeError("Type " + from.toString() + " cannot be " + (mode == "compare" ? "compared to type " : "assigned to type ") + to.toString(), loc);        
     }
 
     public checkFunctionArguments(ft: FunctionType, args: Array<Node> | null, scope: Scope, loc: Location, doThrow: boolean = true): boolean {

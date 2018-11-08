@@ -3322,7 +3322,7 @@ export class CodeGenerator {
                         b.assign(b.mem, "set_member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr"), newArray]);
                     } else {
                         b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr"), newArray]);
-                        b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("array_ptr"), newArray]);
+                        b.assign(b.mem, "store", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr"), newArray]);
                     }
                     b.assign(to, "add", "addr", [newArray, offset]);
                     b.elseBlock();
