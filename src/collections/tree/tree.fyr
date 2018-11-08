@@ -139,7 +139,7 @@ func Iterator.Next() {
         this.Node = this.Node.children[0]
         return
     }
-    for(this.Node.parent != null) {
+    for (this.Node.parent != null) {
         let i = this.Node.parent.IndexOf(this.Node) + 1
         if (i < len(this.Node.parent.children)) {
             this.Node = this.Node.parent.children[i]
