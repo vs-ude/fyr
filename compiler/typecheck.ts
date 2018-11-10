@@ -4157,12 +4157,12 @@ export class TypeChecker {
                     enode.value = (enode.op == "==" ? "true" : "false");
                     enode.op = "bool";                    
                 } else if (enode.lhs.isUnifyableLiteral()) {
-                    if (tr instanceof PointerType || tr instanceof SliceType) {
+                    if ((tr instanceof PointerType || tr instanceof SliceType) && enode.lhs.op != "null") {
                         throw new TypeError("Pointers and literals cannot be compared", enode.loc);
                     }
                     this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
                 } else if (enode.rhs.isUnifyableLiteral()) {
-                    if (tl instanceof PointerType || tl instanceof SliceType) {
+                    if ((tl instanceof PointerType || tl instanceof SliceType) && enode.rhs.op != "null") {
                         throw new TypeError("Pointers and literals cannot be compared", enode.loc);
                     }
                     this.unifyLiterals(enode.lhs.type, enode.rhs, scope, enode.loc);
@@ -5064,6 +5064,15 @@ export class TypeChecker {
                     return false;
                 }
                 throw new TypeError("Type mismatch between object literal and " + t.toString(), loc);
+            case "null":
+                if (this.isSafePointer(t) || this.isUnsafePointer(t) || this.isSlice(t)) {
+                    node.type = t;
+                    return true;
+                }
+                if (!doThrow) {
+                    return false;
+                }
+                throw new TypeError("Type mismatch between null and " + t.toString(), loc);
             default:
                 throw "Implementation error";
         }
@@ -5197,7 +5206,7 @@ export class TypeChecker {
                 }
             }
             // TODO: Else check for exact type equality
-        } else if (to instanceof PointerType && from == TypeChecker.t_null) {
+/*        } else if (to instanceof PointerType && from == TypeChecker.t_null) {
             // null can be assigned to any pointer type
             if (mode == "assign" || mode == "compare") {
                 return true;
@@ -5205,7 +5214,7 @@ export class TypeChecker {
         } else if (to == TypeChecker.t_null && from instanceof PointerType) {
             if (mode == "compare") {
                 return true;
-            }
+            } */
         } else if (to instanceof PointerType && from instanceof UnsafePointerType) {
             if ((mode == "assign" || mode == "compare") && this.checkIsAssignableType(to.elementType, from.elementType, loc, "pointer", false, toRestrictions, fromRestrictions, templateParams)) {
                 return true;
@@ -5264,7 +5273,7 @@ export class TypeChecker {
                     return true;
                 }            
             }
-        } else if (to instanceof SliceType && from == TypeChecker.t_null) {
+/*        } else if (to instanceof SliceType && from == TypeChecker.t_null) {
             // null can be assigned to any pointer type
             if (mode == "assign" || mode == "compare") {
                 return true;
@@ -5273,7 +5282,7 @@ export class TypeChecker {
             // null can be assigned to any pointer type
             if (mode == "compare") {
                 return true;
-            }
+            } */
         } else if (to instanceof MapType && from instanceof MapType) {
             if (this.checkIsAssignableType(to.keyType, from.keyType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams) &&
                 this.checkIsAssignableType(to.valueType, from.valueType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {

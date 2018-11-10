@@ -156,7 +156,7 @@ export class Node {
         if (this.op == "int" || this.op == "float" || this.op == "str" || this.op == "rune") {
             return true;
         }
-        if (this.op == "array" || this.op == "object" || this.op == "tuple") {
+        if (this.op == "array" || this.op == "object" || this.op == "tuple" || this.op == "null") {
             if (this.lhs) { // a typed literal?
                 return false;
             } 

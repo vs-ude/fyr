@@ -1791,6 +1791,14 @@ export class CodeGenerator {
     private processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         switch(enode.op) {
             case "null":
+                if (this.tc.isSlice(enode.type)) {
+                    if (TypeChecker.isLocalReference(enode.type)) {
+                        let zeros = this.generateZeroStruct(this.localSlicePointer);
+                        return b.assign(b.tmp(), "struct", this.localSlicePointer, zeros);
+                    }
+                    let zeros = this.generateZeroStruct(this.slicePointer);
+                    return b.assign(b.tmp(), "struct", this.slicePointer, zeros);
+                }
                 return 0;
             case "int":
                 return parseInt(enode.value);
