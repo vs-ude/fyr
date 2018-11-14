@@ -7338,4 +7338,5 @@ export class TypeError {
 
     public message: string;
     public location: Location;
+    public name: string = "TypeError";
 }
