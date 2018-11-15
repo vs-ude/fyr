@@ -169,11 +169,28 @@ export func main() int {
     root.Append({Value: 20})
     root.Append({Value: 30})
     println(root.Size())
-    for(let it = root.First(); !it.IsNull(); it.Next()) {
-        println(it.Value())
-    }
-    for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
-        println(it.Value())
-    }
+//    let it = root.First()
+//    for(let it = root.First(); !it.IsNull(); it.Next()) {
+//        println(it.Value())
+//    }
+    let it = root.Traverse()
+//    println(it.Value())
+    it.Next()
+//    println(it.Value())
+    it.Next()
+//    println(it.Value(), it.IsNull())
+    println("Now comes the error")
+    it.Next()
+    println("Error happened")
+//    println(it.Value(), it.IsNull())
+//    it.Next()
+//    println(it.Value(), it.IsNull())
+//    it.Next()
+//    println(it.Value(), it.IsNull())
+//    it.Next()
+//    println(it.Value(), it.IsNull())
+//    for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
+//        println(it.Value())
+//    }
     return 0
 }

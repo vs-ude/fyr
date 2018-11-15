@@ -3358,15 +3358,22 @@ export class CodeGenerator {
                     } else {
                         b.assign(b.mem, "store", elementType, [to, 0, src_values[value_count]]);
                         b.assign(to, "add", "addr", [to, size]);
+                        if ((p.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {      
+                            if (!(src_values[value_count] instanceof ssa.Variable) && !(src_values[value_count] instanceof ssa.Pointer)) {
+                                throw "Implementation error";
+                            }
+                            // Fill the RHS with zeros
+                            this.processFillZeros(src_values[value_count] as ssa.Variable | ssa.Pointer, RestrictedType.strip(objType.getElementType()), b);
+                        }            
                         value_count++;
                     }
                 }
 
                 if (enode.op == "append") {
                     // Release the old array
-                    let dtor = this.generateArrayDestructor(RestrictedType.strip(objType.arrayType) as ArrayType);
+                    // let dtor = this.generateArrayDestructor(RestrictedType.strip(objType.arrayType) as ArrayType);
                     b.ifBlock(cond);                    
-                    b.assign(null, "free_arr", null, [dest_array, dtor.getIndex()]);
+                    b.assign(null, "free_arr", null, [dest_array, -1]);
                     b.end();
                 }
 
@@ -3741,6 +3748,7 @@ export class CodeGenerator {
         let st = this.getSSAType(elementType);
         b.assign(pointer, "add", "addr", [pointer, ssa.alignedSizeOf(st)]);
         b.assign(counter, "add", "addr", [counter, 1]);
+        b.br(loop);
         b.end();
         b.end();
         b.end();

@@ -32,7 +32,8 @@ void fyr_free(addr_t ptr, fyr_dtr_t dtr) {
     if (ptr == NULL) {
         return;
     }
-
+    printf("fyr_free\n");
+    *(int*)0 = 0;
     int_t* lptr = ((int_t*)ptr) - 2;
     int_t* iptr = ((int_t*)ptr) - 1;
     if (*iptr == 1) {
@@ -185,8 +186,10 @@ void fyr_unlock(addr_t ptr, fyr_dtr_t dtr) {
             free(lptr);
         } else {
             if (dtr) dtr(ptr);
+#ifndef VALGRIND
             void* ignore = realloc(lptr, 2 * sizeof(int_t));
             assert(ignore == lptr);
+#endif
         }
     }
 }
