@@ -177,5 +177,6 @@ export func main() int {
     for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
         println(it.Value())
     }
+
     return 0
 }

@@ -3541,17 +3541,22 @@ export class TypeChecker {
                 return;
             case "if":
             {
-                let s = new Scope(scope);
-                snode.scope = s;
+                let s: Scope;
                 // Assignment in the if-clause?
                 if (snode.lhs) {
+                    snode.lhs.scope = new Scope(scope)
                     let initScopeExit = new ScopeExit();
                     initScopeExit.fallthrough = scope;
-                    this.checkStatement(snode.lhs, s, initScopeExit);
+                    this.checkStatement(snode.lhs, snode.lhs.scope, initScopeExit);
                     if (initScopeExit.returns || initScopeExit.breaks || initScopeExit.continues) {
                         throw new TypeError("break, return and continue are not allowed inside the initialization statement of an if clause.", snode.loc);
                     }
+                    // initScopeExit can be ignored furtheron, since it does neither return nor break or continue.
+                    s = new Scope(snode.lhs.scope);
+                } else {
+                    s = new Scope(scope);
                 }
+                snode.scope = s;
                 // Check the if-clause
                 this.checkExpression(snode.condition, s);
                 this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.type, snode.condition.loc, "assign", true);

@@ -424,12 +424,13 @@ export class CodeGenerator {
                 break;
             case "if":
             {
-                this.processScopeVariables(b, vars, snode.scope);
                 if (snode.lhs) {
+                    this.processScopeVariables(b, vars, snode.lhs.scope);
                     this.processStatement(f, snode.scope, snode.lhs, b, vars, blocks);
                 }
                 let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars, TypeChecker.t_bool);
                 b.ifBlock(tmp);
+                this.processScopeVariables(b, vars, snode.scope);
                 for(let st of snode.statements) {
                     this.processStatement(f, snode.scope, st, b, vars, blocks);
                 }
@@ -439,6 +440,9 @@ export class CodeGenerator {
                     this.processStatement(f, snode.elseBranch.scope, snode.elseBranch, b, vars, blocks);
                 }
                 b.end();
+                if (snode.lhs) {
+                    this.freeScopeVariables(null, b, vars, snode.lhs.scope);
+                }
                 break;
             }
             case "else":

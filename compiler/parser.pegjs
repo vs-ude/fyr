@@ -462,8 +462,8 @@ statement
       return new ast.Node({loc: fl(location()), op: "return", lhs: e? e : undefined});
     }
   / "if" [ \t]* "(" [ \t\n]* init:simpleStatement e:([ \t]* ";" [ \t]* expression)? ")" [ \t]* b:block el:("else" [ \t\n]* elseBranch)? {
-      if (e && (init.op != "var" && init.op != "=")) {
-         expected("an assignment or variable definition ", init.loc);
+      if (e && (init.op != "var" && init.op != "let" && init.op != "=")) {
+         expected("an assignment or variable definition", init.loc);
       }
       if (!e && isAssignment(init)) {
           expected("'an expression after the assignment", init.loc);
