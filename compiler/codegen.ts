@@ -6,6 +6,7 @@ import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
+import { StringDecoder } from "string_decoder";
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
@@ -865,18 +866,19 @@ export class CodeGenerator {
                 let val: ssa.Variable;
                 let counter: ssa.Variable;
                 let ptr: ssa.Variable;
-                let len: ssa.Variable | number;
-                this.processScopeVariables(b, vars, snode.scope);
+                let len: ssa.Variable | number;                
                 //
                 // Loop initialization
                 //
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     // A c-style for loop
-                    this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
+                    this.processScopeVariables(b, vars, snode.condition.scope);
+                    this.processStatement(f, snode.condition.scope, snode.condition.lhs, b, vars, blocks);
                 } else if (snode.condition && snode.condition.op == "let_in") {
                     //
                     // A for loop of the form "for(let i in list) or for(let i, j in list)"
                     //
+                    this.processScopeVariables(b, vars, snode.condition.scope);
                     let t = RestrictedType.strip(snode.condition.rhs.type);
                     //
                     // Initialize the counter with 0
@@ -884,13 +886,13 @@ export class CodeGenerator {
                     if (snode.condition.lhs.op == "tuple") {
                         if (snode.condition.lhs.parameters[0].value != "_") {
                             // Initialize the counter with 0                            
-                            let element = snode.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
+                            let element = snode.condition.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
                             counter = vars.get(element);
                         } else {
                             counter = b.tmp();
                         }
                         if (snode.condition.lhs.parameters[1].value != "_") {
-                            let valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
+                            let valElement = snode.condition.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
                             val = vars.get(valElement);
                             if (valElement.isForLoopPointer) {
                                 ptr = val;
@@ -898,7 +900,7 @@ export class CodeGenerator {
                         }
                     } else {
                         if (snode.condition.lhs.value != "_") {
-                            let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
+                            let element = snode.condition.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
                             val = vars.get(element);                                
                             if (element.isForLoopPointer) {
                                 ptr = val;
@@ -914,9 +916,9 @@ export class CodeGenerator {
                         // TODO: Incref
                         let sliceHeader: ssa.Pointer | ssa.Variable;
                         if (this.isLeftHandSide(snode.condition.rhs)) {
-                            sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                            sliceHeader = this.processLeftHandExpression(f, snode.condition.scope, snode.condition.rhs, b, vars);
                         } else {
-                            sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
+                            sliceHeader = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
                         }
                         if (sliceHeader instanceof ssa.Variable) {
                             if (t.mode != "local_reference") {
@@ -940,7 +942,7 @@ export class CodeGenerator {
                         // Get the address of the array
                         len = t.size;
                         if (this.isLeftHandSide(snode.condition.rhs)) {
-                            let arr = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                            let arr = this.processLeftHandExpression(f, snode.condition.scope, snode.condition.rhs, b, vars);
                             if (arr instanceof ssa.Variable) {
                                 b.assign(ptr, "addr_of", "addr", [arr]);
                             } else {
@@ -950,12 +952,12 @@ export class CodeGenerator {
                                 }
                             }
                         } else {
-                            let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
+                            let arr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
                             b.assign(ptr, "addr_of", "addr", [arr]);
                         }
                     } else if (t == TypeChecker.t_string) {
                         // TODO: Incref
-                        ptr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, TypeChecker.t_string) as ssa.Variable;
+                        ptr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, TypeChecker.t_string) as ssa.Variable;
                         len = b.assign(b.tmp(), "len_str", "sint", [ptr]);    
                     } else {
                         throw "TODO map"
@@ -969,7 +971,7 @@ export class CodeGenerator {
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.condition) {
-                            let tmp = this.processExpression(f, snode.scope, snode.condition.condition, b, vars, TypeChecker.t_bool);
+                            let tmp = this.processExpression(f, snode.condition.scope, snode.condition.condition, b, vars, TypeChecker.t_bool);
                             let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                             b.br_if(tmp2, outer);
                         }
@@ -1025,11 +1027,12 @@ export class CodeGenerator {
                         }
                     } else {
                         // A for loop of the form: "for( condition )"
-                        let tmp = this.processExpression(f, snode.scope, snode.condition, b, vars, TypeChecker.t_bool);
+                        let tmp = this.processExpression(f, snode.condition.scope, snode.condition, b, vars, TypeChecker.t_bool);
                         let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                         b.br_if(tmp2, outer);
                     }
                 }
+                this.processScopeVariables(b, vars, snode.scope);
                 //
                 // Loop body
                 //
@@ -1037,6 +1040,7 @@ export class CodeGenerator {
                 for(let s of snode.statements) {
                     this.processStatement(f, snode.scope, s, b, vars, {body: body, outer: outer});
                 }
+                this.freeScopeVariables(null, b, vars, snode.scope);
                 //
                 // Loop footer
                 //
@@ -1061,7 +1065,9 @@ export class CodeGenerator {
                 b.br(loop);
                 b.end();
                 b.end();
-                this.freeScopeVariables(null, b, vars, snode.scope);
+                if (snode.condition) {
+                    this.freeScopeVariables(null, b, vars, snode.condition.scope);
+                }
                 break;
             }
             case "continue":

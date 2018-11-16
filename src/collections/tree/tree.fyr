@@ -172,7 +172,6 @@ export func main() int {
     
     for(let it = root.First(); !it.IsNull(); it.Next()) {
         println(it.Value())
-//        let fuck *Node<int> = {}
     }
     for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
         println(it.Value())

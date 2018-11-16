@@ -3585,38 +3585,44 @@ export class TypeChecker {
                 return;
             }
             case "for":
-                let forScope = new Scope(scope);
-                snode.scope = forScope;
-                forScope.forLoop = true;
+            {
+                let forScope: Scope;
                 if (snode.condition) {
+                    snode.condition.scope = new Scope(scope);                    
                     if (snode.condition.op == ";;") {
                         if (snode.condition.lhs) {
                             let initScopeExit = new ScopeExit();
                             initScopeExit.fallthrough = scope;
-                            this.checkStatement(snode.condition.lhs, forScope, initScopeExit);
+                            this.checkStatement(snode.condition.lhs, snode.condition.scope, initScopeExit);
                             if (initScopeExit.returns || initScopeExit.breaks || initScopeExit.continues) {
                                 throw new TypeError("break, return and continue are not allowed inside the initialization statement of a for loop.", snode.loc);
                             }
                         }
                         if (snode.condition.condition) {
-                            this.checkExpression(snode.condition.condition, forScope);
+                            this.checkExpression(snode.condition.condition, snode.condition.scope);
                             this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
                         }
                         if (snode.condition.rhs) {
                             let loopScopeExit = new ScopeExit();
                             loopScopeExit.fallthrough = scope;
-                            this.checkStatement(snode.condition.rhs, forScope, loopScopeExit);
+                            this.checkStatement(snode.condition.rhs, snode.condition.scope, loopScopeExit);
                             if (loopScopeExit.returns || loopScopeExit.breaks || loopScopeExit.continues) {
                                 throw new TypeError("break, return and continue are not allowed inside the loop statement of a for loop.", snode.loc);
                             }
                         }
-                    } else {
-                        this.checkStatement(snode.condition, forScope, scopeExit);
+                    } else {                        
+                        this.checkStatement(snode.condition, snode.condition.scope, scopeExit);
                     }
+                    forScope = new Scope(snode.condition.scope);
+                } else {
+                    forScope = new Scope(scope);
                 }
+                forScope.forLoop = true;
+                snode.scope = forScope;
                 snode.scopeExit = this.checkStatements(snode.statements, forScope);
-                // TODO: Merge returns
+                scopeExit.merge(snode.scopeExit);                
                 return;
+            }
             case "var":
             case "let":
                 if (!snode.rhs) {
