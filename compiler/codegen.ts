@@ -4109,7 +4109,6 @@ export class CodeGenerator {
                 throw "Implementation error"
             }
             if (rhs instanceof ssa.Variable) {
-                console.log("Filling with zeros", rhs.name);
                 let st = this.getSSAType(rhsNode.type) as ssa.StructType;
                 // Make a copy of the data, otherwise it will be overwritten with zeros
                 rhsData = b.assign(b.tmp(), "copy", st, [rhsData]);
@@ -4123,10 +4122,8 @@ export class CodeGenerator {
     private functionArgumentDecref(decrefVar: ssa.Variable, rhsNode: Node, action: "none" | "decref" | "free" | "unlock", b: ssa.Builder): void {
         // If the variable has already been zero'd out, there is no need to destruct it.
         if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
-            console.log("No need to destruct", decrefVar.name)
             return;
         }
-        console.log("Destruct", decrefVar.name)
         let t = RestrictedType.strip(rhsNode.type);
         if (t instanceof PointerType) {
             t = t.elementType;

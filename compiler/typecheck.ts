@@ -6684,7 +6684,9 @@ export class TypeChecker {
             // Set the group of the LHS variable to the RHS group
 //            console.log("!!!!!!! Assiging left to right", lhsVariable.name);
             if (scope.resolveGroup(lhsVariable) == null) {
-                console.log("Empty on assignment", lhsVariable.name);
+                // console.log("Empty on assignment", lhsVariable.name);
+                // The variable being assigned to is currently not accessible.
+                // Hence, it has no value that needs to be destructed before assignment.
                 (lnode as Node).flags |= AstFlags.EmptyOnAssignment;
             }
             scope.setGroup(lhsVariable, rightGroup);
