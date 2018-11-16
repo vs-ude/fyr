@@ -17,7 +17,8 @@ export enum AstFlags {
     // Used on array literals. Indicates that the array literal is incomplete
     // and implies that the variable (to which this literal is assigned) must be
     // filled with zero's first. 
-    FillArray = 4
+    FillArray = 4,
+    EmptyOnAssignment = 8
 }
 
 export type NodeConfig = {

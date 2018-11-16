@@ -63,7 +63,7 @@ export class Wasm32Backend implements backend.Backend {
     constructor() {
         this.tr = new SMTransformer();
         this.optimizer = new Optimizer();
-        this.stackifier = new Stackifier(this.optimizer);
+        this.stackifier = new Stackifier();
         this.funcs = [];
         this.globalVarStorage = new Map<Variable, Wasm32Storage>();
         this.globalVariables = [];

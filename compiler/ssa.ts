@@ -898,7 +898,7 @@ export class Optimizer {
                 this._removeDeadCode1(n.prev[1], n.blockPartner);
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var" || n.kind == "return") {
                 // Do nothing by intention
-            } else if (n.kind == "copy" && n.args[0] instanceof Variable && (n.args[0] as Variable).writeCount == 1 && (n.args[0] as Variable).readCount == 1) {
+            } else if (n.kind == "copy" && n.assign.writeCount == 1 && n.args[0] instanceof Variable && (n.args[0] as Variable).writeCount == 1 && (n.args[0] as Variable).readCount == 1) {
                 let v = n.args[0] as Variable;
                 v.isCopy = true;
                 v.copiedValue = n.assign;
@@ -1314,15 +1314,12 @@ export class SMTransformer {
 }
 
 export class Stackifier {
-    constructor(optimizer: Optimizer) {
-        this.optimizer = optimizer;
+    constructor() {
     }
 
     public stackifyStep(start: Node, end: Node) {
         let n = start.next[0];
-        let last: Node;
         for( ; n && n != end; ) {
-            last = n;
             if (n.kind == "addr_of") {
                 n = n.next[0];
             } else {
@@ -1410,6 +1407,7 @@ export class Stackifier {
      * read between 'n' and its assignment.
      * The variable assignment can then be inlined with a tee.
      */
+    /*
     private findInlineForMultipleReads(n: Node, v: Variable, doNotInline: Array<Variable>, assigned: Map<Variable, boolean>): Node {
         for( ;n; ) {
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
@@ -1441,6 +1439,7 @@ export class Stackifier {
         }
         return null;
     }
+    */
 
     private collectAssignments(n: Node, v: Variable, assigned: Map<Variable, boolean>): boolean {
         if (n.assign) {
@@ -1475,6 +1474,7 @@ export class Stackifier {
         return false;
     }
 
+    /*
     private readsFromVariable(n: Node, v: Variable): boolean {
         for(let a of n.args) {
             if (a instanceof Variable && a == v) {
@@ -1487,6 +1487,7 @@ export class Stackifier {
         }
         return false;
     }
+    */
 
     private readsFromVariables(n: Node, vars: Map<Variable, boolean>): boolean {
         for(let a of n.args) {
@@ -1515,5 +1516,4 @@ export class Stackifier {
         return false;
     }
 
-    private optimizer: Optimizer;
 }

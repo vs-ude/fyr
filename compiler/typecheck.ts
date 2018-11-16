@@ -6321,7 +6321,24 @@ export class TypeChecker {
             case "comment":
             case "yield":
                 break;
-            case "let_in":
+            case "let_in": {
+                let flags = TypeChecker.hasReferenceOrStrongPointers(snode.rhs.type) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
+                let g = this.checkGroupsInExpression(snode.rhs, scope, flags);                
+                if (snode.lhs.op == "tuple") {
+                    if (snode.lhs.parameters[0].value != "_") {
+                        let v = scope.resolveElement(snode.lhs.parameters[0].value);
+                        scope.setGroup(v, new Group(GroupKind.Free));
+                    }
+                    if (snode.lhs.parameters[1].value != "_") {
+                        let v = scope.resolveElement(snode.lhs.parameters[0].value);
+                        scope.setGroup(v, g);    
+                    }
+                } else {
+                    let v = scope.resolveElement(snode.lhs.value);
+                    scope.setGroup(v, g);
+                }
+                break;
+            }
             case "var":
             case "let":
                 if (snode.rhs) {
@@ -6629,7 +6646,7 @@ export class TypeChecker {
         };
 
         // Assigning to a strong or unique pointer? Then the RHS must let go of its ownership
-        if (TypeChecker.hasStrongOrUniquePointers(ltype)) {
+        if (TypeChecker.hasStrongOrUniquePointers(ltype) || (!this.isSafePointer(ltype) && !this.isSlice(ltype) && !TypeChecker.isPureValue(ltype))) {
             if (rhsIsVariable) {
                 // Make the RHS variable unavailable, since the LHS is not the owner and there can be only one owner
                 if (!rnodeReuse) {
@@ -6666,6 +6683,10 @@ export class TypeChecker {
         if (lhsIsVariable && (!(lhsVariable instanceof Variable) || (!lhsVariable.isGlobal && !lhsVariable.isReferencedWithRefcounting))) {
             // Set the group of the LHS variable to the RHS group
 //            console.log("!!!!!!! Assiging left to right", lhsVariable.name);
+            if (scope.resolveGroup(lhsVariable) == null) {
+                console.log("Empty on assignment", lhsVariable.name);
+                (lnode as Node).flags |= AstFlags.EmptyOnAssignment;
+            }
             scope.setGroup(lhsVariable, rightGroup);
         } else {
             // Assigning to an expression of type unique pointer?

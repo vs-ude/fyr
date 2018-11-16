@@ -585,7 +585,7 @@ export class CodeGenerator {
                                     let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     let dest = destinations[destCount];
                                     destCount++;
-                                    // Assigning to an owning pointer? -> destruct the LHS before assigning the RHS
+                                    // Assigning to a value containing pointers? -> destruct the LHS before assigning the RHS
                                     if (!TypeChecker.isPureValue(snode.lhs.type)) {
                                         // The 'dest != rhs' covers the case of assigning a variable to itself without a take expression
                                         if (dest instanceof ssa.Pointer) {
@@ -601,7 +601,7 @@ export class CodeGenerator {
                                     } else {
                                         val = b.assign(b.tmp(), "member", etype, [source, i]);
                                     }
-                                    // Reference counting to pointers
+                                    // Reference counting for pointers
                                     if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                                         if (this.tc.isInterface(p.type)) {
@@ -685,12 +685,14 @@ export class CodeGenerator {
                     } else {
                         rhs = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     }
-                    // Assigning to an owning pointer? -> destruct the LHS before assigning the RHS
+                    // Assigning to a value with pointer? -> destruct the LHS before assigning the RHS
                     if (!TypeChecker.isPureValue(snode.lhs.type)) {
-                        if (dest instanceof ssa.Pointer) {
-                            this.callDestructorOnPointer(snode.lhs.type, dest, b);
-                        } else {
-                            this.callDestructorOnVariable(snode.lhs.type, dest, b);
+                        if ((snode.lhs.flags & AstFlags.EmptyOnAssignment) != AstFlags.EmptyOnAssignment) {
+                            if (dest instanceof ssa.Pointer) {
+                                this.callDestructorOnPointer(snode.lhs.type, dest, b);
+                            } else {
+                                this.callDestructorOnVariable(snode.lhs.type, dest, b);
+                            }
                         }
                     }
                     let data: ssa.Variable | number;
@@ -4107,6 +4109,7 @@ export class CodeGenerator {
                 throw "Implementation error"
             }
             if (rhs instanceof ssa.Variable) {
+                console.log("Filling with zeros", rhs.name);
                 let st = this.getSSAType(rhsNode.type) as ssa.StructType;
                 // Make a copy of the data, otherwise it will be overwritten with zeros
                 rhsData = b.assign(b.tmp(), "copy", st, [rhsData]);
@@ -4118,6 +4121,12 @@ export class CodeGenerator {
     }
 
     private functionArgumentDecref(decrefVar: ssa.Variable, rhsNode: Node, action: "none" | "decref" | "free" | "unlock", b: ssa.Builder): void {
+        // If the variable has already been zero'd out, there is no need to destruct it.
+        if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
+            console.log("No need to destruct", decrefVar.name)
+            return;
+        }
+        console.log("Destruct", decrefVar.name)
         let t = RestrictedType.strip(rhsNode.type);
         if (t instanceof PointerType) {
             t = t.elementType;

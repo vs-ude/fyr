@@ -53,7 +53,7 @@ export class CBackend implements backend.Backend {
     constructor(pkg: Package) {
         this.pkg = pkg;
         this.optimizer = new Optimizer();
-        this.stackifier = new Stackifier(this.optimizer);
+        this.stackifier = new Stackifier();
         this.module = new CModule();
         this.operatorMap.set("mul", "*");
         this.operatorMap.set("add", "+");

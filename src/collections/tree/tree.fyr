@@ -162,6 +162,7 @@ func Iterator.Value() copy<T> {
 export func main() int {
     let root *Node<int> = {Value: 42}
     let child *Node<int> = {Value: 10}
+    let child2 ~Node<int> = child
     child.Append({Value: 11})
     child.Append({Value: 12})
     child.Append({Value: 13})
@@ -169,13 +170,16 @@ export func main() int {
     root.Append({Value: 20})
     root.Append({Value: 30})
     println(root.Size())
-    
+    println(root.IndexOf(child2))
     for(let it = root.First(); !it.IsNull(); it.Next()) {
         println(it.Value())
     }
     for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
         println(it.Value())
     }
+    var itx = root.First()
+    itx = root.Erase(itx)
+    println(itx.Value())
 
     return 0
 }
