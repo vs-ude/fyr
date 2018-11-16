@@ -46,6 +46,11 @@ export class Variable implements ScopeElement {
     // A variable is referenced with "&v". It can be casted to a reference or strong pointer.
     // In this case the stack must provide extra space for the (unnecessary) reference counters.
     public isReferencedWithRefcounting: boolean;
+    /**
+     * For cases like 'for(let x in list)' x is in reality just a pointer inside the array/slice/map.
+     * However, for the user is feels like the variable is a value and not a pointer inside the array/slice/map.
+     */
+    public isForLoopPointer: boolean;
     public name: string;
     public type: Type;
     public loc: Location;
@@ -3712,6 +3717,7 @@ export class TypeChecker {
                     }
                 }
                 break;
+                /*
             case "in":
                 this.checkExpression(snode.rhs, scope);
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
@@ -3734,8 +3740,7 @@ export class TypeChecker {
                         this.checkIsAssignableType(snode.lhs.type, tindex1, snode.loc, "assign", true);
                     }
                 }
-                break;
-            case "var_in":
+                break; */
             case "let_in":
             {
                 this.checkExpression(snode.rhs, scope);
@@ -3756,6 +3761,9 @@ export class TypeChecker {
                         } else {
                             v2.type = tindex2;
                         }
+                        if (v2.type != TypeChecker.t_string) {
+                            v2.isForLoopPointer = true;
+                        }
                     }
                 } else {
                     let v = this.createVar(snode.lhs, scope, false, snode.op == "let_in");
@@ -3763,6 +3771,9 @@ export class TypeChecker {
                         this.checkIsAssignableType(v.type, tindex1, snode.loc, "assign", true);
                     } else {
                         v.type = tindex1;
+                    }
+                    if (v.type != TypeChecker.t_string) {
+                        v.isForLoopPointer = true;
                     }
                 }
                 break;
@@ -6300,14 +6311,12 @@ export class TypeChecker {
             case "yield":
                 break;
             case "let_in":
-            case "var_in":
             case "var":
             case "let":
                 if (snode.rhs) {
                     this.checkGroupsInAssignment(snode, scope);
                 }
                 break;
-            case "in":
             case "+=":                                             
             case "*=":
             case "/=":

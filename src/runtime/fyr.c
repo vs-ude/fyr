@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include <stdio.h>
+// #include <stdio.h>
 #define VALGRIND 1
 
 addr_t fyr_alloc(int_t size) {
@@ -32,8 +32,6 @@ void fyr_free(addr_t ptr, fyr_dtr_t dtr) {
     if (ptr == NULL) {
         return;
     }
-    printf("fyr_free\n");
-    *(int*)0 = 0;
     int_t* lptr = ((int_t*)ptr) - 2;
     int_t* iptr = ((int_t*)ptr) - 1;
     if (*iptr == 1) {

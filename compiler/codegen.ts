@@ -405,7 +405,7 @@ export class CodeGenerator {
             let e = scope.elements.get(name);
             // Parameters with isConst == true are either "this" or references. In both cases the caller is responsible
             // for managing the lifetime of the variables.
-            if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
+            if ((e instanceof Variable && !e.isResult && !e.isForLoopPointer) || (e instanceof FunctionParameter && !e.isConst)) {
                 if (ignoreVariables && ignoreVariables.indexOf(e) != -1) {
                     continue;
                 }
@@ -433,6 +433,7 @@ export class CodeGenerator {
                 for(let st of snode.statements) {
                     this.processStatement(f, snode.scope, st, b, vars, blocks);
                 }
+                this.freeScopeVariables(null, b, vars, snode.scope);
                 if (snode.elseBranch) {
                     b.elseBlock();
                     this.processStatement(f, snode.elseBranch.scope, snode.elseBranch, b, vars, blocks);
@@ -446,6 +447,7 @@ export class CodeGenerator {
                 for(let st of snode.statements) {
                     this.processStatement(f, snode.scope, st, b, vars, blocks);
                 }
+                this.freeScopeVariables(null, b, vars, snode.scope);
                 break;                
             }
             case "let":
@@ -867,64 +869,11 @@ export class CodeGenerator {
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.lhs) {
                     // A c-style for loop
                     this.processStatement(f, snode.scope, snode.condition.lhs, b, vars, blocks);
-                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "let_in")) {
+                } else if (snode.condition && snode.condition.op == "let_in") {
                     //
-                    // A for loop of the form "for(var i in list) or for(var i, j in list)" or the same without "var"
+                    // A for loop of the form "for(let i in list) or for(let i, j in list)"
                     //
                     let t = RestrictedType.strip(snode.condition.rhs.type);
-                    //
-                    // Address and length of array or string
-                    //                    
-                    if (t instanceof SliceType) {
-                        // TODO: Incref
-                        let sliceHeader: ssa.Pointer | ssa.Variable;
-                        if (this.isLeftHandSide(snode.condition.rhs)) {
-                            sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
-                        } else {
-                            sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
-                        }
-                        if (sliceHeader instanceof ssa.Variable) {
-                            if (t.mode != "local_reference") {
-                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
-                                ptr = b.assign(b.tmp(), "member", "addr", [base, this.localSlicePointer.fieldIndexByName("data_ptr")]);    
-                            } else {
-                                ptr = b.assign(b.tmp(), "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
-                            }
-                            if (t.mode != "local_reference") {
-                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
-                                len = b.assign(b.tmp(), "member", "sint", [base, this.localSlicePointer.fieldIndexByName("data_length")]);
-                            } else {
-                                len = b.assign(b.tmp(), "member", "sint", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_length")]);
-                            }
-                        } else {
-                            ptr = b.assign(b.tmp(), "load", "addr", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
-                            len = b.assign(b.tmp(), "load", "sint", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_length")]);
-                        }
-                    } else if (t instanceof ArrayType) {
-                        // TODO: Incref
-                        // Get the address of the array
-                        len = t.size;
-                        if (this.isLeftHandSide(snode.condition.rhs)) {
-                            let arr = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
-                            if (arr instanceof ssa.Variable) {
-                                ptr = b.assign(b.tmp(), "addr_of", "addr", [arr]);
-                            } else {
-                                ptr = b.assign(b.tmp(), "copy", "addr", [arr.variable]);
-                                if (arr.offset != 0) {
-                                    b.assign(ptr, "add", "addr", [ptr, arr.offset]);
-                                }
-                            }
-                        } else {
-                            let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
-                            ptr = b.assign(b.tmp(), "addr_of", "addr", [arr]);
-                        }
-                    } else if (t == TypeChecker.t_string) {
-                        // TODO: Incref
-                        ptr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, TypeChecker.t_string) as ssa.Variable;
-                        len = b.assign(b.tmp(), "len_str", "sint", [ptr]);    
-                    } else {
-                        throw "TODO map"
-                    }
                     //
                     // Initialize the counter with 0
                     //
@@ -939,15 +888,74 @@ export class CodeGenerator {
                         if (snode.condition.lhs.parameters[1].value != "_") {
                             let valElement = snode.scope.resolveElement(snode.condition.lhs.parameters[1].value) as Variable;
                             val = vars.get(valElement);
+                            if (valElement.isForLoopPointer) {
+                                ptr = val;
+                            }
                         }
                     } else {
                         if (snode.condition.lhs.value != "_") {
                             let element = snode.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
                             val = vars.get(element);                                
+                            if (element.isForLoopPointer) {
+                                ptr = val;
+                            }
                         }
                         counter = b.tmp();                                    
                     }
                     b.assign(counter, "const", "sint", [0]);
+                    //
+                    // Address and length of array or string
+                    //                    
+                    if (t instanceof SliceType) {
+                        // TODO: Incref
+                        let sliceHeader: ssa.Pointer | ssa.Variable;
+                        if (this.isLeftHandSide(snode.condition.rhs)) {
+                            sliceHeader = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                        } else {
+                            sliceHeader = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
+                        }
+                        if (sliceHeader instanceof ssa.Variable) {
+                            if (t.mode != "local_reference") {
+                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
+                                b.assign(ptr, "member", "addr", [base, this.localSlicePointer.fieldIndexByName("data_ptr")]);    
+                            } else {
+                                b.assign(ptr, "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
+                            }
+                            if (t.mode != "local_reference") {
+                                let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
+                                len = b.assign(b.tmp(), "member", "sint", [base, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            } else {
+                                len = b.assign(b.tmp(), "member", "sint", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_length")]);
+                            }
+                        } else {
+                            b.assign(ptr, "load", "addr", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
+                            len = b.assign(b.tmp(), "load", "sint", [sliceHeader.variable, sliceHeader.offset + this.localSlicePointer.fieldOffset("data_length")]);
+                        }
+                    } else if (t instanceof ArrayType) {
+                        // TODO: Incref
+                        // Get the address of the array
+                        len = t.size;
+                        if (this.isLeftHandSide(snode.condition.rhs)) {
+                            let arr = this.processLeftHandExpression(f, snode.scope, snode.condition.rhs, b, vars);
+                            if (arr instanceof ssa.Variable) {
+                                b.assign(ptr, "addr_of", "addr", [arr]);
+                            } else {
+                                b.assign(ptr, "copy", "addr", [arr.variable]);
+                                if (arr.offset != 0) {
+                                    b.assign(ptr, "add", "addr", [ptr, arr.offset]);
+                                }
+                            }
+                        } else {
+                            let arr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
+                            b.assign(ptr, "addr_of", "addr", [arr]);
+                        }
+                    } else if (t == TypeChecker.t_string) {
+                        // TODO: Incref
+                        ptr = this.processExpression(f, snode.scope, snode.condition.rhs, b, vars, TypeChecker.t_string) as ssa.Variable;
+                        len = b.assign(b.tmp(), "len_str", "sint", [ptr]);    
+                    } else {
+                        throw "TODO map"
+                    }
                 }
                 //
                 // Loop condition
@@ -961,16 +969,17 @@ export class CodeGenerator {
                             let tmp2 = b.assign(b.tmp(), "eqz", "i8", [tmp]);
                             b.br_if(tmp2, outer);
                         }
-                    } else if (snode.condition.op == "var_in" || snode.condition.op == "let_in" || snode.condition.op == "in") {
+                    } else if (snode.condition.op == "let_in") {
                         // End of iteration?
                         let endcond = b.assign(b.tmp(), "eq", "i8", [counter, len]);
                         b.br_if(endcond, outer);
                         let t = RestrictedType.strip(snode.condition.rhs.type);
                         if (t instanceof SliceType || t instanceof ArrayType) {
-                            // TODO: null-check
+                            /* // TODO: null-check
                             // Store the current value in a variable
                             let storage = this.getSSAType(t.getElementType());
-                            b.assign(val, "load", storage, [ptr, 0]);
+                            b.assign(val, "load", storage, [ptr, 0]); */
+                            // Do nothing by intention
                         } else if (t == TypeChecker.t_string) {
                             let [decodeUtf8, decodeUtf8Type] = this.loadFunction("runtime/utf8", "decodeUtf8", snode.loc);
                             // Get address of value
@@ -1030,7 +1039,7 @@ export class CodeGenerator {
                 b.end();
                 if (snode.condition && snode.condition.op == ";;" && snode.condition.rhs) {
                     this.processStatement(f, snode.scope, snode.condition.rhs, b, vars, blocks);
-                } else if (snode.condition && (snode.condition.op == "var_in" || snode.condition.op == "let_in" || snode.condition.op == "in")) {
+                } else if (snode.condition && snode.condition.op == "let_in") {
                     let t = RestrictedType.strip(snode.condition.rhs.type);
                     if (t instanceof SliceType || t instanceof ArrayType) {
                         // Increase the pointer towards the last element
@@ -1048,6 +1057,7 @@ export class CodeGenerator {
                 b.br(loop);
                 b.end();
                 b.end();
+                this.freeScopeVariables(null, b, vars, snode.scope);
                 break;
             }
             case "continue":
@@ -1291,6 +1301,9 @@ export class CodeGenerator {
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
+                if (element instanceof Variable && element.isForLoopPointer) {
+                    return new ssa.Pointer(vars.get(element), 0);
+                }
                 return vars.get(element);
             }
             case "unary*":
@@ -2243,6 +2256,10 @@ export class CodeGenerator {
             case "id":
             {
                 let element = scope.resolveElement(enode.value);
+                if (element instanceof Variable && element.isForLoopPointer) {
+                    let storage = this.getSSAType(element.type);
+                    return b.assign(b.tmp(), "load", storage, [vars.get(element), 0]);
+                }
                 return vars.get(element);
             }
             case "(":
@@ -3855,9 +3872,16 @@ export class CodeGenerator {
                     b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t instanceof SliceType) {
-                dtr = this.generateSliceDestructor(t);
                 if (free == "no") {
-                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
+                    let st = this.getSSAType(t) as ssa.StructType;
+                    let arrPointer = b.assign(b.tmp(), "load", "addr", [pointer, st.fieldOffset("array_ptr")]);
+                    if (t.mode == "strong" || t.mode == "unique") {
+                        this.callDestructor(t.arrayType, arrPointer, b, false, "free");
+                    } else {
+                        this.callDestructor(t.arrayType, arrPointer, b, false, "decref");
+                    }
+                } else {
+                    dtr = this.generateSliceDestructor(t);
                 }
             } else if (t == TypeChecker.t_string) {
                 // Do nothing by intention, because strings are not explicitly destructed. They are always reference counted.

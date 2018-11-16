@@ -2,7 +2,7 @@
     var ast = require("./ast");
 
     function isAssignment(n) {
-        if (n.op == "=" || n.op == "var_in" || n.op == "let_in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "let") {
+        if (n.op == "=" || n.op == "let_in" || n.op == "*=" || n.op == "/=" || n.op == "/=" || n.op == "%=" || n.op == "&=" || n.op == "&^=" || n.op == "<<=" || n.op == ">>=" || n.op == "+=" || n.op == "-=" || n.op == "|=" || n.op == "^=" || n.op == ":=" || n.op == "var" || n.op == "let") {
             return true;
         }
         return false;
@@ -470,7 +470,9 @@ statement
       }
       return new ast.Node({loc: fl(location()), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
   }
-  / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block { return new ast.Node({loc: fl(location()), op: "for", condition: f ? f[2] : undefined, statements:b}); }
+  / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block {
+      return new ast.Node({loc: fl(location()), op: "for", condition: f ? f[2] : undefined, statements:b});
+    }
   / "yield" {
       return new ast.Node({loc: fl(location()), op: "yield"});
     }
@@ -497,7 +499,7 @@ statement
     }
 
   / s: simpleStatement { 
-      if (s.op == "let_in" || s.op == "var_in") {
+      if (s.op == "let_in") {
           error("'in' is allowed inside a for loop header only", s.loc);
       }
       return s;
@@ -601,7 +603,7 @@ assignKeyIdentifier
     }
 
 varStatement
-  = o:("var" / "let") [ \t]+ i:varIdentifierList a:(("=" / "in ") [ \t\n]* expression)? {
+  = o:("var" / "let") [ \t]+ i:varIdentifierList a:(("=" / "in" [ \t]+) [ \t\n]* expression)? {
         if (i.length > 1) {
             i = new ast.Node({loc: fl(location()), op: "tuple", parameters: i});
         } else {
@@ -614,7 +616,7 @@ varStatement
             return new ast.Node({loc: fl(location()), op: "var", lhs: i});
         }
 
-        if (a[0] == "in ") {
+        if (a[0].length == 2 && a[0][0] == "in") {
             if (i.op == "array" || i.op == "object") {
                 error("array or object not allowed in this context", i.loc)
             }
@@ -631,7 +633,10 @@ varStatement
             } else if (i.op != "id") {
                 error("expression is not allowed on left-hand side of an assignment when used together with 'in'", i.loc);
             }
-            return new ast.Node({loc: fl(location()), op: o + "_in" ,lhs: i, rhs: a[2]});
+            if (o == "var") {
+                error("'var' is not allowed in this place. Use 'let' instead.", fl(location));
+            }
+            return new ast.Node({loc: fl(location()), op: "let_in" ,lhs: i, rhs: a[2]});
         }
 
         return new ast.Node({loc: fl(location()), op: o, lhs: i, rhs: a[2]});
@@ -733,7 +738,8 @@ forCondition
       if (r) {
           return new ast.Node({loc: fl(location()), op: ";;", lhs: left, condition: r[3], rhs: r[7]});
       }
-      if (isAssignment(left) && left.op != "let_in" && left.op != "var_in") {
+      if (isAssignment(left) && left.op != "let_in") {
+          console.log(left.op);
         error("assignment is not allowed in the condition branch of a 'for' loop", left.loc);
       }
       return left;
