@@ -22,6 +22,25 @@
 				"FYRBASE": "${workspaceFolder}",
 				"FYRPATH": "${workspaceFolder}",
 			}
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Debug with mandelbrot",
+			"program": "${workspaceFolder}/bin/fyrc",
+			"preLaunchTask": "npm: build",
+			"outFiles": [
+				"${workspaceFolder}/lib/**/*.js"
+			],
+			"cwd":"${workspaceFolder}",
+			"args": [
+				"-n",
+				"${workspaceFolder}/src/examples/mandelbrot/mandelbrot.fyr"
+			],
+			"env": {
+				"FYRBASE": "${workspaceFolder}",
+				"FYRPATH": "${workspaceFolder}",
+			}
 		}
 	]
 }
