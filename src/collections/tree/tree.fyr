@@ -171,8 +171,8 @@ export func main() int {
     root.Append({Value: 30})
     println(root.Size())
     println(root.IndexOf(child2))
-    for(let it = root.First(); !it.IsNull(); it.Next()) {
-        println(it.Value())
+    for(let itx = root.First(); !itx.IsNull(); itx.Next()) {
+        println(itx.Value())
     }
     for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
         println(it.Value())

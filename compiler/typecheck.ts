@@ -1,8 +1,6 @@
 import {Node, Location, AstFlags} from "./ast"
 import { Package, SystemCalls } from "./pkg";
 import {createHash} from "crypto";
-import { ENETDOWN } from "constants";
-import { endianness } from "os";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.
@@ -230,8 +228,15 @@ export class Scope {
         return null;
     }
 
+    /**
+     * ScopeElements are inaccessible, unless they belong to a group.
+     * A 'null' group means that the element is inaccessible and its value should not be used any further.
+     * This includes that its value does not need destruction any more.
+     * However, destruction is safe nevertheless. Therefore, such elements are zero'd to ensure that subsequent destruction does not crash.
+     */
     public setGroup(element: ScopeElement, group: Group | null) {
         this.elementGroups.set(element, group);
+        this.elementNeedsDestruction.set(element, !!group);
     }
 
     public makeGroupUnavailable(g: Group) {
@@ -324,7 +329,7 @@ export class Scope {
         return b1;
     }
 
-    public mergeScopes(scope: Scope, mode: "conditional" | "subsequent" | "reverted_subsequent"): void {
+    public mergeScopes(scope: Scope, mode: "conditional" | "subsequent"): void {
         for(let g of scope.unavailableGroups) {
             this.unavailableGroups.add(g);
         }
@@ -350,32 +355,25 @@ export class Scope {
                 for(let e of scope.elementGroups.keys()) {
                     let g1 = this.resolveGroup(e);
                     let g2 = scope.elementGroups.get(e);
-                    // Does the "this" scope have a group for this element? If yes, then both have something -> merge
-                    if (g1) {
+                    // Do both scopes have a group for this element? If different, use the one from the "scope" scope.
+                    if (g1 && g2) {
                         g1 = this.resolveCanonicalGroup(g1);
-                        // If the "scope" scope has a null group, the "this" scope gets a null group as well.
-                        if (!g2) {
-                            this.elementGroups.set(e, null);
-                            continue;
-                        }
                         g2 = scope.resolveCanonicalGroup(g2);
-                        // Groups are different in the "this" scope and the "scope" scope? Then do nothing
+                        // Groups are the same in the "this" scope and the "scope" scope? Then do nothing
                         if (g1 == g2) {
                             continue;
                         }
-                        let newg = this.joinGroups(g1, g2, null, false);
-                        if (!newg) {
-                            this.elementGroups.set(e, null);
-                        } else {
-                            this.elementGroups.set(e, newg);
-                        }
-                    } else if (g2) {
-                        // The "this" scope has no group, but the "scope" scope has a non-null group.
+                        // The "this" scope has a group, but the "scope" scope has the "newer" group.
+                        // Therefore, we use the group of the "scope" scope.
+                        this.elementGroups.set(e, g2);
+                    } else {
+                        // The "this" scope has no group, but the "scope" scope has a group.
                         // If this is not conditional, the result is a non-null group.
                         // Otherwise we assume the worst and stick with the non-null group.
                         this.elementGroups.set(e, g2);
                     }
                 }
+                this.elementNeedsDestruction = new Map<ScopeElement, boolean>([...this.elementNeedsDestruction, ...scope.elementNeedsDestruction]);
                 break;
             }
             case "conditional":
@@ -384,42 +382,29 @@ export class Scope {
                     let g1 = this.resolveGroup(e);
                     let g2 = scope.elementGroups.get(e);
                     // Does the "this" scope have a group for this element? If yes, then both have something -> merge
-                    if (g1) {
+                    if (g1 && g2) {
                         g1 = this.resolveCanonicalGroup(g1);
-                        // If the "scope" scope has a null group, the "this" scope gets a null group as well.
-                        if (!g2) {
-                            this.elementGroups.set(e, null);
-                            continue;
-                        }
                         g2 = scope.resolveCanonicalGroup(g2);
                         // Groups are different in the "this" scope and the "scope" scope? Then do nothing
                         if (g1 == g2) {
                             continue;
                         }
-                        let newg = this.joinGroups(g1, g2, null, false);
-                        if (!newg) {
-                            this.elementGroups.set(e, null);
-                        } else {
-                            this.elementGroups.set(e, newg);
-                        }
+                        this.elementGroups.set(e, this.joinGroups(g1, g2, null, false));
+                    } else {
+                        // The group is null in "this". Because "scope" is only conditional, we must stay with "null"
+                        // Do nothing by intention
+                        this.elementGroups.set(e, null);
+                    }
+                }
+                for(let e of scope.elementNeedsDestruction.keys()) {
+                    let destruct = scope.elementNeedsDestruction.get(e);
+                    if (!this.elementNeedsDestruction.has(e)) {
+                        this.elementNeedsDestruction.set(e, destruct);
+                    } else if (destruct) {
+                        this.elementNeedsDestruction.set(e, true);
                     }
                 }
                 break;
-            }
-            case "reverted_subsequent":
-            {
-                for(let e of scope.elementGroups.keys()) {
-                    let g1 = this.elementGroups.get(e);
-                    let g2 = scope.elementGroups.get(e);
-                    // Does the "this" scope have a group for this element? If yes, then both have something -> merge
-                    if (g1) {
-                        continue;
-                    } else if (g2) {
-                        this.elementGroups.set(e, g2);
-                    } else {
-                        this.elementGroups.set(e, null);
-                    }
-                }        
             }
         }
     }
@@ -476,6 +461,12 @@ export class Scope {
     public canonicalGroups: Map<Group, Group> = new Map<Group, Group>();
     public unavailableGroups: Set<Group> = new Set<Group>();
     public elementGroups: Map<ScopeElement, Group | null> = new Map<ScopeElement, Group | null>();
+    /**
+     * If a Group is "null", the element is not accessible.
+     * However, it might still possibly contain a value with pointers (for example set in an if clause), and this value needs destruction.
+     * If the element is not in this set, it is guaranteed to need no destruction.
+     */
+    public elementNeedsDestruction: Map<ScopeElement, boolean> = new Map<ScopeElement, boolean>();
     public parent: Scope | null = null;
     // When taking addresses of local variables, the resulting pointer belongs to this scope.
     public group: Group = new Group(GroupKind.Bound);
@@ -3758,7 +3749,7 @@ export class TypeChecker {
                 let [tindex1, tindex2] = this.checkIsEnumerable(snode.rhs);
                 if (snode.lhs.op == "tuple") {
                     if (snode.lhs.parameters[0].value != "_") {
-                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false, snode.op == "let_in");
+                        let v1 = this.createVar(snode.lhs.parameters[0], scope, false, true);
                         if (v1.type) {
                             this.checkIsAssignableType(v1.type, tindex1, snode.loc, "assign", true);
                         } else {
@@ -3766,7 +3757,7 @@ export class TypeChecker {
                         }
                     }
                     if (snode.lhs.parameters[1].value != "_") {
-                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false, snode.op == "let_in");
+                        let v2 = this.createVar(snode.lhs.parameters[1], scope, false, true);
                         if (v2.type) {
                             this.checkIsAssignableType(v2.type, tindex2, snode.loc, "assign", true);
                         } else {
@@ -3777,7 +3768,7 @@ export class TypeChecker {
                         }
                     }
                 } else {
-                    let v = this.createVar(snode.lhs, scope, false, snode.op == "let_in");
+                    let v = this.createVar(snode.lhs, scope, false, true);
                     if (v.type) {
                         this.checkIsAssignableType(v.type, tindex1, snode.loc, "assign", true);
                     } else {
@@ -6412,6 +6403,7 @@ export class TypeChecker {
 //                        this.checkGroupsInStatement(st, snode.elseBranch.scope);
 //                    }
                 }
+                /*
                 if (snode.scopeExit.breaks) {
                     for (let c of snode.scopeExit.breaks) {
                         c.mergeScopes(scope, "reverted_subsequent");
@@ -6421,12 +6413,13 @@ export class TypeChecker {
                     for (let c of snode.scopeExit.continues) {
                         c.mergeScopes(scope, "reverted_subsequent");
                     }                    
-                }
+                }*/
                 if (snode.elseBranch) {
 //                    snode.elseBranch.scope.resetGroups();
 //                    for(let st of snode.elseBranch.statements) {
 //                        this.checkGroupsInStatement(st, snode.elseBranch.scope);
 //                    }
+                    /*
                     if (snode.elseBranch.scopeExit.breaks) {
                         for (let c of snode.elseBranch.scopeExit.breaks) {
                             c.mergeScopes(scope, "reverted_subsequent");
@@ -6437,6 +6430,7 @@ export class TypeChecker {
                             c.mergeScopes(scope, "reverted_subsequent");
                         }                    
                     }
+                    */
                     if (snode.scopeExit.fallthrough && snode.elseBranch.scopeExit.fallthrough) {                        
                         snode.scope.mergeScopes(snode.elseBranch.scope, "conditional");
                         scope.mergeScopes(snode.scope, "subsequent");
@@ -6455,16 +6449,16 @@ export class TypeChecker {
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.lhs) {
-                            this.checkGroupsInStatement(snode.condition.lhs, snode.scope);
+                            this.checkGroupsInStatement(snode.condition.lhs, snode.condition.scope);
                         }
                         if (snode.condition.condition) {
-                            this.checkGroupsInExpression(snode.condition.condition, snode.scope, GroupCheckFlags.None);
+                            this.checkGroupsInExpression(snode.condition.condition, snode.condition.scope, GroupCheckFlags.None);
                         }
                         if (snode.condition.rhs) {
-                            this.checkGroupsInStatement(snode.condition.rhs, snode.scope);
+                            this.checkGroupsInStatement(snode.condition.rhs, snode.condition.scope);
                         }
                     } else {
-                        this.checkGroupsInStatement(snode.condition, snode.scope);
+                        this.checkGroupsInStatement(snode.condition, snode.condition.scope);
                     }
                 }
                 for(let st of snode.statements) {
@@ -6478,7 +6472,6 @@ export class TypeChecker {
                     }
                 }
                 // Check groups for a second run.
-                // This does either fail (-> TypeError) or le
                 for(let st of snode.statements) {
                     this.checkGroupsInStatement(st, s);
                 }
@@ -6588,17 +6581,18 @@ export class TypeChecker {
             [lhsVariable, lhsVariableScope] = scope.resolveElementWithScope((lnode as Node).value);
         }
 
-        // Assigning a value type? -> Nothing to do.
-        // Assigning to a string? -> Nothing to do because strings are not bound to any group
+        // Assigning to a value type? -> Nothing to do.
+        // Assigning to a string? -> Nothing to do, because strings are not bound to any group.
         // Assigning to an unsafe pointer -> Nothing to do. Programmer hopefully knows what he is doing ...
         if (TypeChecker.isPureValue(ltype) || this.isString(ltype) || this.isUnsafePointer(ltype)) {
             // When assigning to a variable, set its group such that it becomes available
             if (lhsVariable) {
                 if (lhsVariable instanceof Variable && lhsVariable.isReferencedWithRefcounting) {
-//                    console.log("!!!!!!!!!!! Assign with refcount", lhsVariable.name);
+                    // The address of the variable is taken. Therefore, it is restricted to its scope.
+                    // Use the bound-group of its scope.
                     scope.setGroup(lhsVariable, lhsVariableScope.group);
                 } else {
-//                    console.log("!!!!!!!!!!! Assign variable without pointers", lhsVariable.name);
+                    // The variable is free.
                     scope.setGroup(lhsVariable, new Group(GroupKind.Free, lhsVariable.name));
                 }
             }
@@ -6681,23 +6675,19 @@ export class TypeChecker {
         // The if-clause is true when assigning to a variable that is not global.
         // The purpose of ignoring global is that setGroup should not be executed on a global variable.
         if (lhsIsVariable && (!(lhsVariable instanceof Variable) || (!lhsVariable.isGlobal && !lhsVariable.isReferencedWithRefcounting))) {
-            // Set the group of the LHS variable to the RHS group
-//            console.log("!!!!!!! Assiging left to right", lhsVariable.name);
-            if (scope.resolveGroup(lhsVariable) == null) {
-                // console.log("Empty on assignment", lhsVariable.name);
+            // Determine whether the variable being assigned to holds a value that needs destruction before assigning to it.
+            if (scope.elementNeedsDestruction.get(lhsVariable)) {
+                (lnode as Node).flags &= ~AstFlags.EmptyOnAssignment;
+            } else {
                 // The variable being assigned to is currently not accessible.
                 // Hence, it has no value that needs to be destructed before assignment.
                 (lnode as Node).flags |= AstFlags.EmptyOnAssignment;
             }
+            // Set the group of the LHS variable to the RHS group
             scope.setGroup(lhsVariable, rightGroup);
         } else {
             // Assigning to an expression of type unique pointer?
             if (!leftGroup) {
-//                if (lhsVariable) {
-//                    console.log("!!!!!!! Assigning to an isolate", lhsVariable.name);
-//                } else {
-//                    console.log("!!!!!!! Assigning to an isolate");
-//                }
                 // Check that the RHS group is unbound
                 if (rightGroup.isBound(scope)) {
                     throw new TypeError("Assignment of a bound group to an isolate is not allowed", loc);
@@ -6705,16 +6695,7 @@ export class TypeChecker {
                 // Make the RHS group unavailable
                 scope.makeGroupUnavailable(rightGroup);
             } else {
-                // Test whether LHS and RHS are equal or one of LHS or RHS are unbound
-                // if (leftGroup != rightGroup && leftGroup.isBound && rightGroup.isBound) {
-                //    throw new TypeError("Two distinct bound groups cannot be merged", loc);
-                //}
                 // Join RHS and LHS
-//                if (lhsVariable) {
-//                    console.log("!!!!!!! Assiging with join", lhsVariable.name);
-//                } else {
-//                    console.log("!!!!!!! Assiging with join");
-//                }
                 scope.joinGroups(leftGroup, rightGroup, loc, true);
             }
         }

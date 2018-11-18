@@ -410,6 +410,10 @@ export class CodeGenerator {
                 if (ignoreVariables && ignoreVariables.indexOf(e) != -1) {
                     continue;
                 }
+                if (!scope.elementNeedsDestruction.get(e)) {
+                    // console.log("NOT destruction", e.name, scope.elementNeedsDestruction.get(e), e.loc);
+                    continue;
+                }
                 let v = vars.get(e);
                 if (!v) {
                     throw "Implementation error";
