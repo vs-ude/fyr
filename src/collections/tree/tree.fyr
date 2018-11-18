@@ -177,9 +177,8 @@ export func main() int {
     for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
         println(it.Value())
     }
-    var itx = root.First()
-    itx = root.Erase(itx)
-    println(itx.Value())
-
+    var it = root.First()
+    it = root.Erase(it)
+    println(it.Value())
     return 0
 }

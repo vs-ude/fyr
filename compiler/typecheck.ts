@@ -1619,11 +1619,14 @@ export class PackageType extends Type {
 }
 
 export class ScopeExit {
-    public merge(s: ScopeExit) {
+    public merge(s: ScopeExit, returnsOnly: boolean = false) {
         if (!this.returns) {
             this.returns = s.returns;
         } else if (s.returns) {
             this.returns = this.returns.concat(s.returns);
+        }
+        if (returnsOnly) {
+            return;
         }
         if (!this.continues) {
             this.continues = s.continues;
@@ -3611,7 +3614,7 @@ export class TypeChecker {
                 forScope.forLoop = true;
                 snode.scope = forScope;
                 snode.scopeExit = this.checkStatements(snode.statements, forScope);
-                scopeExit.merge(snode.scopeExit);                
+                scopeExit.merge(snode.scopeExit, true);                
                 return;
             }
             case "var":
@@ -6445,6 +6448,7 @@ export class TypeChecker {
                 break;                
             case "for":
             {
+                // This line is required, because the check might run twice when inside a for loop.
                 snode.scope.resetGroups();
                 if (snode.condition) {
                     if (snode.condition.op == ";;") {
