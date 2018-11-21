@@ -131,9 +131,9 @@ export function compileModules() {
     }
 
     // TypeCheck the sources
-    try {
+//    try {
         Package.checkTypesForPackages();
-    } catch(ex) {
+/*    } catch(ex) {
         if (ex instanceof typecheck.TypeError) {
             console.log((ex.location.file + " (" + ex.location.start.line + "," + ex.location.start.column + "): ").yellow + ex.message.red);
             return;
@@ -141,7 +141,7 @@ export function compileModules() {
             console.log(ex);
             throw ex;
         }
-    }
+    }*/
 
     // Generate code
     if (!program.disableCodegen) {

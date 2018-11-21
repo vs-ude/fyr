@@ -6,13 +6,12 @@ import os = require("os");
 import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
-import {Function, FunctionParameter, FunctionType, TypeChecker, UnsafePointerType, Scope, ScopeElement} from "./typecheck"
+import {Function, FunctionParameter, FunctionType, TypeChecker, UnsafePointerType, Scope} from "./typecheck"
 import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
 import {CBackend} from "./backend_c";
 import {DummyBackend} from "./backend_dummy";
-import { Variable } from './ssa';
 
 export enum SystemCalls {
     heap = -1,
@@ -247,6 +246,9 @@ export class Package {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
             let args = includes.concat(["-g3", "-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
+            if (this.compileCmdLineArgs) {
+                args = args.concat(this.compileCmdLineArgs);
+            }
             console.log("gcc", args.join(" "));
             child_process.execFileSync("gcc", args);
         }
@@ -385,14 +387,19 @@ export class Package {
                         let oFiles: Array<string> = [];
                         // Always include fyr.o
                         oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr.o"));
+                        let extraArgs: Array<string> = [];
                         for(let importPkg of Package.packages) {
                             if (importPkg.isInternal) {
                                 continue;
                             }
                             oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
+                            if (importPkg.linkCmdLineArgs) {
+                                extraArgs = extraArgs.concat(importPkg.linkCmdLineArgs);
+                            }
                         }
                         let bFile = path.join(p.binFilePath, p.binFileName);
                         let args = ["-o", bFile, "-g3"].concat(oFiles);
+                        args = args.concat(extraArgs);
                         console.log("gcc", args.join(" "));
                         child_process.execFileSync("gcc", args);
                     }
@@ -489,6 +496,9 @@ export class Package {
     public isImported: boolean;
     public hasMain: boolean;
     public hasInitFunction: boolean;
+
+    public compileCmdLineArgs: Array<string>;
+    public linkCmdLineArgs: Array<string>;
 
     private typeCheckPass: number = 0;
 

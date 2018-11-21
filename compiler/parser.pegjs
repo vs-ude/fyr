@@ -31,7 +31,7 @@
 }
 
 file
-  = m:(comments / func / import / typedef / varStatement / $("\n"+))* {
+  = m:(comments / func / import / export / build / typedef / varStatement / $("\n"+))* {
         let result = [];
         for(let i = 0; i < m.length; i++) {
             let x = m[i];
@@ -43,7 +43,7 @@ file
                     x.comments = m[i-1];
                 }
                 result.push(x);
-            } else if (x.op == "import") {
+            } else if (x.op == "import" || x.op == "exportAs" || x.op == "build") {
                 result.push(x);                
             }
         }
@@ -56,8 +56,8 @@ typedef
     }
 
 import
-  = "import" [ \t]+ a:importAs? [ \t]* m:(importWasm / string) [ \t]* "\n" [ \t]* {
-      if (m.op == "importWasm") {
+  = "import" [ \t]+ a:importSelect? [ \t]* m:(importNative / string) [ \t]* "\n" [ \t]* {
+      if (m.op == "importNative") {
           if (!a || a.op == "identifierList") {
               expected("Either . or an identifier");
           }
@@ -67,7 +67,7 @@ import
       return new ast.Node({loc: fl(location()), op: "import", rhs:m, lhs:a});
     }
 
-importAs
+importSelect
   = "." [ \t]+ "from" [ \t]+ {
         return new ast.Node({loc: fl(location()), op: "."});
     }
@@ -78,18 +78,59 @@ importAs
         return new ast.Node({loc: fl(location()), op: "identifierList", parameters: i});
     }
 
-importWasm
-  = i:string [ \t]* "{" [ \t]* "\n" [ \t]* e:importElement* [ \t]* "}" {
+importNative
+  = i:string [ \t]* "{" [ \t]* "\n" [ \t\n]* e:importElement* [ \t]* "}" {
         if (i == "") {
             expected("A non-empty string describing the imported namespace")
         }
-        return new ast.Node({loc: fl(location()), op: "importWasm", parameters: e, rhs:i})
+        return new ast.Node({loc: fl(location()), op: "importNative", parameters: e, rhs:i})
     }
 
 importElement
-  = "func" [ \t]+ n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* ")" [ \t]* f:returnType? [ \t]* "\n" [ \t]* {
-      return new ast.Node({loc: fl(location()), op: "funcType", parameters: t, rhs: f, name: n});
+  = [ \t]* "func" [ \t]+ n:identifier [ \t]* "(" [ \t]* t:funcTypeParameters? [ \t]* ")" [ \t]* f:returnType? ([ \t]* newline)* {
+      return new ast.Node({loc: fl(location()), op: "funcType", parameters: t ? t : [], rhs: f, name: n});
     }
+  / [ \t]* t: typedef ([ \t]* newline)* {
+      return t;
+    }
+  / [ \t]* "const" [ \t]+ i:identifier t:type ([ \t]* newline)* {
+      return new ast.Node({loc: fl(location()), op: "constValue", lhs: t, name: i});
+    }
+
+export
+  = "export" [ \t]* "{" ([ \t]* newline)+ e:exportAs* [ \t\n]* "}" {
+      return new ast.Node({loc: fl(location()), op: "exportAs", parameters: e});
+  }
+
+exportAs
+  = "func" n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* newline* {
+      return new ast.Node({loc: fl(location()), op: "exportFuncAs", lhs: n, rhs: e});
+    }
+  / "type" n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* newline* {
+      return new ast.Node({loc: fl(location()), op: "exportTypeAs", lhs: n, rhs: e});
+    }
+
+build
+  = "build" [ \t]* "{" ([ \t]* newline)+ e:buildElement* [ \t\n]* "}" {
+      return new ast.Node({loc: fl(location()), op: "build", parameters: e});
+  }
+
+buildElement
+  = [ \t]* "link" [ \t]* ":" [ \t]* "[" ([ \t]* newline)* v:buildElementValues? "]" ([ \t]* newline)* {
+      return new ast.Node({loc: fl(location()), op: "build_link", parameters: v});
+    }
+  / [ \t]* "compile" [ \t]* ":" [ \t]* "[" ([ \t]* newline)* v:buildElementValues? "]" ([ \t]* newline)* {
+      return new ast.Node({loc: fl(location()), op: "build_compile", parameters: v});
+    }
+
+buildElementValues
+  = s:string ([ \t]* newline)* r:([ \t]* "," [ \t]* buildElementValues)? {
+      let result = [s];
+      if (r) {
+          result = result.concat(r[3]);
+      }
+      return result;
+  }
 
 func
   = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ obj:((memberObjectType [ \t]* "." [ \t]* identifier) / identifier) [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
@@ -142,12 +183,12 @@ parameter
     }
 
 funcTypeParameters
-  = g:group? p:type r:([ \t]* "," [ \t\n]* group? type)* [ \t]* {
+  = g:group? (identifier [ \t]+)? p:type r:([ \t]* "," [ \t\n]* group? (identifier [ \t]+)? type)* [ \t]* {
       p.groupName = g;
       if (r) {
         let result = [p];
         for(let x of r) {
-            let p2 = x[4];
+            let p2 = x[5];
             p2.groupName = x[3];
           result.push(p2);
         }
@@ -252,11 +293,11 @@ primitiveType
       }
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
     }
-  / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:returnType? {
+  / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters? [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:returnType? {
       if (e) {
         t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
       }
-      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t, rhs: f});      
+      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t ? t : [], rhs: f});      
     }
   / "*" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
@@ -287,6 +328,9 @@ primitiveType
     }
   / "copy" [ \t]* "<" t:type [ \t]* ">" {
       return new ast.Node({loc: fl(location()), op: "copyType", lhs: t});
+    }
+  / "opaque" {
+      return new ast.Node({loc: fl(location()), op: "opaqueType"});
     }
   / i: identifier s:([ \t]* "." [ \t]* identifier)? g:([ \t]* "<" [ \t]* typeList [ \t]* ">" [ \t]*)? {
       let nspace = null;

@@ -488,7 +488,13 @@ export abstract class Type {
         return this.name
     }
 
+    public get isImported(): boolean {
+        return this.importFromModule !== undefined;
+    }
+
     public abstract toTypeCodeString(): string;
+
+    public importFromModule: string;
 }
 
 /**
@@ -723,6 +729,7 @@ export class StructType extends Type {
     public fields: Array<StructField> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
+    public opaque: boolean;
 
     public _markChecked: boolean;
 }
@@ -1880,6 +1887,15 @@ export class TypeChecker {
         } else if (tnode.op == "copyType") {
             let t = this.createType(tnode.lhs, scope, mode);
             return this.createCopyType(t, tnode.loc);
+        } else if (tnode.op == "opaqueType") {
+            if (originalMode == "parameter_toplevel" || originalMode == "variable_toplevel") {
+                throw new TypeError("Opaque types are not allowed in this place. Use a pointer to the type instead", tnode.loc);
+            }
+            let s = new StructType();
+            s.pkg = this.pkg;
+            s.loc = tnode.loc;
+            s.opaque = true;
+            return s;
         }
         throw "Implementation error for type " + tnode.op
     }
@@ -2057,6 +2073,10 @@ export class TypeChecker {
             this.structs.push(s);
         }
                 
+        if (tnode.op == "opaqueType") {
+            return s;
+        }
+
         for(let fnode of tnode.parameters) {
             if (fnode.op == "extends") {
                 let ext: Type = this.createType(fnode.rhs, scope, mode ? mode : "default");
@@ -2603,7 +2623,7 @@ export class TypeChecker {
             }
             t.type = tmpl;
             scope.registerType(t.name, tmpl, tnode.loc);
-        } else if (t.node.rhs.op == "structType") {
+        } else if (t.node.rhs.op == "structType" || t.node.rhs.op == "opaqueType") {
             let s = new StructType();
             s.pkg = this.pkg;
             s.loc = t.node.loc;
@@ -2638,7 +2658,7 @@ export class TypeChecker {
     }
 
     private createImport(inode: Node, scope: Scope) {
-        if (inode.rhs.op == "importWasm") {
+        if (inode.rhs.op == "importNative") {
             let ip: ImportedPackage;
             let importPath: string = inode.rhs.rhs.value;
             if (!inode.lhs) {
@@ -2701,11 +2721,10 @@ export class TypeChecker {
         let i = 0;
         if (fnode.parameters) {
             for(let pnode of fnode.parameters) {
-                let original_pnode = pnode;
                 let p = new FunctionParameter();
                 p.name = "p" + i.toString();
                 i++;
-                p.type = this.createType(pnode, f.scope, "parameter");
+                p.type = this.createType(pnode, f.scope, "parameter_toplevel");
                 p.loc = pnode.loc;
                 f.type.parameters.push(p);
                 f.scope.registerElement(p.name, p);
@@ -2750,7 +2769,44 @@ export class TypeChecker {
     }
 
     private importTypes(inode: Node, scope: Scope) {
-        if (inode.rhs.op != "importWasm") {
+        if (inode.rhs.op == "importNative") {
+            let ip: ImportedPackage;
+            let importPath: string = inode.rhs.rhs.value;
+            if (!inode.lhs) {
+                // Syntax of the kind: import "native/path" { func ... }
+                let importPathElements = importPath.split("/");
+                let name = importPathElements[importPathElements.length - 1];
+                // TODO: Sanitize the name
+                let e = scope.resolveElement(name);
+                if (!(e instanceof ImportedPackage)) {
+                    throw "Implementation error";
+                }
+                ip = e;
+            } else if (inode.lhs.op == "id") {
+                // Syntax of the kind: import identifier from "native/path" { func ... }
+                // TODO: Sanitize the name
+                let e = scope.resolveElement(inode.lhs.value);
+                if (!(e instanceof ImportedPackage)) {
+                    throw "Implementation error";
+                }
+                ip = e;
+            } else if (inode.lhs.op == ".") {
+                // Syntax of the kind: import . from "native/path" { func ... } 
+            } else {
+                throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+            for(let n of inode.rhs.parameters) {
+                if (n.op == "funcType") {
+                    // Do nothing by intention
+                } else if (n.op == "typedef") {
+                    this.typedefs.push(this.createTypedef(n, ip ? ip.pkg.scope : scope));
+                } else if (n.op == "constValue") {
+                    // Do nothing by intention
+                } else {
+                    throw "Implementation error in import " + n.op;
+                }
+            }
+        } else {
             let importPath: string = inode.rhs.value;
             let p = Package.resolve(importPath, inode.rhs.loc);
             let ip: ImportedPackage;
@@ -2779,11 +2835,11 @@ export class TypeChecker {
     }
 
     private importFunctionsAndVariables(inode: Node, scope: Scope) {
-        if (inode.rhs.op == "importWasm") {
+        if (inode.rhs.op == "importNative") {
             let ip: ImportedPackage;
             let importPath: string = inode.rhs.rhs.value;
             if (!inode.lhs) {
-                // Syntax of the kind: import from "imports" { func ... }
+                // Syntax of the kind: import "native/path" { func ... }
                 let importPathElements = importPath.split("/");
                 let name = importPathElements[importPathElements.length - 1];
                 // TODO: Sanitize the name
@@ -2793,7 +2849,7 @@ export class TypeChecker {
                 }
                 ip = e;
             } else if (inode.lhs.op == "id") {
-                // Syntax of the kind: import identifier from "imports" { func ... }
+                // Syntax of the kind: import identifier from "native/path" { func ... }
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(inode.lhs.value);
                 if (!(e instanceof ImportedPackage)) {
@@ -2801,13 +2857,17 @@ export class TypeChecker {
                 }
                 ip = e;
             } else if (inode.lhs.op == ".") {
-                // Syntax of the kind: import . from "imports" { func ... } 
+                // Syntax of the kind: import . from "native/path" { func ... } 
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
             }
             for(let n of inode.rhs.parameters) {
                 if (n.op == "funcType") {
                     this.createFunctionImport(inode.rhs.rhs.value, n, ip ? ip.pkg.scope : scope);
+                } else if (n.op == "typedef") {
+                    // Do nothing by intention
+                } else if (n.op == "constValue") {
+                    throw "TODO"
                 } else {
                     throw "Implementation error in import " + n.op;
                 }
@@ -2842,6 +2902,32 @@ export class TypeChecker {
                 }
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
+            }
+        }
+    }
+
+    private processBuildInstructions(snode: Node, pkg: Package) {
+        if (snode.parameters) {
+            for(let p of snode.parameters) {
+                if (p.op == "build_link") {
+                    if (p.parameters) {
+                        let args: Array<string> = [];
+                        for(let a of p.parameters) {
+                            args.push(a.value);
+                        }
+                        pkg.linkCmdLineArgs = pkg.linkCmdLineArgs ? pkg.linkCmdLineArgs.concat(args) : args;
+                    }
+                } else if (p.op == "build_compile") {
+                    if (p.parameters) {
+                        let args: Array<string> = [];
+                        for(let a of p.parameters) {
+                            args.push(a.value);
+                        }
+                        pkg.compileCmdLineArgs = pkg.compileCmdLineArgs ? pkg.compileCmdLineArgs.concat(args) : args;
+                    }
+                } else {
+                    throw "Implementation error " + snode.op;
+                }
             }
         }
     }
@@ -2888,6 +2974,8 @@ export class TypeChecker {
             for (let snode of fnode.statements) {
                 if (snode.op == "import") {
                     this.createImport(snode, fnode.scope);
+                } else if (snode.op == "build") {
+                    this.processBuildInstructions(snode, pkg);
                 }
             }
         }
@@ -2957,6 +3045,8 @@ export class TypeChecker {
                 } else if (snode.op == "typedef") {
                     // Do nothing by intention
                 } else if (snode.op == "comment") {
+                    // Do nothing by intention
+                } else if (snode.op == "build") {
                     // Do nothing by intention
                 } else {
                     throw "Implementation error " + snode.op;
