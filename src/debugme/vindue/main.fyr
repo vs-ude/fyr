@@ -86,11 +86,13 @@ export func main() int {
 // TODO: glfwSetWindowRefreshCallback
 // TODO: glfwSetWindowSizeCallback
 
-//export {
-//    func glfwInit as Init
-//    func glfwTerminate as Terminate
-//    func glfwCreateWindow as CreateWindow
-//    func glfwDestroyWindow as DestroyWindow
-//    type GLFWmonitor as Monitor
-//    type GLFWwindow as Window
-//}
+export {
+    type GLFWmonitor as Monitor
+    type GLFWwindow as Window
+    type GLFWimage as Image
+
+    func glfwInit as Init
+    func glfwTerminate as Terminate
+    func glfwCreateWindow as CreateWindow
+    func glfwDestroyWindow as DestroyWindow
+}

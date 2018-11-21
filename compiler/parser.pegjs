@@ -43,7 +43,7 @@ file
                     x.comments = m[i-1];
                 }
                 result.push(x);
-            } else if (x.op == "import" || x.op == "exportAs" || x.op == "build") {
+            } else if (x.op == "import" || x.op == "export_as" || x.op == "build") {
                 result.push(x);                
             }
         }
@@ -99,14 +99,14 @@ importElement
 
 export
   = "export" [ \t]* "{" ([ \t]* newline)+ e:exportAs* [ \t\n]* "}" {
-      return new ast.Node({loc: fl(location()), op: "exportAs", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "export_as", parameters: e});
   }
 
 exportAs
-  = "func" n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* newline* {
+  = [ \t]* "func" [ \t]+ n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* ([ \t]* newline)* {
       return new ast.Node({loc: fl(location()), op: "exportFuncAs", lhs: n, rhs: e});
     }
-  / "type" n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* newline* {
+  / [ \t]*"type" [ \t]+ n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* ([ \t]* newline)* {
       return new ast.Node({loc: fl(location()), op: "exportTypeAs", lhs: n, rhs: e});
     }
 

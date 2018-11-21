@@ -3058,6 +3058,8 @@ export class TypeChecker {
                     // Do nothing by intention
                 } else if (snode.op == "build") {
                     // Do nothing by intention
+                } else if (snode.op == "export_as") {
+                    // Do nothing by intention
                 } else {
                     throw "Implementation error " + snode.op;
                 }
