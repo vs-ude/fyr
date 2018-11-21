@@ -742,6 +742,12 @@ export class CBackend implements backend.Backend {
                 }
                 c.args.push(e);
             }
+            if (f instanceof FunctionImport && n.type.result instanceof ssa.PointerType) {
+                let conv = new CTypeCast();
+                conv.expr = c;
+                conv.type = this.mapType(n.type.result, false);
+                return conv;
+            }
             return c;
         } else if (n.kind == "call_indirect") {
             if (!(n.type instanceof FunctionType)) {

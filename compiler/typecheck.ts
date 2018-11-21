@@ -729,7 +729,17 @@ export class StructType extends Type {
     public fields: Array<StructField> = [];
     // Member methods indexed by their name
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>();
+    /**
+     * An opaque struct cannot be instantiated, because the compiler does not know the size and layout of the struct.
+     * Opaque structs can therefore only be handled via pointers.
+     */
     public opaque: boolean;
+    /**
+     * A native struct is for example provided by a C-library.
+     * In this case, the compiler will use the native struct definition (as defined by some C-include) instead of generating
+     * a defintion for the struct.
+     */
+    public native: boolean;
 
     public _markChecked: boolean;
 }
