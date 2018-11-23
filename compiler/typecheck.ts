@@ -3104,6 +3104,41 @@ export class TypeChecker {
             }
             this.checkGlobalVariable(v, scope);
         }
+
+        // Rename elements for export
+        for(let fnode of this.moduleNode.statements) {
+            for (let snode of fnode.statements) {
+                if (snode.op == "export_as") {
+                    for(let exp of snode.parameters) {
+                        if (exp.op == "exportFuncAs") {
+                            let e = fnode.scope.resolveElement(exp.lhs.value);
+                            if (!e) {
+                                throw new TypeError("Unknown function " + exp.lhs.value, exp.loc);
+                            }
+                            if (exp.lhs.value != exp.rhs.value) {
+                                if (scope.resolveElement(exp.rhs.value)) {
+                                    throw new TypeError("A function of name " + exp.rhs.value + " is already exported", exp.rhs.loc);
+                                }
+                                scope.registerElement(exp.rhs.value, e, exp.loc);
+                            }
+                        } else if (exp.op == "exportTypeAs") {
+                            let t = fnode.scope.resolveType(exp.lhs.value);
+                            if (!t) {
+                                throw new TypeError("Unknown type " + exp.lhs.value, exp.loc);
+                            }
+                            if (exp.lhs.value != exp.rhs.value) {
+                                if (scope.resolveType(exp.rhs.value)) {
+                                    throw new TypeError("A type of name " + exp.rhs.value + " is already exported", exp.rhs.loc);
+                                }
+                                scope.registerType(exp.rhs.value, t, exp.loc);
+                            }
+                        } else {
+                            throw "Implementation error " + exp.op;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /** 

@@ -95,4 +95,34 @@ export {
     func glfwTerminate as Terminate
     func glfwCreateWindow as CreateWindow
     func glfwDestroyWindow as DestroyWindow
+    func glfwWindowShouldClose as WindowShouldClose
+    func glfwSetWindowShouldClose as SetWindowsShouldClose
+    func glfwFocusWindow as FocusWindow
+    func glfwHideWindow as HideWindow
+    func glfwShowWindow as ShowWindow
+    func glfwMaximizeWindow as MaximizeWindow
+    func glfwIconifyWindow as IconifyWindow
+    func glfwRestoreWindow as RestoreWindow
+    func glfwGetFramebufferSize as GetFrameBufferSize
+    func glfwGetWindowAttrib as GetWindowAttrib
+    func glfwGetWindowFrameSize as GetWindowFrameSize
+    func glfwGetWindowMonitor as GetWindowMonitor 
+    func glfwGetWindowPos as GetWindowPos
+    func glfwGetWindowSize as GetWindowSize
+    func glfwSetWindowPos as SetWindowPos
+    func glfwSetWindowSize as SetWindowSize
+    func glfwSetWindowSizeLimits as SetWindowSizeLimits
+    func glfwGetWindowUserPointer as GetWindowUserPointer
+    func glfwSetWindowUserPointer as SetWindowUserPointer
+    func glfwSetWindowAspectRatio as SetWindowAspectRation
+    func glfwSetWindowIcon as SetWindowIcon
+    func glfwSetWindowMonitor as SetWindowMonitor
+    func glfwSetWindowTitle as SetWindowTitle
+    func glfwSwapBuffers as SwapBuffers
+    func glfwPollEvents as PollEvents
+    func glfwPostEmptyEvent as PostEmptyEvent
+    func glfwWaitEvents as WaitEvents
+    func glfwWaitEventsTimeout as WaitEventsTimeout
+    func glfwWindowHint as WindowHint
+    func glfwDefaultWindowHints as DefaultWindowHints
 }
