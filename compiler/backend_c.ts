@@ -137,7 +137,7 @@ export class CBackend implements backend.Backend {
         v.writeCount = 2;        
         this.globalVariables.push(v);      
         this.globalStorage.set(v, v.name);  
-        this.importedGlobalVariables.push(v);
+        this.importedGlobalVariables.set(v, from);
         return v;
     }
 
@@ -255,12 +255,16 @@ export class CBackend implements backend.Backend {
                 cv.initExpr = this.emitExprIntern(v, true);
             }
             // Ignore global variables located in other packages
-            if (this.importedGlobalVariables.indexOf(v) == -1) {
+            let from = this.importedGlobalVariables.get(v);
+            if (!from) {
                 this.module.elements.push(cv);    
             }
-            // Export all global variables, because templates might need them
-            let exp = new CExtern(cv);
-            this.module.elements.push(exp);
+            // Export all global variables, because templates might need them.
+            // For native variables however, do nothing.
+            if (!from || from instanceof Package) {
+                let exp = new CExtern(cv);
+                this.module.elements.push(exp);
+            }
         }
 
         for(let f of this.funcs) {
@@ -1787,7 +1791,7 @@ export class CBackend implements backend.Backend {
     private initFunction: Function;
     private mainFunction: Function;
     private globalVariables: Array<ssa.Variable> = [];
-    private importedGlobalVariables: Array<ssa.Variable> = [];
+    private importedGlobalVariables: Map<ssa.Variable, Package | string> = new Map<ssa.Variable, Package | string>();
     private funcs: Array<Function | FunctionImport> = [];
     private currentFunction: Function;
     private blocks: Map<ssa.Node, string> = new Map<ssa.Node, string>();
