@@ -18,8 +18,9 @@ function runCompiler() {
         process.exit(1);
     }
     let config = new FyrConfiguration;
-    config.disableCodegen = !(program.emitNative || program.emitWasm);
-    config.emitC = config.emitNative = program.emitNative;
+    config.disableCodegen = program.disableCodegen;
+    config.emitC = program.emitC || program.emitNative;
+    config.emitNative = config.emitNative;
     config.emitIr = program.emitIr;
 
     var args: Array<object | string> = Array.prototype.slice.call(arguments, 0);
@@ -105,7 +106,7 @@ export function constructPkg(config: FyrConfiguration): Package {
 }
 
 export function compile(pkg: Package, config: FyrConfiguration) {
-    try {
+//    try {
         pkg.loadSources();
         Package.checkTypesForPackages();
 
@@ -117,11 +118,11 @@ export function compile(pkg: Package, config: FyrConfiguration) {
             } else if (config.emitC) {
                 backend = "C";
             }
-            Package.generateCodeForPackages(backend, config.emitIr, config.emitC, config.disableNullCheck);
+            Package.generateCodeForPackages(backend, config.emitIr, config.emitNative, config.disableNullCheck);
         }
-    } catch(e) {
-        config.errorHandler.handle(e);
-    }
+//    } catch(e) {
+//        config.errorHandler.handle(e);
+//    }
 }
 
 // only parse if this file was required by fyrc
