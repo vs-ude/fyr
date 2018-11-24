@@ -17,6 +17,10 @@ function runCompiler() {
         console.log(("Only one code emit path can be selected".red));
         process.exit(1);
     }
+    if (program.emitC && program.emitWasm) {
+        console.log(("Only one code emit path can be selected".red));
+        process.exit(1);
+    }
     let config = new FyrConfiguration;
     config.disableCodegen = program.disableCodegen;
     config.emitC = program.emitC || program.emitNative;
@@ -137,7 +141,7 @@ if (binaryPath.substring(binaryPath.length - 4, binaryPath.length) === 'fyrc') {
         .option('-c, --emit-c', "Emit C code")
         .option('-n, --emit-native', "Emit native executable")
         .option('-N, --disable-null-check', "Do not check for null pointers")
-        .option('-T, --disable-runtime', "Do not include the standard runtime")
+//        .option('-T, --disable-runtime', "Do not include the standard runtime")
         .option('-G, --disable-codegen', "Do not generate any code, just perform syntax and typechecks")
 
     program
