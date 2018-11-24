@@ -13,7 +13,8 @@ export interface Function {
 
 export interface Backend {
     importFunction(name: string, from: string | Package, type: ssa.FunctionType): FunctionImport;
-    declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType, pkg: Package): ssa.Variable;
+    importGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType, from: string | Package): ssa.Variable;
+    declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable;
     declareFunction(name: string): Function;
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean): void;

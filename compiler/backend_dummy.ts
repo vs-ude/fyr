@@ -39,7 +39,15 @@ export class DummyBackend {
         return f;
     }
 
-    declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType, pkg: Package): ssa.Variable {
+    importGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType, from: string | Package): ssa.Variable {
+        let v = new ssa.Variable(name);
+        v.type = type;
+        v.readCount = 2; // Avoid that global variables are optimized away
+        v.writeCount = 2;        
+        return v;
+    }
+
+    declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable {
         let v = new ssa.Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away

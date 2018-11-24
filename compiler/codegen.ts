@@ -6,7 +6,6 @@ import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
-import { StringDecoder } from "string_decoder";
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
@@ -65,16 +64,19 @@ export class CodeGenerator {
         for(let fnode of mnode.statements) {
             for(let name of fnode.scope.elements.keys()) {
                 let e = fnode.scope.elements.get(name);
-                if (e instanceof Function && e.isImported) {
-                    let name = e.importFromModule + "/" + e.name;
+                if (e instanceof Function && e.isNative) {
+                    let name = e.nativePackageName + "/" + e.name;
                     if (this.imports.has(name)) {
                         this.funcs.set(e, this.imports.get(name));
                     } else {
                         let ft = this.getSSAFunctionType(e.type);
-                        let wf = this.backend.importFunction(e.name, e.importFromModule, ft);
+                        let wf = this.backend.importFunction(e.name, e.nativePackageName, ft);
                         this.funcs.set(e, wf);
                         this.imports.set(name, wf);
                     }
+                } else if (e instanceof Variable && e.isNative) {
+                    let g = this.backend.importGlobalVar(e.name, this.getSSAType(e.type), e.nativePackageName);
+                    this.globalVars.set(e, g);
                 }
             }
         }
@@ -86,8 +88,10 @@ export class CodeGenerator {
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                if (e.isImported) {
-                    throw "Implementation error";
+                if (e.isNative) {
+                    // A native function that has been imported and is being exported as well.
+                    // It has been handled as imported already. Nothing to do here.
+                    continue;
                 }
                 let name = e.name;
                 if (e.type.objectType) {
@@ -100,20 +104,27 @@ export class CodeGenerator {
                 let wf = this.backend.declareFunction(name);
                 this.funcs.set(e, wf);
 
+                // If the function is a template instantiation, make all global variables of the package available,
+                // in which the template has been defined.
                 if (e.type instanceof TemplateFunctionType) {
                     let pkg = e.type.base.pkg;
                     for(let ge of pkg.tc.globalVariables) {
                         if (this.globalVars.has(ge)) {
                             continue;
                         }
-                        let gv = this.backend.declareGlobalVar(ge.name, this.getSSAType(ge.type), pkg);
+                        let gv = this.backend.importGlobalVar(ge.name, this.getSSAType(ge.type), pkg);
                         this.globalVars.set(ge, gv);
                     }
                 }
             } else if (e instanceof TemplateFunction) {
                 // Do nothing by intention
             } else if (e instanceof Variable) {
-                let g = this.backend.declareGlobalVar(e.name, this.getSSAType(e.type), this.tc.pkg);
+                if (e.nativePackageName) {
+                    // A native variable that has been imported and is being exported as well.
+                    // It has been handled as imported already. Nothing to do here.
+                    continue;
+                }
+                let g = this.backend.declareGlobalVar(e.name, this.getSSAType(e.type));
                 this.globalVars.set(e, g);
                 if (e.node.rhs) {
                     globals.push(e);
@@ -156,8 +167,10 @@ export class CodeGenerator {
         for(let name of scope.elements.keys()) {
             let e = scope.elements.get(name);
             if (e instanceof Function) {
-                if (e.isImported) {
-                    throw "Implementation error";
+                if (e.isNative) {
+                    // A native function that has been imported and is being exported as well.
+                    // It has been handled as imported already. Nothing to do here.
+                    continue;
                 }
                 let wf = this.funcs.get(e) as backend.Function;
                 this.processFunction(e, wf);
@@ -1320,7 +1333,11 @@ export class CodeGenerator {
                 if (element instanceof Variable && element.isForLoopPointer) {
                     return new ssa.Pointer(vars.get(element), 0);
                 }
-                return vars.get(element);
+                let v = vars.get(element);
+                if (!v) {
+                    throw "Implementation error: unknown element " + element.name;
+                }
+                return v;
             }
             case "unary*":
             {
@@ -2276,7 +2293,11 @@ export class CodeGenerator {
                     let storage = this.getSSAType(element.type);
                     return b.assign(b.tmp(), "load", storage, [vars.get(element), 0]);
                 }
-                return vars.get(element);
+                let v = vars.get(element);
+                if (!v) {
+                    throw "Implementation error: unknown element " + element.name;
+                }
+                return v;
             }
             case "(":
             case "spawn":
@@ -2441,7 +2462,7 @@ export class CodeGenerator {
                 if (f) {
                     if (!this.funcs.has(f)) {
                         // this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
-                        this.funcs.set(f, this.backend.importFunction(f.name, f.importFromModule, this.getSSAFunctionType(f.type)));
+                        this.funcs.set(f, this.backend.importFunction(f.name, f.nativePackageName, this.getSSAFunctionType(f.type)));
                     }
                     args.push(this.funcs.get(f).getIndex());
                 } else if (findex) {

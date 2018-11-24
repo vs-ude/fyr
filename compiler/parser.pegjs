@@ -93,7 +93,7 @@ importElement
   / [ \t]* t: typedef ([ \t]* newline)* {
       return t;
     }
-  / [ \t]* "const" [ \t]+ i:identifier t:type ([ \t]* newline)* {
+  / [ \t]* "const" [ \t]+ i:identifier [ \t]* t:type ([ \t]* newline)* {
       return new ast.Node({loc: fl(location()), op: "constValue", lhs: t, name: i});
     }
 

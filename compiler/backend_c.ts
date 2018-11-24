@@ -125,17 +125,30 @@ export class CBackend implements backend.Backend {
         return f;
     }
 
-    public declareGlobalVar(name: string, type: ssa.Type | ssa.StructType, pkg: Package): ssa.Variable {
-        name = "g_" + this.mangleName(pkg.pkgPath + "/" + name);
+    public importGlobalVar(name: string, type: ssa.Type | ssa.StructType, from: string | Package): ssa.Variable {
+        if (from instanceof Package) {
+            name = "g_" + this.mangleName(from.pkgPath + "/" + name);
+        } else {
+            // An imported native variable. Use its name without mangling it.
+        }
         let v = new Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
         v.writeCount = 2;        
         this.globalVariables.push(v);      
         this.globalStorage.set(v, v.name);  
-        if (pkg == this.pkg) {
-            this.importedGlobalVariables.push(v);
-        }
+        this.importedGlobalVariables.push(v);
+        return v;
+    }
+
+    public declareGlobalVar(name: string, type: ssa.Type | ssa.StructType): ssa.Variable {
+        name = "g_" + this.mangleName(this.pkg.pkgPath + "/" + name);
+        let v = new Variable(name);
+        v.type = type;
+        v.readCount = 2; // Avoid that global variables are optimized away
+        v.writeCount = 2;        
+        this.globalVariables.push(v);      
+        this.globalStorage.set(v, v.name);  
         return v;
     }
 

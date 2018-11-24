@@ -42,12 +42,12 @@ import . from "<GLFW/glfw3.h>" {
 
 //    func glfwSetFramebufferSizeCallback(window #GLFWwindow, cbfun #GLFWframebuffersizefun) #GLFWframebuffersizefun
 
-//    const GLFW_TRUE int
-//    const GLFW_FALSE int
-//    const GLFW_DONT_CARE int
+    const GLFW_TRUE int
+    const GLFW_FALSE int
+    const GLFW_DONT_CARE int
 
-//    const GLFW_RESIZABLE int
-//    const GLFW_VISIBLE int
+    const GLFW_RESIZABLE int
+    const GLFW_VISIBLE int
     
 //    type Hint GLFW_RESIZABLE | GLFW_VISIBLE
 } 
@@ -75,6 +75,9 @@ export func main() int {
     glfwDestroyWindow(window)
     glfwTerminate();
     println("Bye from glfw")
+    let a = GLFW_RESIZABLE
+    println(a)
+//    println(GLFW_RESIZABLE)
     return 0
 }
 

@@ -31,6 +31,10 @@ export class ImportedPackage implements ScopeElement {
 
 // Variable is a global or function-local variable.
 export class Variable implements ScopeElement {
+    public get isNative(): boolean {
+        return this.nativePackageName !== undefined;
+    }
+
     // Variable is the named return variable of a function, e.g. "count" or "error" in "func foo() (count int, err error) { }"
     public isResult: boolean = false;
     public isGlobal: boolean;
@@ -53,6 +57,7 @@ export class Variable implements ScopeElement {
     public type: Type;
     public loc: Location;
     public node: Node;
+    public nativePackageName: string | undefined;
 }
 
 // Function is a named function inside a scope.
@@ -62,8 +67,8 @@ export class Function implements ScopeElement {
         this.scope.func = this;
     }
 
-    public get isImported(): boolean {
-        return this.importFromModule !== undefined;
+    public get isNative(): boolean {
+        return this.nativePackageName !== undefined;
     }
 
     public name: string;
@@ -85,7 +90,7 @@ export class Function implements ScopeElement {
     public node: Node;
     // Location where the function has been defined.
     public loc: Location;
-    public importFromModule: string;
+    public nativePackageName: string | undefined;
     public isExported: boolean;
     public isTemplateInstance: boolean;
 }
@@ -2717,9 +2722,25 @@ export class TypeChecker {
         }
     }
 
-    private createFunctionImport(namespace: string, fnode: Node, scope: Scope): Function {
+    private createNativeConstImport(nativePackageName: string, node: Node, scope: Scope): Variable {
+        let v: Variable = new Variable();
+        v.nativePackageName = nativePackageName;
+        v.name = node.name.value;
+        v.node = node;
+        v.loc = node.loc;
+        v.type = this.createType(node.lhs, scope, "variable_toplevel");
+        v.isConst = true;
+        v.isGlobal = true;
+        scope.registerElement(v.name, v);
+        // Imported variables are considered to be free.
+        // This can lead to race conditions.
+        scope.setGroup(v, new Group(GroupKind.Free));
+        return v;
+    }
+
+    private createNativeFunctionImport(nativePackageName: string, fnode: Node, scope: Scope): Function {
         let f: Function = new Function();
-        f.importFromModule = namespace;
+        f.nativePackageName = nativePackageName;
         f.name = fnode.name.value;
         f.scope.parent = scope;
         f.node = fnode;
@@ -2873,11 +2894,11 @@ export class TypeChecker {
             }
             for(let n of inode.rhs.parameters) {
                 if (n.op == "funcType") {
-                    this.createFunctionImport(inode.rhs.rhs.value, n, ip ? ip.pkg.scope : scope);
+                    this.createNativeFunctionImport(inode.rhs.rhs.value, n, ip ? ip.pkg.scope : scope);
                 } else if (n.op == "typedef") {
                     // Do nothing by intention
                 } else if (n.op == "constValue") {
-                    throw "TODO"
+                    this.createNativeConstImport(inode.rhs.rhs.value, n, ip ? ip.pkg.scope : scope);
                 } else {
                     throw "Implementation error in import " + n.op;
                 }
