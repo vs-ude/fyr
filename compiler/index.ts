@@ -24,7 +24,7 @@ function runCompiler() {
     let config = new FyrConfiguration;
     config.disableCodegen = program.disableCodegen;
     config.emitC = program.emitC || program.emitNative;
-    config.emitNative = config.emitNative;
+    config.emitNative = program.emitNative;
     config.emitIr = program.emitIr;
 
     var args: Array<object | string> = Array.prototype.slice.call(arguments, 0);
