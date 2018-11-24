@@ -110,7 +110,7 @@ export function constructPkg(config: FyrConfiguration): Package {
 }
 
 export function compile(pkg: Package, config: FyrConfiguration) {
-//    try {
+    try {
         pkg.loadSources();
         Package.checkTypesForPackages();
 
@@ -124,9 +124,9 @@ export function compile(pkg: Package, config: FyrConfiguration) {
             }
             Package.generateCodeForPackages(backend, config.emitIr, config.emitNative, config.disableNullCheck);
         }
-//    } catch(e) {
-//        config.errorHandler.handle(e);
-//    }
+    } catch(e) {
+        config.errorHandler.handle(e);
+    }
 }
 
 // only parse if this file was required by fyrc
