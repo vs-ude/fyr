@@ -84,14 +84,17 @@ export function constructPkg(config: FyrConfiguration): Package {
             if (!pkg) {
                 // Determine all filenames
                 let files: Array<string> = [];
+                let nativeFiles: Array<string> = [];
                 let allFiles = fs.readdirSync(p);
                 for(let f of allFiles) {
                     if (f.length > 4 && f.substr(f.length - 4, 4) == ".fyr") {
                         files.push(path.join(p, f));
+                    } else if (f.length > 2 && f.substr(f.length - 2, 2) == ".c") {
+                        nativeFiles.push(path.join(p, f));
                     }
                 }
                 pkg = new Package(true);
-                pkg.setSources(files);
+                pkg.setSources(files, nativeFiles);
             }
         }
     }
@@ -104,7 +107,7 @@ export function constructPkg(config: FyrConfiguration): Package {
             files.push(file as string);
         }
         pkg = new Package(true);
-        pkg.setSources(files);
+        pkg.setSources(files, []);
     }
     return pkg;
 }

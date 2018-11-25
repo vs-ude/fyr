@@ -1,4 +1,4 @@
-import . from "<GL/gl.h>" {
+import . from "<glad/glad.h>" {
     func glGenBuffers(n uint32, buffers #uint32)
     func glDeleteBuffers(n uint32, buffers #uint32)
     func glBindBuffer(target uint32, buffer uint32)
@@ -12,6 +12,9 @@ import . from "<GL/gl.h>" {
     func glVertexAttribIPointer(index uint32, size int32, datatype uint32, stride uint32, pointer #const void)
     func glVertexAttribLPointer(index uint32, size int32, datatype uint32, stride uint32, pointer #const void)
     func glDrawArrays(mode uint32, first int32, count uint32)
+
+    func gladLoadGL() int
+    func gladLoadGLLoader(proc #void) int
 
     // Buffer types
     const GL_ARRAY_BUFFER uint32
@@ -74,7 +77,7 @@ import . from "<GL/gl.h>" {
 
 build {
     compile: []
-    link: ["-lGL"]
+    link: ["-lGL", "-ldl"]
 }
 
 export {
@@ -91,6 +94,9 @@ export {
     func glVertexAttribIPointer as VertexAttribIPointer
     func glVertexAttribLPointer as VertexAttribLPointer
     func glDrawArrays as DrawArrays
+
+    func gladLoadGL as LoadGL
+    func gladLoadGLLoader as LoadGLLoader
 
     const GL_ARRAY_BUFFER as ARRAY_BUFFER
     const GL_ATOMIC_COUNTER_BUFFER as ATIMOC_COUNTER_BUFFER

@@ -98,12 +98,15 @@ export class Package {
         for(let f of allFiles) {
             if (f.length > 4 && f.substr(f.length - 4, 4) == ".fyr") {
                 this.files.push(path.join(p, f));
+            } else if (f.length > 2 && f.substr(f.length - 2, 2) == ".c") {
+                this.nativeFiles.push(path.join(p, f));
             }
         }
     }
 
-    public setSources(files: Array<string>) {
+    public setSources(files: Array<string>, nativeFiles: Array<string>) {
         this.files = files;
+        this.nativeFiles = nativeFiles;
         if (this.files.length == 0) {
             return;
         }
@@ -234,7 +237,7 @@ export class Package {
         this.hasInitFunction = (b.getInitFunction() != null);
     }
 
-    public generateObjectFiles(backend: "C" | "WASM" | null) {
+    public generateObjectFiles(backend: "C" | "WASM" | null, nativePackages: Array<Package>) {
         // Compile the *.c and *.h files to *.o files
         if (backend == "C") {
             let cfile = path.join(this.objFilePath, this.objFileName + ".c");
@@ -245,12 +248,32 @@ export class Package {
             for (let p of Package.fyrPaths) {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
+            for(let p of nativePackages) {                
+                includes.push("-I" + p.sourcePath());
+            }
             let args = includes.concat(["-g3", "-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
             if (this.compileCmdLineArgs) {
                 args = args.concat(this.compileCmdLineArgs);
             }
             console.log("gcc", args.join(" "));
             child_process.execFileSync("gcc", args);
+
+            if (this.nativeFiles) {
+                for(let cfile of this.nativeFiles) {
+                    let filename = path.basename(cfile, ".c");
+                    let ofile = path.join(this.objFilePath, filename + ".o");                    
+                    let includes: Array<string> = [];
+                    for(let p of nativePackages) {                
+                        includes.push("-I" + p.sourcePath());
+                    }                            
+                    let args = includes.concat(["-g3", "-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
+                    if (this.compileCmdLineArgs) {
+                        args = args.concat(this.compileCmdLineArgs);
+                    }
+                    console.log("gcc", args.join(" "));
+                    child_process.execFileSync("gcc", args);
+                }
+            }
         }
     }
 
@@ -347,9 +370,15 @@ export class Package {
     public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
         let initPackages: Array<Package> = [];
+        // Packages that contain native files, e.g. *.c
+        let nativePackages: Array<Package> = [];
         // Packages that contain (possibly duplicate) code in their header file
         let duplicateCodePackages: Array<Package> = [];
         for(let p of Package.packages) {
+            // Does the package have native files, e.g. *.c?
+            if (p.nativeFiles.length != 0) {
+                nativePackages.push(p);
+            }
             if (p == Package.mainPackage || p.isInternal) {
                 continue;
             }
@@ -376,10 +405,10 @@ export class Package {
                 if (p.isInternal) {
                     continue;                    
                 }
-                p.generateObjectFiles(backend);
+                p.generateObjectFiles(backend, nativePackages);
             }
 
-            // Run the linker
+            // Run the linker on the package that contains a main function and is not itself imported
             for(let p of Package.packages) {
                 if (!p.isImported && p.hasMain) {
                     if (backend == "C") {
@@ -395,6 +424,12 @@ export class Package {
                             oFiles.push(path.join(importPkg.objFilePath, importPkg.objFileName + ".o"));
                             if (importPkg.linkCmdLineArgs) {
                                 extraArgs = extraArgs.concat(importPkg.linkCmdLineArgs);
+                            }
+                            // Link in all native files
+                            for (let cfile of importPkg.nativeFiles) {
+                                let filename = path.basename(cfile, ".c");
+                                let ofile = path.join(importPkg.objFilePath, filename + ".o");
+                                oFiles.push(ofile);
                             }
                         }
                         let bFile = path.join(p.binFilePath, p.binFileName);
@@ -484,8 +519,10 @@ export class Package {
     public fyrPath: string = null;
     public scope: Scope;
     public tc: TypeChecker;
-    // All source files of the package.
+    // All Fyr source files of the package.
     public files: Array<string> = [];
+    // All native files of the package, i.e. *.c files.
+    public nativeFiles: Array<string> = [];
     public codegen: CodeGenerator;
     public objFilePath: string;
     public objFileName: string;

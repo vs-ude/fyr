@@ -1,3 +1,5 @@
+import "vindue/gl"
+
 import . from "<GLFW/glfw3.h>" {
     type GLFWmonitor opaque
     type GLFWwindow opaque
@@ -52,11 +54,14 @@ import . from "<GLFW/glfw3.h>" {
     const GLFW_RESIZABLE int
     const GLFW_VISIBLE int
     
+    // HACK
+    const glfwGetProcAddress #void
+    
 //    type Hint GLFW_RESIZABLE | GLFW_VISIBLE
 } 
 
 build {
-    compile: []
+    compile: ["-include", "glad/glad.h"]
     link: ["-lglfw"]
 }
 
@@ -116,4 +121,8 @@ export {
 
     const GLFW_RESIZABLE as RESIZABLE
     const GLFW_VISIBLE as VISIBLE
+
+    // HACK
+    const glfwGetProcAddress as GetProcAddress
+
 }
