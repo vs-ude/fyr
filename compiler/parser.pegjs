@@ -22,6 +22,11 @@
  
     function runesToString(runes) {
         for(var i = 0, s = ''; i < runes.length; i++) {
+            if (runes[i].op == "runeQ1") {
+                s += "%22";
+            } else if (runes[i].op == "runeQ2") {
+                s += "%22%22";
+            }
             var h = runes[i].numValue.toString(16);
             if(h.length < 2) h = '0' + h;
             s += '%' + h;
@@ -1133,12 +1138,28 @@ identifier "identifier"
     }
 
 string "string"
-  = '"' s:stringchar* '"' { return new ast.Node({loc: fl(location()), op: "str", value: runesToString(s)}); }
+  = "\"\"\"" s:multilinechar* "\"\"\"" {
+      return new ast.Node({loc: fl(location()), op: "str", value: runesToString(s)});
+    }
+  / '"' s:stringchar* '"' { return new ast.Node({loc: fl(location()), op: "str", value: runesToString(s)}); }
 
 stringchar
   = r: runecharSpecial { return r; }
   / s:$([^"]) {
       return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: s.charCodeAt(0)});
+    }
+
+multilinechar
+  = '"' '"' s:stringchar {
+      s.op = "runeQ2";
+      return s;
+    }
+  / '"' s:stringchar {
+      s.op = "runeQ1";
+      return s;
+    }
+  / s:stringchar {
+      return s;
     }
 
 rune
