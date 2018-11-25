@@ -1,4 +1,4 @@
-import . from "<GLFW/glfw3.h>" {
+import . from "<GL/gl.h>" {
     func glGenBuffers(n uint32, buffers #uint32)
     func glDeleteBuffers(n uint32, buffers #uint32)
     func glBindBuffer(target uint32, buffer uint32)
@@ -72,6 +72,11 @@ import . from "<GLFW/glfw3.h>" {
     const GL_PATCHES uint32
 }
 
+build {
+    compile: []
+    link: ["-lGL"]
+}
+
 export {
     func glGenBuffers as GenBuffers
     func glDeleteBuffers as DeleteBuffers
@@ -85,7 +90,8 @@ export {
     func glVertexAttribPointer as VertexAttribPointer
     func glVertexAttribIPointer as VertexAttribIPointer
     func glVertexAttribLPointer as VertexAttribLPointer
-    
+    func glDrawArrays as DrawArrays
+
     const GL_ARRAY_BUFFER as ARRAY_BUFFER
     const GL_ATOMIC_COUNTER_BUFFER as ATIMOC_COUNTER_BUFFER
     const GL_COPY_READ_BUFFER as COPY_READ_BUFFER

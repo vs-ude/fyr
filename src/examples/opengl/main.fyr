@@ -1,25 +1,61 @@
 import "vindue/glfw"
+import "vindue/gl"
 
 export func main() int {
+    let vertexData const [9]float = [
+        -1.0, -1.0, 0.0,
+        1.0, -1.0, 0.0,
+        0.0,  1.0, 0.0
+    ]
+
     if (glfw.Init() == 0) {
         println("GLFW error init")
         return 2
     }
+
     let window = glfw.CreateWindow(640, 480, "Fyr", null, null)
     if (window == null) {
-        // Window or OpenGL context creation failed
         println("No window")
         return 3
     }
+
+    glfw.MakeContextCurrent(window)
+    glfw.SwapInterval(1)
+
+    var vertexBuffer uint32 = 0
+    // Generate 1 buffer, put the resulting identifier in vertexbuffer
+    gl.GenBuffers(1, &vertexBuffer)
+    // The following commands will talk about our 'vertexbuffer' buffer
+    gl.BindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
+    // Give our vertices to OpenGL.
+    gl.BufferData(gl.ARRAY_BUFFER, <uint64>sizeOf<[9]float>, <#const void>&vertexData, gl.STATIC_DRAW)
+
     for (glfw.WindowShouldClose(window) == 0) {
         println("Eventloop")
+
+        // 1st attribute buffer : vertices
+        gl.EnableVertexAttribArray(0)
+        gl.BindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
+        gl.VertexAttribPointer(
+            0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+            3,                  // size
+            gl.FLOAT,           // type
+            false,              // normalized?
+            0,                  // stride
+            null            // array buffer offset
+        )
+        // Draw the triangle !
+        // Starting from vertex 0; 3 vertices total -> 1 triangle
+        gl.DrawArrays(gl.TRIANGLES, 0, 3)
+        gl.DisableVertexAttribArray(0)
+
+        glfw.SwapBuffers(window)
         glfw.WaitEvents()
     }
+
     glfw.DestroyWindow(window)
     glfw.Terminate();
     println("Bye from glfw")
-    let a = glfw.RESIZABLE
-    println(a)
-//    println(GLFW_RESIZABLE)
+
     return 0
 }

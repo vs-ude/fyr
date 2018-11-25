@@ -541,10 +541,10 @@ statement
   / "slice" [ \t]* "(" [ \t]* e:expression [ \t]* "," [ \t]* e2:expression [ \t]* "," [ \t]* e3:expression [ \t]* ")" {
       return new ast.Node({loc: fl(location()), op: "slice", parameters: [e, e2, e3]});
     }
-  / "push" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+  / "push" [ \t]* "(" e:expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "push", parameters: e});
     }    
-  / "append" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+  / "append" [ \t]* "(" e: expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "append", parameters: e});
     }
 
@@ -814,7 +814,7 @@ expression
   = c: logicOr { return c; }
 
 expressionList
-  = e:expression [ \t]* r:("," [ \t\n]* expression [ \t]*)* {
+  = e:expression [ \t]* r:("," (newline / [ \t])* expression [ \t]*)* {
       if (r) {
         let result = [e];
         for(let x of r) {
@@ -824,6 +824,14 @@ expressionList
       }
       return [e];
     }
+
+expressionListWithNewlines
+  = (newline / [ \t])* e:expressionList? (newline / [ \t])* {
+      if (e) {
+        return e;
+      }
+      return [];
+  }
 
 logicOr
   = left: logicAnd r:([ \t]* "||" [ \t\n]* logicOr)? {
@@ -975,7 +983,7 @@ primary
     }
 
 primary2
-  = "tryPush" [ \t]* "(" [ \t\n]* e: expressionList ")" {
+  = "tryPush" [ \t]* "(" e: expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "tryPush", parameters: e});
     }    
   / "pop" [ \t]* "(" [ \t\n]* e: expression ")" {
@@ -1016,7 +1024,7 @@ primary2
   / i: identifier {
       return i;
     }
-  / "(" [ \t\n]* e: expressionList ")" {
+  / "(" e: expressionListWithNewlines ")" {
       if (e.length == 1) {
           return e[0];
       }
@@ -1034,7 +1042,7 @@ primary2
   / o:object { return o; }
   / a:array { return a; }
   / r:rune { return r; }
-  / "println" [ \t]* "(" [ \t\n]* a:arguments? ")" {
+  / "println" [ \t]* "(" a:expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "println", parameters: a}); 
     }
 
@@ -1060,7 +1068,7 @@ object
     }
 
 tuple
-  = "(" [ \t\n]* e: expressionList ")" & {
+  = "(" e: expressionListWithNewlines ")" & {
       return e.length > 1
     } {
         return new ast.Node({loc: fl(location()), op: "tuple", parameters: e});
@@ -1102,20 +1110,8 @@ member
       }
       return new ast.Node({loc: fl(location()), op: "[", rhs: e});
     }
-  / "(" [ \t\n]* a:arguments? ")" { return new ast.Node({loc: fl(location()), op: "(", parameters: a}); }
+  / "(" a:expressionListWithNewlines ")" { return new ast.Node({loc: fl(location()), op: "(", parameters: a}); }
   / "<" [ \t]* t:typeList [ \t]* ">" { return new ast.Node({loc: fl(location()), op: "genericInstance", genericParameters: t}); }
-
-arguments
-  = e:expression r:("," [ \t\n]* expression)* {
-      if (r) {
-        let result = [e];
-        for(let x of r) {
-          result.push(x[2]);
-        }
-        return result;
-      }
-      return [e];
-    }
 
 identifierList
   = v:identifier [ \t]* r:("," [ \t\n]* identifier [ \t]*)* {

@@ -40,6 +40,9 @@ import . from "<GLFW/glfw3.h>" {
     func glfwWindowHint(hint int, value int)
     func glfwDefaultWindowHints()
 
+    func glfwMakeContextCurrent(window #GLFWwindow)
+    func glfwSwapInterval(interval int)
+
 //    func glfwSetFramebufferSizeCallback(window #GLFWwindow, cbfun #GLFWframebuffersizefun) #GLFWframebuffersizefun
 
     const GLFW_TRUE int
@@ -104,6 +107,8 @@ export {
     func glfwWaitEventsTimeout as WaitEventsTimeout
     func glfwWindowHint as WindowHint
     func glfwDefaultWindowHints as DefaultWindowHints
+    func glfwMakeContextCurrent as MakeContextCurrent
+    func glfwSwapInterval as SwapInterval
 
     const GLFW_TRUE as TRUE
     const GLFW_FALSE as FALSE
