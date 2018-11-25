@@ -39,6 +39,9 @@ export func main() int {
     for (glfw.WindowShouldClose(window) == 0) {
         println("Eventloop")
 
+        gl.ClearColor(0.5, 0.5, 1, 1)
+        gl.Clear(gl.COLOR_BUFFER_BIT)
+
         // 1st attribute buffer : vertices
         gl.EnableVertexAttribArray(0)
         gl.BindBuffer(gl.ARRAY_BUFFER, vertexBuffer)

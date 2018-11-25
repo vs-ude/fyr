@@ -12,6 +12,18 @@ import . from "<glad/glad.h>" {
     func glVertexAttribIPointer(index uint32, size int32, datatype uint32, stride uint32, pointer #const void)
     func glVertexAttribLPointer(index uint32, size int32, datatype uint32, stride uint32, pointer #const void)
     func glDrawArrays(mode uint32, first int32, count uint32)
+    func glGetAttribLocation(program uint32, name string) int32
+    func glGetUniformLocation(program uint32, name string) int32
+    func glCreateShader(shaderType uint32) uint32
+    func glShaderSource(shader uint32, count uint32, strings const ##char, lengths const #int)
+    func glCompileShader(shader uint32)
+    func glAttachShader(program uint32, shader uint32)
+    func glCreateProgram() uint32
+    func glLinkProgram(program uint32)
+    func glUseProgram(program uint32)
+    func glDeleteProgram(program uint32)
+    func glClear(mask uint32)
+    func glClearColor(r float, g float, b float, alpha float)
 
     func gladLoadGL() int
     func gladLoadGLLoader(proc #void) int
@@ -73,6 +85,19 @@ import . from "<glad/glad.h>" {
     const GL_TRIANGLE_STRIP_ADJACENCY uint32
     const GL_TRIANGLES_ADJACENCY uint32
     const GL_PATCHES uint32
+
+    // Shader types
+    const GL_COMPUTE_SHADER uint32
+    const GL_VERTEX_SHADER uint32
+    const GL_TESS_CONTROL_SHADER uint32
+    const GL_TESS_EVALUATION_SHADER uint32
+    const GL_GEOMETRY_SHADER uint32
+    const GL_FRAGMENT_SHADER uint32
+
+    // Clear flags
+    const GL_COLOR_BUFFER_BIT uint32
+    const GL_DEPTH_BUFFER_BIT uint32
+    const GL_STENCIL_BUFFER_BIT uint32
 }
 
 build {
@@ -94,6 +119,18 @@ export {
     func glVertexAttribIPointer as VertexAttribIPointer
     func glVertexAttribLPointer as VertexAttribLPointer
     func glDrawArrays as DrawArrays
+    func glGetAttribLocation as GetAttribLocation
+    func glGetUniformLocation as GetUniformLocation
+    func glCreateShader as CreateShader
+    func glShaderSource as ShaderSource
+    func glCompileShader as CompileShader
+    func glAttachShader as AttachShader
+    func glCreateProgram as CreateProgram
+    func glLinkProgram as LinkProgram
+    func glUseProgram as UseProgram
+    func glDeleteProgram as DeleteProgram
+    func glClear as Clear
+    func glClearColor as ClearColor
 
     func gladLoadGL as LoadGL
     func gladLoadGLLoader as LoadGLLoader
@@ -150,4 +187,15 @@ export {
     const GL_TRIANGLE_STRIP_ADJACENCY as TRIANGLE_STRIP_ADJACENCY
     const GL_TRIANGLES_ADJACENCY as TRIANGLES_ADJACENCY
     const GL_PATCHES as PATCHES
+
+    const GL_COMPUTE_SHADER as COMPUTE_SHADER
+    const GL_VERTEX_SHADER as VERTEX_SHADER
+    const GL_TESS_CONTROL_SHADER as TESS_CONTROL_SHADER
+    const GL_TESS_EVALUATION_SHADER as TESS_EVALUATION_SHADER
+    const GL_GEOMETRY_SHADER as GEOMETRY_SHADER
+    const GL_FRAGMENT_SHADER as FRAGMENT_SHADER
+
+    const GL_COLOR_BUFFER_BIT as COLOR_BUFFER_BIT
+    const GL_DEPTH_BUFFER_BIT as DEPTH_BUFFER_BIT
+    const GL_STENCIL_BUFFER_BIT as STENCIL_BUFFER_BIT
 }
