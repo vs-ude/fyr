@@ -1,0 +1,25 @@
+import "vindue/glfw"
+
+export func main() int {
+    if (glfw.Init() == 0) {
+        println("GLFW error init")
+        return 2
+    }
+    let window = glfw.CreateWindow(640, 480, "Fyr", null, null)
+    if (window == null) {
+        // Window or OpenGL context creation failed
+        println("No window")
+        return 3
+    }
+    for (glfw.WindowShouldClose(window) == 0) {
+        println("Eventloop")
+        glfw.WaitEvents()
+    }
+    glfw.DestroyWindow(window)
+    glfw.Terminate();
+    println("Bye from glfw")
+    let a = glfw.RESIZABLE
+    println(a)
+//    println(GLFW_RESIZABLE)
+    return 0
+}

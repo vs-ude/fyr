@@ -1510,7 +1510,25 @@ export class CodeGenerator {
                         throw "TODO interface and class"
                     }          
                 } else if (t instanceof PackageType) {
-                    throw "TODO";
+                    let ip = scope.resolveElement(enode.lhs.value);
+                    if (!(ip instanceof tc.ImportedPackage)) {
+                        throw "Implementation error: no suck package " + enode.lhs.value;
+                    }
+                    let element = ip.pkg.scope.resolveElement(enode.name.value);
+                    if (!element) {
+                        throw "Implementation error missing " + enode.name.value;
+                    }
+                    let v = vars.get(element);
+                    if (!v) {
+                        if (element instanceof Variable) {
+                            v = this.backend.importGlobalVar(element.name, this.getSSAType(element.type), element.nativePackageName ? element.nativePackageName : ip.pkg);
+                            this.globalVars.set(element, v);
+                            vars.set(element, v);
+                        } else {
+                            throw "Implementation error";
+                        }
+                    }
+                    return v;
                 } else if (t instanceof StructType) {
                     // It is a value, i.e. not a pointer to a value
                     let left: ssa.Variable | ssa.Pointer;
@@ -2895,7 +2913,10 @@ export class CodeGenerator {
                     return b.assign(b.tmp(), "member", memberType, [left, structType.fieldIndexByName(enode.name.value)]);
                 }
                 // Note: processLeftHandExpression implements the non-left-hand cases as well.
-                let expr = this.processLeftHandExpression(f, scope, enode, b, vars) as ssa.Pointer;
+                let expr = this.processLeftHandExpression(f, scope, enode, b, vars);
+                if (expr instanceof ssa.Variable) {
+                    return expr;
+                }
                 let storage = this.getSSAType(enode.type);
                 return b.assign(b.tmp(), "load", storage, [expr.variable, expr.offset]);
             }

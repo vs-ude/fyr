@@ -3131,14 +3131,14 @@ export class TypeChecker {
             for (let snode of fnode.statements) {
                 if (snode.op == "export_as") {
                     for(let exp of snode.parameters) {
-                        if (exp.op == "exportFuncAs") {
+                        if (exp.op == "exportFuncAs" || exp.op == "exportConstAs" || exp.op == "exportVarAs") {
                             let e = fnode.scope.resolveElement(exp.lhs.value);
                             if (!e) {
-                                throw new TypeError("Unknown function " + exp.lhs.value, exp.loc);
+                                throw new TypeError("Unknown function/const/variable " + exp.lhs.value, exp.loc);
                             }
                             if (exp.lhs.value != exp.rhs.value) {
                                 if (scope.resolveElement(exp.rhs.value)) {
-                                    throw new TypeError("A function of name " + exp.rhs.value + " is already exported", exp.rhs.loc);
+                                    throw new TypeError("A function/const/variable of name " + exp.rhs.value + " is already exported", exp.rhs.loc);
                                 }
                                 scope.registerElement(exp.rhs.value, e, exp.loc);
                             }

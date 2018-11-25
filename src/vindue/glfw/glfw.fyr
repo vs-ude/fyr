@@ -57,30 +57,6 @@ build {
     link: ["-lglfw"]
 }
 
-export func main() int {
-    if (glfwInit() == 0) {
-        println("GLFW error init")
-        return 2
-    }
-    let window = glfwCreateWindow(640, 480, "Fyr", null, null)
-    if (window == null) {
-        // Window or OpenGL context creation failed
-        println("No window")
-        return 3
-    }
-    for (glfwWindowShouldClose(window) == 0) {
-        println("Eventloop")
-        glfwWaitEvents()
-    }
-    glfwDestroyWindow(window)
-    glfwTerminate();
-    println("Bye from glfw")
-    let a = GLFW_RESIZABLE
-    println(a)
-//    println(GLFW_RESIZABLE)
-    return 0
-}
-
 // TODO:  glfwSetFramebufferSizeCallback 
 // TODO: glfwSetWindowCloseCallback
 // TODO: glfwSetWindowFocusCallback

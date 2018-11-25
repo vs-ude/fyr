@@ -109,6 +109,12 @@ exportAs
   / [ \t]*"type" [ \t]+ n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* ([ \t]* newline)* {
       return new ast.Node({loc: fl(location()), op: "exportTypeAs", lhs: n, rhs: e});
     }
+  / [ \t]*"const" [ \t]+ n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* ([ \t]* newline)* {
+      return new ast.Node({loc: fl(location()), op: "exportConstAs", lhs: n, rhs: e});
+    }
+  / [ \t]*"var" [ \t]+ n:identifier [ \t]* "as" [ \t]+ e:identifier [ \t]* ([ \t]* newline)* {
+      return new ast.Node({loc: fl(location()), op: "exportVarAs", lhs: n, rhs: e});
+    }
 
 build
   = "build" [ \t]* "{" ([ \t]* newline)+ e:buildElement* [ \t\n]* "}" {
