@@ -85,22 +85,22 @@ export class CBackend implements backend.Backend {
         this.operatorMap.set("ge_u", ">=");
     }
 
-    public importFunction(name: string, from: string | Package, type: ssa.FunctionType): backend.FunctionImport {
-        if (type.callingConvention == "native") {
-            if (typeof(from) != "string") {
-                throw "Implementation error";
-            }
-            let path = from;
-            let isSystemPath = false;
-            if (path[0] == '<') {
-                isSystemPath = true;
-                path = path.substr(1, path.length - 2);
-            }
-            if (!this.module.hasInclude(path, isSystemPath)) {
-                let imp = new CInclude();
-                imp.isSystemPath = isSystemPath;
-                imp.path = path;
-                this.module.includes.push(imp);
+    private importPackage(from: string | Package) {
+        if (typeof(from) == "string") {
+            let paths = from.split(",");
+            for(let path of paths) {
+                path = path.trim()
+                let isSystemPath = false;
+                if (path[0] == '<') {
+                    isSystemPath = true;
+                    path = path.substr(1, path.length - 2);
+                }
+                if (!this.module.hasInclude(path, isSystemPath)) {
+                    let imp = new CInclude();
+                    imp.isSystemPath = isSystemPath;
+                    imp.path = path;
+                    this.module.includes.push(imp);
+                }
             }
         } else {
             if (!(from instanceof Package)) {
@@ -114,6 +114,10 @@ export class CBackend implements backend.Backend {
                 this.module.includes.push(imp);
             }
         }
+    }
+
+    public importFunction(name: string, from: string | Package, type: ssa.FunctionType): backend.FunctionImport {
+        this.importPackage(from);
         let f = new FunctionImport();
         if (type.callingConvention == "native") {
             f.name = name;
@@ -126,6 +130,7 @@ export class CBackend implements backend.Backend {
     }
 
     public importGlobalVar(name: string, type: ssa.Type | ssa.StructType, from: string | Package): ssa.Variable {
+        this.importPackage(from);
         if (from instanceof Package) {
             name = "g_" + this.mangleName(from.pkgPath + "/" + name);
         } else {

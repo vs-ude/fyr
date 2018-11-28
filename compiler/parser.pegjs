@@ -84,7 +84,7 @@ importSelect
     }
 
 importNative
-  = i:string [ \t]* "{" [ \t]* "\n" [ \t\n]* e:importElement* [ \t]* "}" {
+  = i:string [ \t]* "{" ([ \t]* newline)+ e:importElement* [ \t]* "}" {
         if (i == "") {
             expected("A non-empty string describing the imported namespace")
         }
