@@ -1,4 +1,4 @@
-import . from "<ft2build.h>, <freetype/freetype.h>" {
+import . from "<ft2build.h>, <freetype/freetype.h>, <freetype/ftmodapi.h>" {
     type FT_LibraryRec opaque
 
     type FT_FaceRec struct {
@@ -156,7 +156,7 @@ import . from "<ft2build.h>, <freetype/freetype.h>" {
         flags       int
     }
 
-    func FT_Init_FreeType(library #FT_LibraryRec) int
+    func FT_Init_FreeType(library &#FT_LibraryRec) int
     func FT_Done_Library(library #FT_LibraryRec) int
     func FT_New_Face(library #FT_LibraryRec, filepathname string, face_index int, aface #FT_FaceRec) int
     func FT_New_Memory_Face(library #FT_LibraryRec, file_base #byte, file_size int, face_index int, aface #FT_FaceRec) int
@@ -225,4 +225,29 @@ export {
     type FT_Vector as Vector
     type FT_Bitmap as Bitmap
     type FT_Outline as Outline
+
+    const FT_LOAD_DEFAULT as LOAD_DEFAULT
+    const FT_LOAD_NO_SCALE as LOAD_NO_SCALE
+    const FT_LOAD_NO_HINTING as LOAD_NO_HINTING
+    const FT_LOAD_RENDER as LOAD_RENDER
+    const FT_LOAD_NO_BITMAP as LOAD_NO_BITMAP
+    const FT_LOAD_VERTICAL_LAYOUT as LOAD_VERTICAL_LAYOUT
+    const FT_LOAD_FORCE_AUTOHINT as LOAD_FORCE_AUTOHINT
+    const FT_LOAD_CROP_BITMAP as LOAD_CROP_BITMAP
+    const FT_LOAD_PEDANTIC as LOAD_PEDANTIC
+    const FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH as LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH
+    const FT_LOAD_NO_RECURSE as LOAD_NO_RECURSE
+    const FT_LOAD_IGNORE_TRANSFORM as LOAD_IGNORE_TRANSFORM
+    const FT_LOAD_MONOCHROME as LOAD_MONOCHROME
+    const FT_LOAD_LINEAR_DESIGN as LOAD_LINEAR_DESIGN
+    const FT_LOAD_NO_AUTOHINT as LOAD_NO_AUTOHINT
+    const FT_LOAD_COLOR as LOAD_COLOR
+    const FT_LOAD_COMPUTE_METRICS as LOAD_COMPUTE_METRICS
+    const FT_LOAD_BITMAP_METRICS_ONLY as LOAD_BITMAP_METRICS_ONLY
+
+    const FT_RENDER_MODE_NORMAL as RENDER_MODE_NORMAL
+    const FT_RENDER_MODE_LIGHT as RENDER_MODE_LIGHT
+    const FT_RENDER_MODE_MONO as RENDER_MODE_MONO
+    const FT_RENDER_MODE_LCD as RENDER_MODE_LCD
+    const FT_RENDER_MODE_LCD_V as RENDER_MODE_LCD_V
 }

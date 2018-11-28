@@ -61,7 +61,7 @@ typedef
     }
 
 import
-  = "import" [ \t]+ a:importSelect? [ \t]* m:(importNative / string) [ \t]* "\n" [ \t]* {
+  = "import" [ \t]+ a:importSelect? [ \t]* m:(importNative / string) n:importAs? ([ \t]* newline)+ {
       if (m.op == "importNative") {
           if (!a || a.op == "identifierList") {
               expected("Either . or an identifier");
@@ -69,7 +69,7 @@ import
       } else if (m.value == "") {
           expected("A non-empty string describing the import path");
       }
-      return new ast.Node({loc: fl(location()), op: "import", rhs:m, lhs:a});
+      return new ast.Node({loc: fl(location()), op: "import", rhs:m, lhs:a, name: n});
     }
 
 importSelect
@@ -100,6 +100,11 @@ importElement
     }
   / [ \t]* "const" [ \t]+ i:identifier [ \t]* t:type ([ \t]* newline)* {
       return new ast.Node({loc: fl(location()), op: "constValue", lhs: t, name: i});
+    }
+
+importAs
+  = [ \t]* "as" [ \t]* i:identifier {
+      return i;
     }
 
 export

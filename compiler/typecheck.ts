@@ -2677,22 +2677,40 @@ export class TypeChecker {
             let ip: ImportedPackage;
             let importPath: string = inode.rhs.rhs.value;
             if (!inode.lhs) {
-                // Syntax of the kind: import { func ... } from "imports"
-                let importPathElements = importPath.split("/");
-                let name = importPathElements[importPathElements.length - 1];
+                // Syntax of the kind: import "<include.h>" { func ... }
+                let name: string;
+                if (inode.name) {
+                    name = inode.name.value;
+                } else {
+                    let importPathElements = importPath.split("/");
+                    // TODO: Sanitize the name
+                    name = importPathElements[importPathElements.length - 1];
+                }
                 let pkg = new Package();
                 pkg.scope = new Scope(null);
                 // TODO: Sanitize the name
                 ip = new ImportedPackage(name, pkg, inode.loc);
                 scope.registerElement(name, ip);
             } else if (inode.lhs.op == "id") {
-                // Syntax of the kind: import identifier { func ... } from "imports"
+                // Syntax of the kind: import identifier from "<include.h>" { func ... } 
+                if (inode.name) {
+                    throw new TypeError("An import selection must not be used together with an import alias", inode.name.loc);
+                }
                 let pkg = new Package();
                 pkg.scope = new Scope(null);
                 ip = new ImportedPackage(inode.lhs.value, pkg, inode.loc);
                 scope.registerElement(ip.name, ip);
             } else if (inode.lhs.op == ".") {
-                // Syntax of the kind: import . { func ... } from "imports"
+                // Syntax of the kind: import . from "<include.h>" { func ... } 
+                if (inode.name) {
+                    throw new TypeError("An import selection must not be used together with an import alias", inode.name.loc);
+                }
+                // Do nothing by intention
+            } else if (inode.lhs.op == "identifierList") {
+                // Syntax of the kind: import {id1, id2, ...} from "path/to/module"
+                if (inode.name) {
+                    throw new TypeError("An import selection must not be used together with an import alias", inode.name.loc);
+                }
                 // Do nothing by intention
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
@@ -2703,19 +2721,27 @@ export class TypeChecker {
             let ip: ImportedPackage;
             if (!inode.lhs) {
                 // Syntax of the kind: import "path/to/module"
-                let importPathElements = importPath.split("/");
-                let name = importPathElements[importPathElements.length - 1];
-                // TODO: Sanitize the name
+                let name: string;
+                if (inode.name) {
+                    name = inode.name.value;
+                } else {
+                    let importPathElements = importPath.split("/");
+                    // TODO: Sanitize the name
+                    name = importPathElements[importPathElements.length - 1];
+                }
                 ip = new ImportedPackage(name, p, inode.loc);
                 scope.registerElement(name, ip);
             } else if (inode.lhs.op == "identifierList") {
-                // Syntax of the kind: import (id1, id2, ...) "path/to/module"
+                // Syntax of the kind: import {id1, id2, ...} from "path/to/module"
+                if (inode.name) {
+                    throw new TypeError("An import selection must not be used together with an import alias", inode.name.loc);
+                }
             } else if (inode.lhs.op == "id") {
-                // Syntax of the kind: import identifier "path/to/module"
+                // Syntax of the kind: import identifier from "path/to/module"
                 ip = new ImportedPackage(inode.lhs.value, p, inode.loc);
                 scope.registerElement(ip.name, ip);
             } else if (inode.lhs.op == ".") {
-                // Syntax of the kind: import . "path/to/module"
+                // Syntax of the kind: import . from "path/to/module"
             } else {
                 throw "Implementation error in import lhs " + inode.lhs.op;                
             }
