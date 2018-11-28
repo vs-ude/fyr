@@ -1,6 +1,14 @@
 import {Node, AstFlags, Location} from "./ast"
-import {Function, TemplateFunction, Type, PackageType, StringLiteralType, MapType, InterfaceType, RestrictedType, OrType, StructType, UnsafePointerType, PointerType, FunctionType, ArrayType, SliceType, TypeChecker, TupleType, Scope, Variable, FunctionParameter, ScopeElement, TemplateFunctionType} from "./typecheck"
-import * as tc from "./typecheck"
+import {
+    Function, TemplateFunction, TypeChecker, Scope, Variable,
+    ScopeElement, FunctionParameter, TypeError, ImportedPackage
+} from "./typecheck"
+import {
+    Type, PackageType, StringLiteralType, MapType, InterfaceType,
+    RestrictedType, OrType, StructType, UnsafePointerType, PointerType,
+    FunctionType, ArrayType, SliceType, TupleType, TemplateFunctionType
+} from "./types"
+import * as types from "./types"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
@@ -233,24 +241,24 @@ export class CodeGenerator {
         if (t == TypeChecker.t_byte) {
             return "i8";
         }
-        if (t instanceof RestrictedType && t.elementType instanceof tc.PointerType) {
+        if (t instanceof RestrictedType && t.elementType instanceof types.PointerType) {
             // Const pointer to an interface?
             if (this.tc.isInterface(t.elementType)) {
                 return this.ifaceHeader;
             }
             return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
         }
-        if (t instanceof tc.PointerType) {
+        if (t instanceof types.PointerType) {
             // Pointer to an interface?
             if (this.tc.isInterface(t)) {
                 return this.ifaceHeader;
             }
             return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
         }
-        if (t instanceof RestrictedType && t.elementType instanceof tc.UnsafePointerType) {
+        if (t instanceof RestrictedType && t.elementType instanceof types.UnsafePointerType) {
             return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
         }
-        if (t instanceof tc.UnsafePointerType) {
+        if (t instanceof types.UnsafePointerType) {
             return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
         }
         if (t == TypeChecker.t_string) {
@@ -1511,7 +1519,7 @@ export class CodeGenerator {
                     }          
                 } else if (t instanceof PackageType) {
                     let ip = scope.resolveElement(enode.lhs.value);
-                    if (!(ip instanceof tc.ImportedPackage)) {
+                    if (!(ip instanceof ImportedPackage)) {
                         throw "Implementation error: no suck package " + enode.lhs.value;
                     }
                     let element = ip.pkg.scope.resolveElement(enode.name.value);
@@ -1723,8 +1731,8 @@ export class CodeGenerator {
                 continue;
             }
             let method = s.method(m);
-            let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as tc.PointerType).elementType);
-            if (!(methodObjType instanceof tc.StructType)) {
+            let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as types.PointerType).elementType);
+            if (!(methodObjType instanceof types.StructType)) {
                 throw "Implementation error";
             }
             let methodName = methodObjType.pkg.pkgPath + "/" + methodObjType.name + "." + m;
@@ -2935,12 +2943,12 @@ export class CodeGenerator {
                     } else {
                         ifaceAddr = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type) as ssa.Variable;
                     }
-                    let ifaceType = RestrictedType.strip((ltype as tc.PointerType).elementType);
+                    let ifaceType = RestrictedType.strip((ltype as types.PointerType).elementType);
                     if (!(ifaceType instanceof InterfaceType)) {
                         throw "Implementation error";
                     }
-                    let structType = RestrictedType.strip((rtype as tc.PointerType).elementType);
-                    if (!(structType instanceof tc.StructType)) {
+                    let structType = RestrictedType.strip((rtype as types.PointerType).elementType);
+                    if (!(structType instanceof types.StructType)) {
                         throw "Implementation error";
                     }
                     let table: ssa.Variable;
@@ -4326,7 +4334,7 @@ export class CodeGenerator {
         let p = this.loadPackage(pkgPath, loc);
         let f = p.scope.elements.get(name);
         if (!f || !(f instanceof Function)) {
-            throw new tc.TypeError("Function " + name + " does not exist in package " + pkgPath, loc);
+            throw new TypeError("Function " + name + " does not exist in package " + pkgPath, loc);
         }
         let t = this.getSSAFunctionType(f.type);
         return [this.backend.importFunction(name, p, t), t];
