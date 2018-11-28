@@ -512,6 +512,10 @@ export class Package {
         Package.packagesByPath.set(p.pkgPath, p);
     }
 
+    public static clearPackages() {
+        Package.packages = []
+    }
+
     public pkgNode: ast.Node;
     // The path name of the package, e.g. "network/http".
     public pkgPath: string;
