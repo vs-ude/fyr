@@ -157,7 +157,41 @@ import . from "<ft2build.h>, <freetype/freetype.h>" {
     }
 
     func FT_Init_FreeType(library #FT_LibraryRec) int
+    func FT_Done_Library(library #FT_LibraryRec) int
     func FT_New_Face(library #FT_LibraryRec, filepathname string, face_index int, aface #FT_FaceRec) int
+    func FT_New_Memory_Face(library #FT_LibraryRec, file_base #byte, file_size int, face_index int, aface #FT_FaceRec) int
+    func FT_Done_Face(aface #FT_FaceRec) int
+    func FT_Set_Char_Size(face #FT_FaceRec, char_width int, char_height int, horz_resolution uint, vert_resolution uint) int
+    func FT_Set_Pixel_Sizes(face #FT_FaceRec, pixel_width uint, pixel_height uint) int
+    func FT_Get_Char_Index(face #FT_FaceRec, charcode uint) uint
+    func FT_Load_Glyph(face #FT_FaceRec, glyph_index uint, load_flags int32) int
+    func FT_Render_Glyph(slot #FT_GlyphSlotRec, render_mode int) int
+    func FT_Load_Char(face #FT_FaceRec, char_code uint, load_flags uint32) int
+
+    const FT_LOAD_DEFAULT int32
+    const FT_LOAD_NO_SCALE int32
+    const FT_LOAD_NO_HINTING int32
+    const FT_LOAD_RENDER int32
+    const FT_LOAD_NO_BITMAP int32
+    const FT_LOAD_VERTICAL_LAYOUT int32
+    const FT_LOAD_FORCE_AUTOHINT int32
+    const FT_LOAD_CROP_BITMAP int32
+    const FT_LOAD_PEDANTIC int32
+    const FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH int32
+    const FT_LOAD_NO_RECURSE int32
+    const FT_LOAD_IGNORE_TRANSFORM int32
+    const FT_LOAD_MONOCHROME int32
+    const FT_LOAD_LINEAR_DESIGN int32
+    const FT_LOAD_NO_AUTOHINT int32
+    const FT_LOAD_COLOR int32
+    const FT_LOAD_COMPUTE_METRICS int32
+    const FT_LOAD_BITMAP_METRICS_ONLY int32
+
+    const FT_RENDER_MODE_NORMAL int
+    const FT_RENDER_MODE_LIGHT int
+    const FT_RENDER_MODE_MONO int
+    const FT_RENDER_MODE_LCD int
+    const FT_RENDER_MODE_LCD_V int
 }
 
 build {
@@ -167,7 +201,16 @@ build {
 
 export {
     func FT_Init_FreeType as Init_FreeType
+    func FT_Done_Library as Done_Library
     func FT_New_Face as New_Face
+    func FT_New_Memory_Face as New_Memory_Face
+    func FT_Done_Face as Done_Face
+    func FT_Set_Char_Size as Set_Char_Size
+    func FT_Set_Pixel_Sizes as Set_Pixel_Sizes
+    func FT_Get_Char_Index as Get_Char_Index
+    func FT_Load_Glyph as Load_Glyph
+    func FT_Render_Glyph as Render_Glyph
+    func FT_Load_Char as Load_Char
 
     type FT_LibraryRec as LibraryRec
     type FT_FaceRec as FaceRec
