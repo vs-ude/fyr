@@ -15,44 +15,44 @@ import { StructType } from './StructType'
  */
 export class TemplateType extends Type {
     constructor() {
-        super();
-        this.templateParameterTypes = [];
-        this.templateParameterNames = [];
+        super()
+        this.templateParameterTypes = []
+        this.templateParameterNames = []
     }
 
     public toTypeCodeString(): string {
-        throw "Implementation error: Typecode of template type is not allowed";
+        throw "Implementation error: Typecode of template type is not allowed"
     }
 
     public toString(): string {
-        let g = "<";
-        let lst = [];
+        let g = "<"
+        let lst = []
         for(let i = 0; i < this.templateParameterNames.length; i++) {
             let s = this.templateParameterNames[i];            
             if (this.templateParameterTypes[i]) {
-                s += " is " + this.templateParameterTypes[i].toString();
+                s += " is " + this.templateParameterTypes[i].toString()
             }
-            lst.push(s);
+            lst.push(s)
         }
-        g += lst.join(",");
-        g += ">";
+        g += lst.join(",")
+        g += ">"
         if (this.name) {
-            return this.name + g;
+            return this.name + g
         }
-        return "template" + g;
+        return "template" + g
     }
 
     // Optional ASTs of template parameters constraints, e.g. in "func<A is int|float, B>()",
     // these are constraints are "int|float" and "null".
-    public templateParameterTypes: Array<Node | null>;
+    public templateParameterTypes: Array<Node | null>
     // Names of the template parameters, e.g. in "func<A,B>(a A, b B)" these are [A.B]
-    public templateParameterNames: Array<string>;
+    public templateParameterNames: Array<string>
     // The AST of the template
-    public node: Node;
-    public parentScope: Scope;
-    public registerScope: Scope;
-    public methods: Array<TemplateFunction> = [];
-    public pkg: Package;
+    public node: Node
+    public parentScope: Scope
+    public registerScope: Scope
+    public methods: Array<TemplateFunction> = []
+    public pkg: Package
 }
 
 /**
@@ -60,45 +60,45 @@ export class TemplateType extends Type {
  */
 export class TemplateFunctionType extends FunctionType {
     constructor() {
-        super();
-        this.templateParameterTypes = [];
+        super()
+        this.templateParameterTypes = []
     }
 
     public toString(): string {
         if (this.name) {
             if (this.objectType) {
-                return this.objectType.toString() + "." + this.name;
+                return this.objectType.toString() + "." + this.name
             }
-            return this.name;
+            return this.name
         }
-        let name = "<";
+        let name = "<"
         for(let i = 0; i < this.templateParameterTypes.length; i++) {
             if (i != 0) {
-                name += ",";
+                name += ","
             }
-            name += this.templateParameterTypes[i];
+            name += this.templateParameterTypes[i]
             if (this.templateParameterTypes[i]) {
-                name += " is " + this.templateParameterTypes[i].toString();
+                name += " is " + this.templateParameterTypes[i].toString()
             }
         }
-        name += ">(";
-        let j = 0;
+        name += ">("
+        let j = 0
         for(let p of this.parameters) {
             if (j != 0) {
-                name += ",";
+                name += ","
             }
             if (p.ellipsis) {
-                name += "...";
+                name += "..."
             }
-            name += p.type.toString();
+            name += p.type.toString()
             j++
         }
-        name += ") => " + this.returnType.toString();
-        return name;
+        name += ") => " + this.returnType.toString()
+        return name
     }
 
-    public templateParameterTypes: Array<Type>;
-    public base: TemplateType;
+    public templateParameterTypes: Array<Type>
+    public base: TemplateType
 }
 
 /**
@@ -106,29 +106,29 @@ export class TemplateFunctionType extends FunctionType {
  */
 export class TemplateStructType extends StructType {
     constructor() {
-        super();
-        this.templateParameterTypes = [];
+        super()
+        this.templateParameterTypes = []
     }
 
     public toString(): string {
-        let g = "<";
-        let lst = [];
+        let g = "<"
+        let lst = []
         for(let s of this.templateParameterTypes) {
-            lst.push(s.toString());
+            lst.push(s.toString())
         }
-        g += lst.join(",");
-        g += ">";
+        g += lst.join(",")
+        g += ">"
         if (this.name) {
-            return this.name + g;
+            return this.name + g
         }
-        let str = "struct" + g + "{";
-        str += this.fields.join(",");
-        str += "}";
-        return str;
+        let str = "struct" + g + "{"
+        str += this.fields.join(",")
+        str += "}"
+        return str
     }
 
-    public templateParameterTypes: Array<Type>;
-    public base: TemplateType;
+    public templateParameterTypes: Array<Type>
+    public base: TemplateType
 }
 
 /**
@@ -136,31 +136,31 @@ export class TemplateStructType extends StructType {
  */
 export class TemplateInterfaceType extends InterfaceType {
     constructor() {
-        super();
-        this.templateParameterTypes = [];
+        super()
+        this.templateParameterTypes = []
     }
 
     public toString(): string {
-        let g = "<";
-        let lst = [];
+        let g = "<"
+        let lst = []
         for(let s of this.templateParameterTypes) {
-            lst.push(s.toString());
+            lst.push(s.toString())
         }
-        g += lst.join(",");
-        g += ">";
+        g += lst.join(",")
+        g += ">"
         if (this.name) {
-            return this.name + g;
+            return this.name + g
         }
-        let str = "interface" + g + "{";
-        let m: Array<string> = [];
+        let str = "interface" + g + "{"
+        let m: Array<string> = []
         for(let mt of this.methods.values()) {
-            m.push(mt.toString());
+            m.push(mt.toString())
         }
-        str += m.join(";");
-        str += "}";
-        return str;
+        str += m.join(";")
+        str += "}"
+        return str
     }
 
-    public templateParameterTypes: Array<Type>;
-    public base: TemplateType;
+    public templateParameterTypes: Array<Type>
+    public base: TemplateType
 }

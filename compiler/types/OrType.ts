@@ -5,51 +5,51 @@ import { StringLiteralType } from './StringLiteralType'
 
 export class OrType extends Type {
     constructor(types?: Array<Type>) {
-        super();
+        super()
         if (types) {
-            this.types = types;
+            this.types = types
         } else {
-            this.types = [];
+            this.types = []
         }
     }
 
-    public types: Array<Type>;
+    public types: Array<Type>
 
     public toString(): string {
         if (this.name) {
-            return this.name;
+            return this.name
         }
-        let name = "";
+        let name = ""
         for(let v of this.types) {
             if (name == "") {
-                name += v.toString();
+                name += v.toString()
             } else {
-                name += " | " + v.toString();
+                name += " | " + v.toString()
             }
         }
-        return name;
+        return name
     }
 
     // TODO: Scoping
     public toTypeCodeString(): string {
-        return this.toString();
+        return this.toString()
     }
 
     public stringsOnly(): boolean {
         for(let t of this.types) {
             if (!(t instanceof StringLiteralType)) {
-                return false;
+                return false
             }
         }
-        return true;
+        return true
     }
 
     public isPureValue(): boolean {
         for(let t of this.types) {
             if (TypeChecker.isPureValue(t)) {
-                return false;
+                return false
             }
         }
-        return true;
+        return true
     }
 }
