@@ -41,6 +41,25 @@
 				"FYRBASE": "${workspaceFolder}",
 				"FYRPATH": "${workspaceFolder}",
 			}
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Debug with opengl",
+			"program": "${workspaceFolder}/bin/fyrc",
+			"preLaunchTask": "npm: build",
+			"outFiles": [
+				"${workspaceFolder}/lib/**/*.js"
+			],
+			"cwd":"${workspaceFolder}/src/examples/opengl/",
+			"args": [
+				"-n",
+				"."
+			],
+			"env": {
+				"FYRBASE": "${workspaceFolder}",
+				"FYRPATH": "${workspaceFolder}",
+			}
 		}
 	]
 }
