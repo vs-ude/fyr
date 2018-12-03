@@ -6,7 +6,7 @@ import {
     PointerType, RestrictedType, SliceType, StringLiteralType, StructField,
     StructType, TemplateFunctionType, TemplateInterfaceType, TemplateStructType, TemplateType,
     TupleLiteralType, TupleType, Type, UnsafePointerType, PointerMode
-} from "./types";
+} from "./types/";
 import {createHash} from "crypto";
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.

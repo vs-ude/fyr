@@ -1,7 +1,7 @@
 import * as ssa from "./ssa"
 import {Package} from "./pkg"
 import * as backend from "./backend"
-import {InterfaceType, StructType} from "./types"
+import {InterfaceType, StructType} from "./types/"
 
 export class FunctionImport implements backend.Function {
     getIndex(): number {

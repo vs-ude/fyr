@@ -7,8 +7,8 @@ import {
     Type, PackageType, StringLiteralType, MapType, InterfaceType,
     RestrictedType, OrType, StructType, UnsafePointerType, PointerType,
     FunctionType, ArrayType, SliceType, TupleType, TemplateFunctionType
-} from "./types"
-import * as types from "./types"
+} from "./types/"
+import * as types from "./types/"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
 import * as backend from "./backend"

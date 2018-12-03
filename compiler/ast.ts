@@ -1,5 +1,5 @@
 import {Scope, ScopeExit} from "./typecheck"
-import { Type } from "./types"
+import { Type } from "./types/"
 
 var _currentFile: string;
 
