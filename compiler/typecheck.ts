@@ -3479,11 +3479,18 @@ export class TypeChecker {
 //                    console.log("Instantiate template", f.name);
                     enode.type = f.type.returnType;
                     enode.lhs.type = f.type;
+                    t = f.type;
                 } else if (t instanceof FunctionType) {
                     this.checkFunctionArguments(t, enode.parameters, scope, enode.loc);                    
                     enode.type = t.returnType;
                 } else {
                     throw new TypeError("Expression is not a function", enode.loc);
+                }
+                if ((t as FunctionType).callingConvention == "fyrCoroutine") {
+                    let outer = scope.envelopingFunction();
+                    if (outer.type.callingConvention != "fyrCoroutine") {
+                        throw new TypeError("Calling an async function is only allowed from inside another async function", enode.loc);
+                    }
                 }
                 break;
             }
