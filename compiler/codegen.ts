@@ -1,13 +1,14 @@
 import {Node, AstFlags, Location} from "./ast"
 import {
-    Function, TemplateFunction, TypeChecker, Scope, Variable,
-    ScopeElement, FunctionParameter, TypeError, ImportedPackage
-} from "./typecheck"
+    Function, TemplateFunction, Scope, Variable, ScopeElement,
+    FunctionParameter, ImportedPackage
+} from "./scopes"
 import {
     Type, PackageType, StringLiteralType, MapType, InterfaceType,
     RestrictedType, OrType, StructType, UnsafePointerType, PointerType,
     FunctionType, ArrayType, SliceType, TupleType, TemplateFunctionType
 } from "./types/"
+import { TypeChecker, TypeError } from './typecheck'
 import * as types from "./types/"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"

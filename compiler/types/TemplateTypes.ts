@@ -1,5 +1,5 @@
 import { Node } from '../ast'
-import { TemplateFunction, Scope } from '../typecheck'
+import { TemplateFunction, Scope } from '../scopes'
 import { Package } from '../pkg'
 
 import { Type } from './Type'

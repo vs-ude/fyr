@@ -6,7 +6,8 @@ import os = require("os");
 import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
-import {Function, FunctionParameter, TypeChecker, Scope} from "./typecheck"
+import {Function, FunctionParameter, Scope} from "./scopes"
+import { TypeChecker } from './typecheck'
 import {FunctionType, UnsafePointerType} from "./types/";
 import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";

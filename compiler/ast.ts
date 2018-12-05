@@ -1,4 +1,4 @@
-import {Scope, ScopeExit} from "./typecheck"
+import { Scope, ScopeExit } from "./scopes"
 import { Type } from "./types/"
 
 var _currentFile: string;
