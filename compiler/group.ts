@@ -8,82 +8,82 @@ export enum GroupKind {
 
 export class Group {
     constructor(kind: GroupKind, name?: string) {
-        this.kind = kind;
+        this.kind = kind
         if (name) {
-            this.name = name;
+            this.name = name
         } else {
-            this.name = "$unnamed" + Group.counter++;
+            this.name = "$unnamed" + Group.counter++
         }
     }
 
-    private static counter = 1;
-    public kind: GroupKind;
+    private static counter = 1
+    public kind: GroupKind
 
-    public name: string;
+    public name: string
 
     public preJoin(scope: Scope, loc: Location, doThrow: boolean): Group {
-        return this;
+        return this
     }
 
     public static isLess(g1: Group, g2: Group) {
         if (g1.kind < g2.kind) {
-            return true;
+            return true
         }
         if (g1.kind == g2.kind && g1.counter < g2.counter) {
-            return true;
+            return true
         }
-        return false;
+        return false
     }
 
     public isBound(scope: Scope): boolean {
-        let g = scope.resolveCanonicalGroup(this);
-        return g.kind == GroupKind.Bound;
+        let g = scope.resolveCanonicalGroup(this)
+        return g.kind == GroupKind.Bound
     }
 
-    private counter: number = Group.groupCounter++;
-    private static groupCounter = 0;
+    private counter: number = Group.groupCounter++
+    private static groupCounter = 0
 }
 
 export class TupleGroup extends Group {
     constructor(kind: GroupKind, name?: string) {
-        super(kind, name);
+        super(kind, name)
     }
 
     public preJoin(scope: Scope, loc: Location, doThrow: boolean): Group {
-        let g: Group = null;
+        let g: Group = null
         for (let tg of this.groups) {
-            g = g ? scope.joinGroups(g, tg, loc, doThrow) : tg;
+            g = g ? scope.joinGroups(g, tg, loc, doThrow) : tg
         }
-        return g;
+        return g
     }
 
-    public groups: Array<Group> = [];
+    public groups: Array<Group> = []
 }
 
 export class Taint {
     constructor(group: Group, loc: Location) {
-        this.loc = loc;
-        this.group = group;
+        this.loc = loc
+        this.group = group
     }
 
-    public loc: Location;
-    public group: Group;
+    public loc: Location
+    public group: Group
 }
 
 export type Restrictions = {
-    isConst?: boolean;
+    isConst?: boolean
 }
 
 export function combineRestrictions(r1: Restrictions, r2: Restrictions): Restrictions {
     if (!r1) {
-        return r2;
+        return r2
     }
     if (!r2) {
-        return r1;
+        return r1
     }
     return {
         isConst: r1.isConst || r2.isConst
-    };
+    }
 }
 
 export enum GroupCheckFlags {
