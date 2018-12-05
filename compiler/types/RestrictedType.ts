@@ -1,4 +1,4 @@
-import { Restrictions } from '../typecheck'
+import { Restrictions } from '../group'
 
 import { Type } from './Type'
 

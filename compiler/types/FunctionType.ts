@@ -1,5 +1,6 @@
 import { SystemCalls } from "../pkg"
-import { TypeChecker, Group, GroupKind, TypeError } from "../typecheck"
+import { TypeChecker, TypeError } from "../typecheck"
+import { Group, GroupKind } from '../group'
 import { FunctionParameter } from '../scopes'
 
 import { Type } from './Type'
