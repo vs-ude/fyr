@@ -7,7 +7,7 @@ import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
 import {Function, FunctionParameter, Scope} from "./scopes"
-import { TypeChecker } from './typecheck'
+import { TypeChecker, Static } from './typecheck'
 import {FunctionType, UnsafePointerType} from "./types/";
 import {CodeGenerator} from "./codegen";
 import * as backend from "./backend";
@@ -95,7 +95,7 @@ export class Package {
         Package.packagesByPath.set(pkgPath, this);
 
         // Determine all filenames
-        let p = this.sourcePath();        
+        let p = this.sourcePath();
         let allFiles = fs.readdirSync(p);
         for(let f of allFiles) {
             if (f.length > 4 && f.substr(f.length - 4, 4) == ".fyr") {
@@ -201,7 +201,7 @@ export class Package {
         } else {
             b = new DummyBackend();
         }
-        
+
         this.codegen = new CodeGenerator(this.tc, b, disableNullCheck);
         let ircode = this.codegen.processModule(this.pkgNode, emitIR, initPackages, duplicateCodePackages);
 
@@ -250,7 +250,7 @@ export class Package {
             for (let p of Package.fyrPaths) {
                 includes.push("-I" + path.join(p, "pkg", architecture));
             }
-            for(let p of nativePackages) {                
+            for(let p of nativePackages) {
                 includes.push("-I" + p.sourcePath());
             }
             let args = includes.concat(["-g3", "-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
@@ -263,11 +263,11 @@ export class Package {
             if (this.nativeFiles) {
                 for(let cfile of this.nativeFiles) {
                     let filename = path.basename(cfile, ".c");
-                    let ofile = path.join(this.objFilePath, filename + ".o");                    
+                    let ofile = path.join(this.objFilePath, filename + ".o");
                     let includes: Array<string> = [];
-                    for(let p of nativePackages) {                
+                    for(let p of nativePackages) {
                         includes.push("-I" + p.sourcePath());
-                    }                            
+                    }
                     let args = includes.concat(["-g3", "-O3", "-Wno-parentheses", "-o", ofile, "-c", cfile]);
                     if (this.compileCmdLineArgs) {
                         args = args.concat(this.compileCmdLineArgs);
@@ -286,7 +286,7 @@ export class Package {
         if (this.fyrPath == "" || this.fyrPath == null) {
             return;
         }
-        
+
         let p = this.fyrPath;
         let packagePaths: Array<string> = this.pkgPath.split('/');
         packagePaths.splice(packagePaths.length - 1, 1);
@@ -301,7 +301,7 @@ export class Package {
                     throw new ImportError(("Cannot create directory " + p).red, null, this.pkgPath);
                 }
             }
-        }                
+        }
 
         // Generate the bin directory
         p = this.fyrPath;
@@ -315,7 +315,7 @@ export class Package {
                     throw new ImportError(("Cannot create directory " + p).red, null, this.pkgPath);
                 }
             }
-        }                
+        }
     }
 
     public hasTemplateInstantiations(): boolean {
@@ -405,7 +405,7 @@ export class Package {
             // Generate object files
             for(let p of Package.packages) {
                 if (p.isInternal) {
-                    continue;                    
+                    continue;
                 }
                 p.generateObjectFiles(backend, nativePackages);
             }
@@ -449,7 +449,7 @@ export class Package {
         if (Package.fyrPaths) {
             return Package.fyrPaths;
         }
-    
+
         // Environment variables
         Package.fyrBase = process.env["FYRBASE"];
         if (!Package.fyrBase) {
@@ -463,16 +463,16 @@ export class Package {
                 fyrPaths_str = "";
             } else {
                 fyrPaths_str = home + path.sep + "fyr";
-            }        
+            }
         }
         Package.fyrPaths = [Package.fyrBase].concat(fyrPaths_str.split(":"));
         return Package.fyrPaths;
     }
-    
+
     /**
      * @param pkgPath is of the form "/some/fyr/package".
      * @param loc is the location that is used for reporting an import error.
-     * 
+     *
      * Throws ImportError of the package could not be resolved.
      * Can throw TypeError or SyntaxError if loading of the sources detecs a syntax error.
      */
@@ -487,7 +487,7 @@ export class Package {
             }
             return p;
         }
-    
+
         for(let p of Package.fyrPaths) {
             let test = path.join(path.join(p, "src"), pkgPath);
             let isdir: boolean;
@@ -495,7 +495,7 @@ export class Package {
                 isdir = fs.lstatSync(test).isDirectory();
             } catch(e) {
                 isdir = false;
-            }        
+            }
             if (!isdir) {
                 continue;
             }
@@ -505,10 +505,10 @@ export class Package {
             pkg.loadSources();
             return pkg;
         }
-    
+
         throw new ImportError("Unknown package \"" + pkgPath + "\"", loc, pkgPath);
     }
-    
+
     // Used for system defined packages
     public static registerPackage(p: Package) {
         Package.packagesByPath.set(p.pkgPath, p);
@@ -574,12 +574,12 @@ function makeMathFunction64(name: string, paramCount: number, call: SystemCalls,
     let t = new FunctionType();
     t.callingConvention = "system";
     t.name = name;
-    t.returnType = TypeChecker.t_double;
+    t.returnType = Static.t_double;
     t.systemCallType = call;
     for(let i = 0; i < paramCount; i++) {
         let p = new FunctionParameter();
         p.name = "value" + i.toString();
-        p.type = TypeChecker.t_double;
+        p.type = Static.t_double;
         t.parameters.push(p);
     }
     f.type = t;
@@ -592,12 +592,12 @@ function makeMathFunction32(name: string, paramCount: number, call: SystemCalls,
     let t = new FunctionType();
     t.callingConvention = "system";
     t.name = name;
-    t.returnType = TypeChecker.t_float;
+    t.returnType = Static.t_float;
     t.systemCallType = call;
     for(let i = 0; i < paramCount; i++) {
         let p = new FunctionParameter();
         p.name = "value" + i.toString();
-        p.type = TypeChecker.t_float;
+        p.type = Static.t_float;
         t.parameters.push(p);
     }
     f.type = t;
@@ -622,14 +622,14 @@ function initPackages() {
     heap.type.callingConvention = "system";
     heap.type.name = "heap";
     heap.type.systemCallType = SystemCalls.heap;
-    heap.type.returnType = new UnsafePointerType(TypeChecker.t_void);
+    heap.type.returnType = new UnsafePointerType(Static.t_void);
     systemPkg.scope.registerElement(heap.name, heap);
     var currentMemory: Function = new Function();
     currentMemory.name = "currentMemory";
     currentMemory.type = new FunctionType();
     currentMemory.type.name = "currentMemory";
     currentMemory.type.systemCallType = SystemCalls.currentMemory;
-    currentMemory.type.returnType = TypeChecker.t_uint;
+    currentMemory.type.returnType = Static.t_uint;
     currentMemory.type.callingConvention = "system";
     systemPkg.scope.registerElement(currentMemory.name, currentMemory);
     var growMemory: Function = new Function();
@@ -637,10 +637,10 @@ function initPackages() {
     growMemory.type = new FunctionType();
     growMemory.type.name = "growMemory";
     growMemory.type.systemCallType = SystemCalls.growMemory;
-    growMemory.type.returnType = TypeChecker.t_int;
+    growMemory.type.returnType = Static.t_int;
     let p = new FunctionParameter();
     p.name = "pages";
-    p.type = TypeChecker.t_uint;
+    p.type = Static.t_uint;
     growMemory.type.parameters.push(p);
     growMemory.type.callingConvention = "system";
     systemPkg.scope.registerElement(growMemory.name, growMemory);
@@ -650,7 +650,7 @@ function initPackages() {
     heapTypemap.type.callingConvention = "system";
     heapTypemap.type.name = "heapTypemap";
     heapTypemap.type.systemCallType = SystemCalls.heapTypemap;
-    heapTypemap.type.returnType = new UnsafePointerType(TypeChecker.t_void);
+    heapTypemap.type.returnType = new UnsafePointerType(Static.t_void);
     systemPkg.scope.registerElement(heapTypemap.name, heapTypemap);
     var pageSize: Function = new Function();
     pageSize.name = "pageSize";
@@ -658,7 +658,7 @@ function initPackages() {
     pageSize.type.callingConvention = "system";
     pageSize.type.name = "pageSize";
     pageSize.type.systemCallType = SystemCalls.pageSize;
-    pageSize.type.returnType = TypeChecker.t_uint;
+    pageSize.type.returnType = Static.t_uint;
     systemPkg.scope.registerElement(pageSize.name, pageSize);
     var defaultStackSize: Function = new Function();
     defaultStackSize.name = "defaultStackSize";
@@ -666,7 +666,7 @@ function initPackages() {
     defaultStackSize.type.callingConvention = "system";
     defaultStackSize.type.name = "defaultStackSize";
     defaultStackSize.type.systemCallType = SystemCalls.defaultStackSize;
-    defaultStackSize.type.returnType = TypeChecker.t_uint;
+    defaultStackSize.type.returnType = Static.t_uint;
     systemPkg.scope.registerElement(defaultStackSize.name, defaultStackSize);
     var stackPointer: Function = new Function();
     stackPointer.name = "stackPointer";
@@ -674,7 +674,7 @@ function initPackages() {
     stackPointer.type.callingConvention = "system";
     stackPointer.type.name = "stackPointer";
     stackPointer.type.systemCallType = SystemCalls.stackPointer;
-    stackPointer.type.returnType = new UnsafePointerType(TypeChecker.t_void);
+    stackPointer.type.returnType = new UnsafePointerType(Static.t_void);
     systemPkg.scope.registerElement(stackPointer.name, stackPointer);
     var continueCoroutine: Function = new Function();
     continueCoroutine.name = "continueCoroutine";
@@ -682,18 +682,18 @@ function initPackages() {
     continueCoroutine.type.callingConvention = "system";
     continueCoroutine.type.name = "continueCoroutine";
     continueCoroutine.type.systemCallType = SystemCalls.continueCoroutine;
-    continueCoroutine.type.returnType = TypeChecker.t_uint32;
+    continueCoroutine.type.returnType = Static.t_uint32;
     p = new FunctionParameter();
     p.name = "step";
-    p.type = TypeChecker.t_uint32;
+    p.type = Static.t_uint32;
     continueCoroutine.type.parameters.push(p);
     p = new FunctionParameter();
     p.name = "frame";
-    p.type = new UnsafePointerType(TypeChecker.t_void);
+    p.type = new UnsafePointerType(Static.t_void);
     continueCoroutine.type.parameters.push(p);
     p = new FunctionParameter();
     p.name = "step";
-    p.type = TypeChecker.t_uint32;
+    p.type = Static.t_uint32;
     continueCoroutine.type.parameters.push(p);
     systemPkg.scope.registerElement(continueCoroutine.name, continueCoroutine);
     var scheduleCoroutine: Function = new Function();
@@ -702,10 +702,10 @@ function initPackages() {
     scheduleCoroutine.type.callingConvention = "system";
     scheduleCoroutine.type.name = "scheduleCoroutine";
     scheduleCoroutine.type.systemCallType = SystemCalls.scheduleCoroutine;
-    scheduleCoroutine.type.returnType = TypeChecker.t_void;
+    scheduleCoroutine.type.returnType = Static.t_void;
     p = new FunctionParameter();
     p.name = "c";
-    p.type = new UnsafePointerType(TypeChecker.t_void);
+    p.type = new UnsafePointerType(Static.t_void);
     scheduleCoroutine.type.parameters.push(p);
     systemPkg.scope.registerElement(scheduleCoroutine.name, scheduleCoroutine);
     var coroutine: Function = new Function();
@@ -714,7 +714,7 @@ function initPackages() {
     coroutine.type.callingConvention = "system";
     coroutine.type.name = "coroutine";
     coroutine.type.systemCallType = SystemCalls.coroutine;
-    coroutine.type.returnType = new UnsafePointerType(TypeChecker.t_void);
+    coroutine.type.returnType = new UnsafePointerType(Static.t_void);
     systemPkg.scope.registerElement(coroutine.name, coroutine);
     Package.registerPackage(systemPkg);
 

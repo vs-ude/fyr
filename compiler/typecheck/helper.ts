@@ -6,7 +6,7 @@ import {
 } from "../types/";
 import { Scope, FunctionParameter, Variable } from '../scopes'
 
-import { TypeChecker } from './'
+import { Static } from './'
 
 export function stripType(t: Type): Type {
     if (t instanceof RestrictedType) {
@@ -17,9 +17,9 @@ export function stripType(t: Type): Type {
 
 export function isString(t: Type): boolean {
     if (t instanceof RestrictedType) {
-        return t.elementType == TypeChecker.t_string;
+        return t.elementType == Static.t_string;
     }
-    return t == TypeChecker.t_string;
+    return t == Static.t_string;
 }
 
 export function isTupleType(t: Type): boolean {
@@ -40,7 +40,7 @@ export function isAny(t: Type): boolean {
     if (t instanceof RestrictedType) {
         return t.elementType instanceof OrType;
     }
-    return t == TypeChecker.t_any;
+    return t == Static.t_any;
 }
 
 export function isOrType(t: Type): boolean {
@@ -101,7 +101,7 @@ export function isUnsafePointer(t: Type): boolean {
 
 export function isNumber(t: Type): boolean {
     t = stripType(t);
-    return (t == TypeChecker.t_rune || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64);
+    return (t == Static.t_rune || t == Static.t_float || t == Static.t_double || t == Static.t_int || t == Static.t_uint || t == Static.t_byte || t == Static.t_char || t == Static.t_int8 || t == Static.t_int16 || t == Static.t_int32 || t == Static.t_int64 || t == Static.t_uint8 || t == Static.t_uint16 || t == Static.t_uint32 || t == Static.t_uint64);
 }
 
 export function isStruct(t: Type): boolean {
@@ -188,12 +188,12 @@ export function isConst(t: Type): boolean {
 
 export function isPlatformIntNumber(type: Type): boolean {
     type = stripType(type);
-    return (type == TypeChecker.t_int || type == TypeChecker.t_uint);
+    return (type == Static.t_int || type == Static.t_uint);
 }
 
 export function isIntNumber(type: Type): boolean {
     type = stripType(type);
-    if (type == TypeChecker.t_int || type == TypeChecker.t_uint || type == TypeChecker.t_byte || type == TypeChecker.t_char || type == TypeChecker.t_int8 || type == TypeChecker.t_int16 || type == TypeChecker.t_int32 || type == TypeChecker.t_int64 || type == TypeChecker.t_uint8 || type == TypeChecker.t_uint16 || type == TypeChecker.t_uint32 || type == TypeChecker.t_uint64) {
+    if (type == Static.t_int || type == Static.t_uint || type == Static.t_byte || type == Static.t_char || type == Static.t_int8 || type == Static.t_int16 || type == Static.t_int32 || type == Static.t_int64 || type == Static.t_uint8 || type == Static.t_uint16 || type == Static.t_uint32 || type == Static.t_uint64) {
         return true;
     }
     return false;
@@ -202,18 +202,18 @@ export function isIntNumber(type: Type): boolean {
 // TODO: Platform specific
 export function isInt32Number(t: Type): boolean {
     t = stripType(t);
-    return t == TypeChecker.t_int32 || t == TypeChecker.t_uint32;
+    return t == Static.t_int32 || t == Static.t_uint32;
 }
 
 // TODO: Platform specific
 export function isUInt32Number(t: Type): boolean {
     t = stripType(t);
-    return t == TypeChecker.t_uint32;
+    return t == Static.t_uint32;
 }
 
 export function isPrimitive(t: Type): boolean {
     t = stripType(t);
-    return (t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void);
+    return (t == Static.t_rune || t == Static.t_bool || t == Static.t_float || t == Static.t_double || t == Static.t_int8 || t == Static.t_int16 || t == Static.t_int32 || t == Static.t_int64 || t == Static.t_uint8 || t == Static.t_uint16 || t == Static.t_uint32 || t == Static.t_uint64 || t == Static.t_null || t == Static.t_void);
 }
 
 export function isSafePointer(t: Type): boolean {
@@ -244,7 +244,7 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
         if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
             return true;
         }
-        if (node.lhs.type == TypeChecker.t_string) {
+        if (node.lhs.type == Static.t_string) {
             return false;
         }
         return isLeftHandSide(node.lhs, scope, true);
@@ -256,7 +256,7 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
  */
 export function isPureValue(t: Type): boolean {
     t = RestrictedType.strip(t);
-    if (t == TypeChecker.t_int || t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_char || t == TypeChecker.t_rune || t == TypeChecker.t_bool || t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64 || t == TypeChecker.t_null || t == TypeChecker.t_void) {
+    if (t == Static.t_int || t == Static.t_uint || t == Static.t_byte || t == Static.t_char || t == Static.t_rune || t == Static.t_bool || t == Static.t_float || t == Static.t_double || t == Static.t_int8 || t == Static.t_int16 || t == Static.t_int32 || t == Static.t_int64 || t == Static.t_uint8 || t == Static.t_uint16 || t == Static.t_uint32 || t == Static.t_uint64 || t == Static.t_null || t == Static.t_void) {
         return true;
     }
     if (t instanceof TupleType) {
@@ -320,7 +320,7 @@ export function isTakeExpression(enode: Node): boolean {
     // A slice operation on a string creates a new string which already has a reference count of 1.
     // Hence it behaves like a take expression.
     // Adding a string, or casting a slice to a string creates a new string, too. Hence, it behaves like a take expression
-    if (enode.type == TypeChecker.t_string && (enode.op == ":" || enode.op == "+" || enode.op == "typeCast")) {
+    if (enode.type == Static.t_string && (enode.op == ":" || enode.op == "+" || enode.op == "typeCast")) {
         return true;
     }
     // Casting a string to a slice returns a new slice. Hence, it behaves like a take expression

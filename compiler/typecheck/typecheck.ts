@@ -17,6 +17,7 @@ import {
 import {createHash} from "crypto";
 
 import * as helper from './helper'
+import { Static } from './Static'
 
 // Typedef represents the result of a 'type' statement, i.e.
 // a named type which is of course subject to a scope.
@@ -36,36 +37,9 @@ export class Typedef {
 
 export class TypeChecker {
     constructor(pkg: Package) {
-        if (!TypeChecker.t_bool) {
-            TypeChecker.t_bool = new BasicType("bool");
-            TypeChecker.t_float = new BasicType("float");
-            TypeChecker.t_double = new BasicType("double");
-            TypeChecker.t_null = new BasicType("null");
-            TypeChecker.t_int8 = new BasicType("int8");
-            TypeChecker.t_char = new BasicType("char");
-            TypeChecker.t_int16 = new BasicType("int16");
-            TypeChecker.t_int32 = new BasicType("int32");
-            TypeChecker.t_int64 = new BasicType("int64");
-            TypeChecker.t_int = new BasicType("int");
-            TypeChecker.t_uint8 = new BasicType("uint8");
-            TypeChecker.t_byte = new BasicType("byte");
-            TypeChecker.t_uint16 = new BasicType("uint16");
-            TypeChecker.t_uint32 = new BasicType("uint32");
-            TypeChecker.t_uint64 = new BasicType("uint64");
-            // TODO: Depends on arch
-            TypeChecker.t_uint = new BasicType("uint");
-            TypeChecker.t_any = new BasicType("any");
-            TypeChecker.t_string = new BasicType("string");
-            TypeChecker.t_void = new BasicType("void");
-            TypeChecker.t_rune = new BasicType("rune");
-            TypeChecker.t_error = new InterfaceType();
-            TypeChecker.t_error.name = "error";
-            let toError = new FunctionType();
-            toError.name = "toError";
-            toError.returnType = TypeChecker.t_string;
-            toError.objectType = new RestrictedType(TypeChecker.t_error, {isConst: true});
-            TypeChecker.t_error.methods.set("toError", toError);
-            this.ifaces.push(TypeChecker.t_error);
+        if (!Static.isInitialized()) {
+            Static.init()
+            this.ifaces.push(Static.t_error);
         }
         this.pkg = pkg;
         this.globalGroup = new Group(GroupKind.Bound, "$global");
@@ -202,7 +176,7 @@ export class TypeChecker {
                 t.returnType = this.createType(tnode.rhs, scope, "parameter");
                 this.checkVariableType(t.returnType, tnode.rhs.loc);
             } else {
-                t.returnType = TypeChecker.t_void;
+                t.returnType = Static.t_void;
             }
             return t;
         } else if (tnode.op == "mapType") {
@@ -930,7 +904,7 @@ export class TypeChecker {
             }
             this.checkVariableType(f.type.returnType, fnode.rhs.loc);
         } else {
-            f.type.returnType = TypeChecker.t_void;
+            f.type.returnType = Static.t_void;
         }
 
         // The function is a member function
@@ -1172,7 +1146,7 @@ export class TypeChecker {
                 f.unnamedReturnVariable = v;
             }
         } else {
-            f.type.returnType = TypeChecker.t_void;
+            f.type.returnType = Static.t_void;
         }
         scope.registerElement(f.name, f);
         scope.setGroup(f, new Group(GroupKind.Free));
@@ -1356,26 +1330,26 @@ export class TypeChecker {
         let scope = new Scope(null);
         scope.pkg = pkg;
 
-        scope.registerType("bool", TypeChecker.t_bool);
-        scope.registerType("float", TypeChecker.t_float);
-        scope.registerType("double", TypeChecker.t_double);
-        scope.registerType("null", TypeChecker.t_null);
-        scope.registerType("byte", TypeChecker.t_byte);
-        scope.registerType("char", TypeChecker.t_char);
-        scope.registerType("int8", TypeChecker.t_int8);
-        scope.registerType("int16", TypeChecker.t_int16);
-        scope.registerType("int32", TypeChecker.t_int32);
-        scope.registerType("int64", TypeChecker.t_int64);
-        scope.registerType("int", TypeChecker.t_int);
-        scope.registerType("uint8", TypeChecker.t_uint8);
-        scope.registerType("uint16", TypeChecker.t_uint16);
-        scope.registerType("uint32", TypeChecker.t_uint32);
-        scope.registerType("uint64", TypeChecker.t_uint64);
-        scope.registerType("uint", TypeChecker.t_uint);
-        scope.registerType("string", TypeChecker.t_string);
-        scope.registerType("void", TypeChecker.t_void);
-        scope.registerType("error", TypeChecker.t_error);
-        scope.registerType("rune", TypeChecker.t_rune);
+        scope.registerType("bool", Static.t_bool);
+        scope.registerType("float", Static.t_float);
+        scope.registerType("double", Static.t_double);
+        scope.registerType("null", Static.t_null);
+        scope.registerType("byte", Static.t_byte);
+        scope.registerType("char", Static.t_char);
+        scope.registerType("int8", Static.t_int8);
+        scope.registerType("int16", Static.t_int16);
+        scope.registerType("int32", Static.t_int32);
+        scope.registerType("int64", Static.t_int64);
+        scope.registerType("int", Static.t_int);
+        scope.registerType("uint8", Static.t_uint8);
+        scope.registerType("uint16", Static.t_uint16);
+        scope.registerType("uint32", Static.t_uint32);
+        scope.registerType("uint64", Static.t_uint64);
+        scope.registerType("uint", Static.t_uint);
+        scope.registerType("string", Static.t_string);
+        scope.registerType("void", Static.t_void);
+        scope.registerType("error", Static.t_error);
+        scope.registerType("rune", Static.t_rune);
         pkg.pkgNode.scope = scope;
         this.moduleNode = pkg.pkgNode;
 
@@ -1692,10 +1666,10 @@ export class TypeChecker {
                         if (rtypeStripped instanceof ArrayLiteralType) {
                             for(let j = i; j < rnode.parameters.length; j++) {
                                 // TODO: Check that all elements of the array have the same type
-//                                this.checkIsAssignableNode(TypeChecker.t_json, rnode.parameters[j]);
+//                                this.checkIsAssignableNode(Static.t_json, rnode.parameters[j]);
 //                                rtype.types[j] = rnode.parameters[j].type;
                             }
-//                            v.type = new SliceType(TypeChecker.t_json);
+//                            v.type = new SliceType(Static.t_json);
                             throw "TODO";
                         } else if (rtypeStripped instanceof ArrayType) {
                             v.type = new ArrayType(rtypeStripped.elementType, rtypeStripped.size - i);
@@ -1783,9 +1757,9 @@ export class TypeChecker {
                         if (rtypeStripped instanceof ObjectLiteralType) {
                             let valueType: Type = null; // TODO
                             for(let j = i; j < rnode.parameters.length; j++) {
-//                                this.checkIsAssignableNode(TypeChecker.t_json, rnode.parameters[j].lhs);
+//                                this.checkIsAssignableNode(Static.t_json, rnode.parameters[j].lhs);
                             }
-                            v.type = new PointerType(new MapType(TypeChecker.t_string, valueType), "strong");
+                            v.type = new PointerType(new MapType(Static.t_string, valueType), "strong");
                             throw "TODO";
                         } else if (rtypeStripped instanceof TemplateStructType) {
                             v.type = rtype;
@@ -2044,7 +2018,7 @@ export class TypeChecker {
                     throw new TypeError("'return' outside of function body", snode.loc);
                 }
                 if (!snode.lhs) {
-                    if (f.type.returnType != TypeChecker.t_void && !f.hasNamedReturnVariables) {
+                    if (f.type.returnType != Static.t_void && !f.hasNamedReturnVariables) {
                         throw new TypeError("Mismatch in return type", snode.loc);
                     }
                 } else {
@@ -2091,7 +2065,7 @@ export class TypeChecker {
                 snode.scope = s;
                 // Check the if-clause
                 this.checkExpression(snode.condition, s);
-                this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
+                this.checkIsAssignableType(Static.t_bool, snode.condition.type, snode.condition.loc, "assign", true);
                 if (snode.condition.op == "bool" && snode.condition.value == "false") {
                     // Do not type check the if-clause, because it does not execute
                     snode.statements = [];
@@ -2132,7 +2106,7 @@ export class TypeChecker {
                         }
                         if (snode.condition.condition) {
                             this.checkExpression(snode.condition.condition, snode.condition.scope);
-                            this.checkIsAssignableType(TypeChecker.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
+                            this.checkIsAssignableType(Static.t_bool, snode.condition.condition.type, snode.condition.condition.loc, "assign", true);
                         }
                         if (snode.condition.rhs) {
                             let loopScopeExit = new ScopeExit();
@@ -2219,16 +2193,16 @@ export class TypeChecker {
                 this.checkExpression(snode.rhs, scope);
                 if (helper.isUnsafePointer(snode.lhs.type)) {
                     if (snode.rhs.op == "int") {
-                        this.unifyLiterals(TypeChecker.t_uint, snode.rhs, scope, snode.loc);
+                        this.unifyLiterals(Static.t_uint, snode.rhs, scope, snode.loc);
                     } else {
-                        this.checkIsAssignableType(TypeChecker.t_uint, snode.rhs.type, snode.loc, "assign", true);
+                        this.checkIsAssignableType(Static.t_uint, snode.rhs.type, snode.loc, "assign", true);
                     }
                 } else {
                     this.checkIsIntNumber(snode.lhs);
                     if (snode.rhs.op == "int") {
-                        this.unifyLiterals(TypeChecker.t_uint, snode.rhs, scope, snode.loc);
+                        this.unifyLiterals(Static.t_uint, snode.rhs, scope, snode.loc);
                     } else {
-                        this.checkIsAssignableType(TypeChecker.t_uint, snode.rhs.type, snode.loc, "assign", true);
+                        this.checkIsAssignableType(Static.t_uint, snode.rhs.type, snode.loc, "assign", true);
                     }
                 }
                 break;
@@ -2248,7 +2222,7 @@ export class TypeChecker {
                     if (snode.rhs.op == "int") {
                         this.unifyLiterals(snode.lhs.type, snode.rhs, scope, snode.loc);
                     } else {
-                        this.checkIsAssignableType(TypeChecker.t_int, snode.rhs.type, snode.loc, "assign", true);
+                        this.checkIsAssignableType(Static.t_int, snode.rhs.type, snode.loc, "assign", true);
                     }
                 } else {
                     this.checkIsIntNumber(snode.lhs);
@@ -2304,7 +2278,7 @@ export class TypeChecker {
                         } else {
                             v2.type = tindex2;
                         }
-                        if (v2.type != TypeChecker.t_string) {
+                        if (v2.type != Static.t_string) {
                             v2.isForLoopPointer = true;
                         }
                     }
@@ -2315,7 +2289,7 @@ export class TypeChecker {
                     } else {
                         v.type = tindex1;
                     }
-                    if (v.type != TypeChecker.t_string) {
+                    if (v.type != Static.t_string) {
                         v.isForLoopPointer = true;
                     }
                 }
@@ -2338,7 +2312,7 @@ export class TypeChecker {
                 if (!(snode.rhs.lhs.type instanceof FunctionType)) {
                     throw "Implementation error";
                 }
-                if ((snode.rhs.lhs.type as FunctionType).returnType != TypeChecker.t_void) {
+                if ((snode.rhs.lhs.type as FunctionType).returnType != Static.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
                 }
                 break;
@@ -2358,7 +2332,7 @@ export class TypeChecker {
                 if (helper.isConst(t.arrayType)) {
                     throw new TypeError("'" + snode.op + "' requires a non-const slice as its first argument", snode.lhs.loc);
                 }
-                if (snode.op == "move" && !(helper.isPureValue(e) || helper.isConst(e) || e == TypeChecker.t_string) && helper.isConst(snode.rhs.type)) {
+                if (snode.op == "move" && !(helper.isPureValue(e) || helper.isConst(e) || e == Static.t_string) && helper.isConst(snode.rhs.type)) {
                     throw new TypeError("'move' requires a non-const slice as its second argument when slice elements are neither const nor pure values", snode.lhs.loc);
                 }
                 let t2 = RestrictedType.strip(snode.rhs.type) as SliceType;
@@ -2400,24 +2374,24 @@ export class TypeChecker {
     public checkExpression(enode: Node, scope: Scope) {
         switch (enode.op) {
             case "null":
-                enode.type = TypeChecker.t_null;
+                enode.type = Static.t_null;
                 break;
             case "bool":
-                enode.type = TypeChecker.t_bool;
+                enode.type = Static.t_bool;
                 break;
             case "str":
-                enode.type = TypeChecker.t_string;
+                enode.type = Static.t_string;
                 break;
             case "rune":
-                enode.type = TypeChecker.t_rune;
+                enode.type = Static.t_rune;
                 break;
             case "int":
                 // TODO: Check ranges and use t_uint if required
-                enode.type = TypeChecker.t_int;
+                enode.type = Static.t_int;
                 break;
             case "float":
                 // TODO: Check ranges
-                enode.type = TypeChecker.t_double;
+                enode.type = Static.t_double;
                 break;
             case "id":
                 // TODO: ellipsis, optional
@@ -2472,7 +2446,7 @@ export class TypeChecker {
                     enode.op = enode.rhs.op;
                     enode.value = enode.rhs.value == "true" ? "false" : "true";
                 }
-                enode.type = TypeChecker.t_bool;
+                enode.type = Static.t_bool;
                 break;
             case "unary*":
             {
@@ -2517,9 +2491,9 @@ export class TypeChecker {
                         enode.value = enode.lhs.value + enode.rhs.value;
                     }
                     if (enode.op == "+" || enode.op == "str") {
-                        enode.type = TypeChecker.t_string;
+                        enode.type = Static.t_string;
                     } else {
-                        enode.type = TypeChecker.t_bool;
+                        enode.type = Static.t_bool;
                     }
                 } else if (helper.isUnsafePointer(enode.lhs.type)) {
                     if (enode.op == "*" || enode.op == "/") {
@@ -2578,8 +2552,8 @@ export class TypeChecker {
                         }
                         if (enode.lhs.op == "float" || enode.rhs.op == "float") {
                             enode.op = "float";
-                            enode.lhs.type = TypeChecker.t_double;
-                            enode.rhs.type = TypeChecker.t_double;
+                            enode.lhs.type = Static.t_double;
+                            enode.rhs.type = Static.t_double;
                         } else {
                             enode.op = "int";
                         }
@@ -2599,7 +2573,7 @@ export class TypeChecker {
                     if (enode.op == "+" || enode.op == "-" || enode.op == "*" || enode.op == "/" || enode.op == "float" || enode.op == "int") {
                         enode.type = helper.stripType(enode.lhs.type);
                     } else {
-                        enode.type = TypeChecker.t_bool;
+                        enode.type = Static.t_bool;
                     }
                 }
                 break;
@@ -2609,7 +2583,7 @@ export class TypeChecker {
                 this.checkExpression(enode.rhs, scope);
                 this.checkIsBool(enode.lhs);
                 this.checkIsBool(enode.rhs);
-                enode.type = TypeChecker.t_bool;
+                enode.type = Static.t_bool;
                 break;
             case "&":
             case "|":
@@ -2652,14 +2626,14 @@ export class TypeChecker {
                     enode.op = "int";
                 } else if (enode.lhs.op == "int") {
                     if (enode.op == "<<" || enode.op == ">>") {
-                        this.unifyLiterals(TypeChecker.t_uint, enode.lhs, scope, enode.loc);
+                        this.unifyLiterals(Static.t_uint, enode.lhs, scope, enode.loc);
                         this.checkIsUnsignedNumber(enode.rhs);
                     } else {
                         this.unifyLiterals(enode.rhs.type, enode.lhs, scope, enode.loc);
                     }
                 } else if (enode.rhs.op == "int") {
                     if (enode.op == "<<" || enode.op == ">>") {
-                        this.unifyLiterals(TypeChecker.t_uint, enode.rhs, scope, enode.loc);
+                        this.unifyLiterals(Static.t_uint, enode.rhs, scope, enode.loc);
                     } else {
                         this.unifyLiterals(enode.lhs.type, enode.rhs, scope, enode.loc);
                     }
@@ -2667,7 +2641,7 @@ export class TypeChecker {
                     if (enode.op == "<<" || enode.op == ">>") {
                         this.checkIsUnsignedNumber(enode.rhs);
                     } else if (helper.isUnsafePointer(enode.lhs.type)) {
-                        this.checkIsAssignableType(TypeChecker.t_uint, enode.rhs.type, enode.rhs.loc, "assign", true);
+                        this.checkIsAssignableType(Static.t_uint, enode.rhs.type, enode.rhs.loc, "assign", true);
                     } else {
                         this.checkIsAssignableType(enode.lhs.type, enode.rhs.type, enode.loc, "assign", true);
                     }
@@ -2723,7 +2697,7 @@ export class TypeChecker {
                 } else {
                     this.checkIsAssignableType(tl, tr, enode.loc, "compare", true);
                 }
-                enode.type = TypeChecker.t_bool;
+                enode.type = Static.t_bool;
                 break;
             }
             case ".":
@@ -2823,8 +2797,8 @@ export class TypeChecker {
                         // For slices the type remains the same
                         enode.type = enode.lhs.type;
                     }
-                } else if (t == TypeChecker.t_string) {
-                    enode.type = TypeChecker.t_string;
+                } else if (t == Static.t_string) {
+                    enode.type = Static.t_string;
                 } else {
                     throw "Implementation error";
                 }
@@ -2862,9 +2836,9 @@ export class TypeChecker {
                     this.checkIsPlatformIntNumber(enode.rhs);
                     enode.type = t.getElementType();
                     isConst = isConst || helper.isConst(t.arrayType);
-                } else if (t == TypeChecker.t_string) {
+                } else if (t == Static.t_string) {
                     this.checkIsPlatformIntNumber(enode.rhs);
-                    enode.type = TypeChecker.t_byte;
+                    enode.type = Static.t_byte;
                 } else if (t instanceof UnsafePointerType) {
                     this.checkIsPlatformIntNumber(enode.rhs);
                     enode.type = t.elementType;
@@ -3096,7 +3070,7 @@ export class TypeChecker {
                         throw new TypeError("Interface can only contain pointers to structs, but not " + t.toString(), enode.loc);
                     }
                 }
-                enode.type = TypeChecker.t_bool;
+                enode.type = Static.t_bool;
                 break;
             }
             case "typeCast":
@@ -3105,22 +3079,22 @@ export class TypeChecker {
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
                 let left = RestrictedType.strip(t);
-                if ((left == TypeChecker.t_float || left == TypeChecker.t_double) && helper.isIntNumber(right)) {
+                if ((left == Static.t_float || left == Static.t_double) && helper.isIntNumber(right)) {
                     // Ints can be converted to floats
                     enode.type = t;
-                } else if (helper.isIntNumber(left) && (right == TypeChecker.t_float || right == TypeChecker.t_double)) {
+                } else if (helper.isIntNumber(left) && (right == Static.t_float || right == Static.t_double)) {
                     // Floats can be converted to ints
                     enode.type = t;
-                } else if (left == TypeChecker.t_float && right == TypeChecker.t_double) {
+                } else if (left == Static.t_float && right == Static.t_double) {
                     // Doubles can be converted to floats
                     enode.type = t;
-                } else if (left == TypeChecker.t_double && right == TypeChecker.t_float) {
+                } else if (left == Static.t_double && right == Static.t_float) {
                     // Floats can be converted to doubles
                     enode.type = t;
-                } else if (left == TypeChecker.t_rune && helper.isUInt32Number(right)) {
+                } else if (left == Static.t_rune && helper.isUInt32Number(right)) {
                     // Runes can be converted to uint32
                     enode.type = t;
-                } else if (helper.isUInt32Number(left) && right == TypeChecker.t_rune) {
+                } else if (helper.isUInt32Number(left) && right == Static.t_rune) {
                     // Uint32 can be converted to a rune
                     enode.type = t;
 //                } else if (helper.isInt32Number(t) && right instanceof UnsafePointerType) {
@@ -3129,16 +3103,16 @@ export class TypeChecker {
                 } else if (left instanceof UnsafePointerType && (right instanceof UnsafePointerType || right instanceof PointerType || helper.isString(right) || helper.isInt32Number(right))) {
                     // Unsafe pointers to anything, safe pointers to anything, strings and 32-bit integers can be converted to any unsafe pointer
                     enode.type = t;
-                } else if ((left == TypeChecker.t_bool || helper.isIntNumber(left)) && (right == TypeChecker.t_bool || helper.isIntNumber(right)) && t != right) {
+                } else if ((left == Static.t_bool || helper.isIntNumber(left)) && (right == Static.t_bool || helper.isIntNumber(right)) && t != right) {
                     // bool and all integers can be converted into each other
                     enode.type = t;
                 } else if (helper.isString(left) && right instanceof UnsafePointerType) {
                     // An unsafe pointer can be converted to a string by doing nothing. This is an unsafe cast.
                     enode.type = t;
-                } else if (helper.isString(left) && right instanceof SliceType && !helper.isLocalReference(right) && !helper.isConst(enode.rhs.type) && (right.getElementType() == TypeChecker.t_byte || right.getElementType() == TypeChecker.t_char)) {
+                } else if (helper.isString(left) && right instanceof SliceType && !helper.isLocalReference(right) && !helper.isConst(enode.rhs.type) && (right.getElementType() == Static.t_byte || right.getElementType() == Static.t_char)) {
                     // A slice of bytes or chars can be converted to a string by taking ownership away from the slice
                     enode.type = t;
-                } else if (left instanceof SliceType && (left.mode == "strong" || left.mode == "unique") && (left.getElementType() == TypeChecker.t_byte || left.getElementType() == TypeChecker.t_char) && helper.isString(right)) {
+                } else if (left instanceof SliceType && (left.mode == "strong" || left.mode == "unique") && (left.getElementType() == Static.t_byte || left.getElementType() == Static.t_char) && helper.isString(right)) {
                     // A string can be casted into a unique or owning sequence of bytes or chars by copying it
                     enode.type = t;
                 } else if (helper.isComplexOrType(right)) {
@@ -3156,7 +3130,7 @@ export class TypeChecker {
                 } else if (this.checkIsAssignableType(t, enode.rhs.type, enode.loc, "assign", false)) {
                     /*
                     // null can be casted, especially when it is assigned to interface{}
-                    if (right != TypeChecker.t_null) {
+                    if (right != Static.t_null) {
                         throw new TypeError("Conversion from " + right.toString() + " to " + t.toString() + " does not require a cast", enode.loc);
                     }
                     */
@@ -3185,14 +3159,14 @@ export class TypeChecker {
                 if (!helper.isString(enode.lhs.type) && !helper.isArray(enode.lhs.type) && !helper.isSlice(enode.lhs.type)) {
                     throw new TypeError("'len' is only allowed on strings, arrays and slices", enode.loc);
                 }
-                enode.type = TypeChecker.t_int;
+                enode.type = Static.t_int;
                 break;
             case "cap":
                 this.checkExpression(enode.lhs, scope);
                 if (!helper.isSlice(enode.lhs.type)) {
                     throw new TypeError("'cap' is only allowed on slices", enode.loc);
                 }
-                enode.type = TypeChecker.t_int;
+                enode.type = Static.t_int;
                 break;
             case "clone":
             {
@@ -3210,7 +3184,7 @@ export class TypeChecker {
             case "sizeof":
             case "aligned_sizeof":
                 enode.lhs.type = this.createType(enode.lhs, scope, "default");
-                enode.type = TypeChecker.t_int;
+                enode.type = Static.t_int;
                 break;
             case "max":
             case "min":
@@ -3284,11 +3258,11 @@ export class TypeChecker {
                     }
                 }
                 if (enode.op == "append") {
-                    enode.type = TypeChecker.t_void;
+                    enode.type = Static.t_void;
                 } else if (enode.op == "tryPush") {
-                    enode.type = TypeChecker.t_bool;
+                    enode.type = Static.t_bool;
                 } else if (enode.op == "push") {
-                    enode.type = TypeChecker.t_void;
+                    enode.type = Static.t_void;
                 } else {
                     throw "Implementation error";
                 }
@@ -3452,7 +3426,7 @@ export class TypeChecker {
                 node.type = t;
                 t = helper.stripType(t);
                 // TODO: Check range
-                if (t == TypeChecker.t_float || t == TypeChecker.t_double) {
+                if (t == Static.t_float || t == Static.t_double) {
                     return true;
                 }
                 if (!doThrow) {
@@ -3475,24 +3449,24 @@ export class TypeChecker {
             case "rune":
                 node.type = t;
                 t = helper.stripType(t);
-                if (t == TypeChecker.t_rune) {
+                if (t == Static.t_rune) {
                     return true;
-                } else if ((t == TypeChecker.t_char || t == TypeChecker.t_int8) && node.numValue <= 127) {
+                } else if ((t == Static.t_char || t == Static.t_int8) && node.numValue <= 127) {
                     node.value = node.numValue.toString();
                     return true;
-                } else if ((t == TypeChecker.t_byte || t == TypeChecker.t_uint8) && node.numValue <= 255) {
+                } else if ((t == Static.t_byte || t == Static.t_uint8) && node.numValue <= 255) {
                     node.value = node.numValue.toString();
                     return true;
-                } else if (t == TypeChecker.t_uint16 && node.numValue <= 65535) {
+                } else if (t == Static.t_uint16 && node.numValue <= 65535) {
                     node.value = node.numValue.toString();
                     return true;
-                } else if (t == TypeChecker.t_int16 && node.numValue <= 32768) {
+                } else if (t == Static.t_int16 && node.numValue <= 32768) {
                     node.value = node.numValue.toString();
                     return true;
-                } else if (t == TypeChecker.t_int32 && node.numValue <= 2147483647) {
+                } else if (t == Static.t_int32 && node.numValue <= 2147483647) {
                     node.value = node.numValue.toString();
                     return true;
-                } else if (t == TypeChecker.t_uint32 || TypeChecker.t_uint64 || TypeChecker.t_int64) {
+                } else if (t == Static.t_uint32 || Static.t_uint64 || Static.t_int64) {
                     node.value = node.numValue.toString();
                     return true;
                 }
@@ -3767,12 +3741,12 @@ export class TypeChecker {
                 }
             }
             // TODO: Else check for exact type equality
-/*        } else if (to instanceof PointerType && from == TypeChecker.t_null) {
+/*        } else if (to instanceof PointerType && from == Static.t_null) {
             // null can be assigned to any pointer type
             if (mode == "assign" || mode == "compare") {
                 return true;
             }
-        } else if (to == TypeChecker.t_null && from instanceof PointerType) {
+        } else if (to == Static.t_null && from instanceof PointerType) {
             if (mode == "compare") {
                 return true;
             } */
@@ -3790,24 +3764,24 @@ export class TypeChecker {
                     return true;
                 }
             }
-        } else if (to instanceof UnsafePointerType && (from == TypeChecker.t_int || from == TypeChecker.t_uint || from == TypeChecker.t_null)) {
+        } else if (to instanceof UnsafePointerType && (from == Static.t_int || from == Static.t_uint || from == Static.t_null)) {
             // integers and null can be assigned to an usafe pointer type
             if (mode == "assign" || mode == "compare") {
                 return true;
             }
-        } else if ((to == TypeChecker.t_int || to == TypeChecker.t_uint || to == TypeChecker.t_null) && from instanceof UnsafePointerType) {
+        } else if ((to == Static.t_int || to == Static.t_uint || to == Static.t_null) && from instanceof UnsafePointerType) {
             // integers and null can be assigned to an usafe pointer type
             if (mode == "compare") {
                 return true;
             }
         } else if (to instanceof UnsafePointerType && (from instanceof UnsafePointerType || from instanceof PointerType)) {
-            if (to.elementType == TypeChecker.t_void) {
+            if (to.elementType == Static.t_void) {
                 // Safe and unsafe pointers to anything can be assigned to #void
                 if (mode == "assign" || mode == "compare") {
                     return true;
                 }
             }
-            if (from.elementType == TypeChecker.t_void) {
+            if (from.elementType == Static.t_void) {
                 // #void can be assigned to any unsafe pointer
                 if (mode == "assign" || mode == "compare") {
                     return true;
@@ -3834,12 +3808,12 @@ export class TypeChecker {
                     return true;
                 }
             }
-/*        } else if (to instanceof SliceType && from == TypeChecker.t_null) {
+/*        } else if (to instanceof SliceType && from == Static.t_null) {
             // null can be assigned to any pointer type
             if (mode == "assign" || mode == "compare") {
                 return true;
             }
-        } else if (to == TypeChecker.t_null && from instanceof SliceType) {
+        } else if (to == Static.t_null && from instanceof SliceType) {
             // null can be assigned to any pointer type
             if (mode == "compare") {
                 return true;
@@ -3849,12 +3823,12 @@ export class TypeChecker {
                 this.checkIsAssignableType(to.valueType, from.valueType, loc, "equal", false, toRestrictions, fromRestrictions, templateParams)) {
                     return true;
             }
-        } else if (to == TypeChecker.t_any) {
+        } else if (to == Static.t_any) {
             // Everything can be asssigned to the empty interface
             if (mode == "assign" || mode == "compare") {
                 return true;
             }
-        } else if (from == TypeChecker.t_any) {
+        } else if (from == Static.t_any) {
             // Everything can be asssigned to the empty interface
             if (mode == "compare") {
                 return true;
@@ -3993,7 +3967,7 @@ export class TypeChecker {
 
         for(let n of t.templateParameterNames) {
             if (!result.has(n)) {
-                result.set(n, TypeChecker.t_void);
+                result.set(n, Static.t_void);
             }
         }
 
@@ -4005,11 +3979,11 @@ export class TypeChecker {
         if (helper.isMap(t)) {
             return [this.mapKeyType(t), this.mapValueType(t)];
         } else if (t instanceof ArrayType) {
-            return [TypeChecker.t_int, t.elementType];
+            return [Static.t_int, t.elementType];
         } else if (t instanceof SliceType) {
-            return [TypeChecker.t_int, t.getElementType()];
-        } else if (t == TypeChecker.t_string) {
-            return [TypeChecker.t_int, TypeChecker.t_rune];
+            return [Static.t_int, t.getElementType()];
+        } else if (t == Static.t_string) {
+            return [Static.t_int, Static.t_rune];
         }
         throw new TypeError("The type " + t.toString() + " is not enumerable", node.loc);
     }
@@ -4033,8 +4007,8 @@ export class TypeChecker {
             return t.types[index];
         } else if (t instanceof UnsafePointerType || t instanceof PointerType) {
             return t.elementType;
-        } else if (t == TypeChecker.t_string) {
-            return TypeChecker.t_byte;
+        } else if (t == Static.t_string) {
+            return Static.t_byte;
         }
         throw new TypeError("The type " + t.toString() + " is not indexable", node.loc);
     }
@@ -4109,7 +4083,7 @@ export class TypeChecker {
 
     public checkIsSignedNumber(node: Node, doThrow: boolean = true): boolean {
         let t = helper.stripType(node.type);
-        if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_int || t == TypeChecker.t_char || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64) {
+        if (t == Static.t_float || t == Static.t_double || t == Static.t_int || t == Static.t_char || t == Static.t_int8 || t == Static.t_int16 || t == Static.t_int32 || t == Static.t_int64) {
             return true;
         }
         if (doThrow) {
@@ -4120,7 +4094,7 @@ export class TypeChecker {
 
     public checkIsUnsignedNumber(node: Node, doThrow: boolean = true): boolean {
         let t = helper.stripType(node.type);
-        if (t == TypeChecker.t_uint || t == TypeChecker.t_byte || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
+        if (t == Static.t_uint || t == Static.t_byte || t == Static.t_uint8 || t == Static.t_uint16 || t == Static.t_uint32 || t == Static.t_uint64) {
             return true;
         }
         if (doThrow) {
@@ -4131,7 +4105,7 @@ export class TypeChecker {
 
     public checkIsBool(node: Node, doThrow: boolean = true): boolean {
         let t = helper.stripType(node.type);
-        if (t == TypeChecker.t_bool) {
+        if (t == Static.t_bool) {
             return true;
         }
         if (doThrow) {
@@ -4744,7 +4718,7 @@ export class TypeChecker {
                 if (!(snode.rhs.lhs.type instanceof FunctionType)) {
                     throw "Implementation error";
                 }
-                if ((snode.rhs.lhs.type as FunctionType).returnType != TypeChecker.t_void) {
+                if ((snode.rhs.lhs.type as FunctionType).returnType != Static.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
                 }
                 break;
@@ -5243,12 +5217,12 @@ export class TypeChecker {
             {
                 // Converting a slice of bytes to a string, freezes the slice.
                 // This is similar to assigning the slice to a unique slice.
-                if (enode.type == TypeChecker.t_string && helper.isSlice(enode.rhs.type)) {
+                if (enode.type == Static.t_string && helper.isSlice(enode.rhs.type)) {
                     let g = this.checkGroupsInExpression(enode.rhs, scope, flags);
-                    this.checkGroupsInSingleAssignment(new SliceType(new ArrayType(TypeChecker.t_byte, -1), "unique"), null, g, enode.rhs, false, scope, enode.loc);
+                    this.checkGroupsInSingleAssignment(new SliceType(new ArrayType(Static.t_byte, -1), "unique"), null, g, enode.rhs, false, scope, enode.loc);
                     return null;
                 }
-                if (helper.isSlice(enode.type) && enode.rhs.type == TypeChecker.t_string) {
+                if (helper.isSlice(enode.type) && enode.rhs.type == Static.t_string) {
                     return new Group(GroupKind.Free);
                 }
                 return this.checkGroupsInExpression(enode.rhs, scope, flags);
@@ -5351,7 +5325,7 @@ export class TypeChecker {
         }
 
         // Void function?
-        if (!ft.returnType || ft.returnType == TypeChecker.t_void) {
+        if (!ft.returnType || ft.returnType == Static.t_void) {
             return null;
         }
         // The function returns a tuple type?
@@ -5399,28 +5373,6 @@ export class TypeChecker {
     public hasTemplateInstantiations(): boolean {
         return (this.templateFunctionInstantiations.size != 0 || this.templateTypeInstantiations.size != 0);
     }
-
-    public static t_bool: Type;
-    public static t_float: Type;
-    public static t_double: Type;
-    public static t_null: Type;
-    public static t_int8: Type;
-    public static t_int16: Type;
-    public static t_int32: Type;
-    public static t_int64: Type;
-    public static t_uint8: Type;
-    public static t_byte: Type;
-    public static t_char: Type;
-    public static t_int: Type;
-    public static t_uint16: Type;
-    public static t_uint32: Type;
-    public static t_uint64: Type;
-    public static t_uint: Type;
-    public static t_string: Type;
-    public static t_rune: Type;
-    public static t_void: Type;
-    public static t_any: Type;
-    public static t_error: InterfaceType;
 
     // List of all interfaces. These are checked for possible errors after they have been defined.
     public ifaces: Array<InterfaceType> = [];
