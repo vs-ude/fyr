@@ -672,7 +672,7 @@ export class CBackend implements backend.Backend {
                 if (n.type == "f32") {
                     return new CConst(n.constantValue.toString() + "f");                    
                 }
-                return this.emitExprIntern(n.constantValue);
+                return this.emitExprIntern(<number>n.constantValue);
             } else if (n.isConstant) {
                 if (!(n.type instanceof StructType)) {
                     throw "Implementation error"
