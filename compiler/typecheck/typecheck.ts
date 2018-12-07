@@ -1,19 +1,19 @@
-import {Node, Location, AstFlags} from "./ast"
-import { Package, SystemCalls } from "./pkg"
+import {Node, Location, AstFlags} from "../ast"
+import { Package, SystemCalls } from "../pkg"
 import {
     ArrayLiteralType, ArrayType, BasicType, FunctionType, GenericParameter,
     InterfaceType, MapType, ObjectLiteralType, OrType, PackageType,
     PointerType, RestrictedType, SliceType, StringLiteralType, StructField,
     StructType, TemplateFunctionType, TemplateInterfaceType, TemplateStructType, TemplateType,
     TupleLiteralType, TupleType, Type, UnsafePointerType, PointerMode
-} from "./types/";
+} from "../types/";
 import {
     Group, GroupKind, TupleGroup, GroupCheckFlags, Restrictions, combineRestrictions
-} from './group'
+} from '../group'
 import {
     Scope, ScopeElement, Function, FunctionParameter, TemplateFunction,
     Variable, ImportedPackage, ScopeExit
-} from './scopes'
+} from '../scopes'
 import {createHash} from "crypto";
 
 // Typedef represents the result of a 'type' statement, i.e.
