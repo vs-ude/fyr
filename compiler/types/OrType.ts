@@ -1,4 +1,4 @@
-import { TypeChecker } from '../typecheck'
+import { isPureValue } from '../typecheck/helper'
 
 import { Type } from './Type'
 import { StringLiteralType } from './StringLiteralType'
@@ -46,7 +46,7 @@ export class OrType extends Type {
 
     public isPureValue(): boolean {
         for(let t of this.types) {
-            if (TypeChecker.isPureValue(t)) {
+            if (isPureValue(t)) {
                 return false
             }
         }

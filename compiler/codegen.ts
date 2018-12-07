@@ -9,6 +9,7 @@ import {
     FunctionType, ArrayType, SliceType, TupleType, TemplateFunctionType
 } from "./types/"
 import { TypeChecker, TypeError } from './typecheck'
+import * as helper from './typecheck/helper'
 import * as types from "./types/"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
@@ -142,7 +143,7 @@ export class CodeGenerator {
                 throw "CodeGen: Implementation Error " + e;
             }
         }
-        
+
         // Generate IR code for the initialization of global variables
         let wf = this.backend.declareInitFunction("init");
         let b = new ssa.Builder();
@@ -157,7 +158,7 @@ export class CodeGenerator {
         }
         for(let v of globals) {
             let g = this.globalVars.get(v);
-            if ((this.tc.isStruct(v.type) || this.tc.isArray(v.type)) && this.isPureLiteral(v.type, v.node.rhs)) {
+            if ((helper.isStruct(v.type) || helper.isArray(v.type)) && this.isPureLiteral(v.type, v.node.rhs)) {
                 let expr = this.processPureLiteral(v.node.rhs);
                 if (v.isConst) {
                     g.isConstant = true;
@@ -184,7 +185,7 @@ export class CodeGenerator {
                 let wf = this.funcs.get(e) as backend.Function;
                 this.processFunction(e, wf);
             } else if (e instanceof TemplateFunction) {
-                // Do nothing by intention                
+                // Do nothing by intention
             } else if (e instanceof Variable) {
                 // Do nothing by intention
             } else {
@@ -244,23 +245,23 @@ export class CodeGenerator {
         }
         if (t instanceof RestrictedType && t.elementType instanceof types.PointerType) {
             // Const pointer to an interface?
-            if (this.tc.isInterface(t.elementType)) {
+            if (helper.isInterface(t.elementType)) {
                 return this.ifaceHeader;
             }
-            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
+            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);
         }
         if (t instanceof types.PointerType) {
             // Pointer to an interface?
-            if (this.tc.isInterface(t)) {
+            if (helper.isInterface(t)) {
                 return this.ifaceHeader;
             }
-            return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
+            return new ssa.PointerType(this.getSSAType(t.elementType), helper.isConst(t.elementType));
         }
         if (t instanceof RestrictedType && t.elementType instanceof types.UnsafePointerType) {
-            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);            
+            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);
         }
         if (t instanceof types.UnsafePointerType) {
-            return new ssa.PointerType(this.getSSAType(t.elementType), this.tc.isConst(t.elementType));
+            return new ssa.PointerType(this.getSSAType(t.elementType), helper.isConst(t.elementType));
         }
         if (t == TypeChecker.t_string) {
             return "addr";
@@ -280,7 +281,7 @@ export class CodeGenerator {
         if (t instanceof StructType) {
             if (this.structs.has(t)) {
                 return this.structs.get(t);
-            }            
+            }
             let s = new ssa.StructType();
             s.name = t.name;
             this.structs.set(t, s);
@@ -311,7 +312,7 @@ export class CodeGenerator {
                 s.addField("t" + i.toString(), this.getSSAType(el));
                 i++;
             }
-            return s;            
+            return s;
         }
         if (t instanceof InterfaceType) {
             return this.ifaceHeader;
@@ -378,7 +379,7 @@ export class CodeGenerator {
                 if (e instanceof Variable && e.isResult) {
                     // Create a variable that can be assigned multiple times
                     let v = b.declareResult(this.getSSAType(e.type), name);
-                    vars.set(e, v);                    
+                    vars.set(e, v);
                 }
             }
         } else if (f.type.returnType != TypeChecker.t_void) {
@@ -399,7 +400,7 @@ export class CodeGenerator {
         b.end();
 
 //        if (this.emitIR || f.name == this.emitFunction) {
-//            console.log(ssa.Node.strainToString("", b.node));                
+//            console.log(ssa.Node.strainToString("", b.node));
 //        }
 
         this.backend.defineFunction(b.node, wf, f.isExported, f.isTemplateInstance);
@@ -479,7 +480,7 @@ export class CodeGenerator {
                     this.processStatement(f, snode.scope, st, b, vars, blocks);
                 }
                 this.freeScopeVariables(null, b, vars, snode.scope);
-                break;                
+                break;
             }
             case "let":
             case "var":
@@ -490,12 +491,12 @@ export class CodeGenerator {
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let t = this.getSSAType(snode.rhs.type);
                         let v = vars.get(element);
-                        if ((this.tc.isArray(element.type) || this.tc.isStruct(element.type)) && this.isPureLiteral(element.type, snode.rhs)) {
+                        if ((helper.isArray(element.type) || helper.isStruct(element.type)) && this.isPureLiteral(element.type, snode.rhs)) {
                             let data = this.processPureLiteral(snode.rhs);
                             if (element.isConst) {
                                 v.isConstant = true;
                                 v.constantValue = (data as ssa.Variable).constantValue;
-                            } else {                                
+                            } else {
                                 b.assign(v, "copy", v.type, [data]);
                             }
                         } else {
@@ -507,19 +508,19 @@ export class CodeGenerator {
                                 rhs = this.processExpression(f, scope, snode.rhs, b, vars, element.type);
                             }
                             let data = this.autoConvertData(rhs, snode.lhs.type, snode.rhs.type, b);
-                            if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
+                            if (helper.isSafePointer(snode.lhs.type) && helper.isReference(snode.lhs.type) && (helper.isStrong(snode.rhs.type) || helper.isUnique(snode.rhs.type) || !helper.isTakeExpression(snode.rhs))) {
                                 // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                                if (this.tc.isInterface(snode.lhs.type)) {
+                                if (helper.isInterface(snode.lhs.type)) {
                                     let ptr = b.assign(b.tmp(), "member", "addr", [data, this.ifaceHeader.fieldIndexByName("pointer")]);
                                     b.assign(null, "incref", "addr", [ptr]);
                                 } else {
                                     data = b.assign(b.tmp(), "incref", "addr", [data]);
                                 }
-                            } else if (this.tc.isString(snode.lhs.type) && !this.tc.isTakeExpression(snode.rhs)) {
+                            } else if (helper.isString(snode.lhs.type) && !helper.isTakeExpression(snode.rhs)) {
                                 data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                             }
                             b.assign(v, "copy", v.type, [data]);
-                            if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
+                            if (helper.isSlice(snode.lhs.type) && helper.isReference(snode.lhs.type) && (helper.isStrong(snode.rhs.type) || helper.isUnique(snode.rhs.type) || !helper.isTakeExpression(snode.rhs))) {
                                 let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                                 let arrayPointer: ssa.Variable;
                                 if (rhs instanceof ssa.Pointer) {
@@ -528,15 +529,15 @@ export class CodeGenerator {
                                     arrayPointer = b.assign(b.tmp(), "member", "addr", [rhs, st.fieldIndexByName("array_ptr")]);
                                 }
                                 b.assign(null, "incref_arr", "addr", [arrayPointer]);
-                            }                                            
-                            if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {      
+                            }
+                            if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                                 if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
                                     throw "Implementation error";
                                 }
                                 // Fill the RHS with zeros
                                 this.processFillZeros(rhs, snode.rhs.type, b);
-                            }            
-                            if (this.tc.isString(snode.lhs.type) || this.tc.isSafePointer(snode.lhs.type) || this.tc.isSlice(snode.lhs.type)) {
+                            }
+                            if (helper.isString(snode.lhs.type) || helper.isSafePointer(snode.lhs.type) || helper.isSlice(snode.lhs.type)) {
                                 // Avoid that the variable is inlined. It carries a reference count and must be destructed correctly
                                 v.readCount = 2;
                                 v.writeCount = 2;
@@ -545,9 +546,9 @@ export class CodeGenerator {
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
                     } else if (snode.lhs.op == "array") {
-                        throw "TODO"                        
+                        throw "TODO"
                     } else if (snode.lhs.op == "object") {
-                        throw "TODO"                        
+                        throw "TODO"
                     } else {
                         throw "Implementation error"
                     }
@@ -560,17 +561,17 @@ export class CodeGenerator {
                         if (t instanceof ssa.StructType) {
                             b.assign(v, "struct", t, this.generateZeroStruct(t));
                         } else {
-                            b.assign(v, "const", v.type, [0]);                            
+                            b.assign(v, "const", v.type, [0]);
                         }
                     } else if (snode.lhs.op == "tuple") {
                         throw "TODO"
                     } else if (snode.lhs.op == "array") {
-                        throw "TODO"                        
+                        throw "TODO"
                     } else if (snode.lhs.op == "object") {
-                        throw "TODO"                        
+                        throw "TODO"
                     } else {
                         throw "Implementation error"
-                    }                    
+                    }
                 } */
                 return;
             }
@@ -588,9 +589,9 @@ export class CodeGenerator {
                                 }
                             }
                         } else if (node.op == "array") {
-                            throw "TODO"                        
+                            throw "TODO"
                         } else if (node.op == "object") {
-                            throw "TODO"                        
+                            throw "TODO"
                         }
                     }
                     var processAssignment = (node: Node, type: Type, rhsIsTakeExpr: boolean, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer | ssa.Variable) => {
@@ -612,7 +613,7 @@ export class CodeGenerator {
                                     let dest = destinations[destCount];
                                     destCount++;
                                     // Assigning to a value containing pointers? -> destruct the LHS before assigning the RHS
-                                    if (!TypeChecker.isPureValue(snode.lhs.type)) {
+                                    if (!helper.isPureValue(snode.lhs.type)) {
                                         // The 'dest != rhs' covers the case of assigning a variable to itself without a take expression
                                         if (dest instanceof ssa.Pointer) {
                                             this.callDestructorOnPointer(snode.lhs.type, dest, b);
@@ -628,15 +629,15 @@ export class CodeGenerator {
                                         val = b.assign(b.tmp(), "member", etype, [source, i]);
                                     }
                                     // Reference counting for pointers
-                                    if (this.tc.isSafePointer(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {
+                                    if (helper.isSafePointer(p.type) && helper.isReference(p.type) && (helper.isStrong(elementType) || helper.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                                        if (this.tc.isInterface(p.type)) {
+                                        if (helper.isInterface(p.type)) {
                                             let ptr = b.assign(b.tmp(), "member", "addr", [val, this.ifaceHeader.fieldIndexByName("pointer")]);
                                             b.assign(null, "incref", "addr", [ptr]);
                                         } else {
                                             val = b.assign(b.tmp(), "incref", "addr", [val]);
                                         }
-                                    } else if (this.tc.isString(p.type) && !rhsIsTakeExpr) {
+                                    } else if (helper.isString(p.type) && !rhsIsTakeExpr) {
                                         val = b.assign(b.tmp(), "incref_arr", "addr", [val]);
                                     }
                                     // If the left-hand expression returns an address, the resulting value must be stored in memory
@@ -646,7 +647,7 @@ export class CodeGenerator {
                                         b.assign(dest, "copy", etype, [val]);
                                     }
                                     // Reference counting for slices
-                                    if (this.tc.isSlice(p.type) && TypeChecker.isReference(p.type) && (TypeChecker.isStrong(elementType) || TypeChecker.isUnique(elementType) || !rhsIsTakeExpr)) {            
+                                    if (helper.isSlice(p.type) && helper.isReference(p.type) && (helper.isStrong(elementType) || helper.isUnique(elementType) || !rhsIsTakeExpr)) {
                                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                                         let arrayPointer: ssa.Variable;
                                         if (dest instanceof ssa.Pointer) {
@@ -655,13 +656,13 @@ export class CodeGenerator {
                                             arrayPointer = b.assign(b.tmp(), "member", "addr", [dest, st.fieldIndexByName("array_ptr")]);
                                         }
                                         b.assign(null, "incref_arr", "addr", [arrayPointer]);
-                                    }                
+                                    }
                                 }
                             }
                         } else if (node.op == "array") {
-                            throw "TODO"                        
+                            throw "TODO"
                         } else if (node.op == "object") {
-                            throw "TODO"                        
+                            throw "TODO"
                         }
                         return destCount;
                     }
@@ -673,16 +674,16 @@ export class CodeGenerator {
                     } else {
                         val = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type) as ssa.Variable;
                     }
-                    let rhsIsTakeExpr = this.tc.isTakeExpression(snode.rhs);
+                    let rhsIsTakeExpr = helper.isTakeExpression(snode.rhs);
                     processAssignment(snode.lhs, snode.rhs.type, rhsIsTakeExpr, destinations, 0, val);
                     if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                         // Fill the RHS with zeros
                         this.processFillZeros(val, snode.rhs.type, b);
-                    }                                
-                } else if (snode.lhs.op == "[" && this.tc.stripType(snode.lhs.lhs.type) instanceof MapType) {
+                    }
+                } else if (snode.lhs.op == "[" && helper.stripType(snode.lhs.lhs.type) instanceof MapType) {
                     // TODO: Ownership transfer
                     /*
-                    let mtype: MapType = this.tc.stripType(snode.lhs.lhs.type) as MapType;
+                    let mtype: MapType = helper.stripType(snode.lhs.lhs.type) as MapType;
                     let m = this.processExpression(f, scope, snode.lhs.lhs, b, vars, mtype);
                     let key = this.processExpression(f, scope, snode.lhs.rhs, b, vars, mtype.keyType);
                     let value = this.processExpression(f, scope, snode.rhs, b, vars, mtype.valueType);
@@ -695,7 +696,7 @@ export class CodeGenerator {
                             key64 = key;
                         } else {
                             key64 = b.assign(b.tmp(), "extend", this.getSSAType(mtype.keyType), [key]);
-                        }   
+                        }
                         let dest = b.call(b.tmp(), this.setNumericMapFunctionType, [SystemCalls.setNumericMap, m, key64]);
                         b.assign(b.mem, "store", this.getSSAType(mtype.valueType), [dest, 0, value]);
                     }
@@ -704,7 +705,7 @@ export class CodeGenerator {
                     let t = this.getSSAType(snode.rhs.type) as ssa.StructType;
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                     let rhs: ssa.Pointer | ssa.Variable | number;
-                    if ((this.tc.isArray(snode.lhs.type) || this.tc.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
+                    if ((helper.isArray(snode.lhs.type) || helper.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
                         rhs = this.processPureLiteral(snode.rhs);
                     } else if (snode.rhs.op == "take") {
                         rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars);
@@ -712,7 +713,7 @@ export class CodeGenerator {
                         rhs = this.processExpression(f, scope, snode.rhs, b, vars, snode.lhs.type);
                     }
                     // Assigning to a value with pointer? -> destruct the LHS before assigning the RHS
-                    if (!TypeChecker.isPureValue(snode.lhs.type)) {
+                    if (!helper.isPureValue(snode.lhs.type)) {
                         if ((snode.lhs.flags & AstFlags.EmptyOnAssignment) != AstFlags.EmptyOnAssignment) {
                             if (dest instanceof ssa.Pointer) {
                                 this.callDestructorOnPointer(snode.lhs.type, dest, b);
@@ -726,17 +727,17 @@ export class CodeGenerator {
                         data = b.assign(b.tmp(), "load", t, [rhs.variable, rhs.offset]);
                     } else {
                         data = rhs;
-                    }            
+                    }
                     // Reference counting for pointers
-                    if (this.tc.isSafePointer(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
+                    if (helper.isSafePointer(snode.lhs.type) && helper.isReference(snode.lhs.type) && (helper.isStrong(snode.rhs.type) || helper.isUnique(snode.rhs.type) || !helper.isTakeExpression(snode.rhs))) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
-                        if (this.tc.isInterface(snode.lhs.type)) {
+                        if (helper.isInterface(snode.lhs.type)) {
                             let ptr = b.assign(b.tmp(), "member", "addr", [data, this.ifaceHeader.fieldIndexByName("pointer")]);
                             b.assign(null, "incref", "addr", [ptr]);
                         } else {
                             data = b.assign(b.tmp(), "incref", "addr", [data]);
                         }
-                    } else if (this.tc.isString(snode.lhs.type) && !this.tc.isTakeExpression(snode.rhs)) {
+                    } else if (helper.isString(snode.lhs.type) && !helper.isTakeExpression(snode.rhs)) {
                         data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }
                     // If the left-hand expression returns an address, the resulting value must be stored in memory
@@ -746,7 +747,7 @@ export class CodeGenerator {
                         b.assign(dest, "copy", this.getSSAType(snode.lhs.type), [data]);
                     }
                     // Reference counting for slices
-                    if (this.tc.isSlice(snode.lhs.type) && TypeChecker.isReference(snode.lhs.type) && (TypeChecker.isStrong(snode.rhs.type) || TypeChecker.isUnique(snode.rhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
+                    if (helper.isSlice(snode.lhs.type) && helper.isReference(snode.lhs.type) && (helper.isStrong(snode.rhs.type) || helper.isUnique(snode.rhs.type) || !helper.isTakeExpression(snode.rhs))) {
                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                         let arrayPointer: ssa.Variable;
                         if (dest instanceof ssa.Pointer) {
@@ -762,7 +763,7 @@ export class CodeGenerator {
                         }
                         // Fill the RHS with zeros
                         this.processFillZeros(rhs, snode.rhs.type, b);
-                    }            
+                    }
                 }
                 break;
             }
@@ -778,7 +779,7 @@ export class CodeGenerator {
             case "|=":
             case "<<=":
             {
-                let t = this.tc.stripType(snode.lhs.type);
+                let t = helper.stripType(snode.lhs.type);
                 let storage = this.getSSAType(t);
                 let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                 let p1: ssa.Variable;
@@ -808,7 +809,7 @@ export class CodeGenerator {
                     b.assign(b.mem, "memcpy", null, [ptr2, p2, l2, 1]);
                     this.callDestructorOnVariable(TypeChecker.t_string, p1, b, true);
                     // Decref p2 if necessary
-                    if (this.tc.isTakeExpression(snode.rhs)) {
+                    if (helper.isTakeExpression(snode.rhs)) {
                         this.callDestructorOnVariable(TypeChecker.t_string, p2 as ssa.Variable, b, true);
                     }
                     dest = ptr;
@@ -852,7 +853,7 @@ export class CodeGenerator {
                         let x = b.assign(b.tmp(), "xor", storage, [p2, -1]);
                         b.assign(dest, "and", storage, [p1, x]);
                     } else if (snode.op == "/=") {
-                        b.assign(dest, this.isSigned(snode.lhs.type) ? "div_s" : "div_u", storage, [p1, p2]);                                
+                        b.assign(dest, this.isSigned(snode.lhs.type) ? "div_s" : "div_u", storage, [p1, p2]);
                     } else if (snode.op == "%=") {
                         b.assign(dest, this.isSigned(snode.lhs.type) ? "rem_s" : "rem_u", storage, [p1, p2]);
                     } else if (snode.op == ">>=") {
@@ -867,7 +868,7 @@ export class CodeGenerator {
             case "--":
             case "++":
             {
-                let t = this.tc.stripType(snode.lhs.type)
+                let t = helper.stripType(snode.lhs.type)
                 let storage = this.getSSAType(t);
                 let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                 let p1: ssa.Variable;
@@ -894,7 +895,7 @@ export class CodeGenerator {
                 let val: ssa.Variable;
                 let counter: ssa.Variable;
                 let ptr: ssa.Variable;
-                let len: ssa.Variable | number;                
+                let len: ssa.Variable | number;
                 //
                 // Loop initialization
                 //
@@ -913,8 +914,8 @@ export class CodeGenerator {
                     //
                     if (snode.condition.lhs.op == "tuple") {
                         if (snode.condition.lhs.parameters[0].value != "_") {
-                            // Initialize the counter with 0                            
-                            let element = snode.condition.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;                                
+                            // Initialize the counter with 0
+                            let element = snode.condition.scope.resolveElement(snode.condition.lhs.parameters[0].value) as Variable;
                             counter = vars.get(element);
                         } else {
                             counter = b.tmp();
@@ -928,30 +929,30 @@ export class CodeGenerator {
                         }
                     } else {
                         if (snode.condition.lhs.value != "_") {
-                            let element = snode.condition.scope.resolveElement(snode.condition.lhs.value) as Variable;                                
-                            val = vars.get(element);                                
+                            let element = snode.condition.scope.resolveElement(snode.condition.lhs.value) as Variable;
+                            val = vars.get(element);
                             if (element.isForLoopPointer) {
                                 ptr = val;
                             }
                         }
-                        counter = b.tmp();                                    
+                        counter = b.tmp();
                     }
                     b.assign(counter, "const", "sint", [0]);
                     //
                     // Address and length of array or string
-                    //                    
+                    //
                     if (t instanceof SliceType) {
                         // TODO: Incref
                         let sliceHeader: ssa.Pointer | ssa.Variable;
                         if (this.isLeftHandSide(snode.condition.rhs)) {
                             sliceHeader = this.processLeftHandExpression(f, snode.condition.scope, snode.condition.rhs, b, vars);
                         } else {
-                            sliceHeader = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;                                
+                            sliceHeader = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, t) as ssa.Variable;
                         }
                         if (sliceHeader instanceof ssa.Variable) {
                             if (t.mode != "local_reference") {
                                 let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
-                                b.assign(ptr, "member", "addr", [base, this.localSlicePointer.fieldIndexByName("data_ptr")]);    
+                                b.assign(ptr, "member", "addr", [base, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             } else {
                                 b.assign(ptr, "member", "addr", [sliceHeader, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             }
@@ -986,7 +987,7 @@ export class CodeGenerator {
                     } else if (t == TypeChecker.t_string) {
                         // TODO: Incref
                         ptr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, TypeChecker.t_string) as ssa.Variable;
-                        len = b.assign(b.tmp(), "len_str", "sint", [ptr]);    
+                        len = b.assign(b.tmp(), "len_str", "sint", [ptr]);
                     } else {
                         throw "TODO map"
                     }
@@ -1033,14 +1034,14 @@ export class CodeGenerator {
                             let ch = b.assign(b.tmp(), "load", "i8", [ptr, 0]);
                             // Increase the counter
                             counter = b.assign(counter, "add", "sint", [counter, 1]);
-                            b.assign(ptr, "add", "addr", [ptr, 1]);                            
+                            b.assign(ptr, "add", "addr", [ptr, 1]);
                             b.call(state, decodeUtf8Type, [decodeUtf8.getIndex(), valAddr, ch, state]);
                             // Not a complete or illegal unicode char?
                             b.ifBlock(state);
-                            // If illegal or end of string -> return 0xfffd      
+                            // If illegal or end of string -> return 0xfffd
                             let illegal = b.assign(b.tmp(), "eq", "i8", [state, 1]);
                             endcond = b.assign(b.tmp(), "eq", "i8", [counter, len]);
-                            b.assign(illegal, "or", "i8", [illegal, endcond]);                            
+                            b.assign(illegal, "or", "i8", [illegal, endcond]);
                             b.ifBlock(illegal);
                             // Handle illegal characters
                             b.assign(val, "const", "i32", [0xfffd]);
@@ -1048,8 +1049,8 @@ export class CodeGenerator {
                             // In the middle of a character. Repeat the loop
                             b.br(decodeLoop);
                             b.end();
-                            b.end();                            
-                            b.end();                            
+                            b.end();
+                            b.end();
                         } else {
                             throw "TODO map and string"
                         }
@@ -1121,13 +1122,13 @@ export class CodeGenerator {
                     let targetType = f.type.returnType;
                     let rhs: ssa.Variable | ssa.Pointer | number;
                     // Returning a local variable? Then do not zero it out and do not execute its destructor
-                    let doNotZero = false;   
-                    let forceIncref = false;                 
+                    let doNotZero = false;
+                    let forceIncref = false;
                     if ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment && snode.lhs.op == "id") {
                         let e = scope.resolveElement(snode.lhs.value);
                         if (e instanceof FunctionParameter || (e instanceof Variable && !e.isGlobal)) {
                             ignoreVariables.push(e);
-                            doNotZero = true;                        
+                            doNotZero = true;
                         }
                         // If the ~ptr parameter does not "own" a reference count, then incref is necessary upon returning the reference
                         if (e instanceof FunctionParameter && e.isConst) {
@@ -1137,23 +1138,23 @@ export class CodeGenerator {
                     if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment/* || snode.lhs.op == "take"*/)) {
                         rhs = this.processLeftHandExpression(f, scope, snode.lhs, b, vars);
                     } else {
-                        rhs = this.processExpression(f, scope, snode.lhs, b, vars, targetType);                            
+                        rhs = this.processExpression(f, scope, snode.lhs, b, vars, targetType);
                     }
                     let t = this.getSSAType(snode.lhs.type);
                     if (rhs instanceof ssa.Pointer) {
                         data = b.assign(b.tmp(), "load", t, [rhs.variable, rhs.offset]);
                     } else {
                         data = rhs;
-                    }                                
+                    }
                     // Reference counting for pointers
-                    if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !this.tc.isTakeExpression(snode.lhs) || forceIncref)) {
+                    if (helper.isSafePointer(targetType) && helper.isReference(targetType) && (helper.isStrong(snode.lhs.type) || helper.isUnique(snode.lhs.type) || !helper.isTakeExpression(snode.lhs) || forceIncref)) {
                         // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
                         data = b.assign(b.tmp(), "incref", "addr", [data]);
-                    } else if (this.tc.isString(targetType) && (!this.tc.isTakeExpression(snode.lhs) || forceIncref)) {
+                    } else if (helper.isString(targetType) && (!helper.isTakeExpression(snode.lhs) || forceIncref)) {
                         data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
                     }
                     // Reference counting for slices
-                    if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(snode.lhs.type) || TypeChecker.isUnique(snode.lhs.type) || !this.tc.isTakeExpression(snode.rhs))) {
+                    if (helper.isSlice(targetType) && helper.isReference(targetType) && (helper.isStrong(snode.lhs.type) || helper.isUnique(snode.lhs.type) || !helper.isTakeExpression(snode.rhs))) {
                         let st = this.getSSAType(snode.lhs.type) as ssa.StructType;
                         let arrayPointer: ssa.Variable;
                         if (rhs instanceof ssa.Pointer) {
@@ -1170,7 +1171,7 @@ export class CodeGenerator {
                         }
                         // Fill the RHS with zeros
                         this.processFillZeros(rhs, snode.lhs.type, b);
-                    }                                
+                    }
                 }
                 if (this.scopeNeedsDestructors(scope)) {
                     let s = scope;
@@ -1192,13 +1193,13 @@ export class CodeGenerator {
                             }
                             let t = this.getSSAType(f.type.returnType);
                             let tmp = b.assign(b.tmp(), "struct", t, args);
-                            b.assign(null, "return", t, [tmp]);                        
+                            b.assign(null, "return", t, [tmp]);
                         } else {
                             b.assign(null, "return", null, []);
                         }
                     } else {
                         let t = this.getSSAType(f.type.returnType);
-                        b.assign(null, "return", t, [data]);                        
+                        b.assign(null, "return", t, [data]);
                     }
                 } else {
                     if (!snode.lhs) {
@@ -1218,7 +1219,7 @@ export class CodeGenerator {
                         }
                     } else {
                         b.assign(null, "return", this.getSSAType(f.type.returnType), [data]);
-                    }    
+                    }
                 }
                 break;
             }
@@ -1239,9 +1240,9 @@ export class CodeGenerator {
                     this.callDestructorOnPointer(snode.type, src, b);
                     if (t instanceof ssa.StructType) {
                         let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
-                        b.assign(b.mem, "store", t, [src.variable, src.offset, tmp]);                        
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, tmp]);
                     } else {
-                        b.assign(b.mem, "store", t, [src.variable, src.offset, 0]);                            
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, 0]);
                     }
                     break;
                 }
@@ -1249,14 +1250,14 @@ export class CodeGenerator {
                 if (t instanceof ssa.StructType) {
                     b.assign(src, "struct", t, this.generateZeroStruct(t));
                 } else {
-                    b.assign(src, "copy", t, [0]);                            
+                    b.assign(src, "copy", t, [0]);
                 }
                 break;
             }
             case "copy":
             case "move":
             {
-                let objType = this.tc.stripType(snode.lhs.type);
+                let objType = helper.stripType(snode.lhs.type);
                 if (!(objType instanceof SliceType)) {
                     throw "Implementation error";
                 }
@@ -1326,7 +1327,7 @@ export class CodeGenerator {
             }
             default:
             {
-                let value = this.processExpression(f, scope, snode, b, vars, snode.type);     
+                let value = this.processExpression(f, scope, snode, b, vars, snode.type);
                 if (value instanceof ssa.Variable) {
                     this.callDestructorOnVariable(snode.type, value, b);
                 }
@@ -1350,7 +1351,7 @@ export class CodeGenerator {
             }
             case "unary*":
             {
-                let t = this.tc.stripType(enode.rhs.type);
+                let t = helper.stripType(enode.rhs.type);
                 let tmp = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 if (!this.disableNullCheck && !this.isThis(tmp)) {
                     this.processNullCheck(tmp, t, b);
@@ -1359,7 +1360,7 @@ export class CodeGenerator {
             }
             case "[":
             {
-                let ltype = this.tc.stripType(enode.lhs.type);
+                let ltype = helper.stripType(enode.lhs.type);
                 // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (ltype instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, ltype);
@@ -1498,17 +1499,17 @@ export class CodeGenerator {
             }
             case ".":
             {
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 // Note: This code implements the non-left-hand cases as well to avoid duplicating code
                 if (t instanceof PointerType || t instanceof UnsafePointerType) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
-                    if (t instanceof PointerType && !this.disableNullCheck && !this.isThis(ptr)) {                        
+                    if (t instanceof PointerType && !this.disableNullCheck && !this.isThis(ptr)) {
                         b.assign(null, "notnull", null, [ptr]);
                     }
                     let elementType = t.elementType;
                     if (elementType instanceof RestrictedType) {
                         elementType = elementType.elementType;
-                    }                    
+                    }
                     if (elementType instanceof StructType) {
                         let s = this.getSSAType(elementType) as ssa.StructType;
                         if (ptr instanceof ssa.Variable) {
@@ -1517,7 +1518,7 @@ export class CodeGenerator {
                         return b.assign(b.tmp(), "add", "ptr", [ptr, s.fieldOffset(enode.name.value)]);
                     } else {
                         throw "TODO interface and class"
-                    }          
+                    }
                 } else if (t instanceof PackageType) {
                     let ip = scope.resolveElement(enode.lhs.value);
                     if (!(ip instanceof ImportedPackage)) {
@@ -1563,8 +1564,8 @@ export class CodeGenerator {
     }
 
     private processNullCheck(value: ssa.Variable | number, t: Type, b: ssa.Builder) {
-        if (this.tc.isSafePointer(t)) {
-            if (TypeChecker.isReference(t)) {
+        if (helper.isSafePointer(t)) {
+            if (helper.isReference(t)) {
                 // References can point to an object that has already been destructed.
                 // Hence, we use notnull_ref to track this.
                 b.assign(null, "notnull_ref", null, [value]);
@@ -1586,7 +1587,7 @@ export class CodeGenerator {
         return v;
     }
 
-    private processPureLiteralInternal(n: Node, buf: ssa.BinaryData): void {        
+    private processPureLiteralInternal(n: Node, buf: ssa.BinaryData): void {
         if (n.type == TypeChecker.t_bool) {
             buf.push(n.value == "true" ? 1 : 0);
         } else if (n.type == TypeChecker.t_uint8 || n.type == TypeChecker.t_byte) {
@@ -1617,12 +1618,12 @@ export class CodeGenerator {
             buf.push(parseFloat(n.value));
         } else if (n.type == TypeChecker.t_string) {
             buf.push(n.value);
-        } else if (this.tc.isSafePointer(n.type) || this.tc.isUnsafePointer(n.type)) {
+        } else if (helper.isSafePointer(n.type) || helper.isUnsafePointer(n.type)) {
             if (n.op != "null" && (n.op != "int" || n.numValue != 0)) {
                 throw "Implementation error"
             }
             buf.push(0);
-        } else if (this.tc.isArray(n.type)) {
+        } else if (helper.isArray(n.type)) {
             let arrType = RestrictedType.strip(n.type) as ArrayType;
             let arrData = new ssa.BinaryArray();
             arrData.totalLen = arrType.size;
@@ -1638,12 +1639,12 @@ export class CodeGenerator {
                 }
             }
             buf.push(arrData);
-        } else if (this.tc.isTuple(n.type)) {
+        } else if (helper.isTuple(n.type)) {
             for(let p of n.parameters) {
                 this.processPureLiteralInternal(p, buf);
             }
-        } else if (this.tc.isStruct(n.type)) {
-            for(let f of (this.tc.stripType(n.type) as StructType).fields) {
+        } else if (helper.isStruct(n.type)) {
+            for(let f of (helper.stripType(n.type) as StructType).fields) {
                 let found = false;
                 if (n.parameters) {
                     for(let p of n.parameters) {
@@ -1664,7 +1665,7 @@ export class CodeGenerator {
     }
 
     /*
-    private processPureLiteralInternal(n: Node, buf: BinaryBuffer): void {        
+    private processPureLiteralInternal(n: Node, buf: BinaryBuffer): void {
         if (n.type == TypeChecker.t_bool) {
             buf.appendUint8(n.value == "true" ? 1 : 0);
         } else if (n.type == TypeChecker.t_uint8) {
@@ -1697,7 +1698,7 @@ export class CodeGenerator {
         } else if (n.type instanceof ArrayType) {
 
         } else if (n.type instanceof TupleType || n.type instanceof StructType) {
-            
+
         } else {
             throw "Implementation error";
         }
@@ -1745,7 +1746,7 @@ export class CodeGenerator {
             table.push(wf);
         }
         return table;
-    }                
+    }
 
     private createInterfaceDescriptor(ifaceType: InterfaceType, structType: StructType): number {
         // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
@@ -1770,11 +1771,11 @@ export class CodeGenerator {
         }
 
         // Convert a normal slice to a local-reference slice
-        if (this.tc.isSlice(fromType) && !TypeChecker.isLocalReference(fromType) && this.tc.isSlice(targetType) && TypeChecker.isLocalReference(targetType)) {
+        if (helper.isSlice(fromType) && !helper.isLocalReference(fromType) && helper.isSlice(targetType) && helper.isLocalReference(targetType)) {
             v = b.assign(b.tmp(), "member", this.localSlicePointer, [v, 0]);
-        } else if (this.tc.isInterface(targetType) && !this.tc.isInterface(fromType)) {
+        } else if (helper.isInterface(targetType) && !helper.isInterface(fromType)) {
             // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
-            if (!this.tc.isSafePointer(fromType)) {
+            if (!helper.isSafePointer(fromType)) {
                 throw "Implementation error";
             }
             let structType = RestrictedType.strip((RestrictedType.strip(fromType) as PointerType).elementType);
@@ -1791,21 +1792,21 @@ export class CodeGenerator {
         }
         // TODO: Encode data for an any
         /*
-        if ((this.tc.isInterface(targetType) || this.tc.isComplexOrType(targetType)) && !this.tc.isInterface(enode.type) && !this.tc.isComplexOrType(enode.type)) {
+        if ((helper.isInterface(targetType) || helper.isComplexOrType(targetType)) && !helper.isInterface(enode.type) && !helper.isComplexOrType(enode.type)) {
             // TODO: Do not use instanceof here
-            if (this.tc.isUnsafePointer(enode.type)) {
+            if (helper.isUnsafePointer(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
             } else if (enode.type instanceof PointerType && enode.type.elementType instanceof StructType) {
                 let index = this.createInterfaceTable(scope, enode.type.elementType);
-                return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), v, index]);                
-            } else if (this.tc.checkIsPointer(enode, false) || this.tc.isString(enode.type)) {
+                return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), v, index]);
+            } else if (this.tc.checkIsPointer(enode, false) || helper.isString(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), v, 0]);
-            } else if (this.tc.isSlice(enode.type)) {
+            } else if (helper.isSlice(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderSlice, [this.typecode(enode.type), v]);
-            } else if (this.tc.isArray(enode.type)) {
+            } else if (helper.isArray(enode.type)) {
                 // TODO: Copy to allocated area
                 throw "TODO";
-            } else if (this.tc.isStruct(enode.type)) {
+            } else if (helper.isStruct(enode.type)) {
                 throw "TODO";
             } else if (enode.type == TypeChecker.t_int64 || enode.type == TypeChecker.t_uint64) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, v]);
@@ -1813,18 +1814,18 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderFloat, [this.typecode(enode.type), 0, v]);
             } else if (enode.type == TypeChecker.t_double) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderDouble, [this.typecode(enode.type), 0, v]);
-            } else if (this.tc.isNumber(enode.type) || enode.type == TypeChecker.t_bool) {
+            } else if (helper.isNumber(enode.type) || enode.type == TypeChecker.t_bool) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader32, [this.typecode(enode.type), 0, v]);
             } else if (enode.type == TypeChecker.t_null) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, 0]);
             } else if (enode.type instanceof StringLiteralType) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, 0]);
-            } else if (this.tc.isOrType(enode.type)) {
+            } else if (helper.isOrType(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [v, 0, 0]);
             } else {
                 throw "Implementation error " + enode.type.toString();
             }
-        } else if (!this.tc.isInterface(targetType) && !this.tc.isComplexOrType(targetType) && (this.tc.isInterface(enode.type) || this.tc.isComplexOrType(enode.type))) {
+        } else if (!helper.isInterface(targetType) && !helper.isComplexOrType(targetType) && (helper.isInterface(enode.type) || helper.isComplexOrType(enode.type))) {
             return this.processUnboxInterface(targetType, v, b);
         }
         */
@@ -1832,18 +1833,18 @@ export class CodeGenerator {
     }
 
     /*
-    private processUnboxInterface(targetType: Type, v: number | ssa.Variable, b: ssa.Builder): ssa.Variable | number {        
+    private processUnboxInterface(targetType: Type, v: number | ssa.Variable, b: ssa.Builder): ssa.Variable | number {
         let addr = b.assign(b.tmp("addr"), "addr_of", "addr", [v]);
-        if (this.tc.isUnsafePointer(targetType)) {
+        if (helper.isUnsafePointer(targetType)) {
             return b.assign(b.tmp(), "load", "addr", [addr, this.ifaceHeader32.fieldOffset("value")]);
-        } else if (this.tc.isSafePointer(targetType) || this.tc.isString(targetType)) {
+        } else if (helper.isSafePointer(targetType) || helper.isString(targetType)) {
             return b.assign(b.tmp(), "load", "ptr", [addr, this.ifaceHeader.fieldOffset("pointer")]);
-        } else if (this.tc.isSlice(targetType)) {
+        } else if (helper.isSlice(targetType)) {
             return b.assign(b.tmp(), "load", this.slicePointer, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
-        } else if (this.tc.isArray(targetType)) {
+        } else if (helper.isArray(targetType)) {
             // TODO: Copy to allocated area
             throw "TODO";
-        } else if (this.tc.isStruct(targetType)) {
+        } else if (helper.isStruct(targetType)) {
             throw "TODO";
         } else if (targetType == TypeChecker.t_int64 || targetType == TypeChecker.t_uint64) {
             return b.assign(b.tmp(), "load", "i64", [addr, this.ifaceHeader.fieldOffset("value")]);
@@ -1851,21 +1852,21 @@ export class CodeGenerator {
             return b.assign(b.tmp(), "load", "f64", [addr, this.ifaceHeaderDouble.fieldOffset("value")]);
         } else if (targetType == TypeChecker.t_float) {
             return b.assign(b.tmp(), "load", "f32", [addr, this.ifaceHeaderFloat.fieldOffset("value")]);
-        } else if (this.tc.isNumber(targetType) || targetType == TypeChecker.t_bool) {
+        } else if (helper.isNumber(targetType) || targetType == TypeChecker.t_bool) {
             return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("value")]);
-        } else if (this.tc.isOrType(targetType)) {
+        } else if (helper.isOrType(targetType)) {
             return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("typecode")]);
         } else {
             throw "Implementation error";
-        }                
+        }
     }
     */
 
     private processExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>, targetType: Type): ssa.Variable | number {
         switch(enode.op) {
             case "null":
-                if (this.tc.isSlice(enode.type)) {
-                    if (TypeChecker.isLocalReference(enode.type)) {
+                if (helper.isSlice(enode.type)) {
+                    if (helper.isLocalReference(enode.type)) {
                         let zeros = this.generateZeroStruct(this.localSlicePointer);
                         return b.assign(b.tmp(), "struct", this.localSlicePointer, zeros);
                     }
@@ -1893,7 +1894,7 @@ export class CodeGenerator {
                 return enode.value == "true" ? 1 : 0;
             case "str":
             {
-                if (this.tc.isStringLiteralType(enode.type)) {
+                if (helper.isStringLiteralType(enode.type)) {
                     let idx: number;
                     let sl = RestrictedType.strip(enode.type) as StringLiteralType;
                     if (this.symbols.has(sl.name)) {
@@ -1913,7 +1914,7 @@ export class CodeGenerator {
             }
             case "object":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 if (t instanceof PointerType) {
                     t = RestrictedType.strip(t.elementType);
                     if (t instanceof StructType) {
@@ -1946,7 +1947,7 @@ export class CodeGenerator {
                         entry.addField("listNext", "addr")
                         entry.addField("hash", "i64")
                         entry.addField("key", "ptr")
-                        entry.addField("value", this.getSSAType(t.valueType));                        
+                        entry.addField("value", this.getSSAType(t.valueType));
                         let m = b.call(b.tmp(), this.createMapFunctionType, [SystemCalls.createMap, enode.parameters ? enode.parameters.length : 4]);
                         if (enode.parameters) {
                             for(let p of enode.parameters) {
@@ -1995,18 +1996,18 @@ export class CodeGenerator {
             }
             case "tuple":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let st = this.getSSAType(enode.type); // This returns a struct type
                 let args: Array<string | ssa.Variable | number> = [];
                 for(let i = 0; i < enode.parameters.length; i++) {
                     let v = this.processLiteralArgument(f, scope, enode.parameters[i], (t as TupleType).types[i], b, vars);
                     args.push(v);
                 }
-                return b.assign(b.tmp(), "struct", st, args);                
+                return b.assign(b.tmp(), "struct", st, args);
             }
             case "array":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 if (t instanceof SliceType) {
                     let et = this.getSSAType(t.getElementType());
                     let esize = ssa.alignedSizeOf(et);
@@ -2059,7 +2060,7 @@ export class CodeGenerator {
                 return this.processCompare("ne", f, scope, enode, b, vars);
             case "<":
             {
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_string) {
                     return this.processCompare("lt", f, scope, enode, b, vars);
                 }
@@ -2070,7 +2071,7 @@ export class CodeGenerator {
             }
             case ">":
             {
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_string) {
                     return this.processCompare("gt", f, scope, enode, b, vars);
                 }
@@ -2081,7 +2082,7 @@ export class CodeGenerator {
             }
             case "<=":
             {
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_string) {
                     return this.processCompare("le", f, scope, enode, b, vars);
                 }
@@ -2092,7 +2093,7 @@ export class CodeGenerator {
             }
             case ">=":
             {
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 if (t == TypeChecker.t_float || t == TypeChecker.t_double || t == TypeChecker.t_string) {
                     return this.processCompare("ge", f, scope, enode, b, vars);
                 }
@@ -2103,7 +2104,7 @@ export class CodeGenerator {
             }
             case "+":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 if (t == TypeChecker.t_string) {
                     let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     if (!this.disableNullCheck && !(p1 as ssa.Variable).isConstant) {
@@ -2122,10 +2123,10 @@ export class CodeGenerator {
                     let ptr2 = b.assign(b.tmp(), "add", "addr", [ptr, l1]);
                     b.assign(b.mem, "memcpy", null, [ptr2, p2, l2, 1]);
                     // Decref p1 and p2 if necessary
-                    if (this.tc.isTakeExpression(enode.lhs)) {
+                    if (helper.isTakeExpression(enode.lhs)) {
                         this.callDestructorOnVariable(TypeChecker.t_string, p1 as ssa.Variable, b, true);
                     }
-                    if (this.tc.isTakeExpression(enode.rhs)) {
+                    if (helper.isTakeExpression(enode.rhs)) {
                         this.callDestructorOnVariable(TypeChecker.t_string, p2 as ssa.Variable, b, true);
                     }
                     return ptr;
@@ -2148,7 +2149,7 @@ export class CodeGenerator {
             case "*":
             case "-":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2: ssa.Variable | number;
                 if (t instanceof UnsafePointerType) {
@@ -2167,7 +2168,7 @@ export class CodeGenerator {
             }
             case "/":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let storage = this.getSSAType(t);
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
@@ -2179,7 +2180,7 @@ export class CodeGenerator {
             }
             case "%":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(t);
@@ -2190,7 +2191,7 @@ export class CodeGenerator {
             case "&":
             case "^":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let opcode: "or" | "xor" | "and" = enode.op == "|" ? "or" : (enode.op == "&" ? "and" : "xor");
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
@@ -2199,7 +2200,7 @@ export class CodeGenerator {
             }
             case "&^":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(t);
@@ -2208,19 +2209,19 @@ export class CodeGenerator {
             }
             case "unary!":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(t);
                 return b.assign(b.tmp(), "eqz", storage, [p]);
             }
             case "unary+":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 return this.processExpression(f, scope, enode.rhs, b, vars, t);
             }
             case "unary-":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(t);
                 if (t == TypeChecker.t_float || t == TypeChecker.t_double) {
@@ -2231,14 +2232,14 @@ export class CodeGenerator {
             }
             case "unary^":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(enode.rhs.type);
                 return b.assign(b.tmp(), "xor", storage, [p, -1]);
             }
             case "unary*":
             {
-                let t = this.tc.stripType(enode.rhs.type);
+                let t = helper.stripType(enode.rhs.type);
                 let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 if (t instanceof UnsafePointerType) {
                     let storage = this.getSSAType(t.elementType);
@@ -2246,14 +2247,14 @@ export class CodeGenerator {
                 } else if (t instanceof PointerType) {
                     let storage = this.getSSAType(t.elementType);
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
-                }                                
+                }
                 throw "Implementation error";
             }
             case "unary&":
             {
                 if (enode.rhs.op == "bool" || enode.rhs.op == "int" || enode.rhs.op == "float" || enode.rhs.op == "str" || enode.rhs.op == "array" || enode.rhs.op == "tuple" || enode.rhs.op == "object") {
                     // Make a copy of a literal
-                    let t = this.tc.stripType(enode.rhs.type);
+                    let t = helper.stripType(enode.rhs.type);
                     let p = this.processExpression(f, scope, enode.rhs, b, vars, t);
                     let s = this.getSSAType(t);
                     let copy = b.assign(b.tmp(), "alloc", "addr", [ssa.sizeOf(s)]);
@@ -2267,11 +2268,11 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "add", "ptr", [p.variable, p.offset]);
                 }
-                return b.assign(b.tmp(), "addr_of", "ptr", [p]);                
+                return b.assign(b.tmp(), "addr_of", "ptr", [p]);
             }
             case "||":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let result = b.tmp();
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 // TODO: Use if-expressions in IR
@@ -2285,7 +2286,7 @@ export class CodeGenerator {
             }
             case "&&":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let result = b.tmp();
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 // TODO: Use if-expressions in IR
@@ -2299,7 +2300,7 @@ export class CodeGenerator {
             }
             case ">>":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(enode.lhs.type);
@@ -2307,7 +2308,7 @@ export class CodeGenerator {
             }
             case "<<":
             {
-                let t = this.tc.stripType(enode.type);
+                let t = helper.stripType(enode.type);
                 let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
                 let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
                 let storage = this.getSSAType(enode.lhs.type);
@@ -2339,14 +2340,14 @@ export class CodeGenerator {
                 let findex: ssa.Variable;
                 let args: Array<ssa.Variable | string | number> = [];
                 let objPtr: ssa.Variable | ssa.Pointer | number | null = null;
-                let striplhs = this.tc.stripType(enode.lhs.type);
+                let striplhs = helper.stripType(enode.lhs.type);
                 let lhs = enode.lhs;
                 if (lhs.op == "genericInstance") {
                     lhs = lhs.lhs;
                 }
                 if (striplhs instanceof FunctionType && striplhs.callingConvention == "system" && striplhs.name == "remove") {
                     /*
-                    let objType = this.tc.stripType(enode.lhs.lhs.type);
+                    let objType = helper.stripType(enode.lhs.lhs.type);
                     if (!(objType instanceof MapType)) {
                         throw "Implementation error";
                     }
@@ -2360,7 +2361,7 @@ export class CodeGenerator {
                             key64 = key;
                         } else {
                             key64 = b.assign(b.tmp(), "extend", this.getSSAType(objType.keyType), [key]);
-                        }   
+                        }
                         return b.call(b.tmp(), this.removeNumericMapKeyFunctionType, [SystemCalls.removeNumericMapKey, m, key64]);
                     } */
                     throw "TODO";
@@ -2379,7 +2380,7 @@ export class CodeGenerator {
                     }
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
-                    }    
+                    }
                     f = e;
                     t = f.type;
                 /* } else if (enode.lhs.op == "genericInstance") {
@@ -2404,7 +2405,7 @@ export class CodeGenerator {
                     let pkg = lhs.lhs.type.pkg;
                     let name = lhs.name.value;
                     let e = pkg.scope.resolveElement(name);
-                    if (e instanceof TemplateFunction) {                        
+                    if (e instanceof TemplateFunction) {
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
                             throw "Implementation error";
                         }
@@ -2413,12 +2414,12 @@ export class CodeGenerator {
                     }
                     if (!(e instanceof Function)) {
                         throw "Implementation error";
-                    }    
+                    }
                     f = e;
-                    t = f.type;                    
+                    t = f.type;
                 } else if (lhs.op == ".") {
                     // Calling a member function?
-                    let ltype = this.tc.stripType(lhs.lhs.type);
+                    let ltype = helper.stripType(lhs.lhs.type);
                     let objType: Type;
                     if (ltype instanceof PointerType) {
                         objType = RestrictedType.strip(ltype.elementType);
@@ -2448,7 +2449,7 @@ export class CodeGenerator {
                         methodObjType = RestrictedType.strip(method.objectType);
                         if (methodObjType instanceof PointerType) {
                             methodObjType = RestrictedType.strip(methodObjType.elementType);
-                        }    
+                        }
                         let methodName = TypeChecker.mangledTypeName(methodObjType) + "." + lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
@@ -2485,7 +2486,7 @@ export class CodeGenerator {
                     // Calling a lamdba function
                     t = lhs.type as FunctionType;
                 }
-                
+
                 if (f) {
                     if (!this.funcs.has(f)) {
                         // this.funcs.set(f, this.backend.importFunction(f.name, f.scope.package(), this.getSSAFunctionType(f.type)));
@@ -2505,13 +2506,13 @@ export class CodeGenerator {
                     } else {
                         data = objPtr;
                     }
-                    let targetType = this.tc.stripType(enode.lhs.lhs.type);
+                    let targetType = helper.stripType(enode.lhs.lhs.type);
                     let dataAndRef = this.functionArgumentIncref(objPtr, enode.lhs.lhs, data, targetType, true, scope, b);
                     args.push(dataAndRef[0]);
                     if (dataAndRef[1]) {
                         decrefArgs.push([enode.lhs.lhs, dataAndRef[1], dataAndRef[2]]);
-                    }                
-                }                
+                    }
+                }
 
                 // Compute arguments
                 if (t.hasEllipsis() && (enode.parameters.length != t.parameters.length || enode.parameters[enode.parameters.length - 1].op != "unary...")) {
@@ -2541,7 +2542,7 @@ export class CodeGenerator {
                         if ((vnode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || vnode.op == "take") {
                             rhs = this.processLeftHandExpression(f, scope, vnode, b, vars);
                         } else {
-                            rhs = this.processExpression(f, scope, vnode, b, vars, targetType);                            
+                            rhs = this.processExpression(f, scope, vnode, b, vars, targetType);
                         }
                         let st = this.getSSAType(pnode.type);
                         // Load the data if we have a pointer to it
@@ -2550,7 +2551,7 @@ export class CodeGenerator {
                             data = b.assign(b.tmp(), "load", st, [rhs.variable, rhs.offset]);
                         } else {
                             data = rhs;
-                        }     
+                        }
                         let dataAndRef = this.functionArgumentIncref(rhs, vnode, data, targetType, false, scope, b);
                         args.push(dataAndRef[0]);
                         if (dataAndRef[1]) {
@@ -2558,7 +2559,7 @@ export class CodeGenerator {
                         }
                     }
                 }
-                
+
                 let result: ssa.Variable | number;
                 if (f) {
                     let ft = this.getSSAFunctionType(t);
@@ -2631,16 +2632,16 @@ export class CodeGenerator {
                         index2 = this.processExpression(f, scope, enode.parameters[1], b, vars, TypeChecker.t_int);
                     }
                 }
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 if (t instanceof UnsafePointerType) {
-                    if (!TypeChecker.isLocalReference(enode.type)) {
+                    if (!helper.isLocalReference(enode.type)) {
                         throw "Implementation error";
                     }
                     let size = ssa.alignedSizeOf(this.getSSAType(t.elementType));
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
-                        l = index2 - index1;  
+                        l = index2 - index1;
                     } else {
                         l = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
                     }
@@ -2672,7 +2673,7 @@ export class CodeGenerator {
                     if (head_addr instanceof ssa.Pointer) {
                         data_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_ptr")]);
                         len = b.assign(b.tmp(), "load", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length")]);
-                        if (!TypeChecker.isLocalReference(enode.type)) {
+                        if (!helper.isLocalReference(enode.type)) {
                             array_ptr = b.assign(b.tmp(), "load", "addr", [head_addr.variable, head_addr.offset + this.slicePointer.fieldOffset("array_ptr")]);
                         }
                     } else {
@@ -2680,7 +2681,7 @@ export class CodeGenerator {
                             data_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.localSlicePointer.fieldIndexByName("data_ptr")]);
                             len = b.assign(b.tmp(), "member", "sint", [head_addr, this.localSlicePointer.fieldIndexByName("data_length")]);
                         } else {
-                            if (!TypeChecker.isLocalReference(enode.type)) {
+                            if (!helper.isLocalReference(enode.type)) {
                                 array_ptr = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
                             }
                             let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
@@ -2694,7 +2695,7 @@ export class CodeGenerator {
                         let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
-                        b.end();                        
+                        b.end();
                     }
                     if (enode.parameters[1] && index2 !== 0) {
                         // Compare 'index2' with 'len'
@@ -2709,11 +2710,11 @@ export class CodeGenerator {
                         let cmp = b.assign(b.tmp(), "gt_s", "i8", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
-                        b.end();                        
+                        b.end();
                     }
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
-                        l = index2 - index1;  
+                        l = index2 - index1;
                     } else {
                         l = b.assign(b.tmp(), "sub", "sint", [index2, index1]);
                     }
@@ -2729,13 +2730,13 @@ export class CodeGenerator {
                             data_ptr = b.assign(b.tmp(), "add", "addr", [data_ptr, index1]);
                         }
                     }
-                    if (TypeChecker.isLocalReference(enode.type)) {
-                        if (this.tc.isTakeExpression(enode.lhs)) {
+                    if (helper.isLocalReference(enode.type)) {
+                        if (helper.isTakeExpression(enode.lhs)) {
                             throw "Implementation error";
                         }
-                        return b.assign(b.tmp(), "struct", this.localSlicePointer, [data_ptr, l]);                        
+                        return b.assign(b.tmp(), "struct", this.localSlicePointer, [data_ptr, l]);
                     }
-//                    if (TypeChecker.isReference(enode.type) && !this.tc.isTakeExpression(enode.lhs)) {
+//                    if (helper.isReference(enode.type) && !helper.isTakeExpression(enode.lhs)) {
 //                        b.assign(null, "incref_arr", null, [array_ptr]);
 //                    }
                     return b.assign(b.tmp(), "struct", this.slicePointer, [data_ptr, l, array_ptr]);
@@ -2747,7 +2748,7 @@ export class CodeGenerator {
                         let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
-                        b.end();                        
+                        b.end();
                     }
                     if (enode.parameters[1] && index2 !== 0) {
                         // Compare 'index2' with 'len'
@@ -2762,7 +2763,7 @@ export class CodeGenerator {
                         let cmp = b.assign(b.tmp(), "gt_s", "sint", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
-                        b.end();                        
+                        b.end();
                     }
                     let ptr3 = b.assign(b.tmp(), "add", "addr", [ptr, index1]);
                     let l: ssa.Variable | number;
@@ -2777,12 +2778,12 @@ export class CodeGenerator {
                     // This is allocating one byte more. Optimization: Do not use calloc. But then add a trailing zero!
                     let result = b.assign(b.tmp(), "alloc_arr", "addr", [l, 1]);
                     b.assign(b.mem, "memcpy", null, [result, ptr3, copyLen, 1]);
-                    if (this.tc.isTakeExpression(enode.lhs)) {
+                    if (helper.isTakeExpression(enode.lhs)) {
                         b.assign(null, "decref_arr", null, [ptr]);
                     }
                     return result;
                 } else if (t instanceof ArrayType) {
-//                    if (!TypeChecker.isLocalReference(enode.type)) {
+//                    if (!helper.isLocalReference(enode.type)) {
 //                        throw "Implementation error";
 //                    }
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
@@ -2792,7 +2793,7 @@ export class CodeGenerator {
                         let trap = b.assign(b.tmp(), "gt_u", "i8", [index1, len]);
                         b.ifBlock(trap);
                         b.assign(null, "trap", null, []);
-                        b.end();                        
+                        b.end();
                     }
                     if (enode.parameters[1]) {
                         // Compare 'index2' with 'len'
@@ -2807,7 +2808,7 @@ export class CodeGenerator {
                         let cmp = b.assign(b.tmp(), "gt_s", "i8", [index1, index2]);
                         b.ifBlock(cmp);
                         b.assign(null, "trap", null, []);
-                        b.end();                        
+                        b.end();
                     }
                     let ptr2: ssa.Pointer;
                     if (ptr instanceof ssa.Variable) {
@@ -2839,11 +2840,11 @@ export class CodeGenerator {
                     }
                     let l: ssa.Variable | number;
                     if (typeof(index1) == "number" && typeof(index2) == "number") {
-                        l = index2 - index1;  
+                        l = index2 - index1;
                     } else {
                         l = b.assign(b.tmp(), "sub", "i32", [index2, index1]);
                     }
-                    if (TypeChecker.isLocalReference(enode.type)) {
+                    if (helper.isLocalReference(enode.type)) {
                         return b.assign(b.tmp(), "struct", this.localSlicePointer, [ptr3, l]);
                     }
                     let arrayPtr: ssa.Variable;
@@ -2855,13 +2856,13 @@ export class CodeGenerator {
                     return b.assign(b.tmp(), "struct", this.slicePointer, [ptr3, l, arrayPtr]);
                 } else {
                     throw "Implementation error";
-                }                
+                }
             }
             case "[":
             {
-                let t = this.tc.stripType(enode.lhs.type);
-                if (t instanceof MapType) {           
-                    /*         
+                let t = helper.stripType(enode.lhs.type);
+                if (t instanceof MapType) {
+                    /*
                     let m = this.processExpression(f, scope, enode.lhs, b, vars, t);
                     let key = this.processExpression(f, scope, enode.rhs, b, vars, t.keyType);
                     let result: ssa.Variable;
@@ -2873,7 +2874,7 @@ export class CodeGenerator {
                             key64 = key;
                         } else {
                             key64 = b.assign(b.tmp(), "extend", this.getSSAType(t.keyType), [key]);
-                        }   
+                        }
                         result = b.call(b.tmp(), this.lookupNumericMapFunctionType, [SystemCalls.lookupNumericMap, m, key64]);
                     }
                     let check = b.assign(b.tmp("i32"), "eqz", "addr", [result]);
@@ -2882,7 +2883,7 @@ export class CodeGenerator {
                         b.assign(null, "trap", null, []);
                         b.end();
                     }
-                    return b.assign(b.tmp(), "load", this.getSSAType(this.tc.stripType(t.valueType)), [result, 0]);
+                    return b.assign(b.tmp(), "load", this.getSSAType(helper.stripType(t.valueType)), [result, 0]);
                     */
                 } else if (t == TypeChecker.t_string) {
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
@@ -2913,10 +2914,10 @@ export class CodeGenerator {
             }
             case ".":
             {
-                let t = this.tc.stripType(enode.lhs.type);
+                let t = helper.stripType(enode.lhs.type);
                 if (t instanceof StructType) {
                     // It is a value, i.e. not a pointer to a value
-                    let left = this.processExpression(f, scope, enode.lhs, b, vars, t) as ssa.Variable;                    
+                    let left = this.processExpression(f, scope, enode.lhs, b, vars, t) as ssa.Variable;
                     let memberType = this.getSSAType(enode.type) as ssa.StructType;
                     let structType = this.getSSAType(enode.lhs.type) as ssa.StructType;
                     return b.assign(b.tmp(), "member", memberType, [left, structType.fieldIndexByName(enode.name.value)]);
@@ -2933,11 +2934,11 @@ export class CodeGenerator {
             {
                 let rtype = RestrictedType.strip(enode.rhs.type);
                 let ltype = RestrictedType.strip(enode.lhs.type);
-                if (this.tc.isStringOrType(enode.lhs.type)) {
-                    let ltypecode = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);    
-                    throw "TODO"                
+                if (helper.isStringOrType(enode.lhs.type)) {
+                    let ltypecode = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);
+                    throw "TODO"
                     // return b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
-                } else if (this.tc.isInterface(ltype)) {
+                } else if (helper.isInterface(ltype)) {
                     let ifaceAddr: ssa.Variable | ssa.Pointer;
                     if (this.isLeftHandSide(enode.lhs)) {
                         ifaceAddr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
@@ -2969,17 +2970,17 @@ export class CodeGenerator {
             case "typeCast":
             {
                 let t = enode.type;
-                let t2 = this.tc.stripType(enode.rhs.type);
+                let t2 = helper.stripType(enode.rhs.type);
                 let expr: number | ssa.Variable;
                 if (t == TypeChecker.t_string && t2 instanceof SliceType && enode.rhs.op == "clone") {
-                    t2 = this.tc.stripType(enode.rhs.lhs.type);
+                    t2 = helper.stripType(enode.rhs.lhs.type);
                     expr = this.processExpression(f, scope, enode.rhs.lhs, b, vars, t2);
                 } else {
                     expr = this.processExpression(f, scope, enode.rhs, b, vars, t2);
                 }
                 let s = this.getSSAType(t);
                 let s2 = this.getSSAType(enode.rhs.type);
-                if ((t == TypeChecker.t_float || t == TypeChecker.t_double) && this.tc.isIntNumber(t2)) {
+                if ((t == TypeChecker.t_float || t == TypeChecker.t_double) && helper.isIntNumber(t2)) {
                     // Ints can be converted to floats
                     let to = this.getSSAType(t);
                     let op: "convert64_s" | "convert64_u" | "convert32_u" | "convert32_s";
@@ -2991,7 +2992,7 @@ export class CodeGenerator {
                         op = this.isSigned(t2) ? "convert32_s" : "convert32_u";
                     }
                     return b.assign(b.tmp(), op, to, [expr]);
-                } else if (this.tc.isIntNumber(t) && (t2 == TypeChecker.t_float || t2 == TypeChecker.t_double)) {
+                } else if (helper.isIntNumber(t) && (t2 == TypeChecker.t_float || t2 == TypeChecker.t_double)) {
                     // Floats can be converted to ints
                     let to = this.getSSAType(t);
                     let op: "trunc64" | "trunc32";
@@ -3000,14 +3001,14 @@ export class CodeGenerator {
                     } else {
                         op = "trunc32";
                     }
-                    return b.assign(b.tmp(), op, to, [expr]);                    
+                    return b.assign(b.tmp(), op, to, [expr]);
                 } else if (t == TypeChecker.t_float && t2 == TypeChecker.t_double) {
                     // Doubles can be converted to floats
                     return b.assign(b.tmp(), "demote", "f32", [expr]);
                 } else if (t == TypeChecker.t_double && t2 == TypeChecker.t_float) {
                     // Floats can be converted to doubles
-                    return b.assign(b.tmp(), "promote", "f64", [expr]);                    
-                } else if (this.tc.isIntNumber(t) && t2 instanceof UnsafePointerType) {
+                    return b.assign(b.tmp(), "promote", "f64", [expr]);
+                } else if (helper.isIntNumber(t) && t2 instanceof UnsafePointerType) {
                     // Convert pointer to integer
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
@@ -3058,7 +3059,7 @@ export class CodeGenerator {
                         }
                         let str = b.assign(b.tmp(), "copy", "addr", [0]);
                         let nn = b.assign(b.tmp(), "ne", "i8", [ptr, 0]);
-                        b.ifBlock(nn);    
+                        b.ifBlock(nn);
                         // Make room for the terminating 0 character
                         let l2 = b.assign(b.tmp(), "add", "sint", [l, 1]);
                         b.assign(str, "alloc_arr", "addr", [l2, 1]);
@@ -3078,7 +3079,7 @@ export class CodeGenerator {
                     }
                     let str = b.assign(b.tmp(), "arr_to_str", "addr", [arrptr, dataptr, l]);
                     return str;
-                } else if ((t == TypeChecker.t_bool || t == TypeChecker.t_rune || this.tc.isIntNumber(t)) && (t2 == TypeChecker.t_bool || t2 == TypeChecker.t_rune || this.tc.checkIsIntNumber(enode.rhs, false))) {
+                } else if ((t == TypeChecker.t_bool || t == TypeChecker.t_rune || helper.isIntNumber(t)) && (t2 == TypeChecker.t_bool || t2 == TypeChecker.t_rune || this.tc.checkIsIntNumber(enode.rhs, false))) {
                     // Convert between integers
                     if (ssa.sizeOf(s) == ssa.sizeOf(s2)) {
                         return expr;
@@ -3100,10 +3101,10 @@ export class CodeGenerator {
                     let slice = b.assign(b.tmp(), "struct", this.slicePointer, [0, 0, 0]);
                     let nn = b.assign(b.tmp(), "ne", "i8", [expr, 0]);
                     b.ifBlock(nn);
-                    let size = b.assign(b.tmp(), "len_arr", "sint", [expr]);                    
+                    let size = b.assign(b.tmp(), "len_arr", "sint", [expr]);
                     let newptr = b.assign(b.tmp(), "alloc_arr", "addr", [size, 1]);
                     b.assign(b.mem, "memcpy", null, [newptr, expr, size, 1]);
-                    if (this.tc.isTakeExpression(enode.rhs)) {
+                    if (helper.isTakeExpression(enode.rhs)) {
                         this.callDestructorOnVariable(t2, expr as ssa.Variable, b, true);
                     }
                     b.assign(slice, "struct", this.slicePointer, [newptr, size, newptr]);
@@ -3112,7 +3113,7 @@ export class CodeGenerator {
                 } else if (t2 == TypeChecker.t_null) {
                     // Convert null to a pointer type
                     return expr;
-                } else if (this.tc.isComplexOrType(t2)) {
+                } else if (helper.isComplexOrType(t2)) {
                     throw "TODO: Unpack complex or type"
 //                    return this.processUnboxInterface(t, expr, b);
                 } else {
@@ -3129,9 +3130,9 @@ export class CodeGenerator {
                     let copy = b.assign(b.tmp(), "load", t, [src.variable, src.offset]);
                     if (t instanceof ssa.StructType) {
                         let tmp = b.assign(b.tmp(), "struct", t, this.generateZeroStruct(t));
-                        b.assign(b.mem, "store", t, [src.variable, src.offset, tmp]);                        
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, tmp]);
                     } else {
-                        b.assign(b.mem, "store", t, [src.variable, src.offset, 0]);                            
+                        b.assign(b.mem, "store", t, [src.variable, src.offset, 0]);
                     }
                     return copy;
                 }
@@ -3139,12 +3140,12 @@ export class CodeGenerator {
                 if (t instanceof ssa.StructType) {
                     b.assign(src, "struct", t, this.generateZeroStruct(t));
                 } else {
-                    b.assign(src, "copy", t, [0]);                            
+                    b.assign(src, "copy", t, [0]);
                 }
                 return copy;
             }
             case "len":
-            {            
+            {
                 let objType = RestrictedType.strip(enode.lhs.type);
                 if (objType == TypeChecker.t_string) {
                     let s = this.processExpression(f, scope, enode.lhs, b, vars, TypeChecker.t_string);
@@ -3173,7 +3174,7 @@ export class CodeGenerator {
             }
             case "cap":
             {
-                let objType = this.tc.stripType(enode.lhs.type);
+                let objType = helper.stripType(enode.lhs.type);
                 if (objType instanceof SliceType) {
                     // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                     let head_addr: ssa.Variable | ssa.Pointer;
@@ -3201,7 +3202,7 @@ export class CodeGenerator {
             }
             case "clone":
             {
-                let objType = this.tc.stripType(enode.lhs.type);
+                let objType = helper.stripType(enode.lhs.type);
                 if (!(objType instanceof SliceType)) {
                     throw "Implementation error";
                 }
@@ -3234,7 +3235,7 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "struct", this.slicePointer, [mem, count, mem]);
             }
             case "pop": {
-                let objType = this.tc.stripType(enode.lhs.type);
+                let objType = helper.stripType(enode.lhs.type);
                 if (!(objType instanceof SliceType)) {
                     throw "Implementation error";
                 }
@@ -3243,7 +3244,7 @@ export class CodeGenerator {
 
                 // Get the address of the destination SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                 // Append and Push modifies the slice, therefore the slice is a left-hand expression
-                let head_addr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);                
+                let head_addr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                 let dest_data_ptr: ssa.Variable | number;
                 // The current length of the slice
                 let dest_count: ssa.Variable | number;
@@ -3270,9 +3271,9 @@ export class CodeGenerator {
                 // Fill the place with zeros
                 if (elementType instanceof ssa.StructType) {
                     let tmp = b.assign(b.tmp(), "struct", elementType, this.generateZeroStruct(elementType));
-                    b.assign(b.mem, "store", elementType, [read_addr, 0, tmp]);                        
+                    b.assign(b.mem, "store", elementType, [read_addr, 0, tmp]);
                 } else {
-                    b.assign(b.mem, "store", elementType, [read_addr, 0, 0]);                            
+                    b.assign(b.mem, "store", elementType, [read_addr, 0, 0]);
                 }
                 // Update length of the slice
                 if (head_addr instanceof ssa.Variable) {
@@ -3283,14 +3284,14 @@ export class CodeGenerator {
                     b.assign(b.mem, "set_member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length"), new_count]);
                 } else {
                     b.assign(b.mem, "store", "sint", [head_addr.variable, head_addr.offset + this.localSlicePointer.fieldOffset("data_length"), new_count]);
-                }                
+                }
                 return result;
             }
             case "push":
             case "tryPush":
             case "append":
             {
-                let objType = this.tc.stripType(enode.parameters[0].type);
+                let objType = helper.stripType(enode.parameters[0].type);
                 if (!(objType instanceof SliceType)) {
                     throw "Implementation error";
                 }
@@ -3307,7 +3308,7 @@ export class CodeGenerator {
                     } else {
                         required++;
                     }
-                }            
+                }
                 let src_values: Array<ssa.Variable | number> = [];
                 let src_data_ptr_arr: Array<ssa.Variable> = [];
                 let src_count_arr: Array<ssa.Variable> = [];
@@ -3350,7 +3351,7 @@ export class CodeGenerator {
 
                 // Get the address of the destination SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
                 // Append and Push modifies the slice, therefore the slice is a left-hand expression
-                let head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0], b, vars);                
+                let head_addr = this.processLeftHandExpression(f, scope, enode.parameters[0], b, vars);
                 let dest_data_ptr: ssa.Variable | number;
                 // The current length of the slice
                 let dest_count: ssa.Variable | number;
@@ -3409,7 +3410,7 @@ export class CodeGenerator {
                     let newArray = b.assign(b.tmp(), "alloc_arr", "addr", [newCount2, size]);
                     b.assign(null, "memcpy", null, [newArray, dest_data_ptr, dest_count, size]);
                     if (head_addr instanceof ssa.Variable) {
-                        b.assign(b.mem, "set_member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr"), newArray]);                    
+                        b.assign(b.mem, "set_member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr"), newArray]);
                         let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                         b.assign(b.mem, "set_member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr"), newArray]);
                     } else {
@@ -3421,7 +3422,7 @@ export class CodeGenerator {
                     b.assign(to, "add", "addr", [dest_data_ptr, offset]);
                     b.end();
                 }
-                        
+
                 // Append data to the array at the location "to" is pointing to
                 let arr_count = 0;
                 let value_count = 0;
@@ -3436,19 +3437,19 @@ export class CodeGenerator {
                         let addOffset = src_count;
                         if (size > 1) {
                             addOffset = b.assign(b.tmp(), "mul", "sint", [src_count, size]);
-                        }                                
+                        }
                         b.assign(to, "add", "addr", [to, addOffset]);
                         // TODO: decref the slice or release it
                     } else {
                         b.assign(b.mem, "store", elementType, [to, 0, src_values[value_count]]);
                         b.assign(to, "add", "addr", [to, size]);
-                        if ((p.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {      
+                        if ((p.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {
                             if (!(src_values[value_count] instanceof ssa.Variable) && !(src_values[value_count] instanceof ssa.Pointer)) {
                                 throw "Implementation error";
                             }
                             // Fill the RHS with zeros
                             this.processFillZeros(src_values[value_count] as ssa.Variable | ssa.Pointer, RestrictedType.strip(objType.getElementType()), b);
-                        }            
+                        }
                         value_count++;
                     }
                 }
@@ -3456,7 +3457,7 @@ export class CodeGenerator {
                 if (enode.op == "append") {
                     // Release the old array
                     // let dtor = this.generateArrayDestructor(RestrictedType.strip(objType.arrayType) as ArrayType);
-                    b.ifBlock(cond);                    
+                    b.ifBlock(cond);
                     b.assign(null, "free_arr", null, [dest_array, -1]);
                     b.end();
                 }
@@ -3481,7 +3482,7 @@ export class CodeGenerator {
                 throw "Implementation error";
             }
             case "slice": {
-                let objType = this.tc.stripType(enode.parameters[0].type);
+                let objType = helper.stripType(enode.parameters[0].type);
                 if (!(objType instanceof SliceType)) {
                     throw "Implementation error";
                 }
@@ -3570,20 +3571,20 @@ export class CodeGenerator {
             if (st instanceof ssa.StructType) {
                 b.assign(target, "struct", st, this.generateZeroStruct(st));
             } else {
-                b.assign(target, "copy", st, [0]);                            
+                b.assign(target, "copy", st, [0]);
             }
         } else if (target instanceof ssa.Pointer) {
             if (st instanceof ssa.StructType) {
                 let tmp = b.assign(b.tmp(), "struct", st, this.generateZeroStruct(st));
                 b.assign(b.mem, "store", st, [target.variable, target.offset, tmp]);
             } else {
-                b.assign(b.mem, "store", st, [target.variable, target.offset, 0]);                            
-            }                                    
-        }        
+                b.assign(b.mem, "store", st, [target.variable, target.offset, 0]);
+            }
+        }
     }
 
     private processCompare(opcode: ssa.NodeKind, f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable {
-        let t = this.tc.stripType(enode.lhs.type);
+        let t = helper.stripType(enode.lhs.type);
         let p1 = this.processExpression(f, scope, enode.lhs, b, vars, t);
         let p2 = this.processExpression(f, scope, enode.rhs, b, vars, t);
         if (t == TypeChecker.t_string) {
@@ -3620,17 +3621,17 @@ export class CodeGenerator {
     }
 
     public isSigned(t: Type): boolean {
-        t = this.tc.stripType(t);
+        t = helper.stripType(t);
         if (t == TypeChecker.t_char || t == TypeChecker.t_int || t == TypeChecker.t_int8 || t == TypeChecker.t_int16 || t == TypeChecker.t_int32 || t == TypeChecker.t_int64 || t == TypeChecker.t_float || t == TypeChecker.t_double) {
             return true;
         }
         if (t == TypeChecker.t_byte || t == TypeChecker.t_uint || t == TypeChecker.t_uint8 || t == TypeChecker.t_uint16 || t == TypeChecker.t_uint32 || t == TypeChecker.t_uint64) {
             return false;
         }
-        if (this.tc.isUnsafePointer(t)) {
+        if (helper.isUnsafePointer(t)) {
             return true;
         }
-        throw "CodeGen: Implementation error: signed check on non number type " + t.toString();       
+        throw "CodeGen: Implementation error: signed check on non number type " + t.toString();
     }
 
     private generateZero(t: ssa.Type | ssa.StructType | ssa.PointerType): Array<number> {
@@ -3674,7 +3675,7 @@ export class CodeGenerator {
         return v instanceof ssa.Variable && v.name == "this";
     }
 
-    private isPureLiteral(t: Type, n: Node): boolean {        
+    private isPureLiteral(t: Type, n: Node): boolean {
         t = RestrictedType.strip(t);
         if (t instanceof InterfaceType) {
             return false;
@@ -3687,9 +3688,9 @@ export class CodeGenerator {
             case "rune":
             case "str":
                 return true;
-            case "array":                
+            case "array":
             {
-                if (this.tc.isArray(t)) {
+                if (helper.isArray(t)) {
                     if (n.parameters) {
                         for(let p of n.parameters) {
                             if (p.op == "unary...") {
@@ -3715,7 +3716,7 @@ export class CodeGenerator {
             }
             case "object":
             {
-                if (this.tc.isStruct(t)) {
+                if (helper.isStruct(t)) {
                     if (n.parameters) {
                         for(let p of n.parameters) {
                             let f = (t as StructType).field(p.name.value);
@@ -3857,7 +3858,7 @@ export class CodeGenerator {
         this.callDestructorOnPointer(t, new ssa.Pointer(pointer, 0), b);
         b.end();
         this.backend.defineFunction(dtrNode, bf, false, true);
-        return bf;    
+        return bf;
     }
 
     private generateInterfaceDestructor(): backend.Function {
@@ -3882,7 +3883,7 @@ export class CodeGenerator {
 //        b.end();
         b.end();
         this.backend.defineFunction(dtrNode, bf, false, true);
-        return bf;    
+        return bf;
     }
 
     /**
@@ -3891,7 +3892,7 @@ export class CodeGenerator {
     private callDestructor(typ: Type, pointer: ssa.Variable | number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref" | "unlock") {
         let t = RestrictedType.strip(typ);
         let dtr: backend.Function;
-        if (!TypeChecker.isPureValue(typ) && !TypeChecker.isLocalReference(typ)) {
+        if (!helper.isPureValue(typ) && !helper.isLocalReference(typ)) {
             if (free == "no" && !avoidNullCheck) {
                 let cond: ssa.Variable;
                 if (t instanceof InterfaceType) {
@@ -3957,7 +3958,7 @@ export class CodeGenerator {
             }
             if (free == "no" && !avoidNullCheck) {
                 b.end();
-            }    
+            }
         }
         if (!avoidNullCheck && t instanceof InterfaceType) {
             let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
@@ -3965,7 +3966,7 @@ export class CodeGenerator {
             b.ifBlock(cond);
         }
         if (free == "free") {
-            if (this.tc.isArray(typ) || this.tc.isString(typ)) {
+            if (helper.isArray(typ) || helper.isString(typ)) {
                 b.assign(null, "free_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
             } else if (t instanceof InterfaceType) {
                 let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
@@ -3976,7 +3977,7 @@ export class CodeGenerator {
                 b.assign(null, "free", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         } else if (free == "unlock") {
-            if (this.tc.isArray(typ) || this.tc.isString(typ)) {
+            if (helper.isArray(typ) || helper.isString(typ)) {
                 throw "Implementation error"
             } else if (t instanceof InterfaceType) {
                 let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
@@ -3987,7 +3988,7 @@ export class CodeGenerator {
                 b.assign(null, "unlock", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         } else if (free == "decref") {
-            if (this.tc.isArray(typ) || this.tc.isString(typ)) {
+            if (helper.isArray(typ) || helper.isString(typ)) {
                 b.assign(null, "decref_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
             } else if (t instanceof InterfaceType) {
                 let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
@@ -4005,7 +4006,7 @@ export class CodeGenerator {
 
     private callDestructorOnPointer(type: Type, pointer: ssa.Pointer, b: ssa.Builder): void {
         let t = RestrictedType.strip(type);
-        if (TypeChecker.isPureValue(t)) {
+        if (helper.isPureValue(t)) {
             return;
         }
         if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
@@ -4026,9 +4027,9 @@ export class CodeGenerator {
         }
     }
 
-    private callDestructorOnVariable(type: Type, v: ssa.Variable, b: ssa.Builder, avoidNullCheck: boolean = false): void {        
+    private callDestructorOnVariable(type: Type, v: ssa.Variable, b: ssa.Builder, avoidNullCheck: boolean = false): void {
         let t = RestrictedType.strip(type);
-        if (TypeChecker.isPureValue(t)) {
+        if (helper.isPureValue(t)) {
             return;
         }
         if (t instanceof PointerType && (t.mode == "strong" || t.mode == "unique")) {
@@ -4056,7 +4057,7 @@ export class CodeGenerator {
             for(let e of scope.elements.values()) {
                 // FunctionParameters marked with isConst are not destructed by the function but by their caller
                 if ((e instanceof Variable && !e.isResult) || (e instanceof FunctionParameter && !e.isConst)) {
-                    if (!TypeChecker.isPureValue(e.type)) {
+                    if (!helper.isPureValue(e.type)) {
                         return true;
                     }
                 }
@@ -4072,10 +4073,10 @@ export class CodeGenerator {
     private functionArgumentIncref(rhs: ssa.Variable | ssa.Pointer | number, rhsNode: Node, rhsData: ssa.Variable | number, targetType: Type, targetIsThis: boolean, scope: Scope, b: ssa.Builder): [ssa.Variable | number, ssa.Variable, "none" | "decref" | "free" | "unlock"] {
         let decrefVar: ssa.Variable;
         let action: "none" | "decref" | "free" | "unlock" = "none"
-        if (this.tc.isSafePointer(targetType) && (targetIsThis || TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
+        if (helper.isSafePointer(targetType) && (targetIsThis || helper.isLocalReference(targetType) || helper.isReference(targetType))) {
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if ((result[0] != "no" && result[0] != "no_not_null") || (targetIsThis && result[0] == "no")) {
-                if (this.tc.isInterface(targetType)) {
+                if (helper.isInterface(targetType)) {
                     let ptr = b.assign(b.tmp(), "member", "addr", [rhsData, this.ifaceHeader.fieldIndexByName("pointer")]);
                     if (targetIsThis && result[0] == "no") {
                         // No null-check necessary, because null-check happened during function-table lookup already
@@ -4096,7 +4097,7 @@ export class CodeGenerator {
                     action = targetIsThis ? "unlock" : "decref";
                 }
             }
-            if ((TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type)) && this.tc.isTakeExpression(rhsNode)) {
+            if ((helper.isStrong(rhsNode.type) || helper.isUnique(rhsNode.type)) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     console.log(action)
                     throw "Implementation error";
@@ -4104,7 +4105,7 @@ export class CodeGenerator {
                 action = "free";
                 decrefVar = rhsData as ssa.Variable;
             }
-            if (TypeChecker.isReference(rhsNode.type) && this.tc.isTakeExpression(rhsNode)) {
+            if (helper.isReference(rhsNode.type) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     console.log(action)
                     throw "Implementation error";
@@ -4112,7 +4113,7 @@ export class CodeGenerator {
                 action = "decref";
                 decrefVar = rhsData as ssa.Variable;
             }
-        } else if (this.tc.isSlice(targetType) && (TypeChecker.isLocalReference(targetType) || TypeChecker.isReference(targetType))) {
+        } else if (helper.isSlice(targetType) && (helper.isLocalReference(targetType) || helper.isReference(targetType))) {
             if (targetIsThis) {
                 throw "Implementation error";
             }
@@ -4129,13 +4130,13 @@ export class CodeGenerator {
                 decrefVar = arrayPointer;
                 action = "decref";
             }
-            if ((TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type)) && this.tc.isTakeExpression(rhsNode)) {
+            if ((helper.isStrong(rhsNode.type) || helper.isUnique(rhsNode.type)) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     throw "Implementation error";
                 }
                 action = "free";
             }
-            if (TypeChecker.isReference(rhsNode.type) && this.tc.isTakeExpression(rhsNode)) {
+            if (helper.isReference(rhsNode.type) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     console.log(action)
                     throw "Implementation error";
@@ -4143,7 +4144,7 @@ export class CodeGenerator {
                 action = "decref";
             }
             // TODO: Handle Maps here, too
-        } else if (this.tc.isString(targetType)) {
+        } else if (helper.isString(targetType)) {
             if (targetIsThis) {
                 throw "Implementation error";
             }
@@ -4156,7 +4157,7 @@ export class CodeGenerator {
                     decrefVar = b.assign(b.tmp(), "incref_arr", "addr", [rhs]);
                 }
                 action = "decref";
-            }            
+            }
         }
 
         if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
@@ -4169,7 +4170,7 @@ export class CodeGenerator {
                 rhsData = b.assign(b.tmp(), "copy", st, [rhsData]);
             }
             this.processFillZeros(rhs, rhsNode.type, b);
-        }            
+        }
 
         return [rhsData, decrefVar, action];
     }
@@ -4191,7 +4192,7 @@ export class CodeGenerator {
             this.callDestructor(t, decrefVar, b, false, "unlock");
         } else if (action == "decref") {
             this.callDestructor(t, decrefVar, b, false, "decref");
-        }        
+        }
     }
 
     /**
@@ -4202,7 +4203,7 @@ export class CodeGenerator {
      * The reason is that local variables of the caller are not modified, hence said object must continue exist, because the local variable holds a strong pointer on it.
      */
     private functionArgumentIncrefIntern(enode: Node, scope: Scope): ["yes" | "no" | "no_not_null", Variable | FunctionParameter] {
-        if (TypeChecker.isLocalReference(enode.type)) {
+        if (helper.isLocalReference(enode.type)) {
             // Passing on a local reference means no incref/decref, because local references must only point to objects
             // that live as long as the local reference does.
             return ["no", null];
@@ -4212,7 +4213,7 @@ export class CodeGenerator {
                 // null needs no reference counting
             case "object":
             case "array":
-                
+
             case "(":
                 // Return values of functions come with an increased reference count already.
             case "take":
@@ -4228,10 +4229,10 @@ export class CodeGenerator {
                     return lhs;
                 }
                 let type: Type = RestrictedType.strip(enode.type);
-                if (this.tc.isUnsafePointer(type)) {
+                if (helper.isUnsafePointer(type)) {
                     return ["no", null];
                 }
-                if (this.tc.isStruct(type) || this.tc.isTuple(type) || this.tc.isArray(type)) {
+                if (helper.isStruct(type) || helper.isTuple(type) || helper.isArray(type)) {
                     return lhs;
                 }
                 return ["yes", null];
@@ -4276,7 +4277,7 @@ export class CodeGenerator {
 
     private processLiteralArgument(f: Function, scope: Scope, rhsNode: Node, targetType: Type, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
         let rhs: ssa.Pointer | ssa.Variable | number;
-        if ((this.tc.isArray(rhsNode.type) || this.tc.isStruct(rhsNode.type)) && this.isPureLiteral(targetType, rhsNode)) {
+        if ((helper.isArray(rhsNode.type) || helper.isStruct(rhsNode.type)) && this.isPureLiteral(targetType, rhsNode)) {
             rhs = this.processPureLiteral(rhsNode);
         } else if (rhsNode.op == "take") {
             rhs = this.processLeftHandExpression(f, scope, rhsNode.lhs, b, vars);
@@ -4289,16 +4290,16 @@ export class CodeGenerator {
             data = b.assign(b.tmp(), "load", st, [rhs.variable, rhs.offset]);
         } else {
             data = rhs;
-        }            
+        }
         // Reference counting for pointers
-        if (this.tc.isSafePointer(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !this.tc.isTakeExpression(rhsNode))) {
+        if (helper.isSafePointer(targetType) && helper.isReference(targetType) && (helper.isStrong(rhsNode.type) || helper.isUnique(rhsNode.type) || !helper.isTakeExpression(rhsNode))) {
             // Assigning to ~ptr means that the reference count needs to be increased unless the RHS is a take expressions which yields ownership
             data = b.assign(b.tmp(), "incref", "addr", [data]);
-        } else if (this.tc.isString(targetType) && !this.tc.isTakeExpression(rhsNode)) {
+        } else if (helper.isString(targetType) && !helper.isTakeExpression(rhsNode)) {
             data = b.assign(b.tmp(), "incref_arr", "addr", [data]);
         }
         // Reference counting for slices
-        if (this.tc.isSlice(targetType) && TypeChecker.isReference(targetType) && (TypeChecker.isStrong(rhsNode.type) || TypeChecker.isUnique(rhsNode.type) || !this.tc.isTakeExpression(rhsNode))) {
+        if (helper.isSlice(targetType) && helper.isReference(targetType) && (helper.isStrong(rhsNode.type) || helper.isUnique(rhsNode.type) || !helper.isTakeExpression(rhsNode))) {
             let st = this.getSSAType(targetType) as ssa.StructType;
             let arrayPointer: ssa.Variable;
             if (rhs instanceof ssa.Pointer) {
@@ -4314,7 +4315,7 @@ export class CodeGenerator {
             }
             // Fill the RHS with zeros
             this.processFillZeros(rhs, rhsNode.type, b);
-        }            
+        }
 
         return data;
     }
@@ -4322,7 +4323,7 @@ export class CodeGenerator {
     /**
      * This function is used to load a package that implements some built-in functionality
      * like starting a coroutine or decoding a string while iterating over it in a for-loop.
-     * 
+     *
      * Throws SyntaxError, ImportError or TypeError.
      */
     private loadPackage(pkgPath: string, loc: Location): Package {

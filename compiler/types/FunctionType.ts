@@ -2,6 +2,7 @@ import { SystemCalls } from "../pkg"
 import { TypeChecker, TypeError } from "../typecheck"
 import { Group, GroupKind } from '../group'
 import { FunctionParameter } from '../scopes'
+import { isUnique } from '../typecheck/helper'
 
 import { Type } from './Type'
 import { TupleType } from './TupleType'
@@ -86,7 +87,7 @@ export class FunctionType extends Type {
         let groupNames = new Map<string, Group>()
         for (let p of this.parameters) {
             if (p.type.groupName) {
-                if (TypeChecker.isUnique(p.type)) {
+                if (isUnique(p.type)) {
                     throw new TypeError("Unique pointers must not be marked with a group name", p.loc)
                 }
                 let g = groupNames.get(p.type.groupName)
@@ -96,7 +97,7 @@ export class FunctionType extends Type {
                 }
                 groups.set(p.name, g)
             } else {
-                if (TypeChecker.isUnique(p.type)) {
+                if (isUnique(p.type)) {
                     groups.set(p.name, new Group(GroupKind.Free))
                 } else {
                     groups.set(p.name, defaultGroup)
@@ -109,9 +110,9 @@ export class FunctionType extends Type {
                 for(let i = 0; i <this.returnType.types.length; i++) {
                     let t = this.returnType.types[i]
                     if (t.groupName) {
-                        if (TypeChecker.isUnique(t)) {
+                        if (isUnique(t)) {
                             throw new TypeError("Unique pointers must not be marked with a group name", t.loc)
-                        }    
+                        }
                         let g = groupNames.get(t.groupName)
                         if (!g) {
                             g = new Group(GroupKind.Bound)
@@ -119,18 +120,18 @@ export class FunctionType extends Type {
                         }
                         groups.set("return " + i.toString(), g)
                     } else {
-                        if (TypeChecker.isUnique(t)) {
+                        if (isUnique(t)) {
                             groups.set("return " + i.toString(), new Group(GroupKind.Free))
                         } else {
                             groups.set("return " + i.toString(), defaultGroup)
                         }
-                    }                                            
+                    }
                 }
             } else {
                 if (this.returnType.groupName) {
-                    if (TypeChecker.isUnique(this.returnType)) {
+                    if (isUnique(this.returnType)) {
                         throw new TypeError("Unique pointers must not be marked with a group name", this.returnType.loc)
-                    }    
+                    }
                     let g = groupNames.get(this.returnType.groupName)
                     if (!g) {
                         g = new Group(GroupKind.Bound)
@@ -138,19 +139,19 @@ export class FunctionType extends Type {
                     }
                     groups.set("return", g)
                 } else {
-                    if (TypeChecker.isUnique(this.returnType)) {
+                    if (isUnique(this.returnType)) {
                         groups.set("return", new Group(GroupKind.Free))
                     } else {
                         groups.set("return", defaultGroup)
                     }
-                }                    
+                }
             }
         }
 
         if (this.objectType) {
             groups.set("this", defaultGroup)
         }
-        
+
         return groups
     }
 
