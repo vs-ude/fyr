@@ -280,6 +280,7 @@ export class CBackend implements backend.Backend {
             if (f == this.initFunction && f.node.next.length == 0) {
                 continue;
             }
+
             this.optimizer.optimizeConstants(f.node);
             if (emitIR) {
                 ircode += '============ OPTIMIZED Constants ===============\n';
@@ -290,6 +291,13 @@ export class CBackend implements backend.Backend {
             if (emitIR) {
                 ircode += '============ OPTIMIZED Dead code ===============\n';
                 ircode += Node.strainToString("", f.node) + "\n";
+            }
+
+            if (f.node.type instanceof ssa.FunctionType && f.node.type.isAsync()) {
+                console.log("ASYNC");
+                let tr = new ssa.SMTransformer();
+                tr.transform(f.node);
+                console.log(Node.strainToString("", f.node) + "\n");
             }
 
             this.currentFunction = f;

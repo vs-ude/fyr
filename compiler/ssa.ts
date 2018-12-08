@@ -214,6 +214,7 @@ export class FunctionType {
         return str;
     }
 
+    // TODO: This is WASM specific code
     public get stackFrame(): StructType {
         if (this._stackFrame) {
             return this._stackFrame;
@@ -244,6 +245,7 @@ export class FunctionType {
     public result: Type | StructType | PointerType | null;
     public callingConvention: CallingConvention = "fyr";
 
+    // TODO: This is WASM specific code
     private _stackFrame: StructType;
 }
 
@@ -557,6 +559,11 @@ export class Builder {
             this._node = n;
         }
         this._current = n;
+        if (kind == "yield") {
+            for(let b of this._blocks) {
+                b.isAsync = true;
+            }
+        }
         this.countReadsAndWrites(n);
         return n.assign;
     }
@@ -1148,7 +1155,7 @@ export class SMTransformer {
             return;
         }
         this.transformUpTo(startBlock, startBlock.blockPartner, null, false);
-        this.insertNextStepsUpTo(startBlock, startBlock.blockPartner);
+        this.insertNextStepsUpTo(startBlock);
         this.cleanup(startBlock);
     }
 
@@ -1270,7 +1277,7 @@ export class SMTransformer {
     /**
      * Determines the destination step of goto_step and goto_step_if.
      */
-    private insertNextStepsUpTo(start: Node, end: Node) {
+    private insertNextStepsUpTo(start: Node) {
         let n = start;
         for(; n; ) {
             if (n.kind == "goto_step" || n.kind == "goto_step_if") {
@@ -1284,7 +1291,7 @@ export class SMTransformer {
                 }
                 n = n.next[0];
             } else if (n.kind == "if" && n.next.length > 1) {
-                this.insertNextStepsUpTo(n.next[1], n.blockPartner);
+                this.insertNextStepsUpTo(n.next[1]);
                 n = n.next[0];
             } else {
                 n = n.next[0];                

@@ -1,0 +1,15 @@
+async func waitForIO() {
+
+}
+
+async func myCoroutine() {
+    println("Hello")
+    var i = 100
+    var j = i*2
+    if (j > 0) {
+        waitForIO()
+        yield
+        waitForIO()
+    }
+    println("Hello")
+}
