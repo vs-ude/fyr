@@ -35,6 +35,13 @@ export class Function implements backend.Function {
         return false;
     }
 
+    public isAsync(): boolean {
+        if (!(this.node.type instanceof ssa.FunctionType)) {
+            throw "Implementation error";
+        }
+        return this.node.type.isAsync();
+    }
+
     public index: number;
     // The name of the function (not the C-encoding of the name).
     public name: string;
@@ -293,7 +300,7 @@ export class CBackend implements backend.Backend {
                 ircode += Node.strainToString("", f.node) + "\n";
             }
 
-            if (f.node.type instanceof ssa.FunctionType && f.node.type.isAsync()) {
+            if (f.isAsync()) {
                 console.log("ASYNC");
                 let tr = new ssa.SMTransformer();
                 tr.transform(f.node);
@@ -331,12 +338,29 @@ export class CBackend implements backend.Backend {
                 code.push(cv);
             }
 
-            this.currentCFunction = f.func;
-            this.emitCode(f.node.next[0], null, code);
-            this.currentCFunction = null;
-            f.func.body = code;
+            if (f.isAsync()) {
+                let implFunc: CFunction  = new CFunction();
+                let p = new CFunctionParameter();
+                p.name = "state";
+                p.type = new CType("void*");
+                this.currentCFunction = implFunc;
+                this.emitCode(f.node.next[0], null, code);
+                this.currentCFunction = null;
+                implFunc.body = code;
+                this.module.elements.push(implFunc);
 
-            this.module.elements.push(f.func);
+                let code2: Array<CNode> = [];
+
+                f.func.body = code2;
+                this.module.elements.push(f.func);
+
+            } else {
+                this.currentCFunction = f.func;
+                this.emitCode(f.node.next[0], null, code);
+                this.currentCFunction = null;
+                f.func.body = code;
+                this.module.elements.push(f.func);
+            }
         }
 
         // Order the structs, such that all structs used by a field
