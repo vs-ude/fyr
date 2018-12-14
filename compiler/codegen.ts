@@ -8,7 +8,7 @@ import {
     RestrictedType, OrType, StructType, UnsafePointerType, PointerType,
     FunctionType, ArrayType, SliceType, TupleType, TemplateFunctionType
 } from "./types/"
-import { TypeChecker, TypeError, Static } from './typecheck'
+import { TypeChecker, TypeError, Static } from './typecheck/'
 import * as helper from './typecheck/helper'
 import * as types from "./types/"
 import * as ssa from "./ssa"
