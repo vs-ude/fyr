@@ -1,65 +1,65 @@
 {
-	// Use IntelliSense to learn about possible attributes.
-	// Hover to view descriptions of existing attributes.
-	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-	"version": "0.2.0",
-	"configurations": [
-		{
-			"type": "node",
-			"request": "launch",
-			"name": "Debug with strconv",
-			"program": "${workspaceFolder}/bin/fyrc",
-			"preLaunchTask": "npm: build",
-			"outFiles": [
-				"${workspaceFolder}/lib/**/*.js"
-			],
-			"cwd":"${workspaceFolder}/src/strconv/",
-			"args": [
-				"-n",
-				"."
-			],
-			"env": {
-				"FYRBASE": "${workspaceFolder}",
-				"FYRPATH": "${workspaceFolder}",
-			}
-		},
-		{
-			"type": "node",
-			"request": "launch",
-			"name": "Debug with mandelbrot",
-			"program": "${workspaceFolder}/bin/fyrc",
-			"preLaunchTask": "npm: build",
-			"outFiles": [
-				"${workspaceFolder}/lib/**/*.js"
-			],
-			"cwd":"${workspaceFolder}",
-			"args": [
-				"-n",
-				"${workspaceFolder}/src/examples/mandelbrot/mandelbrot.fyr"
-			],
-			"env": {
-				"FYRBASE": "${workspaceFolder}",
-				"FYRPATH": "${workspaceFolder}",
-			}
-		},
-		{
-			"type": "node",
-			"request": "launch",
-			"name": "Debug with opengl",
-			"program": "${workspaceFolder}/bin/fyrc",
-			"preLaunchTask": "npm: build",
-			"outFiles": [
-				"${workspaceFolder}/lib/**/*.js"
-			],
-			"cwd":"${workspaceFolder}/src/examples/opengl/",
-			"args": [
-				"-n",
-				"."
-			],
-			"env": {
-				"FYRBASE": "${workspaceFolder}",
-				"FYRPATH": "${workspaceFolder}",
-			}
-		}
-	]
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug with strconv",
+            "program": "${workspaceFolder}/bin/fyrc",
+            "preLaunchTask": "npm: build",
+            "outFiles": [
+                "${workspaceFolder}/lib/**/*.js"
+            ],
+            "cwd":"${workspaceFolder}/src/strconv/",
+            "args": [
+                "-n",
+                "."
+            ],
+            "env": {
+                "FYRBASE": "${workspaceFolder}",
+                "FYRPATH": "${workspaceFolder}",
+            }
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug with mandelbrot",
+            "program": "${workspaceFolder}/bin/fyrc",
+            "preLaunchTask": "npm: build",
+            "outFiles": [
+                "${workspaceFolder}/lib/**/*.js"
+            ],
+            "cwd":"${workspaceFolder}",
+            "args": [
+                "-n",
+                "${workspaceFolder}/src/examples/mandelbrot/mandelbrot.fyr"
+            ],
+            "env": {
+                "FYRBASE": "${workspaceFolder}",
+                "FYRPATH": "${workspaceFolder}",
+            }
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug with opengl",
+            "program": "${workspaceFolder}/bin/fyrc",
+            "preLaunchTask": "npm: build",
+            "outFiles": [
+                "${workspaceFolder}/lib/**/*.js"
+            ],
+            "cwd":"${workspaceFolder}/src/examples/opengl/",
+            "args": [
+                "-n",
+                "."
+            ],
+            "env": {
+                "FYRBASE": "${workspaceFolder}",
+                "FYRPATH": "${workspaceFolder}",
+            }
+        }
+    ]
 }
