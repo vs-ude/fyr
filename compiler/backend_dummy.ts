@@ -43,7 +43,7 @@ export class DummyBackend {
         let v = new ssa.Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
-        v.writeCount = 2;        
+        v.writeCount = 2;
         return v;
     }
 
@@ -51,10 +51,10 @@ export class DummyBackend {
         let v = new ssa.Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
-        v.writeCount = 2;        
+        v.writeCount = 2;
         return v;
     }
-    
+
     declareFunction(name: string): backend.Function {
         let f = new Function();
         f.index = this.funcs.length;
@@ -96,10 +96,10 @@ export class DummyBackend {
         return ircode;
     }
 
-//    addFunctionToTable(f: Function, index: number) {        
+//    addFunctionToTable(f: Function, index: number) {
 //    }
 
-    addInterfaceDescriptor(name: string, table: Array<backend.Function | backend.FunctionImport>): number {        
+    addInterfaceDescriptor(name: string, table: Array<backend.Function | backend.FunctionImport>): number {
         return 0;
     }
 

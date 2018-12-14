@@ -43,13 +43,13 @@ export class Module extends Node {
         if (this.memoryImport) {
             s += indent + "    (import \"" + this.memoryImport.ns + "\" \"" + this.memoryImport.obj + "\" (memory " + Math.ceil((this.memorySize) / 65536).toString() + "))\n";
         } else {
-            s += indent + "    (memory " + Math.ceil((this.memorySize) / 65536).toString() + ")\n";            
+            s += indent + "    (memory " + Math.ceil((this.memorySize) / 65536).toString() + ")\n";
         }
-        
+
         for(let g of this.globals) {
             s += g.toWast(indent + "    ") + "\n";
         }
-        
+
         for(let f of this.funcs.sort(function(a: Function, b: Function) { if (a.index == b.index) return 0; if (a.index < b.index) return -1; return 1;})) {
             s += f.toWast(indent + "    ") + "\n";
         }
@@ -70,7 +70,7 @@ export class Module extends Node {
                 index++;
             } else {
                 throw "Implementation error";
-            } 
+            }
         }
 
         // Table section
@@ -132,7 +132,7 @@ export class Module extends Node {
         let offset = this.dataSize;
         let d = new Data(offset, value);
         this.data.push(d);
-        this.dataSize += align64(d.size());        
+        this.dataSize += align64(d.size());
         return offset;
     }
 
@@ -345,20 +345,20 @@ export class Function extends Node implements backend.Function {
         }
         for(let p of this.parameters) {
             s += " (param " + p + ")";
-        } 
+        }
         for(let p of this.results) {
             s += " (result " + p + ")";
-        } 
+        }
         for(let p of this.locals) {
             s += " (local " + p + ")";
-        } 
+        }
         s += "\n";
         let i = indent;
         for(let st of this.statements) {
             if (st.op == "end") {
                 i = i.substr(0, i.length - 4);
             } else if (st.op == "else") {
-                i = i.substr(0, i.length - 4);                
+                i = i.substr(0, i.length - 4);
             }
             s += st.toWast(i + "    ") + "\n";
             if (st.op == "block" || st.op == "loop" || st.op == "if" || st.op == "else") {
@@ -379,7 +379,7 @@ export class Function extends Node implements backend.Function {
     public parameters: Array<StackType> = [];
     public locals: Array<StackType> = [];
     public results: Array<StackType> = [];
-    public statements: Array<Node> = [];    
+    public statements: Array<Node> = [];
     public isInitFunction: boolean = false;
     public isExported: boolean = false;
 }
@@ -399,8 +399,8 @@ export class Constant extends Node {
         return indent + this.op + " " + this.value.toString();
     }
 
-    public value: number;  
-    public type: StackType;  
+    public value: number;
+    public type: StackType;
 }
 
 export class Drop extends Node {
@@ -410,7 +410,7 @@ export class Drop extends Node {
 
     public toWast(indent: string): string {
         return indent + "drop";
-    }   
+    }
 }
 
 export class Select extends Node {
@@ -420,7 +420,7 @@ export class Select extends Node {
 
     public toWast(indent: string): string {
         return indent + "select";
-    }   
+    }
 }
 
 export type BinaryOp = "copysign" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max";
@@ -438,7 +438,7 @@ export class BinaryInstruction extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + "." + this.binaryOp;
-    }   
+    }
 
     public type: StackType;
     public binaryOp: BinaryOp;
@@ -459,7 +459,7 @@ export class UnaryInstruction extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + "." + this.unaryOp;
-    }   
+    }
 
     public type: StackType;
     public unaryOp: UnaryOp;
@@ -481,7 +481,7 @@ export class BinaryIntInstruction extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + "." + this.intOp;
-    }   
+    }
 
     public type: "i32" | "i64";
     public intOp: BinaryIntOp;
@@ -502,7 +502,7 @@ export class UnaryIntInstruction extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + "." + this.intOp;
-    }   
+    }
 
     public type: "i32" | "i64";
     public intOp: UnaryIntOp;
@@ -523,7 +523,7 @@ export class BinaryFloatInstruction extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + "." + this.intOp;
-    }   
+    }
 
     public type: "f32" | "f64";
     public intOp: BinaryFloatOp;
@@ -544,7 +544,7 @@ export class UnaryFloatInstruction extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + "." + this.intOp;
-    }   
+    }
 
     public type: "f32" | "f64";
     public intOp: UnaryFloatOp;
@@ -558,7 +558,7 @@ export class Return extends Node {
 
     public toWast(indent: string): string {
         return indent + "return";
-    }       
+    }
 }
 
 export class GetLocal extends Node {
@@ -591,7 +591,7 @@ export class GetGlobal extends Node {
     public toWast(indent: string): string {
         return indent + "get_global " + this.index.toString();
     }
-    
+
     public index: number;
 }
 
@@ -642,7 +642,7 @@ export class SetGlobal extends Node {
     public toWast(indent: string): string {
         return indent + "set_global " + this.index.toString();
     }
-    
+
     public index: number;
 }
 
@@ -661,11 +661,11 @@ export class Load extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + ".load" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "") + (this.align !== null ? " align=" + this.align.toString() : "");
-    }       
+    }
 
     public type: StackType;
     public offset: number;
-    public asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u"; 
+    public asType: null | "8_s" | "8_u" | "16_s" | "16_u" | "32_s" | "32_u";
     public align: number;
 }
 
@@ -684,11 +684,11 @@ export class Store extends Node {
 
     public toWast(indent: string): string {
         return indent + this.type + ".store" + (this.asType == null ? "" : this.asType) + (this.offset != 0 ? " offset=" + this.offset.toString() : "") + (this.align !== null ? " align=" + this.align.toString() : "");
-    }       
+    }
 
     public type: StackType;
     public offset: number;
-    public asType: null | "8" | "16" | "32"; 
+    public asType: null | "8" | "16" | "32";
     public align: number;
 }
 
@@ -700,7 +700,7 @@ export class If extends Node {
 
     public get op(): string {
         return "if";
-    }    
+    }
 
     public toWast(indent: string): string {
         let s = indent + "if";
@@ -718,7 +718,7 @@ export class If extends Node {
 export class Else extends Node {
     public get op(): string {
         return "else";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "else";
@@ -728,7 +728,7 @@ export class Else extends Node {
 export class Block extends Node {
     public get op(): string {
         return "block";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "block";
@@ -738,7 +738,7 @@ export class Block extends Node {
 export class Loop extends Node {
     public get op(): string {
         return "loop";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "loop";
@@ -748,7 +748,7 @@ export class Loop extends Node {
 export class End extends Node {
     public get op(): string {
         return "end";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "end";
@@ -763,7 +763,7 @@ export class Call extends Node {
 
     public get op(): string {
         return "call";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "call " + this.index.toString();
@@ -780,7 +780,7 @@ export class CallIndirect extends Node {
 
     public get op(): string {
         return "call_indirect";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "call_indirect " + this.typeName;
@@ -797,7 +797,7 @@ export class Br extends Node {
 
     public get op(): string {
         return "br";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "br " + this.depth.toString();
@@ -814,7 +814,7 @@ export class BrIf extends Node {
 
     public get op(): string {
         return "br_if";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "br_if " + this.depth.toString();
@@ -831,7 +831,7 @@ export class BrTable extends Node {
 
     public get op(): string {
         return "br_table";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "br_table " + this.depths.join(" ");
@@ -843,7 +843,7 @@ export class BrTable extends Node {
 export class Wrap extends Node {
     public get op(): string {
         return "wrap";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "i32.wrap/i64";
@@ -858,7 +858,7 @@ export class Extend extends Node {
 
     public get op(): string {
         return "extend";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "i64.extend" + (this.signed ? "_s" : "_u") + "/i32";
@@ -870,7 +870,7 @@ export class Extend extends Node {
 export class Promote extends Node {
     public get op(): string {
         return "promote";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "f64.promote/f32";
@@ -880,7 +880,7 @@ export class Promote extends Node {
 export class Demote extends Node {
     public get op(): string {
         return "demote";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "f32.demote/f64";
@@ -897,7 +897,7 @@ export class Convert extends Node {
 
     public get op(): string {
         return "convert";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + this.to + ".convert" + (this.signed ? "_s/" : "_u/") + this.from;
@@ -918,7 +918,7 @@ export class Trunc extends Node {
 
     public get op(): string {
         return "trunc";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + this.to + ".trunc" + (this.signed ? "_s/" : "_u/") + this.from;
@@ -932,7 +932,7 @@ export class Trunc extends Node {
 export class Unreachable extends Node {
     public get op(): string {
         return "unreachable";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "unreachable";
@@ -947,7 +947,7 @@ export class Comment extends Node {
 
     public get op(): string {
         return ";;";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + ";; " + this.comment;
@@ -967,7 +967,7 @@ export class Global extends Node {
 
     public get op(): string {
         return "global";
-    }    
+    }
 
     public toWast(indent: string): string {
         let str = indent + "(global ";
@@ -1001,7 +1001,7 @@ export class Global extends Node {
 export class CurrentMemory extends Node {
     public get op(): string {
         return "current_memory";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "current_memory";
@@ -1011,7 +1011,7 @@ export class CurrentMemory extends Node {
 export class GrowMemory extends Node {
     public get op(): string {
         return "grow_memory";
-    }    
+    }
 
     public toWast(indent: string): string {
         return indent + "grow_memory";

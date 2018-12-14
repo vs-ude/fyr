@@ -33,7 +33,7 @@ function runCompiler() {
         process.exit(1);
     }
     args = args.splice(args.length -2, 1);
-    
+
     config.fyrPaths = Package.getFyrPaths();
     if (!config.fyrPaths) {
         process.exit(1);
@@ -63,7 +63,7 @@ export function constructPkg(config: FyrConfiguration): Package {
             isdir = fs.lstatSync(p).isDirectory();
         } catch(e) {
             isdir = false;
-        }        
+        }
         if (isdir) {
             // Is this package located in one of the known pathes. If yes -> put the output in the right location
             for(let fyrPath of config.fyrPaths) {

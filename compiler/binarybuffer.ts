@@ -149,7 +149,7 @@ export class BinaryBuffer {
         this.buf = new Uint8Array(this.arrayBuf)
     }
 
-    private arrayBuf: ArrayBuffer;    
+    private arrayBuf: ArrayBuffer;
     private buf: Uint8Array;
     private offset: number = 0;
     private len: number = 0;

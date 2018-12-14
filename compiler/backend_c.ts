@@ -146,9 +146,9 @@ export class CBackend implements backend.Backend {
         let v = new Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
-        v.writeCount = 2;        
-        this.globalVariables.push(v);      
-        this.globalStorage.set(v, v.name);  
+        v.writeCount = 2;
+        this.globalVariables.push(v);
+        this.globalStorage.set(v, v.name);
         this.importedGlobalVariables.set(v, from);
         return v;
     }
@@ -158,9 +158,9 @@ export class CBackend implements backend.Backend {
         let v = new Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
-        v.writeCount = 2;        
-        this.globalVariables.push(v);      
-        this.globalStorage.set(v, v.name);  
+        v.writeCount = 2;
+        this.globalVariables.push(v);
+        this.globalStorage.set(v, v.name);
         return v;
     }
 
@@ -193,7 +193,7 @@ export class CBackend implements backend.Backend {
     public defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         if (!(f instanceof Function)) {
             throw "Implementation error";
-        }        
+        }
         f.func.isPossibleDuplicate = isPossibleDuplicate;
         let name = f.name;
         if (!isPossibleDuplicate) {
@@ -206,7 +206,7 @@ export class CBackend implements backend.Backend {
             f.func.name = "s_" + name;
         } else if (isExported && f.name == "main") {
             this.mainFunction = f;
-            f.func.name = "f_" + name;        
+            f.func.name = "f_" + name;
             f.isExported = true;
             this.module.isExecutable = true;
         } else if (isExported) {
@@ -218,7 +218,7 @@ export class CBackend implements backend.Backend {
         f.node = n;
     }
 
-    private mangleName(name: string): string {        
+    private mangleName(name: string): string {
         name = name.replace(/_/g, "_u");
         name = name.replace(/\./g, "__");
         name = name.replace(/</g, "_l");
@@ -269,7 +269,7 @@ export class CBackend implements backend.Backend {
             // Ignore global variables located in other packages
             let from = this.importedGlobalVariables.get(v);
             if (!from) {
-                this.module.elements.push(cv);    
+                this.module.elements.push(cv);
             }
             // Export all global variables, because templates might need them.
             // For native variables however, do nothing.
@@ -399,7 +399,7 @@ export class CBackend implements backend.Backend {
             }
         }
 
-        for(let pos = 0; pos < namedStructs.length; pos++) {            
+        for(let pos = 0; pos < namedStructs.length; pos++) {
             let mangledName = mangledNames[pos];
             let t = namedStructs[pos];
 
@@ -440,12 +440,12 @@ export class CBackend implements backend.Backend {
                     if (!p.pkgPath) {
                         throw "Implementation error";
                     }
-                    name = p.pkgPath + "/" + name;                    
+                    name = p.pkgPath + "/" + name;
                     name = this.mangleName(name);
                     name = "s_" + name;
                     let call = new CFunctionCall();
                     call.funcExpr = new CConst(name);
-                    main.body.push(call);                
+                    main.body.push(call);
                 }
             }
 
@@ -467,7 +467,7 @@ export class CBackend implements backend.Backend {
         return this.symbols.length - 1;
     }
 
-    public addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number {        
+    public addInterfaceDescriptor(name: string, table: Array<Function | FunctionImport>): number {
         let namesTable: Array<CConst> = [];
         for (let f of table) {
             if (f instanceof Function) {
@@ -503,7 +503,7 @@ export class CBackend implements backend.Backend {
                 str += "[" + f[2].toString() + "]" + this.typecode(f[1]) + ",";
             }
             str += "}";
-            return str;          
+            return str;
         }
         return this.mapType(t).code;
     }
@@ -567,7 +567,7 @@ export class CBackend implements backend.Backend {
         if (t instanceof ssa.PointerType) {
             if (cstyle) {
                 if (t.isConst) {
-                    return new CType("const void*");                    
+                    return new CType("const void*");
                 }
                 return new CType("void*");
             }
@@ -654,7 +654,7 @@ export class CBackend implements backend.Backend {
             e.operator = "=";
             e.lExpr = this.emitExprIntern(n.assign);
             e.rExpr = c;
-            return e;    
+            return e;
         }
         return c;
     }
@@ -693,7 +693,7 @@ export class CBackend implements backend.Backend {
         if (n instanceof ssa.Variable) {
             if (this.globalStorage && this.globalStorage.has(n) && !generateConstants) {
                 let name = this.globalStorage.get(n);
-                return new CConst(name);                    
+                return new CConst(name);
             }
             if (this.varStorage && this.varStorage.has(n) && !generateConstants) {
                 let name = this.varStorage.get(n);
@@ -710,7 +710,7 @@ export class CBackend implements backend.Backend {
                 return this.emitExprIntern(n.constantValue);
             } else if (n.isConstant && typeof(n.constantValue) == "number") {
                 if (n.type == "f32") {
-                    return new CConst(n.constantValue.toString() + "f");                    
+                    return new CConst(n.constantValue.toString() + "f");
                 }
                 return this.emitExprIntern(<number>n.constantValue);
             } else if (n.isConstant) {
@@ -734,7 +734,7 @@ export class CBackend implements backend.Backend {
                 throw "Implementation error"
             }
             if (!(n.args[0] instanceof ssa.Variable)) {
-                throw "Implementation error"                    
+                throw "Implementation error"
             }
             let e = new CUnary();
             e.operator = "&";
@@ -1138,7 +1138,7 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "div_s" || n.kind == "shr_s" || n.kind == "rem_s" || n.kind == "lt_s" || n.kind == "gt_s" || n.kind == "le_s" || n.kind == "ge_s") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
                 throw "Implementation error"
-            }            
+            }
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
             e.lExpr = this.emitExpr(n.args[0]);
@@ -1157,7 +1157,7 @@ export class CBackend implements backend.Backend {
                 t.expr = e.rExpr;
                 e.rExpr = t;
             }
-            return e;            
+            return e;
         } else if (n.kind == "div_u" || n.kind == "shr_u" || n.kind == "rem_u" || n.kind == "lt_u" || n.kind == "gt_u" || n.kind == "le_u" || n.kind == "ge_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
                 throw "Implementation error"
@@ -1180,11 +1180,11 @@ export class CBackend implements backend.Backend {
                 t.expr = e.rExpr;
                 e.rExpr = t;
             }
-            return e;            
+            return e;
         } else if (n.kind == "wrap" || n.kind == "extend") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
                 throw "Implementation error"
-            }            
+            }
             let e = new CTypeCast();
             e.type = this.mapType(n.type);
             e.expr = this.emitExpr(n.args[0]);
@@ -1192,11 +1192,11 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "convert32_s" || n.kind == "convert32_u" || n.kind == "convert64_s" || n.kind == "convert64_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
                 throw "Implementation error"
-            }            
+            }
             let e = new CTypeCast();
             e.type = this.mapType(n.type);
             e.expr = this.emitExpr(n.args[0]);
-            return e;            
+            return e;
         } else if (n.kind == "alloc") {
             let t = this.mapType(n.type);
             let m = new CFunctionCall();
@@ -1218,7 +1218,7 @@ export class CBackend implements backend.Backend {
                 let cast = new CTypeCast();
                 cast.type = new CType("fyr_dtr_t");
                 cast.expr = this.emitExpr(n.args[1]);
-                m.args = [this.emitExpr(n.args[0]), cast];    
+                m.args = [this.emitExpr(n.args[0]), cast];
             }
             return m;
         } else if (n.kind == "decref") {
@@ -1236,7 +1236,7 @@ export class CBackend implements backend.Backend {
                 let cast = new CTypeCast();
                 cast.type = new CType("fyr_dtr_t");
                 cast.expr = this.emitExpr(n.args[1]);
-                m.args = [this.emitExpr(n.args[0]), cast];    
+                m.args = [this.emitExpr(n.args[0]), cast];
             }
             return m;
         } else if (n.kind == "incref") {
@@ -1259,7 +1259,7 @@ export class CBackend implements backend.Backend {
                 let cast = new CTypeCast();
                 cast.type = new CType("fyr_dtr_t");
                 cast.expr = this.emitExpr(n.args[1]);
-                m.args = [this.emitExpr(n.args[0]), cast];    
+                m.args = [this.emitExpr(n.args[0]), cast];
             }
             return m;
         } else if (n.kind == "lock") {
@@ -1304,7 +1304,7 @@ export class CBackend implements backend.Backend {
                 let cast = new CTypeCast();
                 cast.type = new CType("fyr_dtr_t");
                 cast.expr = this.emitExpr(n.args[1]);
-                m.args = [this.emitExpr(n.args[0]), cast];    
+                m.args = [this.emitExpr(n.args[0]), cast];
             }
             return m;
         } else if (n.kind == "decref_arr") {
@@ -1409,7 +1409,7 @@ export class CBackend implements backend.Backend {
             }
             if (idx < 0 || idx >= this.symbols.length) {
                 throw "Implementation error";
-            }            
+            }
             let name = this.symbols[idx];
             return this.module.symbols.get(name);
         }
@@ -1518,7 +1518,7 @@ export class CBackend implements backend.Backend {
                 this.blockStack.unshift(b);
                 this.emitCode(n.next[0], n.blockPartner, code);
                 this.blockStack.shift();
-                code.push(new CComment("end of block"));                
+                code.push(new CComment("end of block"));
                 let s = new CLabel(b);
                 code.push(s);
                 n = n.blockPartner.next[0];
@@ -1644,7 +1644,7 @@ export class CBackend implements backend.Backend {
                 call.funcExpr = new CConst("fyr_move_arr");
                 call.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1]), this.emitExpr(n.args[2]), this.emitExpr(n.args[3]), new CConst(f.func.name)];
                 code.push(call);
-                n = n.next[0];            
+                n = n.next[0];
             } else if (n.kind == "println") {
                 this.includeStdioHeaderFile();
                 let call = new CFunctionCall();
@@ -1757,7 +1757,7 @@ export class CBackend implements backend.Backend {
                 args[0] = new CConst(f);
                 call.args = args;
                 code.push(call);
-                n = n.next[0];            
+                n = n.next[0];
             } else if (n.kind == "set_member") {
                 let m = new CBinary();
                 m.operator = ".";
@@ -1785,7 +1785,7 @@ export class CBackend implements backend.Backend {
                 code.push(this.emitExpr(n));
                 n = n.next[0];
             }
-        }        
+        }
     }
 
     private analyzeVariableStorage(start: Node, end: Node) {
@@ -1806,20 +1806,20 @@ export class CBackend implements backend.Backend {
                 }
                 this.returnVariables.push(n.assign);
                 this.varStorage.set(n.assign, name);
-                n = n.next[0];                
+                n = n.next[0];
                 continue;
             } else if (n.kind == "decl_param") {
                 let p = new CFunctionParameter();
                 p.name = "v_" + n.assign.name;
                 p.type = this.mapType(n.type);
-                this.varStorage.set(n.assign, p.name);                
+                this.varStorage.set(n.assign, p.name);
                 this.currentFunction.func.parameters.push(p);
                 this.parameterVariables.push(n.assign);
-                n = n.next[0];                
+                n = n.next[0];
                 continue;
             } else if (n.kind == "decl_var") {
                 if (n.assign.readCount == 0 && n.assign.writeCount == 0) {
-                    n = n.next[0];                
+                    n = n.next[0];
                     continue;
                 }
             }
@@ -1837,7 +1837,7 @@ export class CBackend implements backend.Backend {
                 this.analyzeVariableStorage(n.next[1], n.blockPartner);
                 n = n.next[0];
             } else {
-                n = n.next[0];                
+                n = n.next[0];
             }
         }
         if (resultTypes.length != 0) {
@@ -1846,7 +1846,7 @@ export class CBackend implements backend.Backend {
                 s.addField(r[0], r[1]);
             }
             this.currentFunction.func.returnType = this.mapType(s);
-        }            
+        }
     }
 
     private assignVariableStorage(v: Variable): void {
@@ -1872,7 +1872,7 @@ export class CBackend implements backend.Backend {
         } else if (v.isConstant) {
             if (typeof(v.constantValue) == "string" || typeof(v.constantValue) == "number") {
                 return;
-            }    
+            }
             if (name.substr(0, 1) == "%") {
                 name = "s" + prefix + name.substr(1);
             } else {
@@ -1938,12 +1938,12 @@ export class CModule {
             headerFile = path.join(pkg.objFilePath, pkg.objFileName + ".h");
         }
         str += "#include \"" + headerFile + "\"\n";
-        str += "\n";     
+        str += "\n";
         for(let s of this.strings.values()) {
             str += s.toString() + "\n\n";
         }
         for(let c of this.elements) {
-            if (c instanceof CType) {                
+            if (c instanceof CType) {
             } else if (c instanceof CFunction) {
                 if (!c.isPossibleDuplicate) {
                     str += c.toString() + "\n\n";
@@ -2035,7 +2035,7 @@ export class CModule {
         }
         let s = new CString(str);
         this.strings.set(str, s);
-        return s;        
+        return s;
     }
 
     public includes: Array<CInclude> = [];
@@ -2057,7 +2057,7 @@ export abstract class CNode {
 export class CExtern extends CNode {
     constructor(v: CVar) {
         super();
-        this.v = v;        
+        this.v = v;
     }
 
     public toString(indent: string = ""): string {
@@ -2094,12 +2094,12 @@ export class CString extends CNode {
             var charcode = str.charCodeAt(i);
             if (charcode < 0x80) utf8.push(charcode);
             else if (charcode < 0x800) {
-                utf8.push(0xc0 | (charcode >> 6), 
+                utf8.push(0xc0 | (charcode >> 6),
                           0x80 | (charcode & 0x3f));
             }
             else if (charcode < 0xd800 || charcode >= 0xe000) {
-                utf8.push(0xe0 | (charcode >> 12), 
-                          0x80 | ((charcode>>6) & 0x3f), 
+                utf8.push(0xe0 | (charcode >> 12),
+                          0x80 | ((charcode>>6) & 0x3f),
                           0x80 | (charcode & 0x3f));
             }
             // surrogate pair
@@ -2110,9 +2110,9 @@ export class CString extends CNode {
                 // 20 bits of 0x0-0xFFFFF into two halves
                 charcode = 0x10000 + (((charcode & 0x3ff)<<10)
                           | (str.charCodeAt(i) & 0x3ff))
-                utf8.push(0xf0 | (charcode >>18), 
-                          0x80 | ((charcode>>12) & 0x3f), 
-                          0x80 | ((charcode>>6) & 0x3f), 
+                utf8.push(0xf0 | (charcode >>18),
+                          0x80 | ((charcode>>12) & 0x3f),
+                          0x80 | ((charcode>>6) & 0x3f),
                           0x80 | (charcode & 0x3f));
             }
         }
@@ -2138,7 +2138,7 @@ export class CFunction extends CNode {
         for(let s of this.strings.values()) {
             str += s.toString() + "\n\n";
         }
-        str += "\n";     
+        str += "\n";
 
         str += indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
         str += this.body.map(function(c: CNode) { return c.toString(indent + "    ") + ";"}).join("\n");
@@ -2155,7 +2155,7 @@ export class CFunction extends CNode {
         }
         let s = new CString(str);
         this.strings.set(str, s);
-        return s;        
+        return s;
     }
 
     public name: string;
@@ -2185,7 +2185,7 @@ export class CType {
 
     public code: string;
 }
-    
+
 export class CFunctionType extends CType {
     constructor (returnType: CType, parameters: Array<CType>) {
         let str = "";
@@ -2219,8 +2219,8 @@ export class CUnary extends CNode {
         if (this.operator == "sizeof") {
             return indent + "sizeof(" + this.expr.toString("") + ")";
         }
-        if (this.precedence() <= this.expr.precedence()) {            
-            return indent + this.operator + (this.expr.toString(""));            
+        if (this.precedence() <= this.expr.precedence()) {
+            return indent + this.operator + (this.expr.toString(""));
         }
         return indent + this.operator + this.expr.toString("");
     }
@@ -2348,7 +2348,7 @@ export class CTypeCast extends CNode {
     public toString(indent: string = ""): string {
         if (this.precedence() <= this.expr.precedence()) {
             return indent + "(" + this.type.toString() + ")(" + this.expr.toString("") + ")";
-        }            
+        }
         return indent + "(" + this.type.toString() + ")" + this.expr.toString("");
     }
 
@@ -2452,7 +2452,7 @@ export class CGoto extends CNode {
     public name: string;
 }
 
-export class CCompoundLiteral extends CNode {    
+export class CCompoundLiteral extends CNode {
     public toString(indent: string = ""): string {
         return indent + "{" + this.values.map(function (c: CNode) { return c.toString("")}).join(", ") + "}";
     }

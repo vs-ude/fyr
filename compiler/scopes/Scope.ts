@@ -48,7 +48,7 @@ export class Scope {
 
     /**
      * @param name
-     * @param element 
+     * @param element
      */
     public registerType(name: string, type: Type, loc: Location = null): void {
         if (this.elements.has(name)) {
@@ -64,7 +64,7 @@ export class Scope {
 
     /**
      * @param name
-     * @param element 
+     * @param element
      */
     public registerElement(name: string, element: ScopeElement, loc: Location = null): void {
         if (this.elements.has(name)) {
@@ -171,7 +171,7 @@ export class Scope {
         // No join necessary?
         if (b1 == b2) {
             return b1
-        }        
+        }
 
         b1 = b1.preJoin(this, loc, doThrow)
         b2 = b2.preJoin(this, loc, doThrow)
@@ -207,7 +207,7 @@ export class Scope {
 
         for(let g of scope.canonicalGroups.keys()) {
             let c1 = this.resolveCanonicalGroup(g)
-            let c2 = scope.resolveCanonicalGroup(g);            
+            let c2 = scope.resolveCanonicalGroup(g);
             if (g == c1) {
                 this.canonicalGroups.set(g, c2)
             } else if (c1 != c2) {
@@ -368,7 +368,7 @@ export class ScopeExit {
             this.breaks = this.breaks.concat(s.breaks)
         }
     }
-    
+
     public returns: Array<Scope>
     public breaks: Array<Scope>
     public continues: Array<Scope>

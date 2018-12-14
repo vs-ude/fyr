@@ -14,7 +14,7 @@ export class TemplateFunction implements ScopeElement {
     public name: string
     public type: TemplateType
     public namedReturnTypes: boolean
-    public loc: Location;   
+    public loc: Location;
     public importFromModule: string
     public isExported: boolean
     // If the TemplateFunction represents a method of a template struct,

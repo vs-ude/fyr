@@ -9,7 +9,7 @@ export class SliceType extends Type {
         this.arrayType = arrayType
         this.mode = mode
     }
-    
+
     public array(): ArrayType {
         if (this.arrayType instanceof ArrayType) {
             return this.arrayType
@@ -21,9 +21,9 @@ export class SliceType extends Type {
         if (this.arrayType instanceof ArrayType) {
             return this.arrayType.elementType
         }
-        return (this.arrayType.elementType as ArrayType).elementType;    
+        return (this.arrayType.elementType as ArrayType).elementType;
     }
-    
+
     public toString(): string {
         if (this.name) {
             return this.name
@@ -42,7 +42,7 @@ export class SliceType extends Type {
     public toTypeCodeString(): string {
         return this.mode.toString() + "[]" + this.array().elementType.toString()
     }
-    
+
     public mode: PointerMode
     // If the size of the underlying array is -1, then its size is dynamic
     public arrayType: ArrayType | RestrictedType

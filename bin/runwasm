@@ -34,8 +34,8 @@ function loadWebAssembly(filename, imports) {
     return WebAssembly.compile(buffer)
     .then(module => {
         const memory = new WebAssembly.Memory({initial: 510});
-        const memory_u32 = new Uint32Array(memory.buffer);   
-        const decoder = new StringDecoder('utf8');        
+        const memory_u32 = new Uint32Array(memory.buffer);
+        const decoder = new StringDecoder('utf8');
         const importObject = {
             imports: {
                 logString: function(offset, sp) {
@@ -52,7 +52,7 @@ function loadWebAssembly(filename, imports) {
                 mem: memory
             }
         };
-        
+
         // Create the instance.
         return new WebAssembly.Instance(module, importObject)
     })

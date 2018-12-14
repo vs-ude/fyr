@@ -19,7 +19,7 @@
         loc.file = ast.currentFile();
         return loc;
     }
- 
+
     function runesToString(runes) {
         for(var i = 0, s = ''; i < runes.length; i++) {
             if (runes[i].op == "runeQ1") {
@@ -49,7 +49,7 @@ file
                 }
                 result.push(x);
             } else if (x.op == "import" || x.op == "export_as" || x.op == "build") {
-                result.push(x);                
+                result.push(x);
             }
         }
         return new ast.Node({loc: fl(location()), op: "file", statements: result});
@@ -164,7 +164,7 @@ func
       } else {
           scope = obj[0];
           name = obj[4];
-      }      
+      }
       let op = ex ? "export_func" : "func";
       if (async) {
           if (op == "export_func") {
@@ -313,7 +313,7 @@ primitiveType
       if (e) {
         t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
       }
-      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t ? t : [], rhs: f});      
+      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t ? t : [], rhs: f});
     }
   / "*" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
@@ -356,7 +356,7 @@ primitiveType
       }
       if (g) {
           return new ast.Node({loc: fl(location()), op: "genericType", genericParameters: g[3], lhs: i, nspace: nspace});
-      } 
+      }
       i.nspace = nspace;
       i.op = "basicType";
       return i;
@@ -389,7 +389,7 @@ interfaceMembers
           return [i];
       }
       return [i].concat(m);
-  } 
+  }
 
 interfaceMember
   = async:("async" [ \t+])? "func" [ \t]* scope:ifaceObjectType? [ \t]* name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
@@ -452,7 +452,7 @@ structFields
           return [i];
       }
       return [i].concat(m);
-  } 
+  }
 
 structField
   = "extends" [ \t]+ t:type [ \t]* semicolon {
@@ -484,7 +484,7 @@ block
 
 statementOrComment
   = c:comment [ \n\t]* { return c; }
-  / s:statement [ \t]* c:semicolon { if (c) { s.comments = [c]; } return s; } 
+  / s:statement [ \t]* c:semicolon { if (c) { s.comments = [c]; } return s; }
 
 comments
   = c:([ \t]* comment)+ {
@@ -553,12 +553,12 @@ statement
     }
   / "push" [ \t]* "(" e:expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "push", parameters: e});
-    }    
+    }
   / "append" [ \t]* "(" e: expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "append", parameters: e});
     }
 
-  / s: simpleStatement { 
+  / s: simpleStatement {
       if (s.op == "let_in") {
           error("'in' is allowed inside a for loop header only", s.loc);
       }
@@ -818,7 +818,7 @@ elseBranch
       }
       return new ast.Node({loc: fl(location()), op: "if", condition: e ? e[3] : init, lhs: e ? init : undefined, statements: b, elseBranch: el ? el[2] : undefined});
     }
-  / b: block { return new ast.Node({loc: fl(location()), op: "else", statements: b}); } 
+  / b: block { return new ast.Node({loc: fl(location()), op: "else", statements: b}); }
 
 expression
   = c: logicOr { return c; }
@@ -896,7 +896,7 @@ additive
       }
       return left;
     }
-  
+
 additive2
   = "+" ![=+] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "+", rhs:right}); }
   / "-" ![=-] [ \t\n]* right:multiplicative { return new ast.Node({loc: fl(location()), op: "-", rhs:right}); }
@@ -995,10 +995,10 @@ primary
 primary2
   = "tryPush" [ \t]* "(" e: expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "tryPush", parameters: e});
-    }    
+    }
   / "pop" [ \t]* "(" [ \t\n]* e: expression ")" {
       return new ast.Node({loc: fl(location()), op: "pop", lhs: e});
-    }       
+    }
   / t: typedLiteral { return t; }
   / c: typeCast { return c; }
   / n: number { return n; }
@@ -1053,7 +1053,7 @@ primary2
   / a:array { return a; }
   / r:rune { return r; }
   / "println" [ \t]* "(" a:expressionListWithNewlines ")" {
-      return new ast.Node({loc: fl(location()), op: "println", parameters: a}); 
+      return new ast.Node({loc: fl(location()), op: "println", parameters: a});
     }
 
 array
@@ -1136,7 +1136,7 @@ identifierList
   }
 
 identifier "identifier"
-  = i:$([a-zA-Z][a-zA-Z_0-9]*) & { 
+  = i:$([a-zA-Z][a-zA-Z_0-9]*) & {
       return !isKeyword(i);
     } {
       return new ast.Node({loc: fl(location()), op: "id", value: i});
@@ -1217,7 +1217,7 @@ runecharSpecial
     }
   / s:$("\\U" [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f]) {
       return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 16)});
-    }  
+    }
   / s:$("\\" [0-7] [0-7] [0-7]) {
       return new ast.Node({loc: fl(location()), op: "rune", value: s, numValue: parseInt(s.substr(2), 8)});
-    }    
+    }

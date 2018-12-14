@@ -5,7 +5,7 @@ import { Type } from './Type'
 export class ObjectLiteralType extends Type {
     constructor(types: Map<string, Type>) {
         super()
-        this.types = types;        
+        this.types = types;
     }
 
     public toTypeCodeString(): string {

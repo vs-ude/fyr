@@ -28,7 +28,7 @@ export class TemplateType extends Type {
         let g = "<"
         let lst = []
         for(let i = 0; i < this.templateParameterNames.length; i++) {
-            let s = this.templateParameterNames[i];            
+            let s = this.templateParameterNames[i];
             if (this.templateParameterTypes[i]) {
                 s += " is " + this.templateParameterTypes[i].toString()
             }

@@ -45,7 +45,7 @@ export class RestrictedType extends Type {
         }
         return str + this.elementType.toString()
     }
-    
+
     public elementType: Type
     public isConst?: boolean
 }

@@ -17,7 +17,7 @@ export enum AstFlags {
     ReferenceObjectMember = 2,
     // Used on array literals. Indicates that the array literal is incomplete
     // and implies that the variable (to which this literal is assigned) must be
-    // filled with zero's first. 
+    // filled with zero's first.
     FillArray = 4,
     EmptyOnAssignment = 8
 }
@@ -124,7 +124,7 @@ export class Node {
             str += prefix + "-genericParameters:" + "\n";
             for(let s of this.genericParameters) {
                 str += s.stringify(prefix + "  ");
-            }            
+            }
         }
         if (this.parameters) {
             str += prefix + "-parameters:" + "\n";
@@ -161,7 +161,7 @@ export class Node {
         if (this.op == "array" || this.op == "object" || this.op == "tuple" || this.op == "null") {
             if (this.lhs) { // a typed literal?
                 return false;
-            } 
+            }
             return true;
         }
         if (this.op == "unary&" && this.rhs.isUnifyableLiteral()) {

@@ -3,12 +3,12 @@ import {Package} from "./pkg"
 
 export interface FunctionImport {
     getIndex(): number;
-    isImported(): boolean;    
+    isImported(): boolean;
 }
 
 export interface Function {
     getIndex(): number;
-    isImported(): boolean;    
+    isImported(): boolean;
 }
 
 export interface Backend {

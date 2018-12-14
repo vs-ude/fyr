@@ -16,7 +16,7 @@ export class ArrayType extends Type {
             return this.name
         }
         if (this.size === null) {
-            return "[...]" + this.elementType.toString();    
+            return "[...]" + this.elementType.toString();
         }
         return "[" + this.size.toString() + "]" + this.elementType.toString()
     }
@@ -37,7 +37,7 @@ export class ArrayType extends Type {
 export class ArrayLiteralType extends Type {
     constructor(types: Array<Type>) {
         super()
-        this.types = types;        
+        this.types = types;
     }
 
     public toString() : string {

@@ -92,7 +92,7 @@ export enum GroupCheckFlags {
     ForbidIsolates = 2,
     IsolatesMask = 3,
     NotIsolateMask = 255 - ForbidIsolates - AllowIsolates,
-    NoSideEffects = 4,    
+    NoSideEffects = 4,
     AllowUnavailableVariable = 8,
-    AllowUnavailableVariableMask = 255 - AllowUnavailableVariable,    
+    AllowUnavailableVariableMask = 255 - AllowUnavailableVariable,
 }

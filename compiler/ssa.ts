@@ -43,7 +43,7 @@ export class StructType {
         }
         return offset;
     }
-    
+
     public fieldNameByIndex(index: number): string {
         return this.fields[index][0];
     }
@@ -115,7 +115,7 @@ export function alignmentOf(x: Type | StructType | PointerType): number {
             return 8;
         case "int":
         case "sint":
-            return intSize;        
+            return intSize;
     }
 }
 
@@ -357,7 +357,7 @@ export class Node {
             } else {
                 this.args.push(a);
             }
-        }        
+        }
     }
 
     public toString(indent: string): string {
@@ -368,7 +368,7 @@ export class Node {
         str += this.kind + " ";
         if (this.name) {
             str += this.name + " ";
-        }            
+        }
         if (this.type) {
             str += this.type.toString() + " ";
         }
@@ -488,11 +488,11 @@ export class Builder {
 
         let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
-        n.blockPartner = e;  
+        n.blockPartner = e;
         this.countReadsAndWrites(n);
         return n;
     }
-    
+
     public declareParam(type: Type | StructType | PointerType, name: string): Variable {
         let n = new Node(new Variable(name), "decl_param", type, []);
         n.assign.type = type;
@@ -573,7 +573,7 @@ export class Builder {
         if (assign && assign.type) {
             if (!compareTypes(assign.type, type.result)) {
                 throw "Variable " + assign.name + " used with wrong type";
-            }        
+            }
             n.assignType = assign.type;
         } else if (assign) {
             assign.type = type.result;
@@ -670,7 +670,7 @@ export class Builder {
                 }
                 n.blockPartner = to;
                 this._current = n;
-                return;                
+                return;
             }
             j++;
         }
@@ -694,7 +694,7 @@ export class Builder {
                 n.blockPartner = to;
                 this._current = n;
                 this.countReadsAndWrites(n);
-                return;                
+                return;
             }
             j++;
         }
@@ -744,8 +744,8 @@ export class Builder {
         this._blocks.push(n);
         let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
-        n.blockPartner = e;  
-        return n;      
+        n.blockPartner = e;
+        return n;
     }
 
     public loop() : Node {
@@ -760,8 +760,8 @@ export class Builder {
         this._blocks.push(n);
         let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
-        n.blockPartner = e;  
-        return n;      
+        n.blockPartner = e;
+        return n;
     }
 
     public end() {
@@ -787,7 +787,7 @@ export class Builder {
         this._blocks.push(n);
         let e = new Node(null, "end", undefined, []);
         e.blockPartner = n;
-        n.blockPartner = e;  
+        n.blockPartner = e;
         this.countReadsAndWrites(n);
         return n;
     }
@@ -969,10 +969,10 @@ export class Optimizer {
                         if (!val) {
                             let next = n.next[1];
                             n.next[1] = n.next[0];
-                            n.next[0] = next;   
+                            n.next[0] = next;
                             let end = n.blockPartner.prev[1];
                             n.blockPartner.prev[1] = n.blockPartner.prev[0];
-                            n.blockPartner.prev[0] = end;     
+                            n.blockPartner.prev[0] = end;
                         }
                         let n2 = n.blockPartner.next[0];
                         this.removeDeadStrain(n.next[1], n.blockPartner);
@@ -994,8 +994,8 @@ export class Optimizer {
                                 x = x2;
                             }
                             Node.removeNode(n.blockPartner);
-                            Node.removeNode(n);            
-                            n = n2;                
+                            Node.removeNode(n);
+                            n = n2;
                         } else {
                             let n2 = n.next[0];
                             if (n2 == n.blockPartner) {
@@ -1003,7 +1003,7 @@ export class Optimizer {
                             }
                             Node.removeNode(n.blockPartner);
                             Node.removeNode(n);
-                            n = n2;                           
+                            n = n2;
                         }
                     }
                     continue;
@@ -1016,7 +1016,7 @@ export class Optimizer {
                 }
             } else if (n.kind == "block" || n.kind == "loop") {
                 this._removeDeadCode2(n.next[0], n.blockPartner);
-                n = n.blockPartner;                
+                n = n.blockPartner;
             }
             n = n.next[0];
         }
@@ -1084,7 +1084,7 @@ export class Optimizer {
                 n = n.blockPartner;
             } else if (n.kind == "decl_var" || n.kind == "decl_result" || n.kind == "decl_param") {
                 n = n.prev[0];
-            } else {                
+            } else {
                 if (n.kind == "alloc" || n.kind == "call" || n.kind == "call_indirect" || n.kind == "call_end" || n.kind == "call_begin" || n.kind == "call_indirect_begin") {
                     if (n.assign && n.assign.type == "ptr") {
                         // The varible is written.
@@ -1109,7 +1109,7 @@ export class Optimizer {
                         } else if (a instanceof Node && a.assignType == "ptr") {
                             if (a.assign) {
                                 a.assign.gcDiscoverable = true;
-                            } else {                                
+                            } else {
                                 a.assign = new Variable();
                                 a.assign.type = "ptr";
                                 a.assign.gcDiscoverable = true;
@@ -1135,7 +1135,7 @@ export class Optimizer {
                             // then the variable must be GC discoverable, since the value on the WASM stack is not discoverable.
                             a.gcDiscoverable = true;
                         } else {
-                            varsRead.add(a);                                                    
+                            varsRead.add(a);
                         }
                     }
                 }
@@ -1160,7 +1160,7 @@ export class Optimizer {
 /**
  * Transforms control flow with loop/block/br/br_if/if into a state machine using
  * step/goto_step/goto_step_if. This happens in all places where execution could block.
- * Non-blocking constructs are left untouched. 
+ * Non-blocking constructs are left untouched.
  */
 export class SMTransformer {
     public transform(startBlock: Node) {
@@ -1187,7 +1187,7 @@ export class SMTransformer {
                     if (step) {
                         let end = new Node(null, "goto_step", undefined, []);
                         step = null;
-                        Node.insertBetween(n.prev[0], n, end);                        
+                        Node.insertBetween(n.prev[0], n, end);
                     }
                     n = n.next[0];
                 } else {
@@ -1219,7 +1219,7 @@ export class SMTransformer {
                     } else {
                         let end = new Node(null, "goto_step", undefined, []);
                         step = null;
-                        Node.insertBetween(n.prev[elseClause ? 1 : 0], n, end);                        
+                        Node.insertBetween(n.prev[elseClause ? 1 : 0], n, end);
                     }
                 }
                 if (n == endNode) {
@@ -1269,7 +1269,7 @@ export class SMTransformer {
                     let end = new Node(null, "goto_step", undefined, []);
                     step = null;
                     Node.insertBetween(n, n.next[0], end);
-                    n = end.next[0];                    
+                    n = end.next[0];
                 } else {
                     n = n.next[0];
                 }
@@ -1307,7 +1307,7 @@ export class SMTransformer {
                 this.insertNextStepsUpTo(n.next[1]);
                 n = n.next[0];
             } else {
-                n = n.next[0];                
+                n = n.next[0];
             }
         }
     }
@@ -1325,7 +1325,7 @@ export class SMTransformer {
                 Node.removeNode(n);
                 n = n2;
             } else {
-                n = n.next[0];                
+                n = n.next[0];
             }
         }
     }
@@ -1359,7 +1359,7 @@ export class Stackifier {
                             inline.assign = null;
                             if (inline.kind == "const") {
                                 n.args[i] = inline.args[0];
-                            } else {    
+                            } else {
                                 n.args[i] = inline;
                             }
                             Node.removeNode(inline);
@@ -1445,7 +1445,7 @@ export class Stackifier {
                 }
                 if (this.readsFromVariables(n, assigned)) {
                     return null;
-                }                
+                }
                 return n;
             } else if (n.assign) {
                 if (this.collectAssignments(n, v, assigned)) {
