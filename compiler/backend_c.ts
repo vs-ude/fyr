@@ -340,24 +340,32 @@ export class CBackend implements backend.Backend {
 
             if (f.isAsync()) {
                 let implFunc: CFunction  = new CFunction();
+                implFunc.returnType = new CType("int");
                 let p = new CFunctionParameter();
                 p.name = "state";
                 p.type = new CType("void*");
-                this.currentCFunction = implFunc;
-                this.emitCode(f.node.next[0], null, code);
-                this.currentCFunction = null;
+                implFunc.parameters.push(p);
+                implFunc.name = "impl_" + f.func.name;
+                if (f.node.next[0]) {
+                    this.currentCFunction = implFunc;
+                    this.emitCode(f.node.next[0], null, code);
+                    this.currentCFunction = null;
+                }
                 implFunc.body = code;
                 this.module.elements.push(implFunc);
 
                 let code2: Array<CNode> = [];
-
+                // TODO: Return type
+                f.func.returnType = new CType("int");
                 f.func.body = code2;
                 this.module.elements.push(f.func);
 
             } else {
-                this.currentCFunction = f.func;
-                this.emitCode(f.node.next[0], null, code);
-                this.currentCFunction = null;
+                if (f.node.next[0]) {
+                    this.currentCFunction = f.func;
+                    this.emitCode(f.node.next[0], null, code);
+                    this.currentCFunction = null;
+                }
                 f.func.body = code;
                 this.module.elements.push(f.func);
             }
@@ -803,6 +811,46 @@ export class CBackend implements backend.Backend {
                 return conv;
             }
             return c;
+        } else if (n.kind == "call_begin") {
+            if (!(n.type instanceof FunctionType)) {
+                throw "Implementation error"
+            }
+            let c = new CFunctionCall();
+            let f = this.funcs[n.args[0] as number];
+            if (f instanceof FunctionImport) {
+                c.funcExpr = new CConst(f.name);
+            } else {
+                c.funcExpr = new CConst(f.func.name);
+            }
+            for(let i = 1; i < n.args.length; i++) {
+                let a = n.args[i];
+                let e = this.emitExpr(a);
+                if (f instanceof FunctionImport) {
+                    let ctype = this.mapType(n.type.params[i-1], true);
+                    let fyrtype = this.mapType(n.type.params[i-1]);
+                    if (ctype != fyrtype) {
+                        let tcast = new CTypeCast();
+                        tcast.type = ctype;
+                        tcast.expr = e;
+                        e = tcast;
+                    }
+                }
+                c.args.push(e);
+            }
+            let cond = new CIf(c);
+            let r = new CReturn();
+            r.expr = new CConst("1");
+            cond.body = [r];
+            return cond;
+        } else if (n.kind == "call_end") {
+            if (!(n.type instanceof FunctionType)) {
+                throw "Implementation error"
+            }
+            if (n.type.result) {
+                // TODO:            
+                return new CComment("TODO");
+            }
+            return new CComment("No return value to handle");
         } else if (n.kind == "call_indirect") {
             if (!(n.type instanceof FunctionType)) {
                 throw "Implementation error"
@@ -1475,7 +1523,27 @@ export class CBackend implements backend.Backend {
                 code.push(s);
                 n = n.blockPartner.next[0];
             } else if (n.kind == "yield") {
-                throw "TODO";
+                // TODO
+                let r = new CReturn();
+                r.expr = new CConst("1");
+                code.push(r);
+                n = n.next[0];
+            } else if (n.kind == "step") {
+                let stepname = "step_" + n.name;
+                let s = new CLabel(stepname);
+                code.push(s);
+                n = n.next[0];
+            } else if (n.kind == "goto_step") {
+                if (n.name == "<end>") {
+                    let r = new CReturn();
+                    r.expr = new CConst("0");
+                    code.push(r);
+                } else {
+                    let stepname = "step_" + n.name;
+                    let s = new CGoto(stepname);
+                    code.push(s);
+                }
+                n = n.next[0];            
             } else if (n.kind == "store") {
                 if (n.type instanceof FunctionType) {
                     throw "Implementation error"
