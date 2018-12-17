@@ -853,6 +853,7 @@ export class Optimizer {
 
     /**
      * Removes all 'const' nodes which assign to variables that are SSA.
+     * Those variables are marked with isConstant.
      */
     private _optimizeConstants(start: Node, end: Node) {
         let n = start;
@@ -862,19 +863,22 @@ export class Optimizer {
                     this._optimizeConstants(n.next[1], n.blockPartner);
                 }
             }
-            if (n.kind == "const" && n.assign.writeCount == 1 && !n.assign.addressable) {
+            if ((n.kind == "const" || (n.kind == "copy" && typeof(n.args[0]) == "number")) && n.assign.writeCount == 1 && !n.assign.addressable) {
+                // A variable that is assigned once with a constant, can be treated like a constant.
                 n.assign.isConstant = true;
                 n.assign.constantValue = n.args[0] as number;
+                n.assign.writeCount--;
                 let n2 = n.next[0];
                 Node.removeNode(n);
                 n = n2;
             } else {
-              /*  for(let i = 0; i < n.args.length; i++) {
+                for(let i = 0; i < n.args.length; i++) {
                     let a = n.args[i];
                     if (a instanceof Variable && a.isConstant && typeof(a.constantValue) == "number") {
                         n.args[i] = a.constantValue;
+                        a.readCount--;
                     }
-                } */
+                }
                 n = n.next[0];
             }
             // TODO: Computations on constants can be optimized
@@ -903,7 +907,16 @@ export class Optimizer {
                 n.assign = null;
             } else if (n.kind == "end" && n.prev[1]) { // The 'end' belongs to an 'if'?
                 this._removeDeadCode1(n.prev[1], n.blockPartner);
-            } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var" || n.kind == "return") {
+            } else if (n.kind == "decl_var") {
+                // Remove variables that are never assigned and never read.
+                // This can happen if a previous step inlined it.
+                if (n.assign.writeCount == 0 && n.assign.readCount == 0) {
+                    let n2 = n.prev[0];
+                    Node.removeNode(n);
+                    n = n2;
+                    continue;    
+                }
+            } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "return") {
                 // Do nothing by intention
             } else if (n.kind == "copy" && n.assign.writeCount == 1 && n.args[0] instanceof Variable && (n.args[0] as Variable).writeCount == 1 && (n.args[0] as Variable).readCount == 1) {
                 let v = n.args[0] as Variable;
