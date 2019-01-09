@@ -1,4 +1,4 @@
-#!/usr/bash
+#!/bin/bash
 
 ####
 # This is a simple testing script. It assumes that an exit code of 0 implies successful compilation
