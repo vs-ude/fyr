@@ -18,10 +18,25 @@
             "label": "Run test script",
             "type": "shell",
             "command": "./run_tests.sh",
+            "group": "test"
+        },
+        {
+            "type": "npm",
+            "script": "test",
             "group": {
                 "kind": "test",
                 "isDefault": true
             }
+        },
+        {
+            "type": "npm",
+            "script": "test-watch",
+            "problemMatcher": []
+        },
+        {
+            "type": "npm",
+            "script": "test-coverage",
+            "problemMatcher": []
         }
     ]
 }

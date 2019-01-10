@@ -15,7 +15,6 @@
         "typeRoots": ["node_modules/@types"]
     },
     "include": [
-        "compiler/*.ts",
-        "compiler/types/*.ts"
+        "compiler/**/*.ts"
     ]
 }

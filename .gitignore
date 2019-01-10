@@ -30,3 +30,5 @@ src/strconv/*.h
 src/testme/testme
 bin/darwin*
 bin/linux*
+.nyc_output
+/coverage/

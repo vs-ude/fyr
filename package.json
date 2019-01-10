@@ -5,7 +5,9 @@
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "mocha --require ts-node/register 'compiler/**/*.test.ts'",
+    "test-watch": "mocha --require ts-node/register 'compiler/**/*.test.ts' --watch --watch-extensions ts --reporter min",
+    "test-coverage": "nyc --reporter=text mocha --require ts-node/register 'compiler/**/*.test.ts'",
     "build:parser": "pegjs -o lib/parser.js compiler/parser.pegjs",
     "build:js": "tsc",
     "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c",
@@ -26,8 +28,15 @@
     "text-encoding": "^0.6.4"
   },
   "devDependencies": {
+    "@types/chai": "^4.1.7",
     "@types/colors": "^1.2.1",
+    "@types/mocha": "^5.2.5",
     "@types/node": "^8.0.0",
-    "pegjs": "^0.10.0"
+    "chai": "^4.2.0",
+    "mocha": "^5.2.0",
+    "nyc": "^13.1.0",
+    "pegjs": "^0.10.0",
+    "ts-node": "^7.0.1",
+    "typescript": "^3.2.2"
   }
 }
