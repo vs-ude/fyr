@@ -10,7 +10,12 @@
     },
     "npm.enableScriptExplorer": true,
     "files.associations": {
-        "stdio.h": "c"
+        "*.h": "c"
     },
-    "C_Cpp.default.includePath": [ "${workspaceFolder}/pkg/darwin-x64" ]
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/pkg/darwin-x64"
+    ],
+    "mocha-snippets.glob": "**/*.spec.ts",
+    "mocha-snippets.semicolon": false,
+    "mocha-snippets.function-type": "arrow"
 }
