@@ -4,4 +4,5 @@
 
 process.argv.splice(2, 0, "compile");
 
-require('../lib/index.js');
+// require('../lib/index.js');
+require('../compiler/index.ts');

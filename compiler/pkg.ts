@@ -6,6 +6,7 @@ import os = require("os");
 import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
+import colors = require('colors');
 import {Function, FunctionParameter, Scope} from "./scopes"
 import { TypeChecker, Static } from './typecheck'
 import {FunctionType, UnsafePointerType} from "./types/";
@@ -14,6 +15,10 @@ import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
 import {CBackend} from "./backend_c";
 import {DummyBackend} from "./backend_dummy";
+
+
+// Make TSC not throw out the colors lib
+colors.red;
 
 export enum SystemCalls {
     heap = -1,

@@ -7,20 +7,19 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug with strconv",
-            "program": "${workspaceFolder}/bin/fyrc",
-            "preLaunchTask": "npm: build",
-            "outFiles": [
-                "${workspaceFolder}/lib/**/*.js"
+            "name": "Debug",
+            "runtimeArgs": [
+                "-r",
+                "ts-node/register"
             ],
-            "cwd":"${workspaceFolder}/src/strconv/",
+            "cwd":"${workspaceFolder}/src/collections/tree",
             "args": [
+                "${workspaceFolder}/bin/fyrc",
                 "-n",
                 "."
             ],
             "env": {
                 "FYRBASE": "${workspaceFolder}",
-                "FYRPATH": "${workspaceFolder}",
             }
         },
         {
