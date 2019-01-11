@@ -12,7 +12,7 @@
     "build:js": "tsc",
     "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c",
     "build": "npm run build:parser && npm run build:js && npm run build:lib",
-    "clean": "rm lib/*"
+    "clean": "rm -rf lib/*"
   },
   "keywords": [
     "fyr",
