@@ -32,3 +32,4 @@ bin/darwin*
 bin/linux*
 .nyc_output
 /coverage/
+/compiler/**/*.js
