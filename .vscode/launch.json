@@ -14,7 +14,7 @@
             ],
             "cwd":"${workspaceFolder}/src/collections/tree",
             "args": [
-                "${workspaceFolder}/bin/fyrc",
+                "${workspaceFolder}/bin/ts-fyrc",
                 "-n",
                 "."
             ],

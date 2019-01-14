@@ -2,6 +2,8 @@
 
 "use strict"
 
+require('ts-node/register')
+
 process.argv.splice(2, 0, "compile");
 
-require('../lib/index.js');
+require('../compiler/index.ts');
