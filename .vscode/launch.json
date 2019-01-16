@@ -7,25 +7,7 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug",
-            "runtimeArgs": [
-                "-r",
-                "ts-node/register"
-            ],
-            "cwd":"${workspaceFolder}/src/collections/tree",
-            "args": [
-                "${workspaceFolder}/bin/ts-fyrc",
-                "-n",
-                "."
-            ],
-            "env": {
-                "FYRBASE": "${workspaceFolder}",
-            }
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Debug with mandelbrot",
+            "name": "Debug compiled: static",
             "program": "${workspaceFolder}/bin/fyrc",
             "preLaunchTask": "npm: build",
             "outFiles": [
@@ -34,30 +16,56 @@
             "cwd":"${workspaceFolder}",
             "args": [
                 "-n",
-                "${workspaceFolder}/src/examples/mandelbrot/mandelbrot.fyr"
+                "${workspaceFolder}/src/collections/tree"
             ],
             "env": {
-                "FYRBASE": "${workspaceFolder}",
-                "FYRPATH": "${workspaceFolder}",
+                "FYRBASE": "${workspaceFolder}"
             }
         },
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug with opengl",
+            "name": "Debug compiled: current",
             "program": "${workspaceFolder}/bin/fyrc",
             "preLaunchTask": "npm: build",
             "outFiles": [
                 "${workspaceFolder}/lib/**/*.js"
             ],
-            "cwd":"${workspaceFolder}/src/examples/opengl/",
+            "cwd":"${workspaceFolder}",
             "args": [
                 "-n",
-                "."
+                "${fileDirname}"
+            ],
+            "env": {
+                "FYRBASE": "${workspaceFolder}"
+            }
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug ts: static",
+            "program": "${workspaceFolder}/bin/ts-fyrc",
+            "cwd":"${workspaceFolder}/",
+            "args": [
+                "-n",
+                "${workspaceFolder}/src/collections/tree"
             ],
             "env": {
                 "FYRBASE": "${workspaceFolder}",
-                "FYRPATH": "${workspaceFolder}",
+            }
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug ts: current",
+            "program": "${workspaceFolder}/bin/ts-fyrc",
+            "cwd":"${workspaceFolder}/",
+            "args": [
+                "-n",
+                "${fileDirname}"
+            ],
+            "env": {
+                "FYRBASE": "${workspaceFolder}",
             }
         }
     ]
