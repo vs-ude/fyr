@@ -22,21 +22,11 @@
         },
         {
             "type": "npm",
-            "script": "test",
+            "script": "test:watch",
             "group": {
                 "kind": "test",
                 "isDefault": true
             }
-        },
-        {
-            "type": "npm",
-            "script": "test-watch",
-            "problemMatcher": []
-        },
-        {
-            "type": "npm",
-            "script": "test-coverage",
-            "problemMatcher": []
         },
         {
             "type": "npm",

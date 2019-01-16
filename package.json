@@ -5,14 +5,17 @@
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
-    "test": "mocha --require ts-node/register 'compiler/**/*.spec.ts'",
-    "test-watch": "mocha --require ts-node/register 'compiler/**/*.spec.ts' --watch --watch-extensions ts --reporter min",
-    "test-coverage": "nyc --reporter=text mocha --require ts-node/register 'compiler/**/*.spec.ts'",
-    "build:parser": "pegjs -o lib/parser.js compiler/parser.pegjs && ln -f -s `pwd`/lib/parser.js ./compiler/parser.js",
+    "test:once": "mocha 'tests/**/*.spec.js'",
+    "test:watch": "mocha 'tests/**/*.spec.js' --watch --reporter min",
+    "test:coverage": "nyc --reporter=text mocha 'tests/**/*.spec.js'",
+    "build:parser": "pegjs -o lib/parser.js compiler/parser.pegjs",
     "build:js": "tsc",
     "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c",
     "build": "npm run build:parser && npm run build:js && npm run build:lib",
-    "clean": "rm -rf lib/*"
+    "build:parser-test": "pegjs -o tests/parser.js compiler/parser.pegjs",
+    "build:test": "npm run build:parser-test && tsc -p tsconfig.tests.json",
+    "build:test-watch": "npm run build:parser-test && tsc -w --pretty false --preserveWatchOutput true -p tsconfig.tests.json",
+    "clean": "rm -rf lib/* tests/*"
   },
   "keywords": [
     "fyr",
@@ -36,7 +39,6 @@
     "mocha": "^5.2.0",
     "nyc": "^13.1.0",
     "pegjs": "^0.10.0",
-    "ts-node": "^7.0.1",
     "typescript": "^3.2.2"
   }
 }

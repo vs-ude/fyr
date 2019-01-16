@@ -20,6 +20,7 @@
     "compiler/**/*.ts"
   ],
   "exclude": [
-    "compiler/**/*.spec.ts"
+    "compiler/**/*.spec.ts",
+    "node_modules"
   ]
 }
