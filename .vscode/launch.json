@@ -67,6 +67,26 @@
             "env": {
                 "FYRBASE": "${workspaceFolder}",
             }
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run/debug tests",
+            "preLaunchTask": "build:test-watch",
+            "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
+            "cwd":"${workspaceFolder}/",
+            "args": [
+                "tests/**/*.spec.js"
+            ],
+            "runtimeArgs": [
+                "--nolazy"
+            ],
+            "sourceMaps": true,
+            "outFiles": ["${workspaceFolder}/tests/**/*.js"],
+            "env": {
+                "FYRBASE": "${workspaceFolder}",
+                "NODE_ENV": "production"
+            }
         }
     ]
 }

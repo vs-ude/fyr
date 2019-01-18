@@ -29,6 +29,12 @@
             }
         },
         {
+            "label": "build:test-watch",
+            "type": "npm",
+            "script": "build:test-watch",
+            "group": "build",
+        },
+        {
             "type": "npm",
             "script": "clean",
             "problemMatcher": []
