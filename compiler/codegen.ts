@@ -3142,10 +3142,16 @@ export class CodeGenerator {
                 } else if (t2 == Static.t_null) {
                     // Convert null to a pointer type
                     return expr;
-                } else if (helper.isComplexOrType(t2)) {
-                    let u = b.assign(b.tmp(), "member", (s2 as ssa.StructType).fieldTypeByName("value"), [expr, 0]);
+                } else if (helper.isComplexOrType(t2)) {                    
+                    let tc_real = b.assign(b.tmp(), "member", ssa.symbolType, [expr, (s2 as ssa.StructType).fieldIndexByName("kind")])
                     let idx = this.tc.orTypeIndex(t2 as OrType, t, true);
-                    // TODO: Check type code
+                    let sym_goal = this.createTypeSymbol(t);
+                    let tc_goal = b.assign(b.tmp(), "symbol", ssa.symbolType, [sym_goal]);
+                    let cmp = b.assign(b.tmp(), "ne", "i8", [tc_real, tc_goal]);
+                    b.ifBlock(cmp);
+                    b.assign(null, "trap", null, []);
+                    b.end();
+                    let u = b.assign(b.tmp(), "member", (s2 as ssa.StructType).fieldTypeByName("value"), [expr, (s2 as ssa.StructType).fieldIndexByName("value")]);
                     let result = b.assign(b.tmp(), "member", s, [u, idx]);
                     return result;
                 } else {
