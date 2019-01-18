@@ -337,7 +337,7 @@ export class CodeGenerator {
                 u.addField("option" + i.toString(), ft, 1);
             }
             s.addField("value", u, 1);
-            s.addField("kind", ssa.symbolType, 1);
+            s.addField("kind", "addr", 1);
             return s;            
         }
         if (t instanceof StringLiteralType) {
@@ -1779,9 +1779,21 @@ export class CodeGenerator {
         return descriptor;
     }
 
-    private createTypeSymbol(t: Type): number {
+    private createTypeDescriptor(t: Type): number {
         let typecode = t.toTypeCodeString();
-        return this.backend.addSymbol(typecode);
+        if (this.ifaceDescriptors.has(typecode)) {
+            return this.ifaceDescriptors.get(typecode);
+        }
+        let table: Array<backend.Function | backend.FunctionImport> = [];
+        if (helper.isPureValue(t)) {
+            table.push(null);
+        } else {
+            let dtr: backend.Function = this.generateOrTypeDestructor();
+            table.push(dtr);
+        }
+        let descriptor = this.backend.addInterfaceDescriptor(typecode, table);
+        this.ifaceDescriptors.set(typecode, descriptor);
+        return descriptor;
     }
 
     public autoConvertData(data: ssa.Variable | number | ssa.Pointer, targetType: Type, fromType: Type, b: ssa.Builder): ssa.Variable | number {
@@ -1816,8 +1828,8 @@ export class CodeGenerator {
             let ut = (s as ssa.StructType).fieldTypeByName("value");
             let idx = this.tc.orTypeIndex(targetType as OrType, fromType, false);
             let u = b.assign(b.tmp(), "union", ut, [idx, v]);            
-            let tc = b.assign(b.tmp(), "symbol", ssa.symbolType, [this.createTypeSymbol((targetType as OrType).types[idx])]);
-            v = b.assign(b.tmp(), "struct", s, [u, tc]);
+            let d = b.assign(b.tmp(), "table_iface", "addr", [this.createTypeDescriptor((targetType as OrType).types[idx])]);
+            v = b.assign(b.tmp(), "struct", s, [u, d]);
         }
         // TODO: Encode data for an any
         /*
@@ -2992,8 +3004,16 @@ export class CodeGenerator {
                     let dtr2 = b.assign(b.tmp(), "addr_of_func", "addr", [this.generateStructDestructor(structType).getIndex()]);
                     let cmp = b.assign(b.tmp(), "eq", "i8", [dtr, dtr2]);
                     return cmp;
+                } else if (helper.isOrType(enode.lhs.type)) {
+                    let expr = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);
+                    let s = this.getSSAType(ltype);
+                    let tc_real = b.assign(b.tmp(), "member", "addr", [expr, (s as ssa.StructType).fieldIndexByName("kind")])
+                    let d_goal = this.createTypeDescriptor(rtype);
+                    let tc_goal = b.assign(b.tmp(), "table_iface", "addr", [d_goal]);
+                    let cmp = b.assign(b.tmp(), "eq", "i8", [tc_real, tc_goal]);
+                    return cmp;
                 } else {
-                    throw "TODO: OrType"
+                    throw "Implementation error"
                 }
             }
             case "typeCast":
@@ -3142,11 +3162,11 @@ export class CodeGenerator {
                 } else if (t2 == Static.t_null) {
                     // Convert null to a pointer type
                     return expr;
-                } else if (helper.isComplexOrType(t2)) {                    
-                    let tc_real = b.assign(b.tmp(), "member", ssa.symbolType, [expr, (s2 as ssa.StructType).fieldIndexByName("kind")])
+                } else if (helper.isComplexOrType(t2)) {
+                    let tc_real = b.assign(b.tmp(), "member", "addr", [expr, (s2 as ssa.StructType).fieldIndexByName("kind")])
                     let idx = this.tc.orTypeIndex(t2 as OrType, t, true);
-                    let sym_goal = this.createTypeSymbol(t);
-                    let tc_goal = b.assign(b.tmp(), "symbol", ssa.symbolType, [sym_goal]);
+                    let d_goal = this.createTypeDescriptor(t);
+                    let tc_goal = b.assign(b.tmp(), "table_iface", "addr", [d_goal]);
                     let cmp = b.assign(b.tmp(), "ne", "i8", [tc_real, tc_goal]);
                     b.ifBlock(cmp);
                     b.assign(null, "trap", null, []);
@@ -3919,6 +3939,30 @@ export class CodeGenerator {
 //        b.ifBlock(cond);
         b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
 //        b.end();
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false, true);
+        return bf;
+    }
+
+    private generateOrTypeDestructor(): backend.Function {
+        let tc = "ortype";
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+        let dtrName = "dtr_ortype";
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam("addr", "pointer");
+        this.destructors.set(tc, bf);
+        let dtrPtr = b.assign(b.tmp(), "load", "addr", [pointer, 0]);
+        let cond = b.assign(b.tmp(), "ne", "i8", [dtrPtr, 0]);
+        b.ifBlock(cond);
+        let realPointer = b.assign(b.tmp(), "add", "addr", [pointer, ssa.sizeOf("addr")]);
+        b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
+        b.end();
         b.end();
         this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
