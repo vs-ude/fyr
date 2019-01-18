@@ -1,6 +1,6 @@
 import {Package} from "./pkg"
 
-export type NodeKind = "spawn" | "spawn_indirect" | "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend" | "free" | "incref" | "decref" | "alloc_arr" | "free_arr" | "incref_arr" | "decref_arr" | "member" | "set_member" | "len_arr" | "memcpy" | "memmove" | "memcmp" | "len_str" | "table_iface" | "addr_of_func" | "symbol" | "lock" | "unlock" | "notnull" | "notnull_ref" | "println" | "arr_to_str" | "move_arr";
+export type NodeKind = "spawn" | "spawn_indirect" | "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend" | "free" | "incref" | "decref" | "alloc_arr" | "free_arr" | "incref_arr" | "decref_arr" | "member" | "set_member" | "len_arr" | "memcpy" | "memmove" | "memcmp" | "len_str" | "table_iface" | "addr_of_func" | "symbol" | "lock" | "unlock" | "notnull" | "notnull_ref" | "println" | "arr_to_str" | "move_arr" | "union";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr" | "int" | "sint";
 
 export var intSize = 4;
@@ -21,6 +21,12 @@ export class StructType {
     public addField(name: string, type: Type | StructType | PointerType, count: number = 1): number {
         let align = alignmentOf(type);
         this.alignment = Math.max(this.alignment, align);
+        if (this.isUnion) {
+            this.size = Math.max(this.size, sizeOf(type));
+            this.fieldOffsetsByName.set(name, 0);
+            this.fields.push([name, type, count]);
+            return 0;
+        }
         let alignOffset = (align - this.size % align) % align;
         this.size += alignOffset;
         let offset = this.size;
@@ -57,6 +63,15 @@ export class StructType {
         throw "Implementation error " + name;
     }
 
+    public fieldTypeByName(name: string): Type | StructType | PointerType {
+        for(var i = 0; i < this.fields.length; i++) {
+            if (this.fields[i][0] == name) {
+                return this.fields[i][1];
+            }
+        }
+        throw "Implementation error " + name;
+    }
+
     public toDetailedString(): string {
         let str = "{\n";
         for(let i = 0; i < this.fields.length; i++) {
@@ -80,6 +95,7 @@ export class StructType {
     public size: number = 0;
     public name: string | null;
     public alignment: number = 1;
+    public isUnion: boolean = false;
     // The package the type has been defined in.
     // Anonymous structs like arrays and tuples are not associated to any package.
     public pkg?: Package;

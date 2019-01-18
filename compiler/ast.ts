@@ -170,6 +170,16 @@ export class Node {
         return false;
     }
 
+    public isLiteral(): boolean {
+        if (this.op == "int" || this.op == "float" || this.op == "str" || this.op == "rune") {
+            return true;
+        }
+        if (this.op == "array" || this.op == "object" || this.op == "tuple" || this.op == "null") {
+            return true;
+        }
+        return false;
+    }
+
     public clone(): Node {
         let n = new Node();
         n.op = this.op;

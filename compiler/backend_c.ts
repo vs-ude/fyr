@@ -403,7 +403,7 @@ export class CBackend implements backend.Backend {
             let mangledName = mangledNames[pos];
             let t = namedStructs[pos];
 
-            let ct = new CType("#ifndef S_" + mangledName + "\n#define S_" + mangledName + "\nstruct " + mangledName + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
+            let ct = new CType("#ifndef S_" + mangledName + "\n#define S_" + mangledName + (t.isUnion ? "\nunion " : "\nstruct ") + mangledName + " {\n" + t.fields.map((c: [string, ssa.Type | ssa.StructType, number], i: number) => {
                 let t = this.mapType(c[1]).toString();
                 if (c[2] > 1) {
                     return "    " + t + " " + c[0] + "[" + c[2].toString() + "];\n"
@@ -545,6 +545,9 @@ export class CBackend implements backend.Backend {
                         this.mapType(f[1], false);
                     }
                 }
+            }
+            if (t.isUnion) {
+                return new CType("union " + mangledName);    
             }
             return new CType("struct " + mangledName);
 //            }
@@ -901,6 +904,22 @@ export class CBackend implements backend.Backend {
             for(let a of n.args) {
                 l.values.push(this.emitExpr(a));
             }
+            t.expr = l;
+            return t;
+        } else if (n.kind == "union") {
+            if (!(n.type instanceof StructType)) {
+                throw "Implementation error"
+            }
+            if (!n.type.isUnion) {
+                throw "Implementation error"
+            }
+            let t = new CTypeCast();
+            t.type = this.mapType(n.type);
+            if (typeof(n.args[0]) != "number") {
+                throw "Implementation error"
+            }
+            let name = n.type.fieldNameByIndex(n.args[0] as number);
+            let l = new CUnionLiteral(name, this.emitExpr(n.args[1]));
             t.expr = l;
             return t;
         } else if (n.kind == "add" || n.kind == "sub" || n.kind == "mul" || n.kind == "div" || n.kind == "eq" || n.kind == "ne" || n.kind == "or" || n.kind == "xor" || n.kind == "and" || n.kind == "shl" || n.kind == "lt" || n.kind == "gt" || n.kind == "le" || n.kind == "ge") {
@@ -2462,4 +2481,23 @@ export class CCompoundLiteral extends CNode {
     }
 
     public values: Array<CNode> = [];
+}
+
+export class CUnionLiteral extends CNode {
+    constructor(name: string, value: CNode) {
+        super();
+        this.name = name;
+        this.value = value;
+    }
+    
+    public toString(indent: string = ""): string {
+        return indent + "{ ." + this.name + " = " + this.value.toString("") + "}";
+    }
+
+    public precedence(): number {
+        return 1;
+    }
+
+    public name: string;
+    public value: CNode;
 }

@@ -321,7 +321,24 @@ export class CodeGenerator {
             if (t.stringsOnly()) {
                 return ssa.symbolType;
             }
-            return this.ifaceHeader;
+            if (this.structs.has(t)) {
+                return this.structs.get(t);
+            }
+            let s = new ssa.StructType();
+            let u = new ssa.StructType();
+            u.isUnion = true;
+            s.name = t.name;
+            u.name = "union__" + t.name;
+            this.structs.set(t, s);
+            let i = 0;
+            for(let ot of t.types) {
+                i++;                
+                let ft = this.getSSAType(ot);
+                u.addField("option" + i.toString(), ft, 1);
+            }
+            s.addField("value", u, 1);
+            s.addField("kind", "addr");
+            return s;            
         }
         if (t instanceof StringLiteralType) {
             return ssa.symbolType;
@@ -1016,7 +1033,7 @@ export class CodeGenerator {
                             b.assign(val, "load", storage, [ptr, 0]); */
                             // Do nothing by intention
                         } else if (t == Static.t_string) {
-                            let [decodeUtf8, decodeUtf8Type] = this.loadFunction("runtime/utf8", "decodeUtf8", snode.loc);
+                            let [decodeUtf8, decodeUtf8Type] = this.loadFunction("runtime/utf8", "DecodeUtf8", snode.loc);
                             // Get address of value
                             let valAddr: ssa.Variable;
                             if (val instanceof ssa.Variable) {
@@ -1789,6 +1806,12 @@ export class CodeGenerator {
             let descriptor = this.createInterfaceDescriptor(ifaceType, structType);
             let d = b.assign(b.tmp(), "table_iface", "addr", [descriptor]);
             v = b.assign(b.tmp(), "struct", this.ifaceHeader, [v, d]);
+        } else if (helper.isOrType(targetType) && !helper.isOrType(fromType)) {
+            let s = this.getSSAType(targetType);
+            let ut = (s as ssa.StructType).fieldTypeByName("value");
+            // TODO: Type code
+            let u = b.assign(b.tmp(), "union", ut, [1, v]);
+            v = b.assign(b.tmp(), "struct", s, [u]);
         }
         // TODO: Encode data for an any
         /*
@@ -3114,8 +3137,12 @@ export class CodeGenerator {
                     // Convert null to a pointer type
                     return expr;
                 } else if (helper.isComplexOrType(t2)) {
-                    throw "TODO: Unpack complex or type"
+                    // throw "TODO: Unpack complex or type"
+                    // return 42;
 //                    return this.processUnboxInterface(t, expr, b);
+                    let u = b.assign(b.tmp(), "member", (s2 as ssa.StructType).fieldTypeByName("value"), [expr, 0]);
+                    let result = b.assign(b.tmp(), "member", s, [u, 1]);
+                    return result;
                 } else {
                     throw "TODO: conversion not implemented";
                 }
@@ -4366,7 +4393,7 @@ export class CodeGenerator {
     private disableNullCheck: boolean;
     private typeCodeMap: Map<string,number> = new Map<string, number>();
     private destructors: Map<string, backend.Function> = new Map<string, backend.Function>();
-    private structs: Map<StructType, ssa.StructType> = new Map<StructType, ssa.StructType>();
+    private structs: Map<StructType | OrType, ssa.StructType> = new Map<StructType, ssa.StructType>();
     private ifaceDescriptors: Map<string, number> = new Map<string, number>();
     private symbols: Map<string, number> = new Map<string, number>();
 }

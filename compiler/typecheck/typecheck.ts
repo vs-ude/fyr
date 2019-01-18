@@ -2464,6 +2464,8 @@ export class TypeChecker {
                 this.checkExpression(enode.rhs, scope);
                 if (enode.isUnifyableLiteral()) {
                     enode.type = this.defaultLiteralType(enode);
+                } else if (enode.rhs.isLiteral()) {
+                    enode.type = new PointerType(enode.rhs.type, "strong");
                 } else {
                     this.checkIsAddressable(enode.rhs, scope, true, true);
                     enode.type = new PointerType(enode.rhs.type, "local_reference");
@@ -4795,7 +4797,7 @@ export class TypeChecker {
         // Assigning to a value type? -> Nothing to do.
         // Assigning to a string? -> Nothing to do, because strings are not bound to any group.
         // Assigning to an unsafe pointer -> Nothing to do. Programmer hopefully knows what he is doing ...
-        if (helper.isPureValue(ltype) || helper.isString(ltype) || helper.isUnsafePointer(ltype)) {
+        if (helper.isPureValue(ltype) || helper.isPureValue(rnode.type) || helper.isString(ltype) || helper.isUnsafePointer(ltype)) {
             // When assigning to a variable, set its group such that it becomes available
             if (lhsVariable) {
                 if (lhsVariable instanceof Variable && lhsVariable.isReferencedWithRefcounting) {

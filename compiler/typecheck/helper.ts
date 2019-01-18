@@ -327,6 +327,10 @@ export function isTakeExpression(enode: Node): boolean {
     if (isSlice(enode.type) && enode.op == "typeCast") {
         return true;
     }
+    // An expression of the kind &StructType{...} is a take expression
+    if (enode.op == "unary&" && enode.rhs.isLiteral()) {
+        return true;
+    }
     return false;
 }
 
