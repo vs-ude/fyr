@@ -4,7 +4,7 @@ type Node struct {
 type Value *Node | uint64 | int64 | double
 
 export func main() int {
-    var v Value = <uint64>42
-    // var v Value = &Node{}
+    // var v Value = <uint64>42
+    var v Value = &Node{}
     return <int><uint64>v
 }

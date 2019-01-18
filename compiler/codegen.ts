@@ -1809,8 +1809,9 @@ export class CodeGenerator {
         } else if (helper.isOrType(targetType) && !helper.isOrType(fromType)) {
             let s = this.getSSAType(targetType);
             let ut = (s as ssa.StructType).fieldTypeByName("value");
-            // TODO: Type code
-            let u = b.assign(b.tmp(), "union", ut, [1, v]);
+            let idx = this.tc.orTypeIndex(targetType as OrType, fromType, false);
+            // TODO: add type code to union
+            let u = b.assign(b.tmp(), "union", ut, [idx, v]);
             v = b.assign(b.tmp(), "struct", s, [u]);
         }
         // TODO: Encode data for an any
@@ -3137,11 +3138,10 @@ export class CodeGenerator {
                     // Convert null to a pointer type
                     return expr;
                 } else if (helper.isComplexOrType(t2)) {
-                    // throw "TODO: Unpack complex or type"
-                    // return 42;
-//                    return this.processUnboxInterface(t, expr, b);
                     let u = b.assign(b.tmp(), "member", (s2 as ssa.StructType).fieldTypeByName("value"), [expr, 0]);
-                    let result = b.assign(b.tmp(), "member", s, [u, 1]);
+                    let idx = this.tc.orTypeIndex(t2 as OrType, t, true);
+                    // TODO: Check type code
+                    let result = b.assign(b.tmp(), "member", s, [u, idx]);
                     return result;
                 } else {
                     throw "TODO: conversion not implemented";

@@ -4353,6 +4353,17 @@ export class TypeChecker {
         return t.valueType;
     }
 
+    public orTypeIndex(o: OrType, t: Type, exactMatch: boolean): number {
+        let index = 0;
+        for(let ot of o.types) {
+            if (this.checkIsAssignableType(ot, t, null, exactMatch ? "compare" : "assign", false)) {
+                return index;
+            }
+            index++;
+        }
+        throw "Internal error";
+    }
+
     public static hasStrongOrUniquePointers(t: Type): boolean {
         t = RestrictedType.strip(t);
         if ((t instanceof PointerType || t instanceof SliceType) && (t.mode == "strong" || t.mode == "unique")) {
