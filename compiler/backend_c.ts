@@ -225,6 +225,14 @@ export class CBackend implements backend.Backend {
         name = name.replace(/>/g, "_g");
         name = name.replace(/,/g, "_c");
         name = name.replace(/\//g, "_");
+        name = name.replace(/\*/g, "_s");
+        name = name.replace(/\^/g, "_u");
+        name = name.replace(/\~/g, "_r");
+        name = name.replace(/\&/g, "_R");
+        name = name.replace(/\[/g, "_o");
+        name = name.replace(/\]/g, "_c");
+        name = name.replace(/\(/g, "_O");
+        name = name.replace(/\)/g, "_C");
         name = name.replace(/ /g, "_");
         return name;
     }

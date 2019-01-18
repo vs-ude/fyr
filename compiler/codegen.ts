@@ -337,7 +337,7 @@ export class CodeGenerator {
                 u.addField("option" + i.toString(), ft, 1);
             }
             s.addField("value", u, 1);
-            s.addField("kind", "addr");
+            s.addField("kind", ssa.symbolType, 1);
             return s;            
         }
         if (t instanceof StringLiteralType) {
@@ -1779,6 +1779,11 @@ export class CodeGenerator {
         return descriptor;
     }
 
+    private createTypeSymbol(t: Type): number {
+        let typecode = t.toTypeCodeString();
+        return this.backend.addSymbol(typecode);
+    }
+
     public autoConvertData(data: ssa.Variable | number | ssa.Pointer, targetType: Type, fromType: Type, b: ssa.Builder): ssa.Variable | number {
         let v: ssa.Variable | number;
         if (data instanceof ssa.Pointer) {
@@ -1810,9 +1815,9 @@ export class CodeGenerator {
             let s = this.getSSAType(targetType);
             let ut = (s as ssa.StructType).fieldTypeByName("value");
             let idx = this.tc.orTypeIndex(targetType as OrType, fromType, false);
-            // TODO: add type code to union
-            let u = b.assign(b.tmp(), "union", ut, [idx, v]);
-            v = b.assign(b.tmp(), "struct", s, [u]);
+            let u = b.assign(b.tmp(), "union", ut, [idx, v]);            
+            let tc = b.assign(b.tmp(), "symbol", ssa.symbolType, [this.createTypeSymbol((targetType as OrType).types[idx])]);
+            v = b.assign(b.tmp(), "struct", s, [u, tc]);
         }
         // TODO: Encode data for an any
         /*
