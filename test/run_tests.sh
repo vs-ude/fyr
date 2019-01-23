@@ -18,11 +18,11 @@ COMPILE_FILES=(
 RUN_FILES=(
     "list"
     "tree"
-    "mandelbrot" # this takes a second...
+    # "mandelbrot" # this takes a second...
 )
 
 # --------- setup the required variables -------------------------------------
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && cd ../ && pwd )"
 
 FYRBASE="$DIR"
 
@@ -32,10 +32,18 @@ COMPILE_ERRORS=""
 RUN_ERRORS=""
 EXIT=0
 
+# --------- building the compiler if necessary -------------------------------
+if [ ! -f $DIR/lib/index.js ]; then
+    printf "Compiler is not yet built, so I'm building it now."
+    cd $DIR
+    npm run build
+    cd -
+fi
+
 # --------- compile/run the files silently -----------------------------------
 for file in "${COMPILE_FILES[@]}"; do
     printf "%s: Compiling %s...\n" `date +%F_%T` $file
-    $DIR/bin/fyrc -n $file >/dev/null 2>&1
+    $DIR/bin/fyrc -n "$DIR/$file" >/dev/null 2>&1
     if [ $? -ne 0 ]; then
         COMPILE_ERRORS="$COMPILE_ERRORS $file"
     fi
