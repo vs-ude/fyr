@@ -23,6 +23,9 @@ It can be invoked with `npm run test:coverage`.
 To use the unit tests in editors like VS Code, the easiest way is to just run the `npm: test:watch` task and leave the corresponding terminal open.
 It will refresh on every file save and output the tests that failed.
 
+Please not that all imports in tests have to be done through the _index.ts_ files (only specify the folder) wherever they are present.
+Failure to do so will result in errors at runtime.
+
 
 ## editorconfig
 
