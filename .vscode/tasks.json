@@ -15,6 +15,14 @@
             }
         },
         {
+            "type": "npm",
+            "script": "pretest",
+            "problemMatcher": [
+                "$tsc"
+            ],
+            "group": "build"
+        },
+        {
             "label": "Run test script",
             "type": "shell",
             "command": "./test/run_tests.sh",
