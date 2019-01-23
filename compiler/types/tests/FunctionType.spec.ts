@@ -1,11 +1,10 @@
 import { expect } from 'chai'
 
-import * as ft from '../FunctionType'
+import { FunctionType } from '../'
 
 describe('FunctionType', () => {
     it("isAsync() should return false", () => {
-        var instance = new ft.FunctionType()
+        var instance = new FunctionType()
         expect(instance.isAsync).to.be.false
-
     })
 })

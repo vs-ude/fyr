@@ -1,10 +1,10 @@
 import { expect } from 'chai'
 
-import * as g from '../GenericParameter'
+import { GenericParameter } from '../'
 
 describe('GenericParameter', () => {
     it("toTypeCodeString() should return an error", () => {
-        var instance = new g.GenericParameter()
+        var instance = new GenericParameter()
         expect(instance.toTypeCodeString).to.throw(Error)
     })
 })
