@@ -1,10 +1,10 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "outDir": "tests",
+    "outDir": "./tests",
   },
   "include": [
-    "compiler/**/*.ts"
+    "../compiler/**/*.ts"
   ],
   "exclude": [
     "node_modules"

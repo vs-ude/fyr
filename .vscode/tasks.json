@@ -17,7 +17,7 @@
         {
             "label": "Run test script",
             "type": "shell",
-            "command": "./run_tests.sh",
+            "command": "./test/run_tests.sh",
             "group": "test"
         },
         {
@@ -27,12 +27,6 @@
                 "kind": "test",
                 "isDefault": true
             }
-        },
-        {
-            "label": "build:test-watch",
-            "type": "npm",
-            "script": "build:test-watch",
-            "group": "build",
         },
         {
             "type": "npm",

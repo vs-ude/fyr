@@ -14,15 +14,14 @@ It naively checks the exit codes of the compiler and the binaries and outputs fi
 ### Unit tests
 
 We are currently in the process of integrating unit tests into the compiler.
-For this, [chai](https://www.chaijs.com/) and [mocha](https://mochajs.org/) are used.
-The tests can be run with `npm run test:once` or `npm run test:watch`.
+For this, [chai](https://www.chaijs.com/) and [mocha](https://mochajs.org/) (+ [mocha-typescript](https://github.com/pana-cc/mocha-typescript)) are used.
+The tests can be run with `npm run test` or `npm run test:watch`.
 
 Additionally, [istanbul](https://istanbul.js.org/) is used to provide test coverage reports.
 It can be invoked with `npm run test:coverage`.
 
-To use the unit tests in editors like VS Code, the easiest way is to just start the `npm: build:test-watch` script, wait for it to build once, then run the `npm: test:watch` task and leave the corresponding terminal open.
+To use the unit tests in editors like VS Code, the easiest way is to just run the `npm: test:watch` task and leave the corresponding terminal open.
 It will refresh on every file save and output the tests that failed.
-Newly created tests will not be picked up by `npm: test:watch` so a restart of the task is necessary.
 
 
 ## editorconfig

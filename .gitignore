@@ -33,5 +33,5 @@ bin/linux*
 .nyc_output
 /coverage/
 /compiler/**/*.js
-/tests/*
-!/tests/.gitkeep
+/test/tests/*
+!/test/tests/.gitkeep

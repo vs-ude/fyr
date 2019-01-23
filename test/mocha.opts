@@ -1,0 +1,2 @@
+--recursive test/tests/**/*.spec.js
+--reporter min
