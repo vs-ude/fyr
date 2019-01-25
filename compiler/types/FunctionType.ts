@@ -34,7 +34,11 @@ export class FunctionType extends Type {
             }
             name += p.type.toString()
         }
-        name += ") => " + this.returnType.toString()
+        if (this.returnType){
+            name += ") => " + this.returnType.toString()
+        } else {
+            name += ") => undefined"
+        }
         return name
     }
 
