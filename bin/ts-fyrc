@@ -1,9 +1,0 @@
-#!/usr/bin/env node
-
-"use strict"
-
-require('ts-node/register')
-
-process.argv.splice(2, 0, "compile");
-
-require('../compiler/index.ts');

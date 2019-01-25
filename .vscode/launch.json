@@ -43,46 +43,18 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug ts: static",
-            "program": "${workspaceFolder}/bin/ts-fyrc",
-            "cwd":"${workspaceFolder}/",
-            "args": [
-                "-n",
-                "${workspaceFolder}/src/collections/tree"
-            ],
-            "env": {
-                "FYRBASE": "${workspaceFolder}",
-            }
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Debug ts: current",
-            "program": "${workspaceFolder}/bin/ts-fyrc",
-            "cwd":"${workspaceFolder}/",
-            "args": [
-                "-n",
-                "${fileDirname}"
-            ],
-            "env": {
-                "FYRBASE": "${workspaceFolder}",
-            }
-        },
-        {
-            "type": "node",
-            "request": "launch",
             "name": "Run/debug tests",
             "preLaunchTask": "npm: pretest",
             "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
             "cwd":"${workspaceFolder}/",
             "args": [
-                "tests/**/*.spec.js"
+                "test/tests/**/*.spec.js"
             ],
             "runtimeArgs": [
                 "--nolazy"
             ],
             "sourceMaps": true,
-            "outFiles": ["${workspaceFolder}/tests/**/*.js"],
+            "outFiles": ["${workspaceFolder}/test/tests/**/*.js"],
             "env": {
                 "FYRBASE": "${workspaceFolder}",
                 "NODE_ENV": "production"
