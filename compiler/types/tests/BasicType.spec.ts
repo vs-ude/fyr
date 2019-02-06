@@ -15,12 +15,16 @@ describe('void BasicType', () => {
         instance = new BasicType("void")
     })
 
+    it('isImported() returns false', () => {
+        expect(instance.isImported).to.be.false
+    })
+
     it('toString()', () => {
         expect(instance.toString()).to.equal("void")
     })
 
     it('toTypeCodeString()', () => {
-        expect(instance.toString()).to.equal("void")
+        expect(instance.toTypeCodeString()).to.equal("void")
     })
 })
 
@@ -29,6 +33,11 @@ describe('byte BasicType', () => {
 
     before(() => {
         instance = new BasicType("byte")
+        instance.importFromModule = "dummy"
+    })
+
+    it('isImported() returns true', () => {
+        expect(instance.isImported).to.be.true
     })
 
     it('toString()', () => {
@@ -36,6 +45,6 @@ describe('byte BasicType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(instance.toString()).to.equal("byte")
+        expect(instance.toTypeCodeString()).to.equal("byte")
     })
 })

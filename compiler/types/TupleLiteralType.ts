@@ -22,7 +22,7 @@ export class TupleLiteralType extends Type {
     }
 
     public toTypeCodeString(): string {
-        throw "Implemention error"
+        throw "Implementation error"
     }
 
     public types: Array<Type>
