@@ -45,7 +45,7 @@ export class FunctionType extends Type {
     }
 
     public toTypeCodeString(): string {
-        if (this.name) {
+        if (this.name) { // TODO: is this intentional?
             if (this.objectType) {
                 return this.objectType.toTypeCodeString() + "." + this.name
             }
@@ -165,7 +165,9 @@ export class FunctionType extends Type {
     public parameters: Array<FunctionParameter>
     public callingConvention: CallingConvention = "fyr"
     public objectType: Type
-    // Only used when the callingConvention is "system"
+    /**
+     * Only used when the callingConvention is "system"
+     */
     public systemCallType: SystemCalls
 // Enable this line to measure coroutines
 //    public callingConvention: CallingConvention = "fyrCoroutine"
