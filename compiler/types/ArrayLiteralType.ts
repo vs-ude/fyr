@@ -1,7 +1,9 @@
 import { Type } from './Type'
 
-// ArrayLiteralTypes are created while parsing and are then unified.
-// They are gone after type checking.
+/**
+ * ArrayLiteralTypes are created while parsing and are then unified.
+ * They are gone after type checking.
+ */
 export class ArrayLiteralType extends Type {
     constructor(types: Array<Type>) {
         super()

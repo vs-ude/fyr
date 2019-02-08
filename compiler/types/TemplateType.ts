@@ -39,10 +39,14 @@ export class TemplateType extends Type {
         return "template" + g
     }
 
-    // Optional ASTs of template parameters constraints, e.g. in "func<A is int|float, B>()",
-    // these are constraints are "int|float" and "null".
+    /**
+     * Optional ASTs of template parameters constraints, e.g. in "func<A is int|float, B>()",
+     * these are constraints are "int|float" and "null".
+     */
     public templateParameterTypes: Array<Node | null>
-    // Names of the template parameters, e.g. in "func<A,B>(a A, b B)" these are [A.B]
+    /**
+     * Names of the template parameters, e.g. in "func<A,B>(a A, b B)" these are [A.B]
+     */
     public templateParameterNames: Array<string>
     // The AST of the template
     public node: Node

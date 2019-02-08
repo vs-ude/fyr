@@ -19,8 +19,10 @@ import {createHash} from "crypto";
 import * as helper from './helper'
 import { Static } from './Static'
 
-// Typedef represents the result of a 'type' statement, i.e.
-// a named type which is of course subject to a scope.
+/**
+ * Typedef represents the result of a 'type' statement, i.e.
+ * a named type which is of course subject to a scope.
+ */
 export class Typedef {
     // The name of the Typedef
     public name: string;
@@ -1549,6 +1551,9 @@ export class TypeChecker {
         */
     }
 
+    /**
+     * Typecheck the template function body.
+     */
     private checkFunctionBody(f: Function) {
         let scopeExit: ScopeExit;
         if (f.node.statements) {
@@ -1674,10 +1679,10 @@ export class TypeChecker {
                         } else if (rtypeStripped instanceof ArrayType) {
                             v.type = new ArrayType(rtypeStripped.elementType, rtypeStripped.size - i);
                             // TODO: Check whether the array slice can be copied at all
-                            // TODO; Clone the restrictions of the array
+                            // TODO: Clone the restrictions of the array
                             throw "TODO"
                         } else if (rtypeStripped instanceof SliceType) {
-                            // TODO; Clone the restrictions of the array
+                            // TODO: Clone the restrictions of the array
                             v.type = rtype;
                             throw "TODO"
                         }
@@ -3615,7 +3620,9 @@ export class TypeChecker {
         }
     }
 
-    // Checks whether the type of 'from' can be assigned to the type 'to'.
+    /**
+     * Checks whether the type of 'from' can be assigned to the type 'to'.
+     */
     public checkIsAssignableNode(to: Type, from: Node, scope: Scope, doThrow: boolean = true, templateParams: Map<string, Type> = null): boolean {
         if (from.isUnifyableLiteral()) {
             return this.unifyLiterals(to, from, scope, from.loc, doThrow, templateParams);
@@ -3658,8 +3665,10 @@ export class TypeChecker {
         return this.checkIsAssignableType(to, from.type, from.loc, "assign", doThrow, null, null, templateParams);
     }
 
-    // TODO: Remove unbox
-    // Checks whether the type 'from' can be assigned to the type 'to'.
+    /**
+     * Checks whether the type 'from' can be assigned to the type 'to'.
+     * TODO: Remove unbox
+     */
     public checkIsAssignableType(to: Type, from: Type, loc: Location, mode: "assign" | "equal" | "pointer" | "compare", doThrow: boolean = true, toRestrictions: Restrictions = null, fromRestrictions: Restrictions = null, templateParams: Map<string, Type> = null): boolean {
         if (toRestrictions == null) {
             toRestrictions = {isConst: false};
@@ -3874,8 +3883,10 @@ export class TypeChecker {
         throw new TypeError("Type " + from.toString() + " cannot be " + (mode == "compare" ? "compared to type " : "assigned to type ") + to.toString(), loc);
     }
 
+    /**
+     * Type checks all parameters.
+     */
     public checkFunctionArguments(ft: FunctionType, args: Array<Node> | null, scope: Scope, loc: Location, doThrow: boolean = true): boolean {
-        // Type check all parameters
         if (args) {
             if (ft.parameters.length != args.length) {
                 if (ft.requiredParameterCount() > args.length || (args.length > ft.parameters.length && !ft.hasEllipsis())) {
@@ -5387,7 +5398,9 @@ export class TypeChecker {
         return (this.templateFunctionInstantiations.size != 0 || this.templateTypeInstantiations.size != 0);
     }
 
-    // List of all interfaces. These are checked for possible errors after they have been defined.
+    /**
+     * List of all interfaces. These are checked for possible errors after they have been defined.
+     */
     public ifaces: Array<InterfaceType> = [];
     public structs: Array<StructType> = [];
     public templateTypeInstantiations: Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>> = new Map<TemplateType, Array<TemplateStructType | TemplateInterfaceType | TemplateFunctionType>>();

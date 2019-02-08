@@ -1,7 +1,9 @@
 import { Type } from './Type'
 
-// TupleLiteralTypes are created while parsing and are then unified.
-// They are gone after type checking.
+/**
+ * TupleLiteralTypes are created while parsing and are then unified.
+ * They are gone after type checking.
+ */
 export class TupleLiteralType extends Type {
     constructor(types: Array<Type>) {
         super()

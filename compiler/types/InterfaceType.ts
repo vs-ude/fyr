@@ -116,14 +116,20 @@ export class InterfaceType extends Type {
         return this.sortedMethodNames
     }
 
-    // Package the type has been defined in.
-    // For global types sich as "int" the package is undefined.
+    /**
+     * Package the type has been defined in.
+     * For global types sich as "int" the package is undefined.
+     */
     public pkg?: Package
     public extendsInterfaces: Array<InterfaceType> = []
-    // Member methods indexed by their name
+    /**
+     * Member methods indexed by their name
+     */
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>()
     private sortedMethodNames: Array<string> = []
 
-    // Required during recursive checking
+    /**
+     * Required during recursive checking
+     */
     public _markChecked: boolean = false
 }

@@ -7,8 +7,10 @@ import { isUnique } from '../typecheck/helper'
 import { Type } from './Type'
 import { TupleType } from './TupleType'
 
-// CallingConvention is part of a FunctionType.
-// It defines how the function is to be called.
+/**
+ * CallingConvention is part of a FunctionType.
+ * It defines how the function is to be called.
+ */
 export type CallingConvention = "fyr" | "fyrCoroutine" | "system" | "native"
 
 export class FunctionType extends Type {

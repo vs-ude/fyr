@@ -87,13 +87,19 @@ export class StructType extends Type {
         return false
     }
 
-    // Package the type has been defined in.
+    /**
+     * Package the type has been defined in.
+     */
     public pkg: Package
     public extends: StructType
     public implements: Array<InterfaceType> = []
-    // Fields of the struct, ordered by their appearance in the code
+    /**
+     * Fields of the struct, ordered by their appearance in the code
+     */
     public fields: Array<StructField> = []
-    // Member methods indexed by their name
+    /**
+     * Member methods indexed by their name
+     */
     public methods: Map<string, FunctionType> = new Map<string, FunctionType>()
     /**
      * An opaque struct cannot be instantiated, because the compiler does not know the size and layout of the struct.
@@ -110,7 +116,9 @@ export class StructType extends Type {
     public _markChecked: boolean
 }
 
-// StructField describes the field of a StructType.
+/**
+ * StructField describes the field of a StructType.
+ */
 export class StructField {
     public toString(): string {
         if (!this.name) {
