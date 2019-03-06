@@ -44,7 +44,7 @@ export class OrType extends Type {
 
     public isPureValue(): boolean {
         for(let t of this.types) {
-            if (isPureValue(t)) {
+            if (!isPureValue(t)) {
                 return false
             }
         }
