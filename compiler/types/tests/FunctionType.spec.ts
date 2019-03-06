@@ -17,7 +17,7 @@ describe('empty FunctionType', () => {
     })
 
     it('toTypeCodeString() throws TypeError', () => {
-        expect(instance.toTypeCodeString).to.throw(TypeError)
+        expect(() => instance.toTypeCodeString()).to.throw(TypeError)
     })
 
     it('hasEllipsis() returns false', () => {

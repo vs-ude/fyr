@@ -15,7 +15,7 @@ describe('empty TupleLiteralType', () => {
     })
 
     it('toTypeCodeString() should throw an error', () => {
-        expect(instance.toTypeCodeString).to.throw("Implementation error")
+        expect(() => instance.toTypeCodeString()).to.throw("Implementation error")
     })
 })
 
@@ -31,6 +31,6 @@ describe('(string, byte) TupleLiteralType', () => {
     })
 
     it('toTypeCodeString() should throw an error', () => {
-        expect(instance.toTypeCodeString).to.throw("Implementation error")
+        expect(() => instance.toTypeCodeString()).to.throw("Implementation error")
     })
 })

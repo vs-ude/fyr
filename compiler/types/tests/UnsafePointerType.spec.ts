@@ -16,7 +16,7 @@ describe('dummy UnsafePointerType', () => {
     })
 
     it('toTypeCodeString() throws', () => {
-        expect(instance.toTypeCodeString).to.throw
+        expect(() => instance.toTypeCodeString()).to.throw()
     })
 })
 

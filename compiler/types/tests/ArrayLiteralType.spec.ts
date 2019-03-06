@@ -15,7 +15,7 @@ describe('empty ArrayLiteralType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(instance.toTypeCodeString).to.throw('Implementation error')
+        expect(() => instance.toTypeCodeString()).to.throw('Implementation error')
     })
 })
 
@@ -35,6 +35,6 @@ describe('filled ArrayLiteralType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(instance.toTypeCodeString).to.throw('Implementation error')
+        expect(() => instance.toTypeCodeString()).to.throw('Implementation error')
     })
 })

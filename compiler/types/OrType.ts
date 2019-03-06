@@ -13,8 +13,6 @@ export class OrType extends Type {
         }
     }
 
-    public types: Array<Type>
-
     public toString(): string {
         if (this.name) {
             return this.name
@@ -52,4 +50,6 @@ export class OrType extends Type {
         }
         return true
     }
+
+    public types: Array<Type>
 }

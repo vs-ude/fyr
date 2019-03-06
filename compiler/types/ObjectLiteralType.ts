@@ -11,7 +11,7 @@ export class ObjectLiteralType extends Type {
     }
 
     public toTypeCodeString(): string {
-        throw "Implemention error"
+        throw "Implementation error"
     }
 
     public toString() : string {
