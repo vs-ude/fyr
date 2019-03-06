@@ -1,6 +1,7 @@
 import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
+import { Static } from '../../typecheck';
 import { OrType, BasicType } from '../'
 
 describe('empty OrType', () => {
@@ -27,21 +28,22 @@ describe('empty OrType', () => {
     })
 })
 
-describe('string|bool OrType', () => {
+describe('int|bool OrType', () => {
     let instance: OrType
     let types: Array<BasicType>
 
     before(() => {
-        types = [new BasicType('string'), new BasicType('bool')]
+        Static.initIfRequired()
+        types = [Static.t_int, Static.t_bool]
         instance = new OrType(types)
     })
 
     it('toString()', () => {
-        expect(instance.toString()).to.equal('string | bool')
+        expect(instance.toString()).to.equal('int | bool')
     })
 
     it('toTypeCodeString()', () => {
-        expect(instance.toTypeCodeString()).to.equal('string | bool')
+        expect(instance.toTypeCodeString()).to.equal('int | bool')
     })
 
     it('stringsOnly()', () => {

@@ -38,6 +38,12 @@ export class Static {
         return Static.t_bool ? true : false
     }
 
+    public static initIfRequired() {
+        if (!Static.isInitialized()) {
+            Static.init()
+        }
+    }
+
     public static t_bool: Type;
     public static t_float: Type;
     public static t_double: Type;
