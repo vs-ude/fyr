@@ -2,7 +2,7 @@ import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
 import { Static } from '../../typecheck';
-import { OrType, BasicType } from '../'
+import { OrType, BasicType, StringLiteralType } from '../'
 
 describe('empty OrType', () => {
     let instance: OrType
@@ -55,3 +55,21 @@ describe('int|bool OrType', () => {
     })
 })
 
+describe('"test1"|"test2" OrType', () => {
+    let instance: OrType
+    let types: Array<BasicType>
+
+    before(() => {
+        Static.initIfRequired()
+        types = [new StringLiteralType('test1'), new StringLiteralType('test2')]
+        instance = new OrType(types)
+    })
+
+    it('stringsOnly()', () => {
+        expect(instance.stringsOnly()).to.be.true
+    })
+
+    it('isPureValue()', () => {
+        expect(instance.isPureValue()).to.be.false
+    })
+})
