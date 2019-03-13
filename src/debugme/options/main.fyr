@@ -11,3 +11,12 @@ export func main() int {
     }
     return <int><uint64>v
 }
+
+func foo() *Node {
+    // var v Value = <uint64>42
+    var v Value = &Node{}
+    if (v is *Node) {
+        println("Hello int")
+    }
+    return <*Node>v
+}
