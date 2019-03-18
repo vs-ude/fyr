@@ -31,13 +31,13 @@ export class StructType {
         this.fields.push([name, type, count]);
     }
 
-    public addFields(s: StructType) {
+    public addFields(s: StructType): void {
         for(let f of s.fields) {
             this.addField(f[0], f[1], f[2]);
         }
     }
 
-    public extend(s: StructType) {
+    public extend(s: StructType): void {
         this.extends = s;
     }
 
@@ -49,9 +49,11 @@ export class StructType {
         if (this.finalized) {
             return
         }
+        // This will recursively finalize the types of all fields.
+        // However, for pointer types are not finalized.
         for (let field of this.fields) {
             if (this.isUnion) {
-                this.size = Math.max(this.size, sizeOf(field[1], false));
+                this.size = Math.max(this.size, sizeOf(field[1]));
                 this.fieldOffsetsByName.set(field[0], 0);
             } else {
                 let align = alignmentOf(field[1]);
@@ -59,14 +61,13 @@ export class StructType {
                 let alignOffset = (align - this.size % align) % align;
                 this.size += alignOffset;
                 this.fieldOffsetsByName.set(field[0], this.size);
-                this.size += field[2] * alignedSizeOf(field[1], false);
+                this.size += field[2] * alignedSizeOf(field[1]);
             }
         }
         this.finalized = true;
+        // Finalize all referenced types
         for (let field of this.fields) {
-            if (field[1] instanceof StructType) {
-                field[1].finalize()
-            } else if (field[1] instanceof PointerType) {
+            if (field[1] instanceof PointerType) {
                 field[1].finalize()
             }
         }
@@ -133,7 +134,7 @@ export class StructType {
     // Anonymous structs like arrays and tuples are not associated to any package.
     public pkg?: Package;
     private extends: StructType;
-    private finalized: boolean;
+    public finalized: boolean;
 }
 
 export function alignmentOf(x: Type | StructType | PointerType): number {
@@ -174,25 +175,12 @@ export function isSigned(x: Type | PointerType): boolean {
     return x == "s8" || x == "s16" || x == "s32" || x == "s64";
 }
 
-export function sizeOf(x: Type | StructType | PointerType, useCachedSize: boolean = true): number {
+export function sizeOf(x: Type | StructType | PointerType): number {
     if (x instanceof StructType) {
-        if (useCachedSize) {
-            return x.size;
+        if (!x.finalized) {
+            x.finalize();
         }
-        let s = 0;
-        if (x.isUnion) {
-            for(let f of x.fields) {
-                s = Math.max(s, sizeOf(f[1], false))
-            }
-            return s
-        }
-        for(let f of x.fields) {
-            let align = alignmentOf(f[1]);
-            let alignOffset = (align - s % align) % align;
-            s += alignOffset;
-            s += f[2] * alignedSizeOf(f[1], false);
-        }
-        return s
+        return x.size;
     }
     if (x instanceof PointerType) {
         return ptrSize;
@@ -221,8 +209,8 @@ export function sizeOf(x: Type | StructType | PointerType, useCachedSize: boolea
     }
 }
 
-export function alignedSizeOf(type: Type | StructType | PointerType, useCachedSize: boolean = true): number {
-    let size = sizeOf(type, useCachedSize);
+export function alignedSizeOf(type: Type | StructType | PointerType): number {
+    let size = sizeOf(type);
     if (size == 0) {
         return 0;
     }
