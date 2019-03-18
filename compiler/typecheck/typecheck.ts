@@ -4873,10 +4873,10 @@ export class TypeChecker {
             return helper.isArray(variable.type);
         };
 
-        // Assigning to a strong or unique pointer? Then the RHS must let go of its ownership
+        // Assigning to a strong or unique pointer? Then the RHS must let go of its ownership.
         if (TypeChecker.hasStrongOrUniquePointers(ltype) || (!helper.isSafePointer(ltype) && !helper.isSlice(ltype) && !helper.isPureValue(ltype))) {
             if (rhsIsVariable) {
-                // Make the RHS variable unavailable, since the LHS is not the owner and there can be only one owner
+                // Make the RHS variable unavailable, since the LHS is now the owner and there can be only one owner
                 if (!rnodeReuse) {
                     let rhsVariable = scope.resolveElement(rhsVariableName);
                     scope.setGroup(rhsVariable, null);
@@ -4885,9 +4885,20 @@ export class TypeChecker {
             } else if (rhsIsTakeExpr) {
                 // Nothing special todo
             } else if (rnode.op == "unary&" && rnode.rhs.op == "id") {
-                // Nothing special todo. We are referencing a stack variable and this variable remains accessible
+                // Nothing special todo. We are referencing a stack variable and this variable remains accessible.
+                // The variable may even have multiple owners. No owner can hold it longer than the stack frame exists
+                // and the memory is free'd when the stack frame is removed.
             } else if (rnode.op == ":" && rnode.lhs.op == "id" && isArrayVariable(rnode.lhs.value)) {
                 // Nothing special todo. We are slicing an array on the stack and this array remains accessible.
+                // There may be multiple owning slices pointing to the array data. No owner can hold it longer than the stack frame exists
+                // and the memory is free'd when the stack frame is removed.
+            } else if (rnode.op == "typeCast" && rnode.rhs.op == "id" && helper.isOrType(rnode.rhs.type)) {
+                // Taking ownership from an Or-Type? Then the underlying RHS variable is no longer accessible
+                if (!rnodeReuse) {
+                    let rhsVariable = scope.resolveElement(rhsVariableName);
+                    scope.setGroup(rhsVariable, null);
+                }
+                rnode.flags |= AstFlags.ZeroAfterAssignment;
             } else {
                 throw new TypeError("Assignment to an owning pointer (or data structure containing an owning pointer) is only allowed from a variable or take expression", loc);
             }

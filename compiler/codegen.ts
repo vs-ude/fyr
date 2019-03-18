@@ -1141,8 +1141,9 @@ export class CodeGenerator {
                     // Returning a local variable? Then do not zero it out and do not execute its destructor
                     let doNotZero = false;
                     let forceIncref = false;
-                    if ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment && snode.lhs.op == "id") {
-                        let e = scope.resolveElement(snode.lhs.value);
+                    let varName = helper.getUnderlyingLocalVariable(snode.lhs)
+                    if ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment && varName != null) {
+                        let e = scope.resolveElement(varName);
                         if (e instanceof FunctionParameter || (e instanceof Variable && !e.isGlobal)) {
                             ignoreVariables.push(e);
                             doNotZero = true;

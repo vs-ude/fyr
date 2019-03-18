@@ -13,6 +13,13 @@ export function currentFile(): string {
 
 export enum AstFlags {
     None = 0,
+    // Used on the right-hand side of an assignment.
+    // The RHS must be filled with zeros, after the assignment is complete.
+    // This might be necessary when ownership has been transferred from RHS to LHS during an assignment
+    // and the RHS must not run the destructor somewhen later, because it no longer owns the data.
+    // In an ideal case, the compiler knows and does not attempt to run the destructor.
+    // But in many situations, the compiler cannot know.
+    // If the compiler knows better, however, it can ignore this flag and therefore will not assign zero for optimization reasons.
     ZeroAfterAssignment = 1,
     ReferenceObjectMember = 2,
     // Used on array literals. Indicates that the array literal is incomplete

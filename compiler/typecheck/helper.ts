@@ -320,11 +320,11 @@ export function isTakeExpression(enode: Node): boolean {
     // A slice operation on a string creates a new string which already has a reference count of 1.
     // Hence it behaves like a take expression.
     // Adding a string, or casting a slice to a string creates a new string, too. Hence, it behaves like a take expression
-    if (enode.type == Static.t_string && (enode.op == ":" || enode.op == "+" || enode.op == "typeCast")) {
+    if (enode.type == Static.t_string && (enode.op == ":" || enode.op == "+" || (enode.op == "typeCast" && isSlice(enode.rhs.type)))) {
         return true;
     }
     // Casting a string to a slice returns a new slice. Hence, it behaves like a take expression
-    if (isSlice(enode.type) && enode.op == "typeCast") {
+    if (isSlice(enode.type) && enode.op == "typeCast" && enode.rhs.type == Static.t_string) {
         return true;
     }
     // An expression of the kind &StructType{...} is a take expression
@@ -332,6 +332,21 @@ export function isTakeExpression(enode: Node): boolean {
         return true;
     }
     return false;
+}
+
+/**
+ * Returns a local variable name if enode is a local variable, or a (series of) typecasts of a local variable.
+ * If enode is a part of a local variable (e.g. an array element and the array is a local variable),
+ * the function returns null. It only returns true if enode represents the entire(!) value stored in a local variable.
+ */
+export function getUnderlyingLocalVariable(enode: Node): string | null {
+    while (enode.op == "typeCast" && !isTakeExpression(enode)) {
+        enode = enode.rhs;
+    }
+    if (enode.op == "id") {
+        return enode.value
+    }
+    return null
 }
 
 export function makeConst(t: Type, loc: Location): Type {
