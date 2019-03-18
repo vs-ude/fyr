@@ -1406,12 +1406,12 @@ export class CBackend implements backend.Backend {
             if (idx < 0 || idx >= this.module.ifaceDescriptors.length) {
                 throw "Implementation error";
             }
-            let addr = new CUnary();
-            addr.operator = "&";
-            addr.expr = this.module.ifaceDescriptors[idx].name;
+//            let addr = new CUnary();
+//            addr.operator = "&";
+//            addr.expr = this.module.ifaceDescriptors[idx].name;
             let cast = new CTypeCast();
             cast.type = new CType("addr_t");
-            cast.expr = addr;
+            cast.expr = this.module.ifaceDescriptors[idx].name;
             return cast;
         } else if (n.kind == "addr_of_func") {
             let idx = n.args[0];

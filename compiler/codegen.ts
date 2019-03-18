@@ -1788,7 +1788,7 @@ export class CodeGenerator {
         if (helper.isPureValue(t)) {
             table.push(null);
         } else {
-            let dtr: backend.Function = this.generateOrTypeDestructor();
+            let dtr: backend.Function = this.generateDestructor(t);
             table.push(dtr);
         }
         let descriptor = this.backend.addInterfaceDescriptor(typecode, table);
@@ -3866,6 +3866,14 @@ export class CodeGenerator {
         return bf;
     }
 
+    /**
+     * Generates a destructor that takes two arguments.
+     * One is a pointer to the data, the other is the size.
+     * This destructor can be used for slices, too, since a slice
+     * is a pointer to an array which has a runtime-dependent size.
+     * 
+     * The destructor does not free the memory used by the array.
+     */
     private generateArrayDestructor(t: ArrayType): backend.Function {
         let tc = this.typecode(t).toString();
         let elementType = RestrictedType.strip(t.elementType);
@@ -3880,6 +3888,46 @@ export class CodeGenerator {
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
         let size = b.declareParam("sint", "size");
+        this.destructors.set(tc, bf);
+
+        let counter = b.assign(b.tmp(), "copy", "sint", [0]);
+        let outer = b.block();
+        let loop = b.loop()
+        let cmp = b.assign(b.tmp(), "eq", "sint", [counter, size]);
+        b.br_if(cmp, outer);
+        this.callDestructorOnPointer(elementType, new ssa.Pointer(pointer, 0), b);
+        let st = this.getSSAType(elementType);
+        b.assign(pointer, "add", "addr", [pointer, ssa.alignedSizeOf(st)]);
+        b.assign(counter, "add", "addr", [counter, 1]);
+        b.br(loop);
+        b.end();
+        b.end();
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false, true);
+        return bf;
+    }
+
+    /**
+     * Generates a destructor that takes one argument, which is
+     * a pointer to the data
+     * This destructor can be used for or-types, where the size of the array is known
+     * and the destructor must have only one argument.
+     * 
+     * The destructor does not free the memory used by the array.
+     */
+    private generateFixedArrayDestructor(t: ArrayType, size: number): backend.Function {
+        let tc = this.typecode(t).toString();
+        let elementType = RestrictedType.strip(t.elementType);
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+        let dtrName = this.mangleDestructorName(t);
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam("addr", "pointer");
         this.destructors.set(tc, bf);
 
         let counter = b.assign(b.tmp(), "copy", "sint", [0]);
@@ -3919,7 +3967,40 @@ export class CodeGenerator {
         return bf;
     }
 
-    private generateInterfaceDestructor(): backend.Function {
+    /**
+     * Generates a destructor that takes one argument.
+     * The argument is a pointer to the interface header.
+     */
+    private generateInterfaceDestructor(t: InterfaceType): backend.Function {
+        let tc = this.typecode(t).toString();
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+
+        let dtrName = this.mangleDestructorName(t);
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam("addr", "pointer");
+        this.destructors.set(tc, bf);
+        let realPointer = b.assign(b.tmp(), "load", "addr", [pointer, this.ifaceHeader.fieldOffset("pointer")]);
+        let table = b.assign(b.tmp(), "load", "addr", [pointer, this.ifaceHeader.fieldOffset("table")]);
+        let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+        b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, realPointer]);
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false, true);
+        return bf;
+    }
+
+    /**
+     * Generates a destructor that takes two arguments.
+     * The first is a pointer to the struct behind the interface.
+     * The second is a pointer to the interface table.
+     */
+    /*
+    private generateUniversalInterfaceDestructor(): backend.Function {
         let tc = "interface{}";
         let bf = this.destructors.get(tc);
         if (bf) {
@@ -3943,8 +4024,43 @@ export class CodeGenerator {
         this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
     }
+    */
 
-    private generateOrTypeDestructor(): backend.Function {
+    /**
+     * Generates a destructor that takes one argument.
+     * The argument is a pointer to the or type struct.
+     */
+    private generateOrTypeDestructor(t: OrType): backend.Function {
+        let tc = this.typecode(t).toString();
+        let bf = this.destructors.get(tc);
+        if (bf) {
+            return bf;
+        }
+
+        let orType = this.getSSAType(t) as ssa.StructType
+        let dtrName = this.mangleDestructorName(t);
+        let dtrType = new ssa.FunctionType(["addr"], null);
+        let b = new ssa.Builder();
+        bf = this.backend.declareFunction(dtrName);
+        let dtrNode = b.define(dtrName, dtrType);
+        let pointer = b.declareParam(new ssa.PointerType(orType, false), "pointer");
+        this.destructors.set(tc, bf);
+        if (orType.fieldIndexByName("value") != 0) {
+            throw "Implementation error. Wrong offset in or-type struct"
+        }
+        let table = b.assign(b.tmp(), "load", "addr", [pointer, orType.fieldOffset("kind")]);
+        let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
+        let cond = b.assign(b.tmp(), "ne", "i8", [dtrPtr, 0]);
+        b.ifBlock(cond);
+        b.callIndirect(null, new ssa.FunctionType(["addr"], null), [dtrPtr, pointer]);
+        b.end();
+        b.end();
+        this.backend.defineFunction(dtrNode, bf, false, true);
+        return bf;
+    }
+
+    /*
+    private generateUniversalOrTypeDestructor(): backend.Function {
         let tc = "ortype";
         let bf = this.destructors.get(tc);
         if (bf) {
@@ -3957,6 +4073,7 @@ export class CodeGenerator {
         let dtrNode = b.define(dtrName, dtrType);
         let pointer = b.declareParam("addr", "pointer");
         this.destructors.set(tc, bf);
+        // Load a pointer to the destructor function. If not null, call it.
         let dtrPtr = b.assign(b.tmp(), "load", "addr", [pointer, 0]);
         let cond = b.assign(b.tmp(), "ne", "i8", [dtrPtr, 0]);
         b.ifBlock(cond);
@@ -3967,6 +4084,36 @@ export class CodeGenerator {
         this.backend.defineFunction(dtrNode, bf, false, true);
         return bf;
     }
+    */
+
+    /**
+     * Generate a destructor function that takes only one argument, which is a pointer
+     * to the value that is to be destructed.
+     * 
+     * If the type needs no destructors, the function returns null.
+     */
+    private generateDestructor(t: Type): backend.Function {
+        if (t instanceof InterfaceType) {
+            return this.generateInterfaceDestructor(t);            
+        } else if (t instanceof PointerType) {
+            return this.generatePointerDestructor(t);            
+        } else if (t instanceof StructType) {
+            return this.generateStructDestructor(t);
+        } else if (t instanceof ArrayType) {
+            if (t.size < 0) {
+                throw "Implementation error. Generating destructor for array of unknown size"
+            }
+            return this.generateFixedArrayDestructor(t, t.size);
+        } else if (t instanceof TupleType) {
+            return this.generateTupleDestructor(t);
+        } else if (t instanceof SliceType) {
+            return this.generateSliceDestructor(t);            
+        } else if (t == Static.t_string) {
+            // Do nothing by intention, because strings are not explicitly destructed. They are always reference counted.
+            return null
+        }
+        return null
+    }
 
     /**
      * pointer is the address of a value and t is the type of the value being pointed to.
@@ -3974,11 +4121,13 @@ export class CodeGenerator {
     private callDestructor(typ: Type, pointer: ssa.Variable | number, b: ssa.Builder, avoidNullCheck: boolean, free: "no" | "free" | "decref" | "unlock") {
         let t = RestrictedType.strip(typ);
         let dtr: backend.Function;
+        // Determine the destructor and store it in 'dtr'.
+        // If the underlying memory is not free'd in any way, call the destructor.
         if (!helper.isPureValue(typ) && !helper.isLocalReference(typ)) {
             if (free == "no" && !avoidNullCheck) {
                 let cond: ssa.Variable;
                 if (t instanceof InterfaceType) {
-                    let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
+                    let realPointer = b.assign(b.tmp(), "load", "addr", [pointer, this.ifaceHeader.fieldOffset("pointer")]);
                     cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
                 } else {
                     cond = b.assign(b.tmp(), "ne", "i8", [pointer, 0]);
@@ -3986,11 +4135,14 @@ export class CodeGenerator {
                 b.ifBlock(cond);
             }
             if (t instanceof InterfaceType) {
+                dtr = this.generateInterfaceDestructor(t);
                 if (free == "no") {
-                    let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                    let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
-                    let dtr = this.generateInterfaceDestructor();
-                    b.call(null, new ssa.FunctionType(["addr", "addr"], null), [dtr.getIndex(), realPointer, table]);
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
+                }
+            } else if (t instanceof OrType) {
+                dtr = this.generateOrTypeDestructor(t);
+                if (free == "no") {
+                    b.call(null, new ssa.FunctionType(["addr"], null), [dtr.getIndex(), pointer]);
                 }
             } else if (t instanceof PointerType) {
                 if (free == "no") {
@@ -4042,6 +4194,7 @@ export class CodeGenerator {
                 b.end();
             }
         }
+        // Free the underlying memory and by doing so invoke the destructor
         if (!avoidNullCheck && t instanceof InterfaceType) {
             let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
             let cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
@@ -4050,33 +4203,18 @@ export class CodeGenerator {
         if (free == "free") {
             if (helper.isArray(typ) || helper.isString(typ)) {
                 b.assign(null, "free_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
-            } else if (t instanceof InterfaceType) {
-                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
-                let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
-                b.assign(null, "free", null, [realPointer, dtrPtr]);
             } else {
                 b.assign(null, "free", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         } else if (free == "unlock") {
             if (helper.isArray(typ) || helper.isString(typ)) {
                 throw "Implementation error"
-            } else if (t instanceof InterfaceType) {
-                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
-                let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
-                b.assign(null, "unlock", null, [realPointer, dtrPtr]);
             } else {
                 b.assign(null, "unlock", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
         } else if (free == "decref") {
             if (helper.isArray(typ) || helper.isString(typ)) {
                 b.assign(null, "decref_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
-            } else if (t instanceof InterfaceType) {
-                let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
-                let table = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("table")]);
-                let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
-                b.assign(null, "decref", null, [realPointer, dtrPtr]);
             } else {
                 b.assign(null, "decref", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
@@ -4100,7 +4238,7 @@ export class CodeGenerator {
         } else if (t == Static.t_string) {
             let v = b.assign(b.tmp(), "load", this.getSSAType(type), [pointer.variable, pointer.offset]);
             this.callDestructor(t, v, b, false, "decref");
-        } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType) {
+        } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType || t instanceof SliceType || helper.isOrType(t)) {
             let p = pointer.variable;
             if (pointer.offset) {
                 p = b.assign(b.tmp(), "add", "addr", [p, pointer.offset]);
@@ -4129,6 +4267,9 @@ export class CodeGenerator {
             let arrayPointer = b.assign(b.tmp(), "member", "addr", [v, st.fieldIndexByName("array_ptr")]);
             this.callDestructor(t.arrayType, arrayPointer, b, false, "decref");
         } else if (t instanceof ArrayType || t instanceof TupleType || t instanceof StructType) {
+            let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
+            this.callDestructor(t, obj, b, true, "no");
+        } else if (helper.isOrType(t)) {
             let obj = b.assign(b.tmp(), "addr_of", "addr", [v]);
             this.callDestructor(t, obj, b, true, "no");
         }
