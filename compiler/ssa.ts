@@ -305,6 +305,9 @@ export class FunctionType {
     private _stackFrame: StructType;
 }
 
+/**
+ * BinaryArray is used in BinaryData to capture constant byte data.
+ */
 export class BinaryArray {
     constructor() {
         this.data = [];
@@ -317,6 +320,9 @@ export class BinaryArray {
     public data: BinaryData;
 }
 
+/**
+ * BinaryData is used to capture constant data.
+ */
 export type BinaryData = Array<number | string | BinaryArray>;
 
 export class Variable {
