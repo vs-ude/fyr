@@ -734,7 +734,7 @@ export class Wasm32Backend implements backend.Backend {
             if (n.kind == "decl_result" && (this.wfIsAsync || n.type instanceof StructType)) {
                 // Structs are returned via the heap stack.
                 // If async, everything is returned via the heap stack.
-                let index = this.resultFrame.addField(n.assign.name, n.type as Type | StructType);
+                let index = 0 // TODO this.resultFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "result", offset: index};
                 this.varStorage.set(n.assign, s);
                 this.returnVariables.push(n.assign);
@@ -749,7 +749,7 @@ export class Wasm32Backend implements backend.Backend {
                 continue;
             } else if (n.kind == "decl_param" && n.type instanceof StructType) {
                 // Structs are always passed on the stack
-                let index = this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
+                let index = 0; // TODO this.paramsFrame.addField(n.assign.name, n.type as Type | StructType);
                 let s: Wasm32Storage = {storageType: "params", offset: index};
                 this.varStorage.set(n.assign, s);
                 this.parameterVariables.push(n.assign);
@@ -768,7 +768,7 @@ export class Wasm32Backend implements backend.Backend {
                     */
                 } else if (this.wfIsAsync) {
                     // If the function yields, the heapstack must store the value of the parameter
-                    let index = this.varsFrame.addField("$param" + s.offset.toString(), t);
+                    let index = 0; // TODO this.varsFrame.addField("$param" + s.offset.toString(), t);
                     let sAlternative: Wasm32Storage = {storageType: "vars", offset: index};
                     this.varAsyncStorage.set(n.assign, sAlternative);
                 }
@@ -835,7 +835,7 @@ export class Wasm32Backend implements backend.Backend {
             let index = locals.allocate(v.type);
             let s: Wasm32Storage = {storageType: "local_var", offset: index};
             this.varStorage.set(v, s);
-            let indexAlternative = this.varsFrame.addField(v.name, v.type);
+            let indexAlternative = 0; // TODO this.varsFrame.addField(v.name, v.type);
             let sAlternative: Wasm32Storage = {storageType: "vars", offset: indexAlternative};
             this.varAsyncStorage.set(v, sAlternative);
         } else if (!(v.type instanceof StructType) && !v.addressable) {
@@ -843,11 +843,11 @@ export class Wasm32Backend implements backend.Backend {
             let index = locals.allocate(v.type);
             let s: Wasm32Storage = {storageType: "local_var", offset: index};
             this.varStorage.set(v, s);
-            let indexAlternative = this.varsFrame.addField(v.name, v.type);
+            let indexAlternative = 0; // TODO this.varsFrame.addField(v.name, v.type);
             let sAlternative: Wasm32Storage = {storageType: "vars", offset: indexAlternative};
             this.varGCStorage.set(v, sAlternative);
         } else {
-            let index = this.varsFrame.addField(v.name, v.type);
+            let index = 0; // TODO this.varsFrame.addField(v.name, v.type);
             let s: Wasm32Storage = {storageType: "vars", offset: index};
             this.varStorage.set(v, s);
         }

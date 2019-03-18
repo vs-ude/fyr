@@ -1,4 +1,8 @@
 type Node struct {
+    v Value
+    v2 Value
+    ptr *Node
+    ptr2 *Value
 }
 
 type Value *Node | uint64 | int64 | double

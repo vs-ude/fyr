@@ -28,16 +28,19 @@ export class CodeGenerator {
         this.localSlicePointer.name = "localSlice";
         this.localSlicePointer.addField("data_ptr", "addr");
         this.localSlicePointer.addField("data_length", "sint");
+        this.localSlicePointer.finalize()
 
         this.slicePointer = new ssa.StructType();
         this.slicePointer.name = "strongSlice";
         this.slicePointer.addField("base", this.localSlicePointer);
         this.slicePointer.addField("array_ptr", "addr");
+        this.slicePointer.finalize()
 
         this.ifaceHeader = new ssa.StructType();
         this.ifaceHeader.name = "iface";
         this.ifaceHeader.addField("pointer", "addr");
         this.ifaceHeader.addField("table", "addr");
+        this.ifaceHeader.finalize()
 
         /*
         this.ifaceHeader32 = new ssa.StructType();
@@ -67,6 +70,7 @@ export class CodeGenerator {
         this.mapHead.addField("size", "i32");
         this.mapHead.addField("free", "i32");
         this.mapHead.addField("freeList", "addr");
+        this.mapHead.finalize()
     }
 
     public processModule(mnode: Node, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
@@ -197,7 +201,7 @@ export class CodeGenerator {
         return this.backend.generateModule(emitIR, initPackages, duplicateCodePackages);
     }
 
-    public getSSAType(t: Type): ssa.Type | ssa.StructType | ssa.PointerType {
+    public getSSAType(t: Type, finalize: boolean = true): ssa.Type | ssa.StructType | ssa.PointerType {
         if (t == Static.t_bool || t == Static.t_uint8 || t == Static.t_byte || t == Static.t_void) {
             return "i8";
         }
@@ -248,20 +252,20 @@ export class CodeGenerator {
             if (helper.isInterface(t.elementType)) {
                 return this.ifaceHeader;
             }
-            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);
+            return new ssa.PointerType(this.getSSAType(t.elementType.elementType, finalize), true);
         }
         if (t instanceof types.PointerType) {
             // Pointer to an interface?
             if (helper.isInterface(t)) {
                 return this.ifaceHeader;
             }
-            return new ssa.PointerType(this.getSSAType(t.elementType), helper.isConst(t.elementType));
+            return new ssa.PointerType(this.getSSAType(t.elementType, finalize), helper.isConst(t.elementType));
         }
         if (t instanceof RestrictedType && t.elementType instanceof types.UnsafePointerType) {
-            return new ssa.PointerType(this.getSSAType(t.elementType.elementType), true);
+            return new ssa.PointerType(this.getSSAType(t.elementType.elementType, finalize), true);
         }
         if (t instanceof types.UnsafePointerType) {
-            return new ssa.PointerType(this.getSSAType(t.elementType), helper.isConst(t.elementType));
+            return new ssa.PointerType(this.getSSAType(t.elementType, finalize), helper.isConst(t.elementType));
         }
         if (t == Static.t_string) {
             return "addr";
@@ -287,21 +291,28 @@ export class CodeGenerator {
             this.structs.set(t, s);
             for(let i = 0; i < t.fields.length; i++) {
                 let f = t.fields[i];
-                let ft = this.getSSAType(f.type);
+                let ft = this.getSSAType(f.type, false);
                 s.addField(f.name, ft, 1);
                 if (t.extends && i == 0) {
-                    for(let entry of (ft as ssa.StructType).fieldOffsetsByName.entries()) {
-                        s.fieldOffsetsByName.set(entry[0], entry[1]);
-                    }
+                    s.extend(ft as ssa.StructType)
+//                    for(let entry of (ft as ssa.StructType).fieldOffsetsByName.entries()) {
+//                        s.fieldOffsetsByName.set(entry[0], entry[1]);
+//                    }
                 }
-            }
+            }            
             s.pkg = t.pkg;
+            if (finalize) {
+                s.finalize()
+            }
             return s;
         }
         if (t instanceof ArrayType) {
             let s = new ssa.StructType();
             s.name = t.name;
-            s.addField("data", this.getSSAType(t.elementType), t.size);
+            s.addField("data", this.getSSAType(t.elementType, false), t.size);
+            if (finalize) {
+                s.finalize()
+            }
             return s;
         }
         if (t instanceof TupleType) {
@@ -309,8 +320,11 @@ export class CodeGenerator {
             s.name = t.name;
             let i = 0;
             for(let el of t.types) {
-                s.addField("t" + i.toString(), this.getSSAType(el));
+                s.addField("t" + i.toString(), this.getSSAType(el, false));
                 i++;
+            }
+            if (finalize) {
+                s.finalize()
             }
             return s;
         }
@@ -333,11 +347,17 @@ export class CodeGenerator {
             let i = 0;
             for(let ot of t.types) {
                 i++;                
-                let ft = this.getSSAType(ot);
+                let ft = this.getSSAType(ot, false);
                 u.addField("option" + i.toString(), ft, 1);
             }
             s.addField("value", u, 1);
             s.addField("kind", "addr", 1);
+            if (finalize) {
+                u.finalize()
+            }
+            if (finalize) {
+                s.finalize()
+            }
             return s;            
         }
         if (t instanceof StringLiteralType) {

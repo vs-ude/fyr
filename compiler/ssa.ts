@@ -1,4 +1,5 @@
 import {Package} from "./pkg"
+import { StructField } from "./types";
 
 export type NodeKind = "spawn" | "spawn_indirect" | "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend" | "free" | "incref" | "decref" | "alloc_arr" | "free_arr" | "incref_arr" | "decref_arr" | "member" | "set_member" | "len_arr" | "memcpy" | "memmove" | "memcmp" | "len_str" | "table_iface" | "addr_of_func" | "symbol" | "lock" | "unlock" | "notnull" | "notnull_ref" | "println" | "arr_to_str" | "move_arr" | "union";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr" | "int" | "sint";
@@ -13,27 +14,21 @@ export class PointerType {
         this.isConst = isConst;
     }
 
+    public finalize() {
+        if (this.elementType instanceof StructType) {
+            this.elementType.finalize()
+        } else if (this.elementType instanceof PointerType) {
+            this.elementType.finalize()
+        }        
+    }
+
     public elementType: Type | StructType | PointerType;
     public isConst: boolean;
 }
 
 export class StructType {
-    public addField(name: string, type: Type | StructType | PointerType, count: number = 1): number {
-        let align = alignmentOf(type);
-        this.alignment = Math.max(this.alignment, align);
-        if (this.isUnion) {
-            this.size = Math.max(this.size, sizeOf(type));
-            this.fieldOffsetsByName.set(name, 0);
-            this.fields.push([name, type, count]);
-            return 0;
-        }
-        let alignOffset = (align - this.size % align) % align;
-        this.size += alignOffset;
-        let offset = this.size;
-        this.fieldOffsetsByName.set(name, this.size);
-        this.size += count * alignedSizeOf(type);
+    public addField(name: string, type: Type | StructType | PointerType, count: number = 1): void {
         this.fields.push([name, type, count]);
-        return offset;
     }
 
     public addFields(s: StructType) {
@@ -42,9 +37,47 @@ export class StructType {
         }
     }
 
+    public extend(s: StructType) {
+        this.extends = s;
+    }
+
+    /**
+     * Computes the size and offsets of structs.
+     * Due to recursivte types, we can do that only after all fields are added to a StructType.
+     */
+    public finalize(): void {
+        if (this.finalized) {
+            return
+        }
+        for (let field of this.fields) {
+            if (this.isUnion) {
+                this.size = Math.max(this.size, sizeOf(field[1], false));
+                this.fieldOffsetsByName.set(field[0], 0);
+            } else {
+                let align = alignmentOf(field[1]);
+                this.alignment = Math.max(this.alignment, align);
+                let alignOffset = (align - this.size % align) % align;
+                this.size += alignOffset;
+                this.fieldOffsetsByName.set(field[0], this.size);
+                this.size += field[2] * alignedSizeOf(field[1], false);
+            }
+        }
+        this.finalized = true;
+        for (let field of this.fields) {
+            if (field[1] instanceof StructType) {
+                field[1].finalize()
+            } else if (field[1] instanceof PointerType) {
+                field[1].finalize()
+            }
+        }
+    }
+
     public fieldOffset(name: string): number {
         let offset = this.fieldOffsetsByName.get(name);
         if (offset === undefined) {
+            if (this.extends) {
+                return this.extends.fieldOffset(name);
+            }
             throw "Implementation error " + name;
         }
         return offset;
@@ -99,6 +132,8 @@ export class StructType {
     // The package the type has been defined in.
     // Anonymous structs like arrays and tuples are not associated to any package.
     public pkg?: Package;
+    private extends: StructType;
+    private finalized: boolean;
 }
 
 export function alignmentOf(x: Type | StructType | PointerType): number {
@@ -139,9 +174,25 @@ export function isSigned(x: Type | PointerType): boolean {
     return x == "s8" || x == "s16" || x == "s32" || x == "s64";
 }
 
-export function sizeOf(x: Type | StructType | PointerType): number {
+export function sizeOf(x: Type | StructType | PointerType, useCachedSize: boolean = true): number {
     if (x instanceof StructType) {
-        return x.size;
+        if (useCachedSize) {
+            return x.size;
+        }
+        let s = 0;
+        if (x.isUnion) {
+            for(let f of x.fields) {
+                s = Math.max(s, sizeOf(f[1], false))
+            }
+            return s
+        }
+        for(let f of x.fields) {
+            let align = alignmentOf(f[1]);
+            let alignOffset = (align - s % align) % align;
+            s += alignOffset;
+            s += f[2] * alignedSizeOf(f[1], false);
+        }
+        return s
     }
     if (x instanceof PointerType) {
         return ptrSize;
@@ -170,8 +221,8 @@ export function sizeOf(x: Type | StructType | PointerType): number {
     }
 }
 
-export function alignedSizeOf(type: Type | StructType | PointerType): number {
-    let size = sizeOf(type);
+export function alignedSizeOf(type: Type | StructType | PointerType, useCachedSize: boolean = true): number {
+    let size = sizeOf(type, useCachedSize);
     if (size == 0) {
         return 0;
     }
@@ -249,6 +300,7 @@ export class FunctionType {
         if (this._stackFrame.fields.length != 0) {
             this._stackFrame.addField("$typemapCall", "i32");
         }
+        this._stackFrame.finalize()
         return this._stackFrame;
     }
 
