@@ -325,6 +325,9 @@ export class BinaryArray {
  */
 export type BinaryData = Array<number | string | BinaryArray>;
 
+/**
+ * Variables are used to describe local variables.
+ */
 export class Variable {
     constructor(name?: string) {
         if (name) {
@@ -384,10 +387,6 @@ export class Variable {
      */
     public needsRefCounting: boolean;
     /**
-     * True, if the variable holds GC-relevant pointers and thus the GC must be able to find the variable.
-     */
-//    public gcDiscoverable: boolean;
-    /**
      * Internal
      */
     public _step: Node;
@@ -395,6 +394,10 @@ export class Variable {
     private static counter: number = 0;
 }
 
+/**
+ * Pointer describes an address in memory.
+ * The address consists of the numerical value of a Variable plus an offset.
+ */
 export class Pointer {
     constructor(v: Variable, offset: number) {
         this.variable = v;
@@ -1105,117 +1108,6 @@ export class Optimizer {
             this.removeDeadStrain(n.next[1], n.blockPartner);
         }
     }
-
-    /*
-    public analyzeGCDiscoverability(n: Node) {
-        let varsRead = new Set<Variable>();
-        this._analyzeGCDiscoverability(n, null, varsRead);
-    }
-    */
-
-    /**
-     * The function traverses the code in reverse order and collects all variables of type "ptr" that are assigned before and read
-     * after a GC happens. Thus, the object being pointed to is still in use and must be detectable by the GC.
-     */
-    /*
-    private _analyzeGCDiscoverability(n: Node, stop: Node, varsRead: Set<Variable>): boolean {
-        let doesGC = false;
-        for(; n != stop;) {
-            if (n.kind == "end" && n.blockPartner.kind == "if") {
-                let r = new Set<Variable>();
-                for(let v of varsRead) {
-                    r.add(v);
-                }
-                let branchDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, r);
-                doesGC = doesGC || branchDoesGC;
-                if (n.prev[1]) {
-                    branchDoesGC = this._analyzeGCDiscoverability(n.prev[1], n.blockPartner, r);
-                    doesGC = doesGC || branchDoesGC;
-                }
-                for(let v of r) {
-                    varsRead.add(v);
-                }
-                n = n.blockPartner;
-            } else if (n.kind == "end" && (n.blockPartner.kind == "block" || n.blockPartner.kind == "loop")) {
-                let blockDoesGC = this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
-                if (n.blockPartner.kind == "loop") {
-                    // Run once again to see what happens in this case
-                    this._analyzeGCDiscoverability(n.prev[0], n.blockPartner, varsRead);
-                }
-                doesGC = doesGC || blockDoesGC
-                n = n.blockPartner;
-            } else if (n.kind == "decl_var" || n.kind == "decl_result" || n.kind == "decl_param") {
-                n = n.prev[0];
-            } else {
-                if (n.kind == "alloc" || n.kind == "call" || n.kind == "call_indirect" || n.kind == "call_end" || n.kind == "call_begin" || n.kind == "call_indirect_begin") {
-                    if (n.assign && n.assign.type == "ptr") {
-                        // The varible is written.
-                        // If a GC happens before, there is no need to need to inspect this variable.
-                        varsRead.delete(n.assign)
-                    }
-                    // Call might trigger the GC. All variables read AFTER the call must necessarily be assigned BEFORE the call.
-                    // Hence, the objects these variables are pointing to need to survive this GC.
-                    for(let v of varsRead) {
-                        v.gcDiscoverable = true;
-                    }
-                    doesGC = true;
-                }
-                let argDoesGC = false;
-                let doesGCBefore = doesGC;
-                for(let i = n.args.length - 1; i >= 0; i--) {
-                    let a = n.args[i];
-                    // If a ptr is computed for a "store" and then a value is computed leading to a GC, the ptr must be GC discoverable
-                    if (i == 0 && n.kind == "store" && doesGC && !doesGCBefore) {
-                        if (a instanceof Variable && a.type == "ptr") {
-                            a.gcDiscoverable = true;
-                        } else if (a instanceof Node && a.assignType == "ptr") {
-                            if (a.assign) {
-                                a.assign.gcDiscoverable = true;
-                            } else {
-                                a.assign = new Variable();
-                                a.assign.type = "ptr";
-                                a.assign.gcDiscoverable = true;
-                            }
-                        }
-                    }
-                    if (a instanceof Node) {
-                        let gc = this._analyzeGCDiscoverability(a, null, varsRead);
-                        doesGC = doesGC || gc;
-                        if (argDoesGC && a.assignType == "ptr") {
-                            if (a.assign) {
-                                a.assign.gcDiscoverable = true;
-                            } else {
-                                a.assign = new Variable();
-                                a.assign.type = "ptr";
-                                a.assign.gcDiscoverable = true;
-                            }
-                        }
-                        argDoesGC = argDoesGC || gc;
-                    } else if (a instanceof Variable && a.type == "ptr") {
-                        if (argDoesGC) {
-                            // If the value of the variable is a pointer and put on the WASM stack and GC happens before the value of the var is consumed,
-                            // then the variable must be GC discoverable, since the value on the WASM stack is not discoverable.
-                            a.gcDiscoverable = true;
-                        } else {
-                            varsRead.add(a);
-                        }
-                    }
-                }
-                // If the assigned variable has not yet been read, then it must be inside a loop,
-                // otherwise the variable would be useless and would have been removed.
-                // If GC happens after this assignment, GC discoverability is required.
-                // if (n.assign && n.assign.type == "ptr" && !varsRead.has(n.assign) && doesGC) {
-//                    n.assign.gcDiscoverable = true;
-                if (n.assign && n.assign.type == "ptr") {
-                    // The varible is written.
-                    // If a GC happens before, there is no need to need to inspect this variable.
-                    varsRead.delete(n.assign)
-                }
-                n = n.prev[0];
-            }
-        }
-        return doesGC;
-    }*/
 }
 
 
