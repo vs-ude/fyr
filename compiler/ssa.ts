@@ -1292,58 +1292,75 @@ export class Stackifier {
     }
 
     public stackifyStep(start: Node, end: Node) {
+        // No need to inline in the first line
         let n = start.next[0];
+        // Iterate over the code
         for( ; n && n != end; ) {
             if (n.kind == "addr_of") {
+                // If we have the following code:
+                // %56 = expression
+                // %57 = addr_of %56
+                // then inlining would yield
+                // %57 = addr_of expression
+                // which is something different, because it is no longer the address of a local variable.
                 n = n.next[0];
-            } else {
-                if (n.kind == "if" && n.next[1]) {
-                    this.stackifyStep(n.next[1], n.blockPartner);
-                }
-                let doNotInline: Array<Variable> = [];
-                let assigned = new Map<Variable, boolean>();
-                for(let i = 0; i < n.args.length; i++) {
-                    let a = n.args[i];
-                    // A variable that is read only here, could perhaps be removed by inlining the code that computes its value.
-                    if (a instanceof Variable && a.readCount == 1) {
-                        // Try to inline the computation of variable 'a'
-                        let inline: Node = this.findInline(n.prev[0], a, doNotInline, assigned);
-                        if (inline) {
-                            // The variable is now no longer read
-                            inline.assign.readCount--;
-                            // The variable is assigned once less
-                            inline.assign.writeCount--;
-                            // The inlined expression does not assign to any variable any more.
-                            inline.assign = null;
-                            // Inline the expression
-                            if (inline.kind == "const") {
-                                n.args[i] = inline.args[0];
-                            } else {
-                                n.args[i] = inline;
-                            }
-                            // Remove the inlined expression
-                            Node.removeNode(inline);
-                        }
-/*                    } else if (a instanceof Variable && a.writeCount == 1) {
-                        // Try to inline the computation
-                        let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline, assigned);
-                        if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
-                            inline.assign.readCount--;
-                            n.args[i] = inline;
-                            Node.removeNode(inline);
-                        }*/
-                    }
-                    if (a instanceof Variable) {
-                        doNotInline.push(a);
-                    } else if (a instanceof Node) {
-                        this.collectAssignments(a, null, assigned);
-                    }
-                }
-                if (n.kind == "step" || n.kind == "goto_step") {
-                    break;
-                }
-                n = n.next[0];
+                continue
             }
+            // Investigate branches and inline inside the branches
+            if (n.kind == "if" && n.next[1]) {
+                this.stackifyStep(n.next[1], n.blockPartner);
+            }
+            let doNotInline: Array<Variable> = [];
+            let assigned = new Map<Variable, boolean>();
+            for(let i = 0; i < n.args.length; i++) {
+                let a = n.args[i];
+                // A variable that is read only here, could perhaps be removed by inlining the code that computes its value.
+                if (a instanceof Variable && a.readCount == 1) {
+                    // Try to inline the computation of variable 'a'
+                    let inline: Node = this.findInline(n.prev[0], a, doNotInline, assigned);
+                    if (inline) {
+                        // The variable is now no longer read
+                        inline.assign.readCount--;
+                        // The variable is assigned once less
+                        inline.assign.writeCount--;
+                        // The inlined expression does not assign to any variable any more.
+                        inline.assign = null;
+                        // Inline the expression
+                        if (inline.kind == "const") {
+                            n.args[i] = inline.args[0];
+                        } else {
+                            n.args[i] = inline;
+                        }
+                        // Remove the inlined expression
+                        Node.removeNode(inline);
+                    }
+/*                    } else if (a instanceof Variable && a.writeCount == 1) {
+                    // Try to inline the computation
+                    let inline = this.findInlineForMultipleReads(n.prev[0], a, doNotInline, assigned);
+                    if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
+                        inline.assign.readCount--;
+                        n.args[i] = inline;
+                        Node.removeNode(inline);
+                    }*/
+                }
+                if (a instanceof Variable) {
+                    // The variable 'a' is used here.
+                    // Do not move any expression assigning to 'a' behind here,
+                    // since we rely on 'a' right here.
+                    doNotInline.push(a);
+                } else if (a instanceof Node) {
+                    // See which variables are assigned here.
+                    // Do not move earlier assignments of these variables beyond this point.
+                    // Otherwise we might inline a previous value of the same variable,
+                    this.collectAssignments(a, null, assigned);
+                }
+            }
+            // End of step?
+            if (n.kind == "step" || n.kind == "goto_step") {
+                break;
+            }
+            // Next expression
+            n = n.next[0];
         }
     }
 
@@ -1366,11 +1383,11 @@ export class Stackifier {
                     return null;
                 }
                 if (this.assignsToVariable(n, doNotInline)) {
-                    // The expression assigns to a variable that must not be inlined? Then do not inline.
+                    // The expression 'n' assigns to a variable that must not be inlined? Then do not inline.
                     return null;
                 }
                 if (this.readsFromVariables(n, assigned)) {
-                    // The expression reads from a variable that is assigned later.
+                    // The expression 'n' reads from a variable that is assigned later.
                     // In this case, we would inline a previous value and not the latest value.
                     // Therefore, do not inline.
                     return null;
