@@ -1304,18 +1304,24 @@ export class Stackifier {
                 let assigned = new Map<Variable, boolean>();
                 for(let i = 0; i < n.args.length; i++) {
                     let a = n.args[i];
+                    // A variable that is read only here, could perhaps be removed by inlining the code that computes its value.
                     if (a instanceof Variable && a.readCount == 1) {
-                        // Try to inline the computation
+                        // Try to inline the computation of variable 'a'
                         let inline: Node = this.findInline(n.prev[0], a, doNotInline, assigned);
-                        if (inline && (inline.kind != "call_end" || (n.kind == "return" && n.args.length == 0) || n.kind == "store")) {
+                        if (inline) {
+                            // The variable is now no longer read
                             inline.assign.readCount--;
+                            // The variable is assigned once less
                             inline.assign.writeCount--;
+                            // The inlined expression does not assign to any variable any more.
                             inline.assign = null;
+                            // Inline the expression
                             if (inline.kind == "const") {
                                 n.args[i] = inline.args[0];
                             } else {
                                 n.args[i] = inline;
                             }
+                            // Remove the inlined expression
                             Node.removeNode(inline);
                         }
 /*                    } else if (a instanceof Variable && a.writeCount == 1) {
@@ -1339,35 +1345,50 @@ export class Stackifier {
                 n = n.next[0];
             }
         }
-
-        // If end of function has been reached, traverse the code in reverse order
-        // to mark variables that need to be visible to the GC
-//        if (end === null) {
-//            this.optimizer.analyzeGCDiscoverability(last);
-//        }
     }
 
+    /**
+     * Searches for an assignment of 'v' at Node 'n' or a previous expression.
+     * 'assigned' is a list of all variables that have been assigned between 'n' and the returned Node.
+     * 'doNotInline' lists variables that must not be assigned bewteen 'n' and the returned Node.
+     */
     private findInline(n: Node, v: Variable, doNotInline: Array<Variable>, assigned: Map<Variable, boolean>): Node {
+        // Iterate over the code backwards and search for a place where the desired variable is assigned.
         for( ;n; ) {
+            // Do not go past flow-control operations
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
-            }
+            }            
             if (n.assign == v) {
+                // Here, the desired variable is assigned
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {
+                    // The variable is just declared here. Do not inline declarations
                     return null;
                 }
                 if (this.assignsToVariable(n, doNotInline)) {
+                    // The expression assigns to a variable that must not be inlined? Then do not inline.
                     return null;
                 }
                 if (this.readsFromVariables(n, assigned)) {
+                    // The expression reads from a variable that is assigned later.
+                    // In this case, we would inline a previous value and not the latest value.
+                    // Therefore, do not inline.
                     return null;
                 }
+                // Do not inline call_end, because it must stay where it is.
+                if (n.kind == "call_end") {
+                    return null;
+                }
+                // The expression is safe for inlining
                 return n;
             } else if (n.assign) {
+                // Check which variables are assigned by the expression in 'n'
                 if (this.collectAssignments(n, v, assigned)) {
                     return null;
                 }
             }
+            // Some statements change the state of memory. In this case we can no longer known whether inlining is safe.
+            // In this case, don't do it.
             if (this.doNotByPassForInline(n)) {
                 return null;
             }
