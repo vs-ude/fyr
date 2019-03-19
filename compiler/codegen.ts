@@ -1163,7 +1163,7 @@ export class CodeGenerator {
                     let forceIncref = false;
                     let varName = helper.getUnderlyingLocalVariable(snode.lhs)
                     if ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment && varName != null) {
-                        let e = scope.resolveElement(varName);
+                        let e = scope.resolveElement(varName.value);
                         if (e instanceof FunctionParameter || (e instanceof Variable && !e.isGlobal)) {
                             ignoreVariables.push(e);
                             doNotZero = true;
@@ -1373,6 +1373,9 @@ export class CodeGenerator {
         }
     }
 
+    /**
+     * Returns a local variable that can be assigned to or a pointer to a memory location that can be used to store a value.
+     */
     public processLeftHandExpression(f: Function, scope: Scope, enode: Node, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | ssa.Pointer {
         switch(enode.op) {
             case "id":
@@ -1596,6 +1599,43 @@ export class CodeGenerator {
                     throw "CodeGen: Implementation error"
                 }
             }
+            case "typeCast":
+                // This must be a type cast that extracts a value from an OrType.
+                // All other type casts cannot be assigned to.
+                // This typeCase is only assigned to when used with take, e.g. take(<Object*>some_expression).
+                // In this case return some_expression as a left-hand side
+                if (!helper.isOrType(enode.rhs.type)) {
+                    throw "Implementation error";
+                }
+                let s = this.getSSAType(enode.rhs.type)
+                // It is a value, i.e. not a pointer to a value
+                let left: ssa.Variable | ssa.Pointer;
+                let tc_real: ssa.Variable;
+                if (this.isLeftHandSide(enode.rhs)) {
+                    left = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
+                } else {
+                    left = this.processExpression(f, scope, enode.rhs, b, vars, enode.rhs.type) as ssa.Variable;                    
+                }
+                if (left instanceof ssa.Pointer) {
+                    tc_real = b.assign(b.tmp(), "load", "addr", [left.variable, left.offset + (s as ssa.StructType).fieldOffset("kind")])
+                } else {
+                    tc_real = b.assign(b.tmp(), "member", "addr", [left, (s as ssa.StructType).fieldIndexByName("kind")])
+                }
+                let idx = this.tc.orTypeIndex(enode.rhs.type as OrType, enode.type, true);
+                let d_goal = this.createTypeDescriptor(enode.type);
+                let tc_goal = b.assign(b.tmp(), "table_iface", "addr", [d_goal]);
+                let cmp = b.assign(b.tmp(), "ne", "i8", [tc_real, tc_goal]);
+                b.ifBlock(cmp);
+                b.assign(null, "trap", null, []);
+                b.end();
+                if ((s as ssa.StructType).fieldOffset("value") != 0) {
+                    throw "Implementation error"
+                }
+                if (left instanceof ssa.Pointer) {
+                    return left
+                } else {
+                    return new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [left]), 0);
+                }
             default:
                 throw "CodeGen: Implementation error " + enode.op;
         }
@@ -3202,9 +3242,9 @@ export class CodeGenerator {
             case "take":
             {
                 // This code does not work when take is a statement-level expression, because in this case refcounting and freeing is required.
+                // Therefore, processStatement handles "take" as well.
                 let t = this.getSSAType(enode.type);
                 let src: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
-                let pointer: ssa.Variable;
                 if (src instanceof ssa.Pointer) {
                     let copy = b.assign(b.tmp(), "load", t, [src.variable, src.offset]);
                     if (t instanceof ssa.StructType) {

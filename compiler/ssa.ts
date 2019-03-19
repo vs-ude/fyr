@@ -1477,7 +1477,7 @@ export class Stackifier {
     }
 
     private doNotByPassForInline(n: Node): boolean {
-        if (n.kind == "call" || n.kind == "decref") {
+        if (n.kind == "call" || n.kind == "call_indirect" || n.kind == "call_begin" || n.kind == "call_end" || n.kind == "call_indirect_begin" || n.kind == "decref" || n.kind == "store" || n.kind == "free" || n.kind == "free_arr" || n.kind == "unlock") {
             return true;
         }
         for(let a of n.args) {

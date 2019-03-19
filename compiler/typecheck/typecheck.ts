@@ -3150,11 +3150,18 @@ export class TypeChecker {
             }
             case "take":
                 this.checkExpression(enode.lhs, scope);
-                this.checkIsMutable(enode.lhs, scope);
                 switch(enode.lhs.op) {
                     case "id":
                     case "[":
                     case ".":
+                        this.checkIsMutable(enode.lhs, scope);
+                        break;
+                    case "typeCast":
+                        let n = enode.lhs;
+                        while (n.op == "typeCast" && helper.isOrType(n.rhs.type)) {
+                            n = n.rhs;
+                        }
+                        this.checkIsMutable(n, scope);
                         break;
                     default:
                         throw new TypeError("take() can only be applied on variables, object fields or slice/array elements", enode.lhs.loc);

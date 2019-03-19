@@ -335,16 +335,16 @@ export function isTakeExpression(enode: Node): boolean {
 }
 
 /**
- * Returns a local variable name if enode is a local variable, or a (series of) typecasts of a local variable.
+ * Returns a Node with op == 'id' if enode is a local variable, or a (series of) typecasts of a local variable.
  * If enode is a part of a local variable (e.g. an array element and the array is a local variable),
  * the function returns null. It only returns true if enode represents the entire(!) value stored in a local variable.
  */
-export function getUnderlyingLocalVariable(enode: Node): string | null {
+export function getUnderlyingLocalVariable(enode: Node): Node | null {
     while (enode.op == "typeCast" && !isTakeExpression(enode)) {
         enode = enode.rhs;
     }
     if (enode.op == "id") {
-        return enode.value
+        return enode
     }
     return null
 }

@@ -32,3 +32,13 @@ func foo2() {
         println("Hello int")
     }
 }
+
+func foo3() *Node {
+    var v Value = &Node{}
+    return take((<*Node>v).ptr)
+}
+
+func foo4() *Node {
+    var n = &Node{}
+    return take(<*Node>n.v2)
+}
