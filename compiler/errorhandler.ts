@@ -29,8 +29,10 @@ export class StdErrorOutput implements ErrorHandler {
         } else {
             if (e.stack) {
                 console.error(this.buildOffendingLineString(e.stack))
+                console.error(e.stack)
+            } else {
+                console.error(e)
             }
-            console.error(e)
             process.exit(1)
         }
     }

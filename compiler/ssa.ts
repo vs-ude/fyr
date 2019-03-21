@@ -1,5 +1,6 @@
 import {Package} from "./pkg"
 import { StructField } from "./types";
+import { ImplementationError } from "./errors";
 
 export type NodeKind = "spawn" | "spawn_indirect" | "promote" | "demote" | "trunc32" | "trunc64" | "convert32_u" | "convert32_s" | "convert64_u" | "convert64_s" | "goto_step" | "goto_step_if" | "step" | "call_begin" | "call_end" | "call_indirect" | "call_indirect_begin" | "define" | "decl_param" | "decl_result" | "decl_var" | "alloc" | "return" | "yield" | "block" | "loop" | "end" | "if" | "br" | "br_if" | "copy" | "struct" | "trap" | "load" | "store" | "addr_of" | "call" | "const" | "add" | "sub" | "mul" | "div" | "div_s" | "div_u" | "rem_s" | "rem_u" | "and" | "or" | "xor" | "shl" | "shr_u" | "shr_s" | "rotl" | "rotr" | "eq" | "ne" | "lt_s" | "lt_u" | "le_s" | "le_u" | "gt_s" | "gt_u" | "ge_s" | "ge_u" | "lt" | "gt" | "le" | "ge" | "min" | "max" | "eqz" | "clz" | "ctz" | "popcnt" | "neg" | "abs" | "copysign" | "ceil" | "floor" | "trunc" | "nearest" | "sqrt" | "wrap" | "extend" | "free" | "incref" | "decref" | "alloc_arr" | "free_arr" | "incref_arr" | "decref_arr" | "member" | "set_member" | "len_arr" | "memcpy" | "memmove" | "memcmp" | "len_str" | "table_iface" | "addr_of_func" | "symbol" | "lock" | "unlock" | "notnull" | "notnull_ref" | "println" | "arr_to_str" | "move_arr" | "union";
 export type Type = "i8" | "i16" | "i32" | "i64" | "s8" | "s16" | "s32" | "s64" | "addr" | "f32" | "f64" | "ptr" | "int" | "sint";
@@ -19,7 +20,7 @@ export class PointerType {
             this.elementType.finalize()
         } else if (this.elementType instanceof PointerType) {
             this.elementType.finalize()
-        }        
+        }
     }
 
     public elementType: Type | StructType | PointerType;
@@ -79,7 +80,7 @@ export class StructType {
             if (this.extends) {
                 return this.extends.fieldOffset(name);
             }
-            throw "Implementation error " + name;
+            throw new ImplementationError(name)
         }
         return offset;
     }
@@ -94,7 +95,7 @@ export class StructType {
                 return i;
             }
         }
-        throw "Implementation error " + name;
+        throw new ImplementationError(name)
     }
 
     public fieldTypeByName(name: string): Type | StructType | PointerType {
@@ -103,7 +104,7 @@ export class StructType {
                 return this.fields[i][1];
             }
         }
-        throw "Implementation error " + name;
+        throw new ImplementationError(name)
     }
 
     public toDetailedString(): string {
@@ -499,7 +500,7 @@ export class Node {
 
     public static removeNode(n: Node) {
         if (n.next.length > 1 || n.prev.length > 1) {
-            throw "Cannot remove this node";
+            throw new Error("Cannot remove this node")
         }
         if (n.next.length == 1) {
             for(let i = 0; i < n.next[0].prev.length; i++) {
@@ -609,7 +610,7 @@ export class Builder {
 //        if (assign && assign.type && assign != this.mem) {
 //            if (!compareTypes(assign.type, type)) {
 //                fuck
-//                throw "Variable " + assign.name + " used with wrong type: " + assign.type + " " + type;
+//                throw new Error("Variable " + assign.name + " used with wrong type: " + assign.type + " " + type)
 //            }
         if (assign && !assign.type) {
             assign.type = type;
@@ -637,7 +638,7 @@ export class Builder {
         let n = new Node(assign, "call", type, args);
         if (assign && assign.type) {
             if (!compareTypes(assign.type, type.result)) {
-                throw "Variable " + assign.name + " used with wrong type";
+                throw new Error("Variable " + assign.name + " used with wrong type")
             }
             n.assignType = assign.type;
         } else if (assign) {
@@ -665,7 +666,7 @@ export class Builder {
         let n = new Node(assign, "call_indirect", type, args);
         if (assign && assign.type) {
             if (!compareTypes(assign.type, type.result)) {
-                throw "Variable " + assign.name + " used with wrong type";
+                throw new Error("Variable " + assign.name + " used with wrong type")
             }
         } else if (assign) {
             assign.type = type.result;
@@ -702,7 +703,7 @@ export class Builder {
         let n = new Node(assign, "spawn_indirect", type, args);
         if (assign && assign.type) {
             if (!compareTypes(assign.type, type.result)) {
-                throw "Variable " + assign.name + " used with wrong type";
+                throw new Error("Variable " + assign.name + " used with wrong type")
             }
         } else if (assign) {
             assign.type = type.result;
@@ -739,7 +740,7 @@ export class Builder {
             }
             j++;
         }
-        throw "Branch target is not reachable";
+        throw new Error("Branch target is not reachable")
     }
 
     public br_if(arg: Variable | string | number, to: Node) {
@@ -763,7 +764,7 @@ export class Builder {
             }
             j++;
         }
-        throw "Branch target is not reachable";
+        throw new Error("Branch target is not reachable")
     }
 
     /*
@@ -783,7 +784,7 @@ export class Builder {
                 }
             }
             if (!ok) {
-                throw "Branch target is not reachable";
+                throw new Error("Branch target is not reachable")
             }
         }
         let n = new Node([], "br_table", undefined, args);
@@ -831,7 +832,7 @@ export class Builder {
 
     public end() {
         if (this._blocks.length == 0) {
-            throw "end without opening block";
+            throw new Error("end without opening block")
         }
         let block = this._blocks.pop();
         let end = block.blockPartner;
@@ -859,11 +860,11 @@ export class Builder {
 
     public elseBlock() {
         if (this._blocks.length == 0) {
-            throw "end without opening block";
+            throw new Error("end without opening block")
         }
         let n = this._blocks.pop();
         if (n.kind != "if") {
-            throw "else without if";
+            throw new Error("else without if")
         }
         this._blocks.push(n);
         this._current.next.push(n.blockPartner);
@@ -890,7 +891,7 @@ export class Builder {
         if (n.assign && n.kind != "decl_var") {
             n.assign.writeCount++;
 //            if (n.assign.isTemporary && n.assign.writeCount > 1) {
-//                throw "Variable " + n.assign.name + " is temporary but assigned more than once";
+//                throw new Error("Variable " + n.assign.name + " is temporary but assigned more than once")
 //            }
         }
         for(let v of n.args) {
@@ -979,7 +980,7 @@ export class Optimizer {
                     let n2 = n.prev[0];
                     Node.removeNode(n);
                     n = n2;
-                    continue;    
+                    continue;
                 }
             } else if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "return") {
                 // Do nothing by intention
@@ -1375,7 +1376,7 @@ export class Stackifier {
             // Do not go past flow-control operations
             if (n.kind == "step" || n.kind == "goto_step" || n.kind == "goto_step_if" || n.kind == "br" || n.kind == "br_if" || n.kind == "if" || n.kind == "block" || n.kind == "loop" || n.kind == "end" || n.kind == "return") {
                 return null;
-            }            
+            }
             if (n.assign == v) {
                 // Here, the desired variable is assigned
                 if (n.kind == "decl_param" || n.kind == "decl_result" || n.kind == "decl_var") {

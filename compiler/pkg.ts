@@ -15,6 +15,7 @@ import * as backend from "./backend";
 import {Wasm32Backend} from "./backend_wasm";
 import {CBackend} from "./backend_c";
 import {DummyBackend} from "./backend_dummy";
+import { ImplementationError } from './errors'
 
 
 // Make TSC not throw out the colors lib
@@ -404,7 +405,7 @@ export class Package {
         // Create native executable?
         if (emitNative) {
             if (backend !== "C") {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
 
             // Generate object files

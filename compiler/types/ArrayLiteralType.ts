@@ -1,3 +1,4 @@
+import { ImplementationError } from '../errors'
 import { Type } from './Type'
 
 /**
@@ -24,7 +25,7 @@ export class ArrayLiteralType extends Type {
     }
 
     public toTypeCodeString(): string {
-        throw "Implementation error"
+        throw new ImplementationError()
     }
 
     public types: Array<Type>

@@ -3,6 +3,7 @@ import * as m from 'ts-mockito'
 
 import { PackageType } from '../'
 import { Package } from '../../pkg'
+import { ImplementationError } from '../../errors';
 
 describe('empty PackageType', () => {
     let instance: PackageType
@@ -16,7 +17,7 @@ describe('empty PackageType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(() => instance.toTypeCodeString()).to.throw('Implementation error')
+        expect(() => instance.toTypeCodeString()).to.throw(ImplementationError)
     })
 })
 
@@ -33,6 +34,6 @@ describe('filled PackageType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(() => instance.toTypeCodeString()).to.throw('Implementation error')
+        expect(() => instance.toTypeCodeString()).to.throw(ImplementationError)
     })
 })

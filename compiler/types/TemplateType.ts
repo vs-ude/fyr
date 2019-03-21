@@ -1,6 +1,7 @@
 import { Node } from '../ast'
 import { TemplateFunction, Scope } from '../scopes'
 import { Package } from '../pkg'
+import { ImplementationError } from '../errors';
 
 import { Type } from './Type'
 
@@ -18,7 +19,7 @@ export class TemplateType extends Type {
     }
 
     public toTypeCodeString(): string {
-        throw "Implementation error: Typecode of template type is not allowed"
+        throw new ImplementationError("Typecode of template type is not allowed")
     }
 
     public toString(): string {

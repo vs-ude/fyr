@@ -16,6 +16,7 @@ import {SystemCalls} from "./pkg"
 import * as backend from "./backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
+import { ImplementationError, TodoError } from './errors'
 
 export class CodeGenerator {
     constructor(tc: TypeChecker, backend: backend.Backend, disableNullCheck: boolean) {
@@ -144,7 +145,7 @@ export class CodeGenerator {
                     globals.push(e);
                 }
             } else {
-                throw "CodeGen: Implementation Error " + e;
+                throw new Error("CodeGen: Implementation Error " + e)
             }
         }
 
@@ -193,7 +194,7 @@ export class CodeGenerator {
             } else if (e instanceof Variable) {
                 // Do nothing by intention
             } else {
-                throw "CodeGen: Implementation Error " + e
+                throw new Error("CodeGen: Implementation Error " + e)
             }
         }
 
@@ -299,7 +300,7 @@ export class CodeGenerator {
 //                        s.fieldOffsetsByName.set(entry[0], entry[1]);
 //                    }
                 }
-            }            
+            }
             s.pkg = t.pkg;
             if (finalize) {
                 s.finalize()
@@ -346,7 +347,7 @@ export class CodeGenerator {
             this.structs.set(t, s);
             let i = 0;
             for(let ot of t.types) {
-                i++;                
+                i++;
                 let ft = this.getSSAType(ot, false);
                 u.addField("option" + i.toString(), ft, 1);
             }
@@ -358,7 +359,7 @@ export class CodeGenerator {
             if (finalize) {
                 s.finalize()
             }
-            return s;            
+            return s;
         }
         if (t instanceof StringLiteralType) {
             return ssa.symbolType;
@@ -367,7 +368,7 @@ export class CodeGenerator {
             return this.getSSAType(t.elementType);
         }
         console.log(t)
-        throw "CodeGen: Implementation error: The type does not fit in a register " + t.toString();
+        throw new Error("CodeGen: Implementation error: The type does not fit in a register " + t.toString())
     }
 
     private getSSAFunctionType(t: FunctionType): ssa.FunctionType {
@@ -476,7 +477,7 @@ export class CodeGenerator {
                 }
                 let v = vars.get(e);
                 if (!v) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 this.callDestructorOnVariable(e.type, v, b);
             }
@@ -569,7 +570,7 @@ export class CodeGenerator {
                             }
                             if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                                 if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
-                                    throw "Implementation error";
+                                    throw new ImplementationError()
                                 }
                                 // Fill the RHS with zeros
                                 this.processFillZeros(rhs, snode.rhs.type, b);
@@ -581,13 +582,13 @@ export class CodeGenerator {
                             }
                         }
                     } else if (snode.lhs.op == "tuple") {
-                        throw "TODO"
+                        throw new TodoError()
                     } else if (snode.lhs.op == "array") {
-                        throw "TODO"
+                        throw new TodoError()
                     } else if (snode.lhs.op == "object") {
-                        throw "TODO"
+                        throw new TodoError()
                     } else {
-                        throw "Implementation error"
+                        throw new ImplementationError()
                     }
                 } /* else {
                     if (snode.lhs.op == "id") {
@@ -601,13 +602,13 @@ export class CodeGenerator {
                             b.assign(v, "const", v.type, [0]);
                         }
                     } else if (snode.lhs.op == "tuple") {
-                        throw "TODO"
+                        throw new TodoError()
                     } else if (snode.lhs.op == "array") {
-                        throw "TODO"
+                        throw new TodoError()
                     } else if (snode.lhs.op == "object") {
-                        throw "TODO"
+                        throw new TodoError()
                     } else {
-                        throw "Implementation error"
+                        throw new ImplementationError()
                     }
                 } */
                 return;
@@ -626,21 +627,21 @@ export class CodeGenerator {
                                 }
                             }
                         } else if (node.op == "array") {
-                            throw "TODO"
+                            throw new TodoError()
                         } else if (node.op == "object") {
-                            throw "TODO"
+                            throw new TodoError()
                         }
                     }
                     var processAssignment = (node: Node, type: Type, rhsIsTakeExpr: boolean, destinations: Array<ssa.Variable | ssa.Pointer>, destCount: number, source: ssa.Pointer | ssa.Variable) => {
                         if (node.op == "tuple") {
                             if (!(type instanceof TupleType)) {
-                                throw "Implementation error";
+                                throw new ImplementationError()
                             }
                             let stype = this.getSSAType(type) as ssa.StructType;
                             for(let i = 0; i < node.parameters.length; i++) {
                                 let p = node.parameters[i];
                                 if (p.op == "tuple" || p.op == "array" || p.op == "object") {
-                                    throw "TODO";
+                                    throw new TodoError()
                                     // let eoffset = stype.fieldOffset(stype.fields[i][0]);
                                     // destCount = processAssignment(p, type.types[i], rhsIsTakeExpr, destinations, destCount, new ssa.Pointer(source.variable, source.offset + eoffset));
                                 } else {
@@ -697,9 +698,9 @@ export class CodeGenerator {
                                 }
                             }
                         } else if (node.op == "array") {
-                            throw "TODO"
+                            throw new TodoError()
                         } else if (node.op == "object") {
-                            throw "TODO"
+                            throw new TodoError()
                         }
                         return destCount;
                     }
@@ -796,7 +797,7 @@ export class CodeGenerator {
                     }
                     if ((snode.rhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || snode.rhs.op == "take") {
                         if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         // Fill the RHS with zeros
                         this.processFillZeros(rhs, snode.rhs.type, b);
@@ -1026,7 +1027,7 @@ export class CodeGenerator {
                         ptr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, Static.t_string) as ssa.Variable;
                         len = b.assign(b.tmp(), "len_str", "sint", [ptr]);
                     } else {
-                        throw "TODO map"
+                        throw new TodoError("map")
                     }
                 }
                 //
@@ -1089,7 +1090,7 @@ export class CodeGenerator {
                             b.end();
                             b.end();
                         } else {
-                            throw "TODO map and string"
+                            throw new TodoError("map and string")
                         }
                     } else {
                         // A for loop of the form: "for( condition )"
@@ -1125,7 +1126,7 @@ export class CodeGenerator {
                     } else if (t == Static.t_string) {
                         // Nothing to do. Counter has been increased already
                     } else {
-                        throw "TODO map"
+                        throw new TodoError("map")
                     }
                 }
                 b.br(loop);
@@ -1205,7 +1206,7 @@ export class CodeGenerator {
                     // TODO: The same for maps
                     if (!doNotZero && ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment/* || snode.lhs.op == "take"*/)) {
                         if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         // Fill the RHS with zeros
                         this.processFillZeros(rhs, snode.lhs.type, b);
@@ -1297,7 +1298,7 @@ export class CodeGenerator {
             {
                 let objType = helper.stripType(snode.lhs.type);
                 if (!(objType instanceof SliceType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                 let size = ssa.alignedSizeOf(elementType);
@@ -1386,7 +1387,7 @@ export class CodeGenerator {
                 }
                 let v = vars.get(element);
                 if (!v) {
-                    throw "Implementation error: unknown element " + element.name;
+                    throw new ImplementationError("unknown element " + element.name)
                 }
                 return v;
             }
@@ -1486,7 +1487,7 @@ export class CodeGenerator {
                     // Compare 'index' with 'len'
                     if (typeof(index) == "number") {
                         if (index < 0 || index >= ltype.size * size) {
-                            throw "Implementation error " + index + " " +ltype.size ;
+                            throw new ImplementationError(index + " " +ltype.size )
                         }
                     } else {
                         let cmp = b.assign(b.tmp(), "ge_u", "int", [index, ltype.size]);
@@ -1522,11 +1523,11 @@ export class CodeGenerator {
                     let t = this.getSSAType(ltype) as ssa.StructType;
                     let index: ssa.Variable | number = 0;
                     if (enode.rhs.op != "int") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let i = parseInt(enode.rhs.value);
                     if (i < 0 || i >= ltype.types.length) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let offset = t.fieldOffset("t" + i.toString());
                     if (ptr instanceof ssa.Pointer) {
@@ -1535,7 +1536,7 @@ export class CodeGenerator {
                     }
                     return new ssa.Pointer(ptr, offset);
                 } else {
-                    throw "TODO"; // TODO: map
+                    throw new TodoError(); // TODO: map
                 }
             }
             case ".":
@@ -1558,16 +1559,16 @@ export class CodeGenerator {
                         }
                         return b.assign(b.tmp(), "add", "ptr", [ptr, s.fieldOffset(enode.name.value)]);
                     } else {
-                        throw "TODO interface and class"
+                        throw new TodoError("interface and class")
                     }
                 } else if (t instanceof PackageType) {
                     let ip = scope.resolveElement(enode.lhs.value);
                     if (!(ip instanceof ImportedPackage)) {
-                        throw "Implementation error: no suck package " + enode.lhs.value;
+                        throw new ImplementationError("no such package " + enode.lhs.value)
                     }
                     let element = ip.pkg.scope.resolveElement(enode.name.value);
                     if (!element) {
-                        throw "Implementation error missing " + enode.name.value;
+                        throw new ImplementationError("missing " + enode.name.value)
                     }
                     let v = vars.get(element);
                     if (!v) {
@@ -1576,7 +1577,7 @@ export class CodeGenerator {
                             this.globalVars.set(element, v);
                             vars.set(element, v);
                         } else {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                     }
                     return v;
@@ -1596,7 +1597,7 @@ export class CodeGenerator {
                     let ptr = b.assign(b.tmp(), "addr_of", "ptr", [left]);
                     return new ssa.Pointer(ptr, s.fieldOffset(enode.name.value));
                 } else {
-                    throw "CodeGen: Implementation error"
+                    throw new Error("CodeGen: Implementation error")
                 }
             }
             case "typeCast":
@@ -1605,7 +1606,7 @@ export class CodeGenerator {
                 // This typeCase is only assigned to when used with take, e.g. take(<Object*>some_expression).
                 // In this case return some_expression as a left-hand side
                 if (!helper.isOrType(enode.rhs.type)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let s = this.getSSAType(enode.rhs.type)
                 // It is a value, i.e. not a pointer to a value
@@ -1614,7 +1615,7 @@ export class CodeGenerator {
                 if (this.isLeftHandSide(enode.rhs)) {
                     left = this.processLeftHandExpression(f, scope, enode.rhs, b, vars);
                 } else {
-                    left = this.processExpression(f, scope, enode.rhs, b, vars, enode.rhs.type) as ssa.Variable;                    
+                    left = this.processExpression(f, scope, enode.rhs, b, vars, enode.rhs.type) as ssa.Variable;
                 }
                 if (left instanceof ssa.Pointer) {
                     tc_real = b.assign(b.tmp(), "load", "addr", [left.variable, left.offset + (s as ssa.StructType).fieldOffset("kind")])
@@ -1629,7 +1630,7 @@ export class CodeGenerator {
                 b.assign(null, "trap", null, []);
                 b.end();
                 if ((s as ssa.StructType).fieldOffset("value") != 0) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 if (left instanceof ssa.Pointer) {
                     return left
@@ -1637,7 +1638,7 @@ export class CodeGenerator {
                     return new ssa.Pointer(b.assign(b.tmp(), "addr_of", "addr", [left]), 0);
                 }
             default:
-                throw "CodeGen: Implementation error " + enode.op;
+                throw new Error("CodeGen: Implementation error " + enode.op)
         }
     }
 
@@ -1651,7 +1652,7 @@ export class CodeGenerator {
                 b.assign(null, "notnull", null, [value]);
             }
         } else {
-            throw "Implementation error"
+            throw new ImplementationError()
         }
     }
 
@@ -1698,7 +1699,7 @@ export class CodeGenerator {
             buf.push(n.value);
         } else if (helper.isSafePointer(n.type) || helper.isUnsafePointer(n.type)) {
             if (n.op != "null" && (n.op != "int" || n.numValue != 0)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             buf.push(0);
         } else if (helper.isArray(n.type)) {
@@ -1708,7 +1709,7 @@ export class CodeGenerator {
             if (n.parameters) {
                 for(let p of n.parameters) {
                     if (p.op == "unary...") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     if (p.op == "...") {
                         continue;
@@ -1738,7 +1739,7 @@ export class CodeGenerator {
                 }
             }
         } else {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
     }
 
@@ -1770,7 +1771,7 @@ export class CodeGenerator {
             buf.appendFloat64(parseFloat(n.value));
         } else if (n.type instanceof PointerType) {
             if (n.op != "null" && (n.op != "int" || n.numValue != 0)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             buf.appendPointer(0);
         } else if (n.type instanceof ArrayType) {
@@ -1778,7 +1779,7 @@ export class CodeGenerator {
         } else if (n.type instanceof TupleType || n.type instanceof StructType) {
 
         } else {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
     }
     */
@@ -1813,12 +1814,12 @@ export class CodeGenerator {
             let method = s.method(m);
             let methodObjType = RestrictedType.strip((RestrictedType.strip(method.objectType) as types.PointerType).elementType);
             if (!(methodObjType instanceof types.StructType)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let methodName = methodObjType.pkg.pkgPath + "/" + methodObjType.name + "." + m;
             let f = s.pkg.scope.resolveElement(methodName);
             if (!(f instanceof Function)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let wf = this.funcs.get(f);
             table.push(wf);
@@ -1871,15 +1872,15 @@ export class CodeGenerator {
         } else if (helper.isInterface(targetType) && !helper.isInterface(fromType)) {
             // Assign a pointer to some struct to a pointer to some interface? -> create an ifaceHeader instance
             if (!helper.isSafePointer(fromType)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let structType = RestrictedType.strip((RestrictedType.strip(fromType) as PointerType).elementType);
             let ifaceType = RestrictedType.strip((RestrictedType.strip(targetType) as PointerType).elementType);
             if (!(structType instanceof StructType)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (!(ifaceType instanceof InterfaceType)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let descriptor = this.createInterfaceDescriptor(ifaceType, structType);
             let d = b.assign(b.tmp(), "table_iface", "addr", [descriptor]);
@@ -1888,7 +1889,7 @@ export class CodeGenerator {
             let s = this.getSSAType(targetType);
             let ut = (s as ssa.StructType).fieldTypeByName("value");
             let idx = this.tc.orTypeIndex(targetType as OrType, fromType, false);
-            let u = b.assign(b.tmp(), "union", ut, [idx, v]);            
+            let u = b.assign(b.tmp(), "union", ut, [idx, v]);
             let d = b.assign(b.tmp(), "table_iface", "addr", [this.createTypeDescriptor((targetType as OrType).types[idx])]);
             v = b.assign(b.tmp(), "struct", s, [u, d]);
         }
@@ -1907,9 +1908,9 @@ export class CodeGenerator {
                 return b.assign(b.tmp(), "struct", this.ifaceHeaderSlice, [this.typecode(enode.type), v]);
             } else if (helper.isArray(enode.type)) {
                 // TODO: Copy to allocated area
-                throw "TODO";
+                throw new TodoError()
             } else if (helper.isStruct(enode.type)) {
-                throw "TODO";
+                throw new TodoError()
             } else if (enode.type == Static.t_int64 || enode.type == Static.t_uint64) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [this.typecode(enode.type), 0, v]);
             } else if (enode.type == Static.t_float) {
@@ -1925,7 +1926,7 @@ export class CodeGenerator {
             } else if (helper.isOrType(enode.type)) {
                 return b.assign(b.tmp(), "struct", this.ifaceHeader, [v, 0, 0]);
             } else {
-                throw "Implementation error " + enode.type.toString();
+                throw new ImplementationError(enode.type.toString())
             }
         } else if (!helper.isInterface(targetType) && !helper.isComplexOrType(targetType) && (helper.isInterface(enode.type) || helper.isComplexOrType(enode.type))) {
             return this.processUnboxInterface(targetType, v, b);
@@ -1945,9 +1946,9 @@ export class CodeGenerator {
             return b.assign(b.tmp(), "load", this.slicePointer, [addr, this.ifaceHeaderSlice.fieldOffset("value")]);
         } else if (helper.isArray(targetType)) {
             // TODO: Copy to allocated area
-            throw "TODO";
+            throw new TodoError()
         } else if (helper.isStruct(targetType)) {
-            throw "TODO";
+            throw new TodoError()
         } else if (targetType == Static.t_int64 || targetType == Static.t_uint64) {
             return b.assign(b.tmp(), "load", "i64", [addr, this.ifaceHeader.fieldOffset("value")]);
         } else if (targetType == Static.t_double) {
@@ -1959,7 +1960,7 @@ export class CodeGenerator {
         } else if (helper.isOrType(targetType)) {
             return b.assign(b.tmp(), "load", "i32", [addr, this.ifaceHeader32.fieldOffset("typecode")]);
         } else {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
     }
     */
@@ -2054,7 +2055,7 @@ export class CodeGenerator {
                         if (enode.parameters) {
                             for(let p of enode.parameters) {
                                 if (t.keyType != Static.t_string) {
-                                    throw "Implementation error";
+                                    throw new ImplementationError()
                                 }
                                 // let off = this.backend.addString(p.name.value);
                                 let str = new ssa.Variable;
@@ -2094,7 +2095,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", st, args);
                 }
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             case "tuple":
             {
@@ -2118,7 +2119,7 @@ export class CodeGenerator {
                         let p = enode.parameters[i];
                         if (p.op == "unary...") {
                             if (typeof(count) != "number") {
-                                throw "Implementation error";
+                                throw new ImplementationError()
                             }
                             count--;
                             let dynCount = this.processExpression(f, scope, p.rhs, b, vars, Static.t_int);
@@ -2154,7 +2155,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", st, args);
                 }
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             case "==":
                 return this.processCompare("eq", f, scope, enode, b, vars);
@@ -2350,7 +2351,7 @@ export class CodeGenerator {
                     let storage = this.getSSAType(t.elementType);
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
                 }
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             case "unary&":
             {
@@ -2425,7 +2426,7 @@ export class CodeGenerator {
                 }
                 let v = vars.get(element);
                 if (!v) {
-                    throw "Implementation error: unknown element " + element.name;
+                    throw new ImplementationError("unknown element " + element.name)
                 }
                 return v;
             }
@@ -2451,7 +2452,7 @@ export class CodeGenerator {
                     /*
                     let objType = helper.stripType(enode.lhs.lhs.type);
                     if (!(objType instanceof MapType)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let m = this.processExpression(f, scope, enode.lhs.lhs, b, vars, objType);
                     let key = this.processExpression(f, scope, enode.parameters[0], b, vars, objType.keyType);
@@ -2466,7 +2467,7 @@ export class CodeGenerator {
                         }
                         return b.call(b.tmp(), this.removeNumericMapKeyFunctionType, [SystemCalls.removeNumericMapKey, m, key64]);
                     } */
-                    throw "TODO";
+                    throw new TodoError()
                 } else if (striplhs instanceof FunctionType && striplhs.callingConvention == "system") {
                     // A built-in function. Nothing to do here
                     t = striplhs;
@@ -2475,13 +2476,13 @@ export class CodeGenerator {
                     let e = scope.resolveElement(lhs.value);
                     if (e instanceof TemplateFunction) {
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         let name = e.type.pkg.pkgPath + "/" + lhs.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
                         e = this.tc.pkg.scope.resolveElement(name);
                     }
                     if (!(e instanceof Function)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     f = e;
                     t = f.type;
@@ -2489,7 +2490,7 @@ export class CodeGenerator {
                     // Lookup the template function
                     let tmplFunc = scope.resolveElement(enode.lhs.lhs.value);
                     if (!(tmplFunc instanceof TemplateFunction)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let types: Array<Type> = [];
                     for(let g of enode.lhs.genericParameters) {
@@ -2498,7 +2499,7 @@ export class CodeGenerator {
                     let name = tmplFunc.type.pkg.pkgPath + "/" + enode.lhs.lhs.value + TypeChecker.mangleTemplateParameters(types);
                     let e = scope.resolveElement(name);
                     if (!(e instanceof Function)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     f = e;
                     t = f.type;                */
@@ -2509,13 +2510,13 @@ export class CodeGenerator {
                     let e = pkg.scope.resolveElement(name);
                     if (e instanceof TemplateFunction) {
                         if (!(enode.lhs.type instanceof TemplateFunctionType)) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         let name = e.type.pkg.pkgPath + "/" + lhs.name.value + TypeChecker.mangleTemplateParameters(enode.lhs.type.templateParameterTypes);
                         e = this.tc.pkg.scope.resolveElement(name);
                     }
                     if (!(e instanceof Function)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     f = e;
                     t = f.type;
@@ -2543,7 +2544,7 @@ export class CodeGenerator {
                             objPtr = b.assign(b.tmp(), "addr_of", "addr", [value]);
                         }
                     } else {
-                        throw "Implementation error"
+                        throw new ImplementationError()
                     }
                     if (objType instanceof StructType) {
                         let method = objType.method(lhs.name.value);
@@ -2555,7 +2556,7 @@ export class CodeGenerator {
                         let methodName = TypeChecker.mangledTypeName(methodObjType) + "." + lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         f = e;
                         t = f.type;
@@ -2582,7 +2583,7 @@ export class CodeGenerator {
                         findex = b.assign(b.tmp(), "load", "addr", [table, idx * ssa.sizeOf("addr")]);
                         t = objType.method(name);
                     } else {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                 } else {
                     // Calling a lamdba function
@@ -2707,7 +2708,7 @@ export class CodeGenerator {
                 } else if (t.callingConvention == "system" && t.systemCallType == SystemCalls.copysign64) {
                     result = b.assign(b.tmp(), "copysign", "f64", [args[0]]);
                 } else {
-                    throw "TODO: call a lambda function"
+                    throw new TodoError("call a lambda function")
                 }
 
                 for(let decrefArg of decrefArgs) {
@@ -2737,7 +2738,7 @@ export class CodeGenerator {
                 let t = helper.stripType(enode.lhs.type);
                 if (t instanceof UnsafePointerType) {
                     if (!helper.isLocalReference(enode.type)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let size = ssa.alignedSizeOf(this.getSSAType(t.elementType));
                     let ptr = this.processExpression(f, scope, enode.lhs, b, vars, t);
@@ -2834,7 +2835,7 @@ export class CodeGenerator {
                     }
                     if (helper.isLocalReference(enode.type)) {
                         if (helper.isTakeExpression(enode.lhs)) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         return b.assign(b.tmp(), "struct", this.localSlicePointer, [data_ptr, l]);
                     }
@@ -2886,7 +2887,7 @@ export class CodeGenerator {
                     return result;
                 } else if (t instanceof ArrayType) {
 //                    if (!helper.isLocalReference(enode.type)) {
-//                        throw "Implementation error";
+//                        throw new ImplementationError()
 //                    }
                     let ptr = this.processLeftHandExpression(f, scope, enode.lhs, b, vars);
                     let len = t.size;
@@ -2957,7 +2958,7 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "struct", this.slicePointer, [ptr3, l, arrayPtr]);
                 } else {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
             }
             case "[":
@@ -3038,7 +3039,7 @@ export class CodeGenerator {
                 let ltype = RestrictedType.strip(enode.lhs.type);
                 if (helper.isStringOrType(enode.lhs.type)) {
                     let ltypecode = this.processExpression(f, scope, enode.lhs, b, vars, enode.lhs.type);
-                    throw "TODO"
+                    throw new TodoError()
                     // return b.assign(b.tmp(), "eq", "i32", [ltypecode, rtypecode]);
                 } else if (helper.isInterface(ltype)) {
                     let ifaceAddr: ssa.Variable | ssa.Pointer;
@@ -3049,11 +3050,11 @@ export class CodeGenerator {
                     }
                     let ifaceType = RestrictedType.strip((ltype as types.PointerType).elementType);
                     if (!(ifaceType instanceof InterfaceType)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let structType = RestrictedType.strip((rtype as types.PointerType).elementType);
                     if (!(structType instanceof types.StructType)) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let table: ssa.Variable;
                     if (ifaceAddr instanceof ssa.Variable) {
@@ -3074,7 +3075,7 @@ export class CodeGenerator {
                     let cmp = b.assign(b.tmp(), "eq", "i8", [tc_real, tc_goal]);
                     return cmp;
                 } else {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
             }
             case "typeCast":
@@ -3236,7 +3237,7 @@ export class CodeGenerator {
                     let result = b.assign(b.tmp(), "member", s, [u, idx]);
                     return result;
                 } else {
-                    throw "TODO: conversion not implemented";
+                    throw new TodoError("conversion not implemented")
                 }
             }
             case "take":
@@ -3289,7 +3290,7 @@ export class CodeGenerator {
                     return objType.size;
                 }
                 // TODO: Map
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             case "cap":
             {
@@ -3317,13 +3318,13 @@ export class CodeGenerator {
                     }
                     return b.assign(b.tmp(), "len_arr", "sint", [arrayPointer]);
                 }
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             case "clone":
             {
                 let objType = helper.stripType(enode.lhs.type);
                 if (!(objType instanceof SliceType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                 let size = ssa.alignedSizeOf(elementType);
@@ -3356,7 +3357,7 @@ export class CodeGenerator {
             case "pop": {
                 let objType = helper.stripType(enode.lhs.type);
                 if (!(objType instanceof SliceType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                 let size = ssa.alignedSizeOf(elementType);
@@ -3369,7 +3370,7 @@ export class CodeGenerator {
                 let dest_count: ssa.Variable | number;
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     dest_data_ptr = b.assign(b.tmp(), "member", "addr", [tmp, this.localSlicePointer.fieldIndexByName("data_ptr")]);
@@ -3397,7 +3398,7 @@ export class CodeGenerator {
                 // Update length of the slice
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     b.assign(b.mem, "set_member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length"), new_count]);
@@ -3412,7 +3413,7 @@ export class CodeGenerator {
             {
                 let objType = helper.stripType(enode.parameters[0].type);
                 if (!(objType instanceof SliceType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                 let size = ssa.alignedSizeOf(elementType);
@@ -3477,7 +3478,7 @@ export class CodeGenerator {
                 let dest_array: ssa.Variable | number;
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     dest_array = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
@@ -3564,7 +3565,7 @@ export class CodeGenerator {
                         b.assign(to, "add", "addr", [to, size]);
                         if ((p.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {
                             if (!(src_values[value_count] instanceof ssa.Variable) && !(src_values[value_count] instanceof ssa.Pointer)) {
-                                throw "Implementation error";
+                                throw new ImplementationError()
                             }
                             // Fill the RHS with zeros
                             this.processFillZeros(src_values[value_count] as ssa.Variable | ssa.Pointer, RestrictedType.strip(objType.getElementType()), b);
@@ -3584,7 +3585,7 @@ export class CodeGenerator {
                 // Update length of the slice
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     b.assign(b.mem, "set_member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length"), req_count]);
@@ -3598,12 +3599,12 @@ export class CodeGenerator {
                     b.end();
                     return cond;
                 }
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             case "slice": {
                 let objType = helper.stripType(enode.parameters[0].type);
                 if (!(objType instanceof SliceType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                 let size = ssa.alignedSizeOf(elementType);
@@ -3617,7 +3618,7 @@ export class CodeGenerator {
                 let dest_data: ssa.Variable | number;
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     dest_array = b.assign(b.tmp(), "member", "addr", [head_addr, this.slicePointer.fieldIndexByName("array_ptr")]);
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
@@ -3648,7 +3649,7 @@ export class CodeGenerator {
                 // Update data_ptr and length of the slice
                 if (head_addr instanceof ssa.Variable) {
                     if (objType.mode == "local_reference") {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     let tmp = b.assign(b.tmp(), "member", this.localSlicePointer, [head_addr, this.slicePointer.fieldIndexByName("base")]);
                     b.assign(b.mem, "set_member", "sint", [tmp, this.localSlicePointer.fieldIndexByName("data_length"), len]);
@@ -3679,7 +3680,7 @@ export class CodeGenerator {
                 return ssa.alignedSizeOf(st);
             }
             default:
-                throw "CodeGen: Implementation error " + enode.op;
+                throw new Error("CodeGen: Implementation error " + enode.op)
         }
     }
 
@@ -3726,7 +3727,7 @@ export class CodeGenerator {
                 case "ge":
                     return b.assign(b.tmp(), "ge_s", "sint", [cmp, 0]);
             }
-            throw "Implementation error " + opcode;
+            throw new ImplementationError(opcode)
         } else {
             let storage = this.getSSAType(t);
             if (p1 === 0 && opcode == "eq" && storage != "f32" && storage != "f64") {
@@ -3750,7 +3751,7 @@ export class CodeGenerator {
         if (helper.isUnsafePointer(t)) {
             return true;
         }
-        throw "CodeGen: Implementation error: signed check on non number type " + t.toString();
+        throw new Error("CodeGen: Implementation error: signed check on non number type " + t.toString())
     }
 
     private generateZero(t: ssa.Type | ssa.StructType | ssa.PointerType): Array<number> {
@@ -3932,7 +3933,7 @@ export class CodeGenerator {
      * One is a pointer to the data, the other is the size.
      * This destructor can be used for slices, too, since a slice
      * is a pointer to an array which has a runtime-dependent size.
-     * 
+     *
      * The destructor does not free the memory used by the array.
      */
     private generateArrayDestructor(t: ArrayType): backend.Function {
@@ -3973,7 +3974,7 @@ export class CodeGenerator {
      * a pointer to the data
      * This destructor can be used for or-types, where the size of the array is known
      * and the destructor must have only one argument.
-     * 
+     *
      * The destructor does not free the memory used by the array.
      */
     private generateFixedArrayDestructor(t: ArrayType, size: number): backend.Function {
@@ -4107,7 +4108,7 @@ export class CodeGenerator {
         let pointer = b.declareParam(new ssa.PointerType(orType, false), "pointer");
         this.destructors.set(tc, bf);
         if (orType.fieldIndexByName("value") != 0) {
-            throw "Implementation error. Wrong offset in or-type struct"
+            throw new ImplementationError("Wrong offset in or-type struct")
         }
         let table = b.assign(b.tmp(), "load", "addr", [pointer, orType.fieldOffset("kind")]);
         let dtrPtr = b.assign(b.tmp(), "load", "addr", [table, 0]);
@@ -4150,25 +4151,25 @@ export class CodeGenerator {
     /**
      * Generate a destructor function that takes only one argument, which is a pointer
      * to the value that is to be destructed.
-     * 
+     *
      * If the type needs no destructors, the function returns null.
      */
     private generateDestructor(t: Type): backend.Function {
         if (t instanceof InterfaceType) {
-            return this.generateInterfaceDestructor(t);            
+            return this.generateInterfaceDestructor(t);
         } else if (t instanceof PointerType) {
-            return this.generatePointerDestructor(t);            
+            return this.generatePointerDestructor(t);
         } else if (t instanceof StructType) {
             return this.generateStructDestructor(t);
         } else if (t instanceof ArrayType) {
             if (t.size < 0) {
-                throw "Implementation error. Generating destructor for array of unknown size"
+                throw new ImplementationError("Generating destructor for array of unknown size")
             }
             return this.generateFixedArrayDestructor(t, t.size);
         } else if (t instanceof TupleType) {
             return this.generateTupleDestructor(t);
         } else if (t instanceof SliceType) {
-            return this.generateSliceDestructor(t);            
+            return this.generateSliceDestructor(t);
         } else if (t == Static.t_string) {
             // Do nothing by intention, because strings are not explicitly destructed. They are always reference counted.
             return null
@@ -4249,7 +4250,7 @@ export class CodeGenerator {
             } else if (t == Static.t_string) {
                 // Do nothing by intention, because strings are not explicitly destructed. They are always reference counted.
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (free == "no" && !avoidNullCheck) {
                 b.end();
@@ -4269,7 +4270,7 @@ export class CodeGenerator {
             }
         } else if (free == "unlock") {
             if (helper.isArray(typ) || helper.isString(typ)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             } else {
                 b.assign(null, "unlock", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
@@ -4384,7 +4385,7 @@ export class CodeGenerator {
             if ((helper.isStrong(rhsNode.type) || helper.isUnique(rhsNode.type)) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     console.log(action)
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 action = "free";
                 decrefVar = rhsData as ssa.Variable;
@@ -4392,14 +4393,14 @@ export class CodeGenerator {
             if (helper.isReference(rhsNode.type) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     console.log(action)
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 action = "decref";
                 decrefVar = rhsData as ssa.Variable;
             }
         } else if (helper.isSlice(targetType) && (helper.isLocalReference(targetType) || helper.isReference(targetType))) {
             if (targetIsThis) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no" && result[0] != "no_not_null") {
@@ -4416,21 +4417,21 @@ export class CodeGenerator {
             }
             if ((helper.isStrong(rhsNode.type) || helper.isUnique(rhsNode.type)) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 action = "free";
             }
             if (helper.isReference(rhsNode.type) && helper.isTakeExpression(rhsNode)) {
                 if (action != "none") {
                     console.log(action)
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 action = "decref";
             }
             // TODO: Handle Maps here, too
         } else if (helper.isString(targetType)) {
             if (targetIsThis) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let result = this.functionArgumentIncrefIntern(rhsNode, scope);
             if (result[0] != "no") {
@@ -4446,7 +4447,7 @@ export class CodeGenerator {
 
         if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
             if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             if (rhs instanceof ssa.Variable) {
                 let st = this.getSSAType(rhsNode.type) as ssa.StructType;
@@ -4530,7 +4531,7 @@ export class CodeGenerator {
             {
                 let e = scope.resolveElement(enode.value);
                 if (!e) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 // FunctionParameters of pointer type already guarantee that the object being pointed to exists while the function executes.
                 // No need to refcount again.
@@ -4595,7 +4596,7 @@ export class CodeGenerator {
         }
         if ((rhsNode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment || rhsNode.op == "take") {
             if (!(rhs instanceof ssa.Variable) && !(rhs instanceof ssa.Pointer)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             // Fill the RHS with zeros
             this.processFillZeros(rhs, rhsNode.type, b);

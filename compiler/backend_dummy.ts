@@ -78,7 +78,7 @@ export class DummyBackend {
 
     defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         if (!(f instanceof Function)) {
-            throw "implementation error";
+            throw new Error("implementation error")
         }
         f.node = n;
     }

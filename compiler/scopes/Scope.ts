@@ -3,6 +3,7 @@ import { TypeError } from '../typecheck'
 import { Group, GroupKind, TupleGroup } from '../group'
 import { Location, Node } from '../ast'
 import { Package } from '../pkg'
+import { ImplementationError } from '../errors'
 
 import { ScopeElement, Function } from './'
 
@@ -177,7 +178,7 @@ export class Scope {
         b2 = b2.preJoin(this, loc, doThrow)
 
         if (b1 instanceof TupleGroup || b2 instanceof TupleGroup) {
-            throw "Implementation error"
+            throw new ImplementationError()
         }
 
         if ((b1.kind == GroupKind.Bound && b2.kind != GroupKind.Free) || (b2.kind == GroupKind.Bound && b1!.kind != GroupKind.Free)) {

@@ -4,6 +4,7 @@ import * as backend from "./backend";
 import * as ssa from "./ssa"
 import path = require("path");
 import {createHash} from "crypto";
+import { ImplementationError, TodoError } from './errors'
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -37,7 +38,7 @@ export class Function implements backend.Function {
 
     public isAsync(): boolean {
         if (!(this.node.type instanceof ssa.FunctionType)) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         return this.node.type.isAsync();
     }
@@ -111,7 +112,7 @@ export class CBackend implements backend.Backend {
             }
         } else {
             if (!(from instanceof Package)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let headerFile = from.pkgPath + ".h";
             if (!this.module.hasInclude(headerFile, false)) {
@@ -192,7 +193,7 @@ export class CBackend implements backend.Backend {
 
     public defineFunction(n: ssa.Node, f: backend.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         if (!(f instanceof Function)) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         f.func.isPossibleDuplicate = isPossibleDuplicate;
         let name = f.name;
@@ -446,7 +447,7 @@ export class CBackend implements backend.Backend {
                 for (let p of initPackages) {
                     let name = "init";
                     if (!p.pkgPath) {
-                        throw "Implementation error";
+                        throw new ImplementationError()
                     }
                     name = p.pkgPath + "/" + name;
                     name = this.mangleName(name);
@@ -526,7 +527,7 @@ export class CBackend implements backend.Backend {
     private mapType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType, cstyle: boolean = false, needsRefCounting: boolean = false): CType {
         if (needsRefCounting) {
             if (t instanceof ssa.FunctionType) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let s = new ssa.StructType()
             s.addField("word1", "sint");
@@ -555,7 +556,7 @@ export class CBackend implements backend.Backend {
                 }
             }
             if (t.isUnion) {
-                return new CType("union " + mangledName);    
+                return new CType("union " + mangledName);
             }
             return new CType("struct " + mangledName);
 //            }
@@ -585,7 +586,7 @@ export class CBackend implements backend.Backend {
             return new CType("addr_t");
         }
         if (t instanceof ssa.FunctionType) {
-            throw "TODO"
+            throw new TodoError()
         }
         switch(t) {
             case "i8":
@@ -616,7 +617,7 @@ export class CBackend implements backend.Backend {
             case "sint":
                 return new CType("int_t");
         }
-        throw "Implementation error";
+        throw new ImplementationError()
     }
 
     private mapToSignedType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): CType {
@@ -635,7 +636,7 @@ export class CBackend implements backend.Backend {
             case "int":
                 return new CType("int_t");
         }
-        throw "Implementation error";
+        throw new ImplementationError()
     }
 
     private mapToUnsignedType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): CType {
@@ -651,7 +652,7 @@ export class CBackend implements backend.Backend {
             case "sint":
                 return new CType("uint_t");
         }
-        throw "Implementation error";
+        throw new ImplementationError()
     }
 
     private isSignedType(t: ssa.Type | ssa.StructType | ssa.PointerType | ssa.FunctionType): boolean {
@@ -726,7 +727,7 @@ export class CBackend implements backend.Backend {
                 return this.emitExprIntern(<number>n.constantValue);
             } else if (n.isConstant) {
                 if (!(n.type instanceof StructType)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 let t = new CTypeCast();
                 t.type = this.mapType(n.type);
@@ -738,14 +739,14 @@ export class CBackend implements backend.Backend {
                 return t;
             }
 
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         if (n.kind == "addr_of") {
             if (n.type instanceof ssa.FunctionType || n.type instanceof ssa.StructType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             if (!(n.args[0] instanceof ssa.Variable)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let e = new CUnary();
             e.operator = "&";
@@ -756,7 +757,7 @@ export class CBackend implements backend.Backend {
             return t;
         } else if (n.kind == "load") {
             if (n.type instanceof FunctionType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let expr = this.emitExpr(n.args[0]);
             if (n.args[1] != 0) {
@@ -775,12 +776,12 @@ export class CBackend implements backend.Backend {
             return e;
         } else if (n.kind == "promote" || n.kind == "demote" || n.kind == "trunc32" || n.kind == "trunc64") {
             if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
-            throw "TODO"
+            throw new TodoError()
         } else if (n.kind == "const") {
             if (n.type instanceof FunctionType || !n.assign) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             if (typeof(n.args[0]) == "number") {
                 let t = new CTypeCast();
@@ -791,7 +792,7 @@ export class CBackend implements backend.Backend {
             return this.emitExpr(n.args[0]);
         } else if (n.kind == "call") {
             if (!(n.type instanceof FunctionType)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let c = new CFunctionCall();
             let f = this.funcs[n.args[0] as number];
@@ -824,7 +825,7 @@ export class CBackend implements backend.Backend {
             return c;
         } else if (n.kind == "call_begin") {
             if (!(n.type instanceof FunctionType)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let c = new CFunctionCall();
             let f = this.funcs[n.args[0] as number];
@@ -855,16 +856,16 @@ export class CBackend implements backend.Backend {
             return cond;
         } else if (n.kind == "call_end") {
             if (!(n.type instanceof FunctionType)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             if (n.type.result) {
-                // TODO:            
+                // TODO:
                 return new CComment("TODO");
             }
             return new CComment("No return value to handle");
         } else if (n.kind == "call_indirect") {
             if (!(n.type instanceof FunctionType)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let c = new CFunctionCall();
             let f = this.funcs[n.args[0] as number];
@@ -899,12 +900,12 @@ export class CBackend implements backend.Backend {
             return c;
         } else if (n.kind == "copy") {
             if (n.type instanceof FunctionType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             return this.emitExpr(n.args[0]);
         } else if (n.kind == "struct") {
             if (!(n.type instanceof StructType)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let t = new CTypeCast();
             t.type = this.mapType(n.type);
@@ -916,15 +917,15 @@ export class CBackend implements backend.Backend {
             return t;
         } else if (n.kind == "union") {
             if (!(n.type instanceof StructType)) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             if (!n.type.isUnion) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let t = new CTypeCast();
             t.type = this.mapType(n.type);
             if (typeof(n.args[0]) != "number") {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let name = n.type.fieldNameByIndex(n.args[0] as number);
             let l = new CUnionLiteral(name, this.emitExpr(n.args[1]));
@@ -961,7 +962,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("fabs");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -973,7 +974,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("sqrt");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -985,7 +986,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("copysign");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -997,7 +998,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("ceil");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -1009,7 +1010,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("floor");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -1021,7 +1022,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("trunc_f64");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -1033,7 +1034,7 @@ export class CBackend implements backend.Backend {
             } else if (n.type == "f64") {
                 c.funcExpr = new CConst("round");
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             this.includeMathHeaderFile();
             c.args.push(this.emitExpr(n.args[0]));
@@ -1068,7 +1069,7 @@ export class CBackend implements backend.Backend {
                     case "uint64":
                         return new CConst("UINT64_MIN");
                     default:
-                        throw "Implementation error";
+                        throw new ImplementationError()
                 }
             } else if (n.type != "f32" && n.type != "f64") {
                 let c = new CTypeCast();
@@ -1120,7 +1121,7 @@ export class CBackend implements backend.Backend {
                     case "uint64":
                         return new CConst("UINT64_MAX");
                     default:
-                        throw "Implementation error";
+                        throw new ImplementationError()
                 }
             } else if (n.type != "f32" && n.type != "f64") {
                 let c = new CTypeCast();
@@ -1164,7 +1165,7 @@ export class CBackend implements backend.Backend {
             return c;
         } else if (n.kind == "div_s" || n.kind == "shr_s" || n.kind == "rem_s" || n.kind == "lt_s" || n.kind == "gt_s" || n.kind == "le_s" || n.kind == "ge_s") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
@@ -1187,7 +1188,7 @@ export class CBackend implements backend.Backend {
             return e;
         } else if (n.kind == "div_u" || n.kind == "shr_u" || n.kind == "rem_u" || n.kind == "lt_u" || n.kind == "gt_u" || n.kind == "le_u" || n.kind == "ge_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let e = new CBinary();
             e.operator = this.operatorMap.get(n.kind);
@@ -1210,7 +1211,7 @@ export class CBackend implements backend.Backend {
             return e;
         } else if (n.kind == "wrap" || n.kind == "extend") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let e = new CTypeCast();
             e.type = this.mapType(n.type);
@@ -1218,7 +1219,7 @@ export class CBackend implements backend.Backend {
             return e;
         } else if (n.kind == "convert32_s" || n.kind == "convert32_u" || n.kind == "convert64_s" || n.kind == "convert64_u") {
             if (n.type instanceof FunctionType || n.type instanceof StructType) {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
             let e = new CTypeCast();
             e.type = this.mapType(n.type);
@@ -1238,7 +1239,7 @@ export class CBackend implements backend.Backend {
             } else if (typeof(n.args[1]) == "number") {
                 let f = this.funcs[n.args[1] as number];
                 if (f instanceof FunctionImport) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             } else {
@@ -1256,7 +1257,7 @@ export class CBackend implements backend.Backend {
             } else if (typeof(n.args[1]) == "number") {
                 let f = this.funcs[n.args[1] as number];
                 if (f instanceof FunctionImport) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             } else {
@@ -1279,7 +1280,7 @@ export class CBackend implements backend.Backend {
             } else if (typeof(n.args[1]) == "number") {
                 let f = this.funcs[n.args[1] as number];
                 if (f instanceof FunctionImport) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             } else {
@@ -1324,7 +1325,7 @@ export class CBackend implements backend.Backend {
             } else if (typeof(n.args[1]) == "number") {
                 let f = this.funcs[n.args[1] as number];
                 if (f instanceof FunctionImport) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             } else {
@@ -1338,14 +1339,14 @@ export class CBackend implements backend.Backend {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_decref_arr");
             if (typeof(n.args[1]) != "number") {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (n.args[1] === -1) {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else {
                 let f = this.funcs[n.args[1] as number];
                 if (f instanceof FunctionImport) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 m.args = [this.emitExpr(n.args[0]), new CConst(f.func.name)];
             }
@@ -1360,15 +1361,15 @@ export class CBackend implements backend.Backend {
             m.operator = ".";
             let s = n.args[0];
             if (!(s instanceof ssa.Variable) && !(s instanceof ssa.Node)) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let idx = n.args[1];
             if (typeof(idx) != "number") {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let t = s.type;
             if (!(t instanceof ssa.StructType) || t.fields.length <= idx) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             m.lExpr = this.emitExpr(n.args[0]);
             m.rExpr = new CConst(t.fieldNameByIndex(idx));
@@ -1401,10 +1402,10 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "table_iface") {
             let idx = n.args[0];
             if (typeof(idx) != "number") {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (idx < 0 || idx >= this.module.ifaceDescriptors.length) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
 //            let addr = new CUnary();
 //            addr.operator = "&";
@@ -1416,7 +1417,7 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "addr_of_func") {
             let idx = n.args[0];
             if (typeof(idx) != "number") {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let f = this.funcs[idx];
             let c: CConst;
@@ -1432,15 +1433,15 @@ export class CBackend implements backend.Backend {
         } else if (n.kind == "symbol") {
             let idx = n.args[0];
             if (typeof(idx) != "number") {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (idx < 0 || idx >= this.symbols.length) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let name = this.symbols[idx];
             return this.module.symbols.get(name);
         }
-        throw "Implementation error " + n.kind;
+        throw new ImplementationError(n.kind)
     }
 
     private includeMathHeaderFile() {
@@ -1504,10 +1505,10 @@ export class CBackend implements backend.Backend {
             code.push(new CComment(n.toString("")));
             if (n.kind == "if") {
                 if (n.type instanceof ssa.StructType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 if (n.type instanceof ssa.FunctionType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 let expr = this.emitExpr(n.args[0]);
                 let s = new CIf(expr);
@@ -1570,10 +1571,10 @@ export class CBackend implements backend.Backend {
                     let s = new CGoto(stepname);
                     code.push(s);
                 }
-                n = n.next[0];            
+                n = n.next[0];
             } else if (n.kind == "store") {
                 if (n.type instanceof FunctionType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 let expr = this.emitExpr(n.args[0]);
                 let val = this.emitExpr(n.args[2]);
@@ -1600,31 +1601,31 @@ export class CBackend implements backend.Backend {
                 code.push(a);
                 n = n.next[0];
             } else if (n.kind == "spawn" || n.kind == "spawn_indirect") {
-                throw "TODO";
+                throw new TodoError()
             } else if (n.kind == "return") {
                 if (n.type instanceof ssa.FunctionType) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if (n.args.length == 0) {
                     if (this.returnVariables.length != 0) {
-                        throw "return without a parameter, but function has a return type"
+                        throw new Error("return without a parameter, but function has a return type")
                     }
                     code.push(new CReturn());
                 } else { //} if (n.args.length == 1) {
 //                    if (this.returnVariables.length != 1) {
-//                        throw "return with one parameter, but function has no return type"
+//                        throw new Error("return with one parameter, but function has no return type")
 //                    }
                     let r = new CReturn();
                     r.expr = this.emitExpr(n.args[0]);;
                     code.push(r);
 /*                } else {
                     if (this.returnVariables.length != n.args.length) {
-                        throw "number of return values does not match with return type"
+                        throw new Error("number of return values does not match with return type")
                     }
                     let r = new CReturn();
                     for(let i = 0; i < n.args.length; i++) {
                         let t = this.returnVariables[i].type;
-                        throw "TODO";
+                        throw new TodoError()
                     }
                     code.push(r); */
                 }
@@ -1665,7 +1666,7 @@ export class CBackend implements backend.Backend {
             } else if (n.kind == "move_arr") {
                 let f = this.funcs[n.args[4] as number];
                 if (f instanceof FunctionImport) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let call = new CFunctionCall();
                 call.funcExpr = new CConst("fyr_move_arr");
@@ -1790,15 +1791,15 @@ export class CBackend implements backend.Backend {
                 m.operator = ".";
                 let s = n.args[0];
                 if (!(s instanceof ssa.Variable) && !(s instanceof ssa.Node)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let idx = n.args[1];
                 if (typeof(idx) != "number") {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 let t = s.type;
                 if (!(t instanceof ssa.StructType) || t.fields.length <= idx) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 m.lExpr = this.emitExpr(n.args[0]);
                 m.rExpr = new CConst(t.fieldNameByIndex(idx));
@@ -2497,7 +2498,7 @@ export class CUnionLiteral extends CNode {
         this.name = name;
         this.value = value;
     }
-    
+
     public toString(indent: string = ""): string {
         return indent + "{ ." + this.name + " = " + this.value.toString("") + "}";
     }

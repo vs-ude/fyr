@@ -1,4 +1,5 @@
 import { Type } from './Type'
+import { ImplementationError } from '../errors'
 
 /**
  * TupleLiteralTypes are created while parsing and are then unified.
@@ -24,7 +25,7 @@ export class TupleLiteralType extends Type {
     }
 
     public toTypeCodeString(): string {
-        throw "Implementation error"
+        throw new ImplementationError()
     }
 
     public types: Array<Type>

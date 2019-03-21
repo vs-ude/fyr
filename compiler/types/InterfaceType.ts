@@ -1,4 +1,5 @@
 import { Package } from '../pkg'
+import { ImplementationError, TodoError } from '../errors'
 import { Type } from './Type'
 import { FunctionType } from './FunctionType'
 
@@ -65,7 +66,7 @@ export class InterfaceType extends Type {
         if (this.name) {
             return this.name
         }
-        throw "TODO"
+        throw new TodoError()
     }
 
     public method(name: string): FunctionType {
@@ -87,7 +88,7 @@ export class InterfaceType extends Type {
         this.sortMethodNames()
         let index = this.sortedMethodNames.indexOf(name)
         if (index == -1) {
-            throw "Implementation error " + name
+            throw new ImplementationError(name)
         }
         return index
     }

@@ -6,6 +6,7 @@ import program = require('commander');
 import colors = require('colors');
 import { Package } from "./pkg";
 import { FyrConfiguration } from "./config";
+import { ImplementationError } from './errors';
 
 // Make TSC not throw out the colors lib
 colors.red;

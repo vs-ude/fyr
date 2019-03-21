@@ -14,6 +14,7 @@ import {
     Scope, ScopeElement, Function, FunctionParameter, TemplateFunction,
     Variable, ImportedPackage, ScopeExit
 } from '../scopes'
+import { ImplementationError, TodoError } from '../errors'
 import {createHash} from "crypto";
 
 import * as helper from './helper'
@@ -242,7 +243,7 @@ export class TypeChecker {
             s.opaque = true;
             return s;
         }
-        throw "Implementation error for type " + tnode.op
+        throw new ImplementationError("type " + tnode.op)
     }
 
     private createCopyType(t: Type, loc: Location): Type {
@@ -280,7 +281,7 @@ export class TypeChecker {
         if (helper.isNumber(t)) {
             return t;
         }
-        throw "Implementation error";
+        throw new ImplementationError()
     }
 
     private createArrayType(tnode: Node, scope: Scope, t: ArrayType, mode?: "default" | "parameter" | "variable"): Type {
@@ -360,7 +361,7 @@ export class TypeChecker {
                     ft.objectType = helper.makeConst(ft.objectType, mnode.loc);
                 }
             } else {
-                throw "Implementation error " + mnode.op + " " + iface.name;
+                throw new ImplementationError(mnode.op + " " + iface.name)
             }
         }
         return iface;
@@ -457,7 +458,7 @@ export class TypeChecker {
                 field.type = this.createType(fnode.rhs, scope, mode ? mode : "default");
                 s.fields.push(field);
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
         }
 
@@ -588,11 +589,11 @@ export class TypeChecker {
                 this.templateTypeInstantiations.set(t, [s]);
             }
 
-            throw "TODO";
+            throw new TodoError()
         } else if (node.op == "orType") {
-            throw "TODO";
+            throw new TodoError()
         }
-        throw "Implementation error";
+        throw new ImplementationError()
     }
 
     private instantiateTemplateMemberFunction(t: TemplateType, s: TemplateStructType, m: TemplateFunction): Function | TemplateFunction {
@@ -616,7 +617,7 @@ export class TypeChecker {
      */
     private instantiateTemplateFunctionFromNode(tnode: Node, scope: Scope): Function {
         if (tnode.op != "genericInstance") {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         let baset = tnode.lhs.type;
         // Is the type a template type?
@@ -695,10 +696,10 @@ export class TypeChecker {
         let node = t.node.clone();
         let f = this.createFunction(node, scope, this.moduleNode.scope, t, types);
         if (!(f instanceof Function)) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
 //        if (!(f.type instanceof TemplateFunctionType)) {
-//            throw "Implementation error";
+//            throw new ImplementationError()
 //        }
 //        f.isTemplateInstance = true;
 //        f.type.base = t;
@@ -1043,7 +1044,7 @@ export class TypeChecker {
                 }
                 // Do nothing by intention
             } else {
-                throw "Implementation error in import lhs " + inode.lhs.op;
+                throw new ImplementationError("import lhs " + inode.lhs.op)
             }
         } else {
             let importPath: string = inode.rhs.value;
@@ -1073,7 +1074,7 @@ export class TypeChecker {
             } else if (inode.lhs.op == ".") {
                 // Syntax of the kind: import . from "path/to/module"
             } else {
-                throw "Implementation error in import lhs " + inode.lhs.op;
+                throw new ImplementationError("import lhs " + inode.lhs.op)
             }
         }
     }
@@ -1166,7 +1167,7 @@ export class TypeChecker {
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(name);
                 if (!(e instanceof ImportedPackage)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 ip = e;
             } else if (inode.lhs.op == "id") {
@@ -1174,13 +1175,13 @@ export class TypeChecker {
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(inode.lhs.value);
                 if (!(e instanceof ImportedPackage)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 ip = e;
             } else if (inode.lhs.op == ".") {
                 // Syntax of the kind: import . from "native/path" { func ... }
             } else {
-                throw "Implementation error in import lhs " + inode.lhs.op;
+                throw new ImplementationError("import lhs " + inode.lhs.op)
             }
             for(let n of inode.rhs.parameters) {
                 if (n.op == "funcType") {
@@ -1190,7 +1191,7 @@ export class TypeChecker {
                 } else if (n.op == "constValue") {
                     // Do nothing by intention
                 } else {
-                    throw "Implementation error in import " + n.op;
+                    throw new ImplementationError("import " + n.op)
                 }
             }
         } else {
@@ -1216,7 +1217,7 @@ export class TypeChecker {
                     scope.registerType(key, t, inode.loc);
                 }
             } else {
-                throw "Implementation error in import lhs " + inode.lhs.op;
+                throw new ImplementationError("import lhs " + inode.lhs.op)
             }
         }
     }
@@ -1232,7 +1233,7 @@ export class TypeChecker {
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(name);
                 if (!(e instanceof ImportedPackage)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 ip = e;
             } else if (inode.lhs.op == "id") {
@@ -1240,13 +1241,13 @@ export class TypeChecker {
                 // TODO: Sanitize the name
                 let e = scope.resolveElement(inode.lhs.value);
                 if (!(e instanceof ImportedPackage)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 ip = e;
             } else if (inode.lhs.op == ".") {
                 // Syntax of the kind: import . from "native/path" { func ... }
             } else {
-                throw "Implementation error in import lhs " + inode.lhs.op;
+                throw new ImplementationError("import lhs " + inode.lhs.op)
             }
             for(let n of inode.rhs.parameters) {
                 if (n.op == "funcType") {
@@ -1256,7 +1257,7 @@ export class TypeChecker {
                 } else if (n.op == "constValue") {
                     this.createNativeConstImport(inode.rhs.rhs.value, n, ip ? ip.pkg.scope : scope);
                 } else {
-                    throw "Implementation error in import " + n.op;
+                    throw new ImplementationError("import " + n.op)
                 }
             }
         } else {
@@ -1288,7 +1289,7 @@ export class TypeChecker {
                     scope.setGroup(el, new Group(GroupKind.Free));
                 }
             } else {
-                throw "Implementation error in import lhs " + inode.lhs.op;
+                throw new ImplementationError("import lhs " + inode.lhs.op)
             }
         }
     }
@@ -1313,7 +1314,7 @@ export class TypeChecker {
                         pkg.compileCmdLineArgs = pkg.compileCmdLineArgs ? pkg.compileCmdLineArgs.concat(args) : args;
                     }
                 } else {
-                    throw "Implementation error " + snode.op;
+                    throw new ImplementationError(snode.op)
                 }
             }
         }
@@ -1438,7 +1439,7 @@ export class TypeChecker {
                 } else if (snode.op == "export_as") {
                     // Do nothing by intention
                 } else {
-                    throw "Implementation error " + snode.op;
+                    throw new ImplementationError(snode.op)
                 }
             }
         }
@@ -1510,7 +1511,7 @@ export class TypeChecker {
                                 scope.registerType(exp.rhs.value, t, exp.loc);
                             }
                         } else {
-                            throw "Implementation error " + exp.op;
+                            throw new ImplementationError(exp.op)
                         }
                     }
                 }
@@ -1675,16 +1676,16 @@ export class TypeChecker {
 //                                rtype.types[j] = rnode.parameters[j].type;
                             }
 //                            v.type = new SliceType(Static.t_json);
-                            throw "TODO";
+                            throw new TodoError()
                         } else if (rtypeStripped instanceof ArrayType) {
                             v.type = new ArrayType(rtypeStripped.elementType, rtypeStripped.size - i);
                             // TODO: Check whether the array slice can be copied at all
                             // TODO: Clone the restrictions of the array
-                            throw "TODO"
+                            throw new TodoError()
                         } else if (rtypeStripped instanceof SliceType) {
                             // TODO: Clone the restrictions of the array
                             v.type = rtype;
-                            throw "TODO"
+                            throw new TodoError()
                         }
                     } else {
                         let lt = RestrictedType.strip(v.type);
@@ -1765,7 +1766,7 @@ export class TypeChecker {
 //                                this.checkIsAssignableNode(Static.t_json, rnode.parameters[j].lhs);
                             }
                             v.type = new PointerType(new MapType(Static.t_string, valueType), "strong");
-                            throw "TODO";
+                            throw new TodoError()
                         } else if (rtypeStripped instanceof TemplateStructType) {
                             v.type = rtype;
                         }
@@ -1800,7 +1801,7 @@ export class TypeChecker {
                         }
                         rt = rtype.types.get(name);
                         r = rnode.parameters[i].lhs;
-                        throw "TODO: Find matching node in literal"
+                        throw new TodoError("Find matching node in literal")
                     } else if (helper.isMap(rtype)) {
                         rt = this.mapValueType(rtype);
                     }
@@ -1981,7 +1982,7 @@ export class TypeChecker {
                         }
                         rt = rtypeStripped.types.get(name);
                         r = rnode.parameters[i].lhs;
-                        throw "TODO: Find matching node in literal"
+                        throw new TodoError("Find matching node in literal")
                     } else if (helper.isMap(rtypeStripped)) {
                         rt = this.mapValueType(rtypeStripped);
                     }
@@ -2138,7 +2139,7 @@ export class TypeChecker {
             case "let":
                 if (!snode.rhs) {
                     if (snode.op == "let") {
-                        throw "Implementation error: let without initialization"
+                        throw new ImplementationError("let without initialization")
                     }
                     if (snode.lhs.op == "id") {
                         let v = this.createVar(snode.lhs, scope, true);
@@ -2149,7 +2150,7 @@ export class TypeChecker {
                             p.type = v.type;
                         }
                     } else {
-                        throw "TODO: Implementation error"
+                        throw new TodoError("Implementation error")
                     }
                 } else {
                     this.checkExpression(snode.rhs, scope);
@@ -2312,10 +2313,10 @@ export class TypeChecker {
             {
                 this.checkExpression(snode.rhs, scope);
                 if (snode.rhs.op != "(") {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if (!(snode.rhs.lhs.type instanceof FunctionType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if ((snode.rhs.lhs.type as FunctionType).returnType != Static.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
@@ -2807,7 +2808,7 @@ export class TypeChecker {
                 } else if (t == Static.t_string) {
                     enode.type = Static.t_string;
                 } else {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 break;
             }
@@ -3144,7 +3145,7 @@ export class TypeChecker {
                     enode.type = t;
                 } else {
                     throw new TypeError("Conversion from " + enode.rhs.type.toString() + " to " + t.toString() + " is not possible", enode.loc);
-//                    throw "TODO: conversion not possible or not implemented";
+//                    throw new TodoError("conversion not possible or not implemented")
                 }
                 break;
             }
@@ -3278,7 +3279,7 @@ export class TypeChecker {
                 } else if (enode.op == "push") {
                     enode.type = Static.t_void;
                 } else {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 break;
             }
@@ -3288,7 +3289,7 @@ export class TypeChecker {
             case "optionalId":
                 throw new TypeError("'?' is not allowed in this context", enode.loc);
             default:
-                throw "Implementation error " + enode.op;
+                throw new ImplementationError(enode.op)
         }
     }
 
@@ -3623,7 +3624,7 @@ export class TypeChecker {
                 }
                 throw new TypeError("Type mismatch between null and " + t.toString(), loc);
             default:
-                throw "Implementation error";
+                throw new ImplementationError()
         }
     }
 
@@ -3638,7 +3639,7 @@ export class TypeChecker {
         if (from.op == "unary&" && from.rhs.op == "id" && (helper.isStrong(to) || helper.isReference(to))) {
             let element = scope.resolveElement(from.rhs.value);
             if (!element) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (element instanceof Variable) {
                 let ptr = new PointerType(element.type, helper.isStrong(to) ? "strong" : "reference");
@@ -3656,7 +3657,7 @@ export class TypeChecker {
         if (from.op == ":" && from.lhs.op == "id" && (helper.isStrong(to) || helper.isReference(to))) {
             let element = scope.resolveElement(from.lhs.value);
             if (!element) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if (element instanceof Variable && helper.isArray(element.type)) {
                 let ptr = new SliceType(element.type as ArrayType | RestrictedType, helper.isStrong(to) ? "strong" : "reference");
@@ -3944,7 +3945,7 @@ export class TypeChecker {
 
     public checkTemplateFunctionArguments(t: TemplateType, args: Array<Node>, scope: Scope, loc: Location) : Map<string, Type> {
         if (t.node.parameters.length == 0) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         let s = new Scope(scope);
         let result = new Map<string, Type>();
@@ -4350,11 +4351,11 @@ export class TypeChecker {
     private mapKeyType(t: Type): Type {
         t = helper.stripType(t);
         if (!(t instanceof PointerType)) {
-            throw "Internal error";
+            throw new Error("Internal error")
         }
         t = helper.stripType(t.elementType);
         if (!(t instanceof MapType)) {
-            throw "Internal error";
+            throw new Error("Internal error")
         }
         return t.keyType;
     }
@@ -4362,11 +4363,11 @@ export class TypeChecker {
     private mapValueType(t: Type): Type {
         t = helper.stripType(t);
         if (!(t instanceof PointerType)) {
-            throw "Internal error";
+            throw new Error("Internal error")
         }
         t = helper.stripType(t.elementType);
         if (!(t instanceof MapType)) {
-            throw "Internal error";
+            throw new Error("Internal error")
         }
         return t.valueType;
     }
@@ -4379,7 +4380,7 @@ export class TypeChecker {
             }
             index++;
         }
-        throw "Internal error";
+        throw new Error("Internal error")
     }
 
     public static hasStrongOrUniquePointers(t: Type): boolean {
@@ -4509,7 +4510,7 @@ export class TypeChecker {
         for(let pt of f.type.parameters) {
             let g = groups.get(pt.name);
             if (!g) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             f.scope.setGroup(pt, g);
         }
@@ -4517,11 +4518,11 @@ export class TypeChecker {
         if (f.type.objectType) {
             let th = f.scope.resolveElement("this");
             if (!th) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             let g = groups.get("this");
             if (!g) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             f.scope.setGroup(th, g);
         }
@@ -4531,14 +4532,14 @@ export class TypeChecker {
                 let r = f.namedReturnVariables[i];
                 let g = groups.get("return " + i.toString());
                 if (!g) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 f.scope.setGroup(r, g);
             }
         } else if (f.unnamedReturnVariable) {
             let g = groups.get("return");
             if (!g) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             f.scope.setGroup(f.unnamedReturnVariable, g);
         }
@@ -4594,7 +4595,7 @@ export class TypeChecker {
             case "return": {
                 let f = scope.envelopingFunction();
                 if (!f) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if (snode.lhs) {
                     if (f.namedReturnVariables) {
@@ -4607,7 +4608,7 @@ export class TypeChecker {
                         }
                     } else {
                         if (!f.unnamedReturnVariable) {
-                            throw "Implementation error";
+                            throw new ImplementationError()
                         }
                         let group = scope.resolveGroup(f.unnamedReturnVariable);
                         if (helper.isUnique(f.unnamedReturnVariable.type)) {
@@ -4744,10 +4745,10 @@ export class TypeChecker {
             {
                 this.checkExpression(snode.rhs, scope);
                 if (snode.rhs.op != "(") {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if (!(snode.rhs.lhs.type instanceof FunctionType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if ((snode.rhs.lhs.type as FunctionType).returnType != Static.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
@@ -4792,20 +4793,20 @@ export class TypeChecker {
             if (helper.isSafePointer(snode.lhs.lhs.type) || helper.isStruct(snode.lhs.lhs.type)) {
                 this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
         } else if (snode.lhs.op == "[") {
             this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
         } else if (snode.lhs.op == "unary*") {
             this.checkGroupsInSingleAssignment(snode.lhs.type, snode.lhs, null, snode.rhs, false, scope, snode.loc);
         } else {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
     }
 
     private checkGroupsInSingleAssignment(ltype: Type, lnode: Node | Group, rightGroup: Group, rnode: Node, rnodeReuse: boolean, scope: Scope, loc: Location) {
         if (!rnode) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         // Determine the groups of the LHS and the RHS
         if (!rightGroup) {
@@ -4868,7 +4869,7 @@ export class TypeChecker {
             if (TypeChecker.hasReferenceOrStrongPointers(rnode.type)) {
                 // Accessing a strong pointer or reference inside an isolate is not allowed.
                 // This should be guarded by the GroupCheckFlags.ForbidIsolates above. Just being paranoid here.
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             rightGroup = new Group(GroupKind.Free);
         }
@@ -4983,7 +4984,7 @@ export class TypeChecker {
                 // TODO: ellipsis, optional
                 let element = scope.resolveElement(enode.value);
                 if (!element) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if (element instanceof TemplateFunction) {
                     return new Group(GroupKind.Free);
@@ -5094,7 +5095,7 @@ export class TypeChecker {
             {
                 let g = this.checkGroupsInExpression(enode.lhs, scope, flags | GroupCheckFlags.ForbidIsolates);
 //                if (!g) {
-//                    throw "Implementation error";
+//                    throw new ImplementationError()
 //                }
                 // When calling a non-member function, the default group is determined by the first parameter.
                 if (enode.lhs.op == "id") {
@@ -5102,7 +5103,7 @@ export class TypeChecker {
                 }
                 let t = helper.stripType(enode.lhs.type);
                 if (!(t instanceof FunctionType)) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 return this.checkGroupsInFunctionArguments(t, g, enode.parameters, scope, enode.loc);
             }
@@ -5176,7 +5177,7 @@ export class TypeChecker {
                         }
                     }
                 } else if (t instanceof MapType) {
-                    throw "TODO";
+                    throw new TodoError()
                 }
                 if (!group) {
                     return new Group(GroupKind.Free);
@@ -5320,7 +5321,7 @@ export class TypeChecker {
                 return null;
             }
             default:
-                throw "Implementation error " + enode.op;
+                throw new ImplementationError(enode.op)
         }
         return null;
     }

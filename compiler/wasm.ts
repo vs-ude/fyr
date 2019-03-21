@@ -1,5 +1,6 @@
 import * as textEncoding from "text-encoding";
 import * as backend from "./backend";
+import { ImplementationError } from './errors'
 
 export abstract class Node {
     public abstract get op(): string;
@@ -69,7 +70,7 @@ export class Module extends Node {
                 s += indent + "    (export \"" + k + "\" (func " + v.index.toString() + "))\n";
                 index++;
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
         }
 
@@ -143,7 +144,7 @@ export class Module extends Node {
 
     public setInitFunction(f: Function) {
         if (this.initFunction) {
-            throw "Duplicate init function";
+            throw new Error("Duplicate init function")
         }
         f.index = this.funcIndex++;
         f.isInitFunction = true;

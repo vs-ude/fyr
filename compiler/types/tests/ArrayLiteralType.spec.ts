@@ -2,6 +2,7 @@ import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
 import { ArrayLiteralType, BasicType } from '../'
+import { ImplementationError } from '../../errors';
 
 describe('empty ArrayLiteralType', () => {
     let instance: ArrayLiteralType
@@ -15,7 +16,7 @@ describe('empty ArrayLiteralType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(() => instance.toTypeCodeString()).to.throw('Implementation error')
+        expect(() => instance.toTypeCodeString()).to.throw(ImplementationError)
     })
 })
 
@@ -35,6 +36,6 @@ describe('filled ArrayLiteralType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(() => instance.toTypeCodeString()).to.throw('Implementation error')
+        expect(() => instance.toTypeCodeString()).to.throw(ImplementationError)
     })
 })

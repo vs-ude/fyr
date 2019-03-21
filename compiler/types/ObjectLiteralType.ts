@@ -1,3 +1,4 @@
+import { ImplementationError } from '../errors'
 import { Type } from './Type'
 
 /**

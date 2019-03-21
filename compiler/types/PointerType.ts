@@ -1,6 +1,7 @@
 import { Type } from './Type'
 import { MapType } from './MapType'
 import { RestrictedType } from './RestrictedType'
+import { ImplementationError } from '../errors'
 
 export type PointerMode = "unique" | "strong" | "reference" | "local_reference"
 
@@ -26,7 +27,7 @@ export class PointerType extends Type {
             } else if (this.mode == "strong") {
                 op = ""
             } else {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
         } else {
             if (this.mode == "local_reference") {
@@ -38,7 +39,7 @@ export class PointerType extends Type {
             } else if (this.mode == "strong") {
                 op = "*"
             } else {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
         }
         if (this.elementType instanceof RestrictedType) {
@@ -62,7 +63,7 @@ export class PointerType extends Type {
             } else if (this.mode == "strong") {
                 op = ""
             } else {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
         } else {
             if (this.mode == "local_reference") {
@@ -74,7 +75,7 @@ export class PointerType extends Type {
             } else if (this.mode == "strong") {
                 op = "*"
             } else {
-                throw "Implementation error"
+                throw new ImplementationError()
             }
         }
         return op + this.elementType.toTypeCodeString()

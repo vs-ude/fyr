@@ -1,5 +1,6 @@
 import { Package } from '../pkg'
 import { Location } from '../ast'
+import { ImplementationError } from '../errors'
 
 import { Type } from './Type'
 
@@ -16,7 +17,7 @@ export class PackageType extends Type {
     }
 
     public toTypeCodeString(): string {
-        throw "Implementation error"
+        throw new ImplementationError()
     }
 
     public pkg: Package

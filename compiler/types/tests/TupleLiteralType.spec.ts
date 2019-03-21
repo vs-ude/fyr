@@ -2,6 +2,7 @@ import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
 import { TupleLiteralType, BasicType } from '../'
+import { ImplementationError } from '../../errors';
 
 describe('empty TupleLiteralType', () => {
     let instance: TupleLiteralType
@@ -15,7 +16,7 @@ describe('empty TupleLiteralType', () => {
     })
 
     it('toTypeCodeString() should throw an error', () => {
-        expect(() => instance.toTypeCodeString()).to.throw("Implementation error")
+        expect(() => instance.toTypeCodeString()).to.throw(ImplementationError)
     })
 })
 
@@ -31,6 +32,6 @@ describe('(string, byte) TupleLiteralType', () => {
     })
 
     it('toTypeCodeString() should throw an error', () => {
-        expect(() => instance.toTypeCodeString()).to.throw("Implementation error")
+        expect(() => instance.toTypeCodeString()).to.throw(ImplementationError)
     })
 })

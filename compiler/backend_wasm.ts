@@ -4,6 +4,7 @@ import {SMTransformer, Optimizer, Stackifier, Type, PointerType, StructType, Fun
 import * as backend from "./backend"
 import {BinaryBuffer} from "./binarybuffer"
 import * as tc from "./typecheck"
+import { ImplementationError, TodoError } from './errors'
 
 export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap" | "global_strings";
 
@@ -89,25 +90,25 @@ export class Wasm32Backend implements backend.Backend {
     }
 
     public addInterfaceDescriptor(name: string, table: Array<backend.Function | backend.FunctionImport>): number {
-        throw "TODO";
+        throw new TodoError()
     }
 
     /*
     public addFunctionToTable(f: backend.Function, index: number) {
         if (!(f instanceof wasm.Function)) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         return this.module.addFunctionToTable(f, index);
     }
     */
 
     public addSymbol(name: string): number {
-        throw "TODO";
+        throw new TodoError()
     }
 
     public importFunction(name: string, from: string | Package, type: FunctionType): backend.FunctionImport {
         if (typeof(from) != "string") {
-            throw "TODO: Packet import in WASM";
+            throw new TodoError("Packet import in WASM")
         }
         let wt = new wasm.FunctionType(name, [], []);
         for(let p of type.params) {
@@ -127,7 +128,7 @@ export class Wasm32Backend implements backend.Backend {
     }
 
     public importGlobalVar(name: string, type: Type | StructType, from: string | Package): Variable {
-        throw "TODO";
+        throw new TodoError()
     }
 
     public declareGlobalVar(name: string, type: Type | StructType): Variable {
@@ -222,7 +223,7 @@ export class Wasm32Backend implements backend.Backend {
                 code.push(new wasm.Call("$finishHostCoroutine"));
                 if (wfExport.results && wfExport.results.length != 0) {
                     if (wfExport.results.length != 1) {
-                        throw "Implementation error in export";
+                        throw new ImplementationError("in export")
                     }
                     code.push(new wasm.Return());
                 }
@@ -241,7 +242,7 @@ export class Wasm32Backend implements backend.Backend {
 
     private generateFunction(n: Node, f: wasm.Function, emitIR: boolean): string {
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
         this.steps = [];
         this.stepCode = [];
@@ -277,7 +278,7 @@ export class Wasm32Backend implements backend.Backend {
         let ircode = "";
 
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
 
         this.wfIsAsync = false;
@@ -396,7 +397,7 @@ export class Wasm32Backend implements backend.Backend {
         let ircode = "";
 
         if (n.kind != "define" || (!(n.type instanceof FunctionType))) {
-            throw "Implementation error";
+            throw new ImplementationError()
         }
 
         this.wfIsAsync = true;
@@ -820,7 +821,7 @@ export class Wasm32Backend implements backend.Backend {
                 this.varStorage.set(v, s);
                 return;
             } else {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
         }
 
@@ -881,10 +882,10 @@ export class Wasm32Backend implements backend.Backend {
                 break;
             } else if (n.kind == "if") {
                 if (n.type instanceof StructType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 if (n.type instanceof FunctionType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n.args[0], "wasmStack", 0, code);
                 code.push(new wasm.If());
@@ -956,10 +957,10 @@ export class Wasm32Backend implements backend.Backend {
                 code.push(new wasm.Br(depth + additionalDepth - this.asyncCalls.length + this.asyncCallCode.length));
                 n = n.next[0];
                 if (!n || n.kind != "goto_step") {
-                    throw "yield must be followed by goto_step";
+                    throw new Error("yield must be followed by goto_step")
                 }
                 if (n.name == "<end>") {
-                    throw "goto_step after yield must not return";
+                    throw new Error("goto_step after yield must not return")
                 }
                 let nextStep = this.stepNumberFromName(n.name);
                 let c: Array<wasm.Node> = [];
@@ -973,7 +974,7 @@ export class Wasm32Backend implements backend.Backend {
                 this.asyncCallCode.push(c);
             } else if (n.kind == "call_begin") {
                 if (!(n.type instanceof FunctionType)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 // Allocate a stack frame (if required)
                 if (n.type.stackFrame.size > 0) {
@@ -987,7 +988,7 @@ export class Wasm32Backend implements backend.Backend {
                 // Put parameters on stack
                 for(let i = 1; i < n.args.length; i++) {
                     if (n.type.params[i-1] instanceof FunctionType) {
-                        throw "Implementation error"
+                        throw new ImplementationError()
                     }
                     // Pointers as arguments must be passed on the stack
                     if (n.type.params[i-1] instanceof StructType || n.type.params[i-1] == "ptr") {
@@ -1004,10 +1005,10 @@ export class Wasm32Backend implements backend.Backend {
                 code.push(new wasm.BrIf(depth + additionalDepth - this.asyncCalls.length + this.asyncCallCode.length));
                 n = n.next[0];
                 if (!n || n.kind != "goto_step") {
-                    throw "call_begin must be followed by goto_step";
+                    throw new Error("call_begin must be followed by goto_step")
                 }
                 if (n.name == "<end>") {
-                    throw "goto_step after call_begin must not return";
+                    throw new Error("goto_step after call_begin must not return")
                 }
                 let nextStep = this.stepNumberFromName(n.name);
                 // Go to the next step?
@@ -1024,7 +1025,7 @@ export class Wasm32Backend implements backend.Backend {
                 this.asyncCallCode.push(c);
             } else if (n.kind == "call_end") {
                 if (!(n.type instanceof FunctionType)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 if (n.assign) {
                     if (n.type.result instanceof StructType) {
@@ -1066,12 +1067,12 @@ export class Wasm32Backend implements backend.Backend {
                 n = n.next[0];
             } else if (n.kind == "store") {
                 if (n.type instanceof FunctionType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 // Get the destination addr
                 this.emitWordAssign("addr", n.args[0], "wasmStack", code);
                 if (typeof(n.args[1]) != "number") {
-                    throw "Implementation error: second arg to store is always a number";
+                    throw new ImplementationError("second arg to store is always a number")
                 }
                 if (n.args[2] instanceof Node && (n.args[2] as Node).kind == "call_end") {
                     let call_end = n.args[2] as Node;
@@ -1091,46 +1092,46 @@ export class Wasm32Backend implements backend.Backend {
                 n = n.next[0];
             } else if (n.kind == "addr_of") {
                 if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 if (!(n.args[0] instanceof Variable)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign("addr", n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "load") {
                 if (n.type instanceof FunctionType || !n.assign) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "wrap" || n.kind == "extend" || n.kind == "convert32_s" || n.kind == "convert32_u" || n.kind == "convert64_s" || n.kind == "convert64_u") {
                 if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "promote" || n.kind == "demote" || n.kind == "trunc32" || n.kind == "trunc64") {
                 if (n.type instanceof FunctionType || n.type instanceof StructType || !n.assign) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "const" || this.isBinaryInstruction(n.kind) || this.isUnaryInstruction(n.kind)) {
                 if (n.type instanceof FunctionType || !n.assign) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "call" || n.kind == "call_indirect") {
                 if (!(n.type instanceof FunctionType)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type.result, n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "spawn" || n.kind == "spawn_indirect") {
                 if (!(n.type instanceof FunctionType)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 // Store the sp
                 let sp = this.allocLocal("addr");
@@ -1159,11 +1160,11 @@ export class Wasm32Backend implements backend.Backend {
                 n = n.next[0];
             } else if (n.kind == "return") {
                 if (n.type instanceof FunctionType) {
-                    throw "Implementation error";
+                    throw new ImplementationError()
                 }
                 if (n.args.length == 1 && !this.wfIsAsync && !(n.type instanceof StructType)) {
                     if (this.returnVariables.length != 1) {
-                        throw "return with one parameter, but function has no return type"
+                        throw new Error("return with one parameter, but function has no return type")
                     }
                     this.emitAssign(n.type as Type, n.args[0], "wasmStack", 0, code);
                 } else if (n.args.length == 1 && n.args[0] instanceof Node && (n.args[0] as Node).kind == "call_end") {
@@ -1182,7 +1183,7 @@ export class Wasm32Backend implements backend.Backend {
                     code.push(new wasm.SetLocal(this.spLocal));
                 } else {
                     if (this.returnVariables.length != n.args.length) {
-                        throw "number of return values does not match with return type"
+                        throw new Error("number of return values does not match with return type")
                     }
                     for(let i = 0; i < n.args.length; i++) {
                         let t = this.returnVariables[i].type;
@@ -1205,13 +1206,13 @@ export class Wasm32Backend implements backend.Backend {
                 n = n.next[0];
             } else if (n.kind == "copy") {
                 if (n.type instanceof FunctionType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
             } else if (n.kind == "struct") {
                 if (!(n.type instanceof StructType)) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
                 this.emitAssign(n.type, n, null, 0, code);
                 n = n.next[0];
@@ -1219,10 +1220,10 @@ export class Wasm32Backend implements backend.Backend {
                 n = n.next[0];
             } else if (n.kind == "alloc") {
                 if (n.type instanceof FunctionType) {
-                    throw "Implementation error"
+                    throw new ImplementationError()
                 }
 //                if (n.type != "addr" && n.type != "ptr") {
-//                    throw "Implementation error"
+//                    throw new ImplementationError()
 //                }
                 this.emitAssign("ptr", n, null, 0, code);
                 n = n.next[0];
@@ -1231,7 +1232,7 @@ export class Wasm32Backend implements backend.Backend {
                 n = n.next[0];
             } else {
                 // TODO: This clause should never trigger
-                throw "TODO " + n.toString("");
+                throw new TodoError(n.toString(""))
 //                n = n.next[0];
             }
         }
@@ -1241,20 +1242,20 @@ export class Wasm32Backend implements backend.Backend {
      */
     private emitAssign(type: Type | StructType | PointerType, n: Node | Variable | number, dest: "heap" | "heapStack" | "wasmStack" | null, destOffset: number, code: Array<wasm.Node>) {
         if (dest === null && (n instanceof Variable || typeof(n) == "number" || (n instanceof Node && n.kind != "call" && n.kind != "call_indirect"  && n.kind != "spawn" && n.kind != "spawn_indirect" && !n.assign))) {
-            throw "Implementation error: No assignment";
+            throw new ImplementationError("No assignment")
         }
 
         if (type instanceof StructType) {
             if (dest == "wasmStack") {
-                throw "Implementation error: StructType on wasmStack is not possible";
+                throw new ImplementationError("StructType on wasmStack is not possible")
             }
             // Synchronous function call that returns a StructType?
             if (n instanceof Node && (n.kind == "call" || n.kind == "call_indirect")) {
                 if (!(n.type instanceof FunctionType)) {
-                    throw "Implementation error " + n.toString("");
+                    throw new ImplementationError(n.toString(""))
                 }
                 if (!(n.type.result instanceof StructType)) {
-                    throw "Implementation error.";
+                    throw new ImplementationError()
                 }
                 let assignOffset = 0;
                 if (n.assign) {
@@ -1393,7 +1394,7 @@ export class Wasm32Backend implements backend.Backend {
                 let args = 0;
                 for(let i = 0; i < type.fields.length; i++) {
                     if (args >= n.args.length) {
-                        throw "Implementation errro";
+                        throw new ImplementationError()
                     }
                     let f = type.fields[i];
                     let name: string = f[0];
@@ -1443,7 +1444,7 @@ export class Wasm32Backend implements backend.Backend {
 
             // An expression of type StructType?
             if (typeof(n) == "number") {
-                throw "Implementation error: A number cannot be of type StructType " + type.name;
+                throw new ImplementationError("A number cannot be of type StructType " + type.name)
             } else if (n instanceof Variable) {
                 let srcOffset = this.emitAddrOfVariable(n, true, code);
                 if (dest === "heapStack") {
@@ -1487,7 +1488,7 @@ export class Wasm32Backend implements backend.Backend {
                     }
                 }
             } else {
-                throw "Implementation error: Node " + (n as Node).kind + " cannot yield a StructType";
+                throw new ImplementationError("Node " + (n as Node).kind + " cannot yield a StructType")
             }
             return;
         }
@@ -1654,14 +1655,14 @@ export class Wasm32Backend implements backend.Backend {
                 break;
             }
             default:
-                throw "Implementation error"
+                throw new ImplementationError()
         }
         return 0;
     }
 
     private emitWordAssign(type: Type | PointerType, n: Node | Variable | number, stack: "wasmStack" | null, code: Array<wasm.Node>) {
         if (stack == null && (n instanceof Variable || typeof(n) == "number" || (n.kind != "call" && n.kind != "call_indirect" && n.kind != "spawn" && n.kind != "spawn_indirect" && !n.assign))) {
-            throw "Implementation error: No assignment"
+            throw new ImplementationError("No assignment")
         }
 
         if (n instanceof Node) {
@@ -1761,7 +1762,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "const") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             let width: wasm.StackType = this.stackTypeOf(n.type);
             if (n.assign) {
@@ -1774,7 +1775,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "load") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1803,7 +1804,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (this.isBinaryInstruction(n.kind)) {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1818,7 +1819,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (this.isUnaryInstruction(n.kind)) {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1832,7 +1833,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "extend") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1845,7 +1846,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "wrap") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1858,7 +1859,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "demote" || n.kind == "promote") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1875,7 +1876,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "trunc64" || n.kind == "trunc32") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1892,7 +1893,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "convert64_s" || n.kind == "convert64_u" || n.kind == "convert32_s" || n.kind == "convert32_u") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1913,7 +1914,7 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "copy") {
             if (n.type instanceof StructType || n.type instanceof FunctionType) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type, n.assign, code);
@@ -1925,10 +1926,10 @@ export class Wasm32Backend implements backend.Backend {
             n = n.next[0];
         } else if (n.kind == "call" || n.kind == "call_indirect" || n.kind == "spawn" || n.kind == "spawn_indirect") { // TODO: spawn_indirect
             if (!(n.type instanceof FunctionType)) {
-                throw "Implementation error " + n.toString("");
+                throw new ImplementationError(n.toString(""))
             }
             if (n.type.result instanceof StructType) {
-                throw "Implementation error. StructType returns are handled elsewhere";
+                throw new ImplementationError("StructType returns are handled elsewhere")
             }
             if (n.assign) {
                 this.storeVariableFromWasmStack1(n.type.result as Type, n.assign, code);
@@ -2051,7 +2052,7 @@ export class Wasm32Backend implements backend.Backend {
                 } else if (n.args[0] == SystemCalls.copysign64) {
                     code.push(new wasm.BinaryInstruction("f64", "copysign"));
                 } else {
-                    throw "Implementation error. Unknown system function " + n.args[0];
+                    throw new ImplementationError("Unknown system function " + n.args[0])
                 }
             } else {
                 if (n.kind == "call_indirect") {
@@ -2082,7 +2083,7 @@ export class Wasm32Backend implements backend.Backend {
             }
             n = n.next[0];
         } else {
-            throw "Implementation error emitAssignWordNode " + n.kind;
+            throw new ImplementationError("emitAssignWordNode " + n.kind)
         }
     }
 
@@ -2094,7 +2095,7 @@ export class Wasm32Backend implements backend.Backend {
         let argNumber = 0;
         for(let i = 0; i < type.fields.length; i++) {
             if (args != null && argNumber >= args.length) {
-                throw "Implementation errro";
+                throw new ImplementationError()
             }
             let f = type.fields[i];
             let name: string = f[0];
@@ -2124,7 +2125,7 @@ export class Wasm32Backend implements backend.Backend {
         let argNumber = 0;
         for(let i = 0; i < type.fields.length; i++) {
             if (args != null && argNumber >= args.length) {
-                throw "Implementation errro";
+                throw new ImplementationError()
             }
             let f = type.fields[i];
             let name: string = f[0];
@@ -2166,7 +2167,7 @@ export class Wasm32Backend implements backend.Backend {
                 }
                 break;
             case "global_strings":
-                throw "Implementation error";
+                throw new ImplementationError()
         }
     }
 
@@ -2251,7 +2252,7 @@ export class Wasm32Backend implements backend.Backend {
                 }
                 break;
             case "global_strings":
-                throw "Implementation error";
+                throw new ImplementationError()
 
         }
     }
@@ -2403,7 +2404,7 @@ export class Wasm32Backend implements backend.Backend {
                 }
                 return this.tmpF64Local;
         }
-        throw "Implementation error";
+        throw new ImplementationError()
     }
 
     private storageOf(v: Variable): Wasm32Storage {
@@ -2486,7 +2487,7 @@ export class Wasm32Backend implements backend.Backend {
                     }
                     break;
                 default:
-                    throw "Implementation error";
+                    throw new ImplementationError()
             }
         }
         return dataOffset;

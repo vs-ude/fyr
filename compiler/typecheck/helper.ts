@@ -5,6 +5,7 @@ import {
     TupleType, Type, UnsafePointerType
 } from "../types/";
 import { Scope, FunctionParameter, Variable } from '../scopes'
+import { ImplementationError } from '../errors'
 
 import { Static } from './'
 
@@ -226,7 +227,7 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
         if (!_allowConstVariable) {
             let e = scope.resolveElement(node.value);
             if (!e) {
-                throw "Implementation error";
+                throw new ImplementationError()
             }
             if ((e instanceof Variable && e.isConst) || (e instanceof FunctionParameter && e.isConst)) {
                 return false;

@@ -2,6 +2,7 @@ import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
 import { InterfaceType, FunctionType } from '../'
+import { ImplementationError, TodoError } from '../../errors';
 
 describe('empty InterfaceType', () => {
     let instance: InterfaceType
@@ -27,7 +28,7 @@ describe('empty InterfaceType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(() => instance.toTypeCodeString()).to.throw("TODO")
+        expect(() => instance.toTypeCodeString()).to.throw(TodoError)
     })
 
     it('method()', () => {
@@ -35,7 +36,7 @@ describe('empty InterfaceType', () => {
     })
 
     it('methodIndex()', () => {
-        expect(() => instance.methodIndex('none')).to.throw(/Implementation error.*/)
+        expect(() => instance.methodIndex('none')).to.throw(ImplementationError)
     })
 
     it('sortMethodNames()', () => {
@@ -77,7 +78,7 @@ describe('filled InterfaceType', () => {
     })
 
     it('toTypeCodeString()', () => {
-        expect(() => instance.toTypeCodeString()).to.throw("TODO")
+        expect(() => instance.toTypeCodeString()).to.throw(TodoError)
     })
 
     it('method()', () => {
