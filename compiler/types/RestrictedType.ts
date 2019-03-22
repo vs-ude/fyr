@@ -1,4 +1,5 @@
 import { Restrictions } from '../group'
+import { ImplementationError } from '../errors';
 
 import { Type } from './Type'
 
@@ -22,11 +23,11 @@ export class RestrictedType extends Type {
     }
 
     public toString(omitElement?: boolean): string {
+        if (!this.elementType) {
+            throw new ImplementationError('elementType not set')
+        }
         if (this.name) {
             return this.name
-        }
-        if (this.elementType.name == "string") {
-            return "string"
         }
         let str = ""
         if (this.isConst && this.elementType.name != "string") {
@@ -39,6 +40,9 @@ export class RestrictedType extends Type {
     }
 
     public toTypeCodeString(): string {
+        if (!this.elementType) {
+            throw new ImplementationError('elementType not set')
+        }
         let str = ""
         if (this.isConst) {
             str += "const "

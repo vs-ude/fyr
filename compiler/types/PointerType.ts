@@ -16,31 +16,19 @@ export class PointerType extends Type {
         if (this.name) {
             return this.name
         }
-        let op
-        if (RestrictedType.strip(this.elementType) instanceof MapType) {
-            if (this.mode == "local_reference") {
-                op = "&"
-            } else if (this.mode == "reference") {
-                op = "~"
-            } else if (this.mode == "unique") {
-                op = "^"
-            } else if (this.mode == "strong") {
-                op = ""
-            } else {
-                throw new ImplementationError()
+        let op = ''
+        if (this.mode == "local_reference") {
+            op = "&"
+        } else if (this.mode == "reference") {
+            op = "~"
+        } else if (this.mode == "unique") {
+            op = "^"
+        } else if (this.mode == "strong") {
+            if (!(RestrictedType.strip(this.elementType) instanceof MapType)) {
+                op = "*"
             }
         } else {
-            if (this.mode == "local_reference") {
-                op = "&"
-            } else if (this.mode == "reference") {
-                op = "~"
-            } else if (this.mode == "unique") {
-                op = "^"
-            } else if (this.mode == "strong") {
-                op = "*"
-            } else {
-                throw new ImplementationError()
-            }
+            throw new ImplementationError()
         }
         if (this.elementType instanceof RestrictedType) {
             return this.elementType.toString(true) + op + this.elementType.elementType.toString()
@@ -52,31 +40,19 @@ export class PointerType extends Type {
         if (this.name) {
             return this.name
         }
-        let op
-        if (RestrictedType.strip(this.elementType) instanceof MapType) {
-            if (this.mode == "local_reference") {
-                op = "&"
-            } else if (this.mode == "reference") {
-                op = "~"
-            } else if (this.mode == "unique") {
-                op = "^"
-            } else if (this.mode == "strong") {
-                op = ""
-            } else {
-                throw new ImplementationError()
+        let op = ''
+        if (this.mode == "local_reference") {
+            op = "&"
+        } else if (this.mode == "reference") {
+            op = "~"
+        } else if (this.mode == "unique") {
+            op = "^"
+        } else if (this.mode == "strong") {
+            if (!(RestrictedType.strip(this.elementType) instanceof MapType)) {
+                op = "*"
             }
         } else {
-            if (this.mode == "local_reference") {
-                op = "&"
-            } else if (this.mode == "reference") {
-                op = "~"
-            } else if (this.mode == "unique") {
-                op = "^"
-            } else if (this.mode == "strong") {
-                op = "*"
-            } else {
-                throw new ImplementationError()
-            }
+            throw new ImplementationError()
         }
         return op + this.elementType.toTypeCodeString()
     }
