@@ -422,8 +422,9 @@ export class Package {
                     if (backend == "C") {
                         // List of all object files
                         let oFiles: Array<string> = [];
-                        // Always include fyr.o
+                        // Always include fyr.o and fyr_spawn.o
                         oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr.o"));
+                        oFiles.push(path.join(Package.fyrBase, "pkg", architecture, "fyr_spawn.o"));
                         let extraArgs: Array<string> = [];
                         for(let importPkg of Package.packages) {
                             if (importPkg.isInternal) {

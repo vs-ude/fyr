@@ -2302,6 +2302,10 @@ export class TypeChecker {
                 break;
             }
             case "yield":
+                break;
+            case "yield_continue":
+                break;
+            /*
             {
                 let f = scope.envelopingFunction();
                 if (f.type.callingConvention != "fyrCoroutine") {
@@ -2309,6 +2313,7 @@ export class TypeChecker {
                 }
                 break;
             }
+            */
             case "spawn":
             {
                 this.checkExpression(snode.rhs, scope);
@@ -4554,6 +4559,8 @@ export class TypeChecker {
             case "comment":
             case "yield":
                 break;
+            case "yield_continue":
+                break;
             case "let_in": {
                 let flags = TypeChecker.hasReferenceOrStrongPointers(snode.rhs.type) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
                 let g = this.checkGroupsInExpression(snode.rhs, scope, flags);
@@ -5320,6 +5327,9 @@ export class TypeChecker {
                 }
                 return null;
             }
+            case "spawn":
+                // TODO
+                return null;
             default:
                 throw new ImplementationError(enode.op)
         }

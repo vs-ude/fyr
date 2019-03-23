@@ -1265,11 +1265,14 @@ export class CodeGenerator {
             case "yield":
                 b.assign(null, "yield", null, []);
                 break;
-            case "spawn":
+            case "yield_continue":
+                b.assign(null, "yield_continue", null, []);
+                break;
+/*            case "spawn":
             {
                 this.processExpression(f, scope, snode, b, vars, snode.type);
                 break;
-            }
+            } */
             case "take":
             {
                 // If take is used as a statement, run the destructor on it and zero everything

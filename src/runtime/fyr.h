@@ -1,3 +1,6 @@
+#ifndef FYR_H
+#define FYR_H
+
 #define EXIT_FAILURE 1
 
 #include <stddef.h>
@@ -30,3 +33,5 @@ int_t fyr_min(int_t a, int_t b);
 int_t fyr_max(int_t a, int_t b);
 addr_t fyr_arr_to_str(addr_t array_ptr, addr_t data_ptr, int_t len);
 void fyr_move_arr(addr_t dest, addr_t source, int_t count, int_t size, fyr_dtr_arr_t dtr);
+
+#endif

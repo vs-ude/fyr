@@ -13,7 +13,7 @@
     "test:coverage": "nyc mocha --reporter progress || exit 0",
     "build:parser": "pegjs -o lib/parser.js compiler/parser.pegjs",
     "build:js": "tsc",
-    "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c",
+    "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c && gcc -o pkg/`bin/fyrarch`/fyr_spawn.o -O3 -g3 -c src/runtime/fyr_spawn.c -U_FORTIFY_SOURCE",
     "build": "npm run build:parser && npm run build:js && npm run build:lib",
     "clean": "rm -rf lib/* test/tests/*"
   },

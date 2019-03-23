@@ -5,6 +5,7 @@ import * as ssa from "./ssa"
 import path = require("path");
 import {createHash} from "crypto";
 import { ImplementationError, TodoError } from './errors'
+import { FunctionParameter } from "./scopes";
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -347,6 +348,7 @@ export class CBackend implements backend.Backend {
                 code.push(cv);
             }
 
+            /*
             if (f.isAsync()) {
                 let implFunc: CFunction  = new CFunction();
                 implFunc.returnType = new CType("int");
@@ -369,15 +371,15 @@ export class CBackend implements backend.Backend {
                 f.func.body = code2;
                 this.module.elements.push(f.func);
 
-            } else {
-                if (f.node.next[0]) {
-                    this.currentCFunction = f.func;
-                    this.emitCode(f.node.next[0], null, code);
-                    this.currentCFunction = null;
-                }
-                f.func.body = code;
-                this.module.elements.push(f.func);
+            } else {*/
+            if (f.node.next[0]) {
+                this.currentCFunction = f.func;
+                this.emitCode(f.node.next[0], null, code);
+                this.currentCFunction = null;
             }
+            f.func.body = code;
+            this.module.elements.push(f.func);
+//            }
         }
 
         // Order the structs, such that all structs used by a field
@@ -458,12 +460,40 @@ export class CBackend implements backend.Backend {
                 }
             }
 
-            let call = new CFunctionCall();
-            call.funcExpr = new CConst(this.mainFunction.func.name);
-            let r = new CReturn();
-            r.expr = call;
-            main.body.push(r);
-            this.module.elements.push(main);
+            // Generate with coroutines?
+            if (!this.module.hasInclude("fyr_spawn.h", true)) {
+                // Call code to initialize coroutines
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst("fyr_component_main_start")
+                main.body.push(call);
+
+                // Call the fyr main function
+                call = new CFunctionCall();
+                call.funcExpr = new CConst(this.mainFunction.func.name);
+                let v = new CVar()
+                v.name = "ret";
+                v.initExpr = call;
+                v.type = new CType("int");
+                main.body.push(v);
+                
+                // Call code to finalize coroutines
+                call = new CFunctionCall();
+                call.funcExpr = new CConst("fyr_component_main_end")
+                main.body.push(call);
+
+                let r = new CReturn();
+                r.expr = new CConst("ret");
+                main.body.push(r);
+                this.module.elements.push(main);
+            } else {
+                // Call the fyr main function
+                let call = new CFunctionCall();
+                call.funcExpr = new CConst(this.mainFunction.func.name);
+                let r = new CReturn();
+                r.expr = call;
+                main.body.push(r);
+                this.module.elements.push(main);
+            }
         }
 
         return ircode;
@@ -586,7 +616,12 @@ export class CBackend implements backend.Backend {
             return new CType("addr_t");
         }
         if (t instanceof ssa.FunctionType) {
-            throw new TodoError()
+            let r = t.result ? this.mapType(t.result, cstyle) : new CType("void");                        
+            let params = [];
+            for (let p of t.params) {
+                params.push(this.mapType(p, cstyle));
+            }
+            return new CFunctionType(r, params);
         }
         switch(t) {
             case "i8":
@@ -1489,6 +1524,21 @@ export class CBackend implements backend.Backend {
         }
     }
 
+    private includeFyrSpawnFile() {
+        if (!this.module.hasInclude("fyr_spawn.h", false)) {
+            let inc = new CInclude();
+            inc.isSystemPath = false;
+            inc.path = "fyr_spawn.h";
+            this.module.includes.push(inc);
+        }
+        if (!this.module.hasInclude("alloca.h", true)) {
+            let inc = new CInclude();
+            inc.isSystemPath = true;
+            inc.path = "alloca.h";
+            this.module.includes.push(inc);
+        }
+    }
+
     private includePackageHeaderFile(p: Package) {
         let headerFile = p.pkgPath + ".h";
         if (!this.module.hasInclude(headerFile, true)) {
@@ -1551,10 +1601,18 @@ export class CBackend implements backend.Backend {
                 code.push(s);
                 n = n.blockPartner.next[0];
             } else if (n.kind == "yield") {
-                // TODO
-                let r = new CReturn();
-                r.expr = new CConst("1");
-                code.push(r);
+                this.includeFyrSpawnFile();
+                let f = new CFunctionCall();
+                f.funcExpr = new CConst("fyr_yield");
+                f.args = [new CConst("true")];
+                code.push(f);
+                n = n.next[0];
+            } else if (n.kind == "yield_continue") {
+                this.includeFyrSpawnFile();
+                let f = new CFunctionCall();
+                f.funcExpr = new CConst("fyr_yield");
+                f.args = [new CConst("false")];
+                code.push(f);
                 n = n.next[0];
             } else if (n.kind == "step") {
                 let stepname = "step_" + n.name;
@@ -1600,7 +1658,124 @@ export class CBackend implements backend.Backend {
                 a.rExpr = val;
                 code.push(a);
                 n = n.next[0];
-            } else if (n.kind == "spawn" || n.kind == "spawn_indirect") {
+            } else if (n.kind == "spawn") {
+                if (!(n.type instanceof FunctionType)) {
+                    throw new ImplementationError()
+                }
+                this.includeFyrSpawnFile();
+                let tc = this.mangledTypecode(n.type);
+                let name1 = "spawn_1_" + tc;
+                let name2 = "spawn_2_" + tc;
+                // Call the spawn_1 function
+                let c = new CFunctionCall();
+                c.funcExpr = new CConst(name1);
+                // The arguments passed to the spawn_1 function
+                let f = this.funcs[n.args[0] as number];
+                let params: Array<CFunctionParameter> = [];
+                let paramTypes: Array<CType> = [];
+                let argList: string = "";
+                for(let i = 1; i < n.args.length; i++) {
+                    let a = n.args[i];
+                    let e = this.emitExpr(a);
+                    let p = new CFunctionParameter();
+                    p.name = "p" + i.toString();
+                    if (argList == "") {
+                        argList = p.name;
+                    } else {
+                        argList += ", " + p.name;
+                    }
+                    if (f instanceof FunctionImport) {
+                        let ctype = this.mapType(n.type.params[i-1], true);
+                        let fyrtype = this.mapType(n.type.params[i-1]);
+                        if (ctype != fyrtype) {
+                            let tcast = new CTypeCast();
+                            tcast.type = ctype;
+                            tcast.expr = e;
+                            e = tcast;
+                        }
+                        p.type = ctype;
+                    } else {
+                        p.type = this.mapType(n.type.params[i-1]);
+                    }
+                    params.push(p);
+                    paramTypes.push(p.type);
+                    c.args.push(e);
+                }
+                // The function pointer
+                if (f instanceof FunctionImport) {
+                    c.args.push(new CConst(f.name));
+                } else {
+                    c.args.push(new CConst(f.func.name));
+                }
+                let pfun = new CFunctionParameter();
+                pfun.name = "fun";
+                pfun.type = new CFunctionType(new CType("void"), paramTypes);
+                params.push(pfun);
+                let result: CNode;
+                if (f instanceof FunctionImport && n.type.result instanceof ssa.PointerType) {
+                    let conv = new CTypeCast();
+                    conv.expr = c;
+                    conv.type = this.mapType(n.type.result, false);
+                    result = conv;
+                }
+                result = c;
+    
+                let f2 = new CFunction();
+                f2.name = name2;
+                f2.returnType = new CType("void");
+                let params2: Array<CFunctionParameter> = [];
+                let p = new CFunctionParameter();
+                p.name = "dummy";
+                p.type = new CType("__attribute__ ((unused)) void *");
+                params2.push(p);
+                p = new CFunctionParameter();
+                p.name = "caller";
+                p.type = new CType("jmp_buf");
+                params2.push(p);
+                p = new CFunctionParameter();
+                p.name = "c";
+                p.type = new CType("struct fyr_coro_t*");
+                params2.push(p);
+                params2 = params2.concat(params);
+                f2.parameters = params2;
+                f2.isPossibleDuplicate = true;
+                f2.body = [
+                    new CConst("if (!setjmp(c->buf)) { longjmp(caller, 1); }"),
+                    new CConst("fyr_running = c;"),
+                    new CConst("fun(" + argList + ");"),
+                    new CConst("fyr_running = NULL;"),
+                    new CConst("fyr_garbage_coro = c;"),
+                    new CConst("fyr_yield(true);")
+                ];
+                this.module.elements.push(f2);
+
+                let f1 = new CFunction();
+                f1.name = name1;
+                f1.returnType = new CType("void");
+                f1.parameters = params;
+                f1.isPossibleDuplicate = true;
+                f1.body = [
+                    new CConst("char *p, *newtop, *mytop, *dummy;"),
+                    new CConst("struct fyr_coro_t *c;"),
+                    new CConst("jmp_buf buf;"),
+                    new CConst("p = malloc(fyr_stacksize());"),
+                    new CConst("c = (struct fyr_coro_t*)p;"),
+                    new CConst("c->memory = p;"),
+                    new CConst("newtop = p + fyr_stacksize();"),
+                    new CConst("mytop = (char*)&p;"),
+                    new CConst("dummy = alloca((size_t)((intptr_t)mytop - (intptr_t)newtop));"),
+                    new CConst("c->next = fyr_ready_first;"),
+                    new CConst("fyr_ready_first = c;"),
+                    new CConst("if (fyr_ready_last == NULL) { fyr_ready_last = c; }"),
+                    new CConst("if (setjmp(buf)) { return; }"),
+                    new CConst(name2 + "(dummy, buf, c" + (argList != "" ? ", ": "") + argList + ", fun);")
+                ];
+                this.module.elements.push(f1);
+
+                code.push(result);
+                n = n.next[0];
+            } else if (n.kind == "spawn_indirect") {
+                this.includeFyrSpawnFile();
                 throw new TodoError()
             } else if (n.kind == "return") {
                 if (n.type instanceof ssa.FunctionType) {
@@ -2196,6 +2371,9 @@ export class CFunction extends CNode {
 
 export class CFunctionParameter {
     public toString(): string {
+        if (this.type instanceof CFunctionType) {
+            return this.type.toString().replace(/\(\*\)/, "(*" + this.name + ")");
+        }
         return this.type.toString() + " " + this.name;
     }
     public name: string;

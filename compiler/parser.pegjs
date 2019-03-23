@@ -533,7 +533,10 @@ statement
   / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block {
       return new ast.Node({loc: fl(location()), op: "for", condition: f ? f[2] : undefined, statements:b});
     }
-  / "yield" {
+  / "yield" c:([ \t]+ "continue") {
+      if (c) {
+          return new ast.Node({loc: fl(location()), op: "yield_continue"});
+      }
       return new ast.Node({loc: fl(location()), op: "yield"});
     }
   / "spawn" [ \t]+ e:expression {

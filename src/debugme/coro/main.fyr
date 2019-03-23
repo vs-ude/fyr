@@ -1,0 +1,21 @@
+func coro1() {
+    println("Hello 1")
+    yield continue
+    println("Hello 2")
+    yield continue
+    println("Hello 3")
+}
+
+func coro2() {
+    println("World 1")
+    yield continue
+    println("World 2")
+    yield continue
+    println("World 3")
+}
+
+export func main() int {
+    spawn coro2()
+    coro1()
+    return 1
+}
