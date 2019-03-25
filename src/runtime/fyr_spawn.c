@@ -103,3 +103,11 @@ void fyr_yield(bool wait) {
 int fyr_stacksize() {
     return fyr_coro_STACKSIZE + sizeof(struct fyr_coro_t);
 }
+
+void fyr_resume(struct fyr_coro_t *coro) {
+    // TODO
+}
+
+struct fyr_coro_t* fyr_coroutine() {
+    return fyr_running;
+}

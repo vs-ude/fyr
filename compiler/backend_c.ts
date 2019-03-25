@@ -1475,6 +1475,18 @@ export class CBackend implements backend.Backend {
             }
             let name = this.symbols[idx];
             return this.module.symbols.get(name);
+        } else if (n.kind == "resume") {
+            this.includeFyrSpawnFile();
+            let c = new CFunctionCall();
+            c.funcExpr = new CConst("fyr_resume");
+            c.args = [this.emitExpr(n.args[0])];
+            return c;
+        } else if (n.kind == "coroutine") {
+            this.includeFyrSpawnFile();
+            let c = new CFunctionCall();
+            c.funcExpr = new CConst("fyr_coroutine");
+            c.args = [];
+            return c;
         }
         throw new ImplementationError(n.kind)
     }

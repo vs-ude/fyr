@@ -1058,6 +1058,17 @@ primary2
   / "println" [ \t]* "(" a:expressionListWithNewlines ")" {
       return new ast.Node({loc: fl(location()), op: "println", parameters: a});
     }
+  / "component" [ \t]* "." [ \t]* e:componentElement {
+      return e;
+  }
+  
+componentElement
+  = "resume" [ \t]* "(" [ \t\n]* e: expression ")" {
+      return new ast.Node({loc: fl(location()), op: "resume", lhs: e});
+    }
+  / "coroutine" [ \t]* "(" [ \t\n]* ")" {
+      return new ast.Node({loc: fl(location()), op: "coroutine"});
+    }
 
 array
   = "[" [ \t\n]* e:arrayElementList? [ \t\n]* "]" {

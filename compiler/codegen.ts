@@ -3682,6 +3682,15 @@ export class CodeGenerator {
                 let st = this.getSSAType(enode.lhs.type);
                 return ssa.alignedSizeOf(st);
             }
+            case "resume":
+            {
+                let expr = this.processExpression(f, scope, enode.lhs, b, vars, Static.t_coroutine);
+                return b.assign(b.tmp(), "resume", null, [expr]);
+            }
+            case "coroutine":
+            {
+                return b.assign(b.tmp(), "coroutine", this.getSSAType(Static.t_coroutine), []);
+            }
             default:
                 throw new Error("CodeGen: Implementation error " + enode.op)
         }

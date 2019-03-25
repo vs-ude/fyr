@@ -21,5 +21,7 @@ void fyr_component_main_start(void);
 void fyr_component_main_end(void);
 void fyr_yield(bool);
 int fyr_stacksize();
+void fyr_resume(struct fyr_coro_t *coro);
+struct fyr_coro_t* fyr_coroutine();
 
 #endif

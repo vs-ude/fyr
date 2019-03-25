@@ -1353,6 +1353,7 @@ export class TypeChecker {
         scope.registerType("void", Static.t_void);
         scope.registerType("error", Static.t_error);
         scope.registerType("rune", Static.t_rune);
+        scope.registerType("coroutine", Static.t_coroutine);
         pkg.pkgNode.scope = scope;
         this.moduleNode = pkg.pkgNode;
 
@@ -3288,6 +3289,14 @@ export class TypeChecker {
                 }
                 break;
             }
+            case "coroutine":
+                enode.type = Static.t_coroutine;
+                break;
+            case "resume":
+                enode.type = Static.t_void;
+                this.checkExpression(enode.lhs, scope);
+                this.checkTypeEquality(Static.t_coroutine, enode.lhs.type, enode.loc, true);
+                break;
             case "ellipsisId":
             case "unary...":
                 throw new TypeError("'...' is not allowed in this context", enode.loc);

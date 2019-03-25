@@ -1,5 +1,8 @@
-import { Type, BasicType, FunctionType, InterfaceType, RestrictedType } from '../types'
+import { Type, BasicType, FunctionType, InterfaceType, RestrictedType, PointerType } from '../types'
 
+/**
+ * The types defined here must be registered in TypeChecker.checkModule.
+ */
 export class Static {
     public static init() {
         Static.t_bool = new BasicType("bool");
@@ -32,6 +35,8 @@ export class Static {
         toError.returnType = Static.t_string;
         toError.objectType = new RestrictedType(Static.t_error, {isConst: true});
         Static.t_error.methods.set("toError", toError);
+
+        Static.t_coroutine = new PointerType(Static.t_void, "reference");
     }
 
     public static isInitialized() {
@@ -65,4 +70,5 @@ export class Static {
     public static t_void: Type;
     public static t_any: Type;
     public static t_error: InterfaceType;
+    public static t_coroutine: PointerType;
 }
