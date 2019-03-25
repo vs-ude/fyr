@@ -3,6 +3,18 @@ import { MapType } from './MapType'
 import { RestrictedType } from './RestrictedType'
 import { ImplementationError } from '../errors'
 
+/**
+ * ^ptr is unique. In this case only one pointer to an object exists and the pointer owns the data.
+ * If more exist then the compiler knows them all.
+ * 
+ * *ptr is strong. The data is owned by this pointer.
+ * 
+ * ~ptr is reference. That pointer becomes null if nobody owns the data any more.
+ * 
+ * &ptr is a local reference. This is pointer that is only valid during lifetime of a function call.
+ * It is impossible to derive a strong, unique or reference pointer from a local reference.
+ * The object being pointed to can live on the stack or on the heap.
+ */
 export type PointerMode = "unique" | "strong" | "reference" | "local_reference"
 
 export class PointerType extends Type {
