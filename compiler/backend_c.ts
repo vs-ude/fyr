@@ -1479,14 +1479,20 @@ export class CBackend implements backend.Backend {
             this.includeFyrSpawnFile();
             let c = new CFunctionCall();
             c.funcExpr = new CConst("fyr_resume");
-            c.args = [this.emitExpr(n.args[0])];
+            let cast = new CTypeCast();
+            cast.type = new CType("struct fyr_coro_t*")
+            cast.expr = this.emitExpr(n.args[0]);
+            c.args = [cast];
             return c;
         } else if (n.kind == "coroutine") {
             this.includeFyrSpawnFile();
             let c = new CFunctionCall();
             c.funcExpr = new CConst("fyr_coroutine");
             c.args = [];
-            return c;
+            let cast = new CTypeCast();
+            cast.type = new CType("void*");
+            cast.expr = c;
+            return cast;
         }
         throw new ImplementationError(n.kind)
     }

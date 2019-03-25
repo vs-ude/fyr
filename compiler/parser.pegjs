@@ -533,7 +533,7 @@ statement
   / "for" [ \t]* f:("(" [ \t\n]* forCondition ")" [ \t]* )? b:block {
       return new ast.Node({loc: fl(location()), op: "for", condition: f ? f[2] : undefined, statements:b});
     }
-  / "yield" c:([ \t]+ "continue") {
+  / "yield" c:([ \t]+ "continue")? {
       if (c) {
           return new ast.Node({loc: fl(location()), op: "yield_continue"});
       }
@@ -1061,7 +1061,7 @@ primary2
   / "component" [ \t]* "." [ \t]* e:componentElement {
       return e;
   }
-  
+
 componentElement
   = "resume" [ \t]* "(" [ \t\n]* e: expression ")" {
       return new ast.Node({loc: fl(location()), op: "resume", lhs: e});

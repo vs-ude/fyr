@@ -1,3 +1,5 @@
+var c coroutine = null
+
 func coro1() {
     println("Hello 1")
     yield continue
@@ -8,7 +10,8 @@ func coro1() {
 
 func coro2() {
     println("World 1")
-    yield continue
+    c = component.coroutine()
+    yield
     println("World 2")
     yield continue
     println("World 3")
@@ -17,5 +20,6 @@ func coro2() {
 export func main() int {
     spawn coro2()
     coro1()
+    component.resume(c)
     return 1
 }

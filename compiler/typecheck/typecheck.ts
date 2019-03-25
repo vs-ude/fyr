@@ -5339,6 +5339,11 @@ export class TypeChecker {
             case "spawn":
                 // TODO
                 return null;
+            case "resume":
+                this.checkGroupsInExpression(enode.lhs, scope, flags);
+                return null;                
+            case "coroutine":
+                return this.globalGroup;
             default:
                 throw new ImplementationError(enode.op)
         }
