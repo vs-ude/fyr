@@ -426,11 +426,8 @@ export class TypeChecker {
         for(let fnode of tnode.parameters) {
             if (fnode.op == "extends") {
                 let ext: Type = this.createType(fnode.rhs, scope, mode ? mode : "default");
-                if (!(ext instanceof StructType)) {
-                    throw new TypeError("Struct can only extend another struct", tnode.lhs.loc);
-                }
                 if (s.extends) {
-                    throw new TypeError("Struct cannot extend multiple structs", fnode.loc);
+                    throw new TypeError("Struct cannot extend only one type", fnode.loc);
                 }
                 s.extends = ext;
                 if (s.extends.name != "") {
@@ -438,8 +435,11 @@ export class TypeChecker {
                         throw new TypeError("Duplicate field name " + s.extends.name, fnode.loc);
                     }
                 }
+                if (s.field("base", true)) {
+                    throw new TypeError("Duplicate field name base", fnode.loc);
+                }
                 let f = new StructField();
-                f.name = s.extends.name;
+                f.name = "base";
                 f.type = s.extends;
                 s.fields.unshift(f);
             } else if (fnode.op == "implements") {
@@ -472,22 +472,27 @@ export class TypeChecker {
         s._markChecked = true;
 
         if (s.extends) {
-            this.checkStructType(s.extends);
             let bases = s.getAllBaseTypes();
             if (bases && bases.indexOf(s) != -1) {
                 throw new TypeError("Struct " + s.name + " is extending itself", s.loc);
             }
-            let inheritedMethods = s.extends.getAllMethodsAndFields();
-
-            for(let key of s.methods.keys()) {
-                if (inheritedMethods.has(key)) {
-                    throw new TypeError("Method " + key + " shadows field or method of " + s.extends.toString(), s.loc);
+            if (s.extends instanceof StructType) {
+                if (s.extends.opaque) {
+                    throw new TypeError("Cannot extend opaque type " + s.extends.toString(), s.loc);
                 }
-            }
+                this.checkStructType(s.extends);
+                let inheritedMethods = s.extends.getAllMethodsAndFields();
 
-            for(let f of s.fields) {
-                if (inheritedMethods.has(f.name)) {
-                    throw new TypeError("Field " + f.name + " shadows field or method of " + s.extends.toString(), s.loc);
+                for(let key of s.methods.keys()) {
+                    if (inheritedMethods.has(key)) {
+                        throw new TypeError("Method " + key + " shadows field or method of " + s.extends.toString(), s.loc);
+                    }
+                }
+
+                for(let f of s.fields) {
+                    if (inheritedMethods.has(f.name)) {
+                        throw new TypeError("Field " + f.name + " shadows field or method of " + s.extends.toString(), s.loc);
+                    }
                 }
             }
         }
@@ -3727,7 +3732,7 @@ export class TypeChecker {
         }
 
         if (mode == "pointer" || mode == "compare") {
-            if (to instanceof StructType && from instanceof StructType && to != from && from.doesExtend(to)) {
+            if (from instanceof StructType && to != from && from.doesExtend(to)) {
                 return true;
             }
         }

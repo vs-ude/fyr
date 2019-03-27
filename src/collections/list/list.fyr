@@ -5,7 +5,7 @@ type List<T> struct {
 }
 
 type Element<T> struct {
-    value T
+    extends T
     prev ~Element<T>
     next *Element<T>
 }
@@ -34,20 +34,20 @@ func const List.ConstBack() ConstIterator<T> {
     return {element: this.last}
 }
 
-func List.PeekFront() copy<T> {
-    return this.first.value
+func List.AtFront() ~T {
+    return this.first
 }
 
-func const List.ConstPeekFront() const copy<T> {
-    return this.first.value
+func const List.ConstAtFront() const ~T {
+    return this.first
 }
 
-func List.Peek() copy<T> {
-    return this.last.value
+func List.AtBack() ~T {
+    return this.last
 }
 
-func const List.ConstPeek() const copy<T> {
-    return this.last.value
+func const List.ConstAtBack() const ~T {
+    return this.last
 }
 
 func const List.Size() int {
@@ -65,7 +65,7 @@ func const List.IsEmpty() bool {
 }
 
 func List.Push(value T) {
-    let e *Element<T> = {value: value, prev: this.last}
+    let e *Element<T> = {base: value, prev: this.last}
     let last = take(this.last)
     this.last = e
     if (last != null) {
@@ -81,12 +81,12 @@ func List.Pop() T {
     if (last == this.first) {
         this.first = null
         this.count = 0
-        return take(last.value)
+        return take(last.base)
     }
     this.last = take(last.prev)
     this.last.next = null
     this.count--
-    return take(last.value)    
+    return take(last.base)
 }
 
 // func List.Shift(value T) {
@@ -95,12 +95,12 @@ func List.Pop() T {
 // func List.Unshift() T {
 // }
 
-func List.At(pos int) copy<T> {
+func List.At(pos int) ~T {
     var e ~Element<T> = this.first
     for(var i = 0; i < pos; i++) {
         e = e.next
     }
-    return e.value
+    return e
 }
 
 func List.Erase(it Iterator<T>) Iterator<T> {
@@ -144,21 +144,21 @@ func List.Remove(it Iterator<T>) (Iterator<T>, T) {
             this.first = take(it.element.next)
             this.first.prev = null
         }
-        return {element: it.element}, take(e.value)
+        return {element: it.element}, take(e.base)
     } else if (it.element.next == null) {
         if (it.element != this.last) {
             println("Iterator on wrong list")
         }
         this.last = take(it.element.prev)
         let e = take(this.last.next)
-        return {}, take(e.value)
+        return {}, take(e.base)
     }
     let prev = take(it.element.prev)
     let next ~Element<T> = it.element.next
     let e = take(prev.next)
     prev.next = take(e.next)
     next.prev = prev
-    return {element: next}, take(e.value)
+    return {element: next}, take(e.base)
 }
 
 func List.Concat(l &List<T>) {
@@ -185,8 +185,8 @@ func Iterator.Prev() {
     this.element = this.element.prev
 }
 
-func Iterator.Value() copy<T> {
-    return this.element.value
+func Iterator.At() ~T {
+    return this.element
 }
 
 func const Iterator.IsNull() bool {
@@ -202,8 +202,8 @@ func ConstIterator.Prev() {
     this.element = this.element.prev
 }
 
-func ConstIterator.Balue() const copy<T> {
-    return this.element.value
+func ConstIterator.At() const ~T {
+    return this.element
 }
 
 func const ConstIterator.IsNull() bool {
@@ -216,7 +216,15 @@ export func main() int {
     l.Push(42)
     l.Push(43)
     for(let it = l.Front(); !it.IsNull(); it.Next()) {
-        println(it.Value())
+        println(*it.At())
     }
-    return 0
+    for(let it = l.Front(); !it.IsNull(); it.Next()) {
+        *it.At() += 10
+//        *it.At() 
+    }
+    for(let it = l.Front(); !it.IsNull(); it.Next()) {
+        println(*it.At())
+    }
+    println("Done")
+    return 42
 }

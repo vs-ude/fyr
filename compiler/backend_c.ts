@@ -461,7 +461,7 @@ export class CBackend implements backend.Backend {
             }
 
             // Generate with coroutines?
-            if (!this.module.hasInclude("fyr_spawn.h", true)) {
+            if (this.module.hasInclude("fyr_spawn.h", false)) {
                 // Call code to initialize coroutines
                 let call = new CFunctionCall();
                 call.funcExpr = new CConst("fyr_component_main_start")
@@ -1332,7 +1332,7 @@ export class CBackend implements backend.Backend {
             return m;
         } else if (n.kind == "notnull_ref") {
             let m = new CFunctionCall();
-            m.funcExpr = new CConst("fyr_notnull");
+            m.funcExpr = new CConst("fyr_notnull_ref");
             m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "notnull") {

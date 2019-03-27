@@ -315,7 +315,15 @@ export function applyConst(t: Type, loc: Location): Type {
  * Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
  */
 export function isTakeExpression(enode: Node): boolean {
-    if (enode.op == "clone" || enode.op == "take" || enode.op == "pop" || enode.op == "(" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (isStrong(enode.type) || isUnique(enode.type)))) {
+    if (enode.op == "clone" || enode.op == "take" || enode.op == "pop" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (isStrong(enode.type) || isUnique(enode.type)))) {
+        return true;
+    }
+    if (enode.op == "(") {
+        // If the function returns a reference pointer, it is not a take expression, since it does not yield ownership.
+        // In this case it just yields a reference.
+        if (isSlice(enode.type) || isSafePointer(enode.type)) {
+            return isStrong(enode.type) || isUnique(enode.type);
+        }
         return true;
     }
     // A slice operation on a string creates a new string which already has a reference count of 1.

@@ -1370,9 +1370,7 @@ export class CodeGenerator {
             default:
             {
                 let value = this.processExpression(f, scope, snode, b, vars, snode.type);
-                if (value instanceof ssa.Variable) {
-                    this.callDestructorOnVariable(snode.type, value, b);
-                }
+                this.processCleanupExpression(snode, value, b, false);
             }
         }
     }
@@ -2352,7 +2350,10 @@ export class CodeGenerator {
                     return b.assign(b.tmp(), "load", storage, [p, 0]);
                 } else if (t instanceof PointerType) {
                     let storage = this.getSSAType(t.elementType);
-                    return b.assign(b.tmp(), "load", storage, [p, 0]);
+                    // TODO: Check for null pointer to prevent a segfault? Will cost extra time.
+                    let result = b.assign(b.tmp(), "load", storage, [p, 0]);
+                    this.processCleanupExpression(enode.rhs, p, b, true);
+                    return result;
                 }
                 throw new ImplementationError()
             }
@@ -4617,9 +4618,35 @@ export class CodeGenerator {
         return data;
     }
 
+    private processCleanupExpression(enode: Node, v: ssa.Variable | number, b: ssa.Builder, avoidNullCheck: boolean) {
+        if (!(v instanceof ssa.Variable)) {
+            return;
+        }
+        if (this.isDonatingExpression(enode)) {
+            this.callDestructorOnVariable(enode.type, v, b, avoidNullCheck)
+        }
+    }
+
+    /**
+     * Returns whether the expression yields a value that requires a cleanup via callDestructor().
+     */
+    private isDonatingExpression(enode: Node): boolean {
+        if (helper.isPureValue(enode.type)) {
+            return false;
+        }
+        if (helper.isTakeExpression(enode)) {
+            return true;
+        }
+        if (enode.op == "(") {
+            return true;
+        }
+
+        return false;
+    }
+
     /**
      * This function is used to load a package that implements some built-in functionality
-     * like starting a coroutine or decoding a string while iterating over it in a for-loop.
+     * like decoding a string while iterating over it in a for-loop.
      *
      * Throws SyntaxError, ImportError or TypeError.
      */

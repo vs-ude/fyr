@@ -14,7 +14,7 @@ export class StructType extends Type {
                 return f
             }
         }
-        if (!ownFieldsOnly && this.extends) {
+        if (!ownFieldsOnly && this.extends && this.extends instanceof StructType) {
             return this.extends.field(name)
         }
         return null
@@ -24,7 +24,7 @@ export class StructType extends Type {
         if (this.methods.has(name)) {
             return this.methods.get(name)
         }
-        if (this.extends) {
+        if (this.extends && this.extends instanceof StructType) {
             return this.extends.method(name)
         }
         return null
@@ -63,7 +63,7 @@ export class StructType extends Type {
         return map
     }
 
-    public getAllBaseTypes(base?: Array<StructType>): Array<StructType> {
+    public getAllBaseTypes(base?: Array<Type>): Array<Type> {
         if (base && base.indexOf(this) != -1) {
             return base
         }
@@ -73,12 +73,14 @@ export class StructType extends Type {
             } else {
                 base.push(this.extends)
             }
-            base = this.extends.getAllBaseTypes(base)
+            if (this.extends instanceof StructType) {
+                base = this.extends.getAllBaseTypes(base)
+            }
         }
         return base
     }
 
-    public doesExtend(parent: StructType): boolean {
+    public doesExtend(parent: Type): boolean {
         if (this.extends == parent) {
             return true
         } else if (this.extends) {
@@ -91,7 +93,7 @@ export class StructType extends Type {
      * Package the type has been defined in.
      */
     public pkg: Package
-    public extends: StructType
+    public extends: Type
     public implements: Array<InterfaceType> = []
     /**
      * Fields of the struct, ordered by their appearance in the code
