@@ -220,8 +220,11 @@ export function isPrimitive(t: Type): boolean {
 export function isSafePointer(t: Type): boolean {
     t = stripType(t);
     return (t instanceof PointerType);
-    }
+}
 
+/**
+ * Returns true if the expression denoted by 'node' can be the left-hand-side of an assignment
+ */
 export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: boolean = false): boolean {
     if (node.op == "id") {
         if (!_allowConstVariable) {
@@ -251,7 +254,8 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
         return isLeftHandSide(node.lhs, scope, true);
     }
     return false;
-    }
+}
+
 /**
  * A pure value contains no pointers and can be copied byte by byte.
  */
@@ -308,7 +312,7 @@ export function applyConst(t: Type, loc: Location): Type {
 //            }
     }
     return makeConst(t, loc);
-    }
+}
 
 /**
  * Returns true if the expression yields ownership of the object it is pointing to.
