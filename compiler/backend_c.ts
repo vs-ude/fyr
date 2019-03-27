@@ -1759,11 +1759,11 @@ export class CBackend implements backend.Backend {
                 f2.isPossibleDuplicate = true;
                 f2.body = [
                     new CConst("if (!setjmp(c->buf)) { longjmp(caller, 1); }"),
-                    new CConst("fyr_running = c;"),
-                    new CConst("fun(" + argList + ");"),
-                    new CConst("fyr_running = NULL;"),
-                    new CConst("fyr_garbage_coro = c;"),
-                    new CConst("fyr_yield(true);")
+                    new CConst("fyr_running = c"),
+                    new CConst("fun(" + argList + ")"),
+                    new CConst("fyr_running = NULL"),
+                    new CConst("fyr_garbage_coro = c"),
+                    new CConst("fyr_yield(true)")
                 ];
                 this.module.elements.push(f2);
 
@@ -1773,20 +1773,20 @@ export class CBackend implements backend.Backend {
                 f1.parameters = params;
                 f1.isPossibleDuplicate = true;
                 f1.body = [
-                    new CConst("char *p, *newtop, *mytop, *dummy;"),
-                    new CConst("struct fyr_coro_t *c;"),
-                    new CConst("jmp_buf buf;"),
-                    new CConst("p = malloc(fyr_stacksize());"),
-                    new CConst("c = (struct fyr_coro_t*)p;"),
-                    new CConst("c->memory = p;"),
-                    new CConst("newtop = p + fyr_stacksize();"),
-                    new CConst("mytop = (char*)&p;"),
-                    new CConst("dummy = alloca((size_t)((intptr_t)mytop - (intptr_t)newtop));"),
-                    new CConst("c->next = fyr_ready_first;"),
-                    new CConst("fyr_ready_first = c;"),
+                    new CConst("addr_t p; addr_t newtop; addr_t mytop; addr_t dummy"),
+                    new CConst("struct fyr_coro_t *c"),
+                    new CConst("jmp_buf buf"),
+                    new CConst("p = fyr_alloc(fyr_stacksize())"),
+                    new CConst("c = (struct fyr_coro_t*)p"),
+                    new CConst("c->memory = p"),
+                    new CConst("newtop = p + fyr_stacksize()"),
+                    new CConst("mytop = (char*)&p"),
+                    new CConst("dummy = alloca((size_t)((intptr_t)mytop - (intptr_t)newtop))"),
+                    new CConst("c->next = fyr_ready_first"),
+                    new CConst("fyr_ready_first = c"),
                     new CConst("if (fyr_ready_last == NULL) { fyr_ready_last = c; }"),
                     new CConst("if (setjmp(buf)) { return; }"),
-                    new CConst(name2 + "(dummy, buf, c" + (argList != "" ? ", ": "") + argList + ", fun);")
+                    new CConst(name2 + "(dummy, buf, c" + (argList != "" ? ", ": "") + argList + ", fun)")
                 ];
                 this.module.elements.push(f1);
 

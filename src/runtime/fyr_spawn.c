@@ -5,7 +5,6 @@
 #include "fyr.h"
 #include "fyr_spawn.h"
 
-
 struct fyr_coro_t fyr_main_coro;
 struct fyr_coro_t *fyr_running;
 struct fyr_coro_t *fyr_ready_first;
@@ -43,7 +42,7 @@ void fyr_component_main_end(void) {
     // The previous coroutine finished? Garbage collect it now.
     // Doing that before was not possible, because a coroutine cannot delete the stack it operates on.
     if (fyr_garbage_coro) {
-        free(fyr_garbage_coro->memory);
+        fyr_free(fyr_garbage_coro->memory, NULL);
         fyr_garbage_coro = NULL;
     }
 }
@@ -54,7 +53,7 @@ void fyr_yield(bool wait) {
             // The previous coroutine finished? Garbage collect it now.
             // Doing that before was not possible because a coroutine cannot delete the stack it operates on.
             if (fyr_garbage_coro) {
-                free(fyr_garbage_coro->memory);
+                fyr_free(fyr_garbage_coro->memory, NULL);
                 fyr_garbage_coro = NULL;
             }
             // When we are here, the yielding coroutine is resumed.
@@ -152,6 +151,7 @@ void fyr_resume(struct fyr_coro_t *c) {
         fyr_ready_first = c;
     } else {
         fyr_ready_last->next = c;
+        fyr_ready2_last = c;
     }
 }
 

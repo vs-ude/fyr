@@ -3685,7 +3685,7 @@ export class CodeGenerator {
             case "resume":
             {
                 let expr = this.processExpression(f, scope, enode.lhs, b, vars, Static.t_coroutine);
-                return b.assign(b.tmp(), "resume", null, [expr]);
+                return b.assign(null, "resume", null, [expr]);
             }
             case "coroutine":
             {
