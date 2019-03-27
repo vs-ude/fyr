@@ -1785,11 +1785,16 @@ export class CodeGenerator {
     }
     */
 
+    /**
+     * Returns true if the expression denoted by 'node' must be evaluted with processLeftHandSide.
+     * For example in "a.b.c" the expression "a.b" must be processed with processLeftHandSide, because
+     * otherwise we would get a copy of the struct denoted by "a.b".
+     */
     public isLeftHandSide(node: Node): boolean {
         if (node.op == "id") {
             return true;
-        } else if (node.op == "unary*") {
-            return true;
+//        } else if (node.op == "unary*") {
+//            return true;
         } else if (node.op == ".") {
             if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
                 return true;
