@@ -1,3 +1,4 @@
+.vscode/ipch/*
 node_modules
 tmp.*
 old
@@ -35,4 +36,4 @@ bin/linux*
 /compiler/**/*.js
 /test/tests/*
 !/test/tests/.gitkeep
-.vscode/ipch/*
+
