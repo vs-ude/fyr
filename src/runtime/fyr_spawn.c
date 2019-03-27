@@ -10,6 +10,8 @@ struct fyr_coro_t fyr_main_coro;
 struct fyr_coro_t *fyr_running;
 struct fyr_coro_t *fyr_ready_first;
 struct fyr_coro_t *fyr_ready_last;
+struct fyr_coro_t *fyr_ready2_first;
+struct fyr_coro_t *fyr_ready2_last;
 struct fyr_coro_t *fyr_waiting;
 struct fyr_coro_t *fyr_garbage_coro;
 
@@ -21,6 +23,8 @@ void fyr_component_main_start(void) {
     fyr_running = &fyr_main_coro;
     fyr_ready_first = NULL;
     fyr_ready_last = NULL;
+    fyr_ready2_first = NULL;
+    fyr_ready2_last = NULL;
     fyr_waiting = NULL;
     fyr_garbage_coro = NULL;
 }
@@ -57,7 +61,7 @@ void fyr_yield(bool wait) {
             return;
         }
     }
-    if (fyr_ready_first == NULL) {
+    if (fyr_ready_first == NULL && fyr_ready2_first == NULL) {
         // All other coroutines are waiting to be resumed, only the yielding coroutine can continue?
         // Then continue the yielding coroutine.
         if (!wait) {
@@ -65,7 +69,6 @@ void fyr_yield(bool wait) {
         }
         if (fyr_waiting != NULL || fyr_running != NULL) {
             // There are coroutines left, but all are waiting. This is a deadlock.
-//            printf("All coroutines are blocked.\n");
             exit(1);
         }
         // There are no coroutines left.
@@ -79,35 +82,79 @@ void fyr_yield(bool wait) {
         if (wait) {
             // Add the current coroutine to the waiting list
             fyr_running->next = fyr_waiting;
+            if (fyr_waiting != NULL) {
+                fyr_waiting->prev = fyr_running;
+            }
             fyr_waiting = fyr_running;
         } else {
-            // Add the current coroutine at the end of the ready list.
-            // We know that the ready list is not empty here.
-            fyr_ready_last->next = fyr_running;
-            fyr_ready_last = fyr_running;
+            // Add the current coroutine at the end of the ready2 list.
+            if (fyr_ready2_first == NULL) {
+                fyr_ready2_first = fyr_running;
+                fyr_ready2_last = fyr_running;
+            } else {
+                fyr_ready2_last->next = fyr_running;
+                fyr_ready2_last = fyr_running;
+            }
         }
     }
-    // Execute the next coroutine that is ready
-    fyr_running = fyr_ready_first;
-    if (fyr_ready_first == fyr_ready_last) {
-        // The ready list is now empty
-        fyr_ready_first = NULL;
-        fyr_ready_last = NULL;
+    // Execute the next coroutine that is ready.
+    // Look in both ready lists.
+    if (fyr_ready_first != NULL) {
+        fyr_running = fyr_ready_first;
+        if (fyr_ready_first == fyr_ready_last) {
+            // The ready list is now empty
+            fyr_ready_first = NULL;
+            fyr_ready_last = NULL;
+        } else {
+            fyr_ready_first = fyr_ready_first->next;
+        }
     } else {
-        fyr_ready_first = fyr_ready_first->next;
+        fyr_running = fyr_ready2_first;
+        if (fyr_ready2_first == fyr_ready2_last) {
+            // The ready2 list is now empty
+            fyr_ready2_first = NULL;
+            fyr_ready2_last = NULL;
+        } else {
+            fyr_ready2_first = fyr_ready2_first->next;
+        }
     }
     fyr_running->next = NULL;
-    longjmp(fyr_running->buf, 1);
+    longjmp(fyr_running->buf, 1);    
 }
 
 int fyr_stacksize() {
     return fyr_coro_STACKSIZE + sizeof(struct fyr_coro_t);
 }
 
-void fyr_resume(struct fyr_coro_t *coro) {
-    // TODO
+void fyr_resume(struct fyr_coro_t *c) {
+    if (fyr_waiting == c) {
+        // The coroutine is the first element of the waiting list?
+        fyr_waiting = c->next;
+        if (c->next != NULL) {
+            c->next->prev = NULL;
+            c->next = NULL;
+        }    
+    } else if (c->prev != NULL) {
+        // The coroutine is in a double linked list? This must be the waiting list.
+        c->prev->next = c->next;
+        if (c->next != NULL) {
+            c->next->prev = c->prev;
+            c->next = NULL;
+        }    
+        c->prev = NULL;
+    } else {
+        // The coroutine is not in the waiting list. Do nothing.
+        return;
+    }
+    // Add the coroutine to the end of the ready list
+    if (fyr_ready_last == NULL) {
+        fyr_ready_last = c;
+        fyr_ready_first = c;
+    } else {
+        fyr_ready_last->next = c;
+    }
 }
 
-struct fyr_coro_t* fyr_coroutine() {
+struct fyr_coro_t* fyr_coroutine(void) {
     return fyr_running;
 }

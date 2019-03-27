@@ -6,8 +6,9 @@
 
 struct fyr_coro_t {
     void* memory;
+    struct fyr_coro_t *prev;
     struct fyr_coro_t *next;
-        jmp_buf buf;
+    jmp_buf buf;
 };
 
 extern struct fyr_coro_t fyr_main_coro;
@@ -22,6 +23,6 @@ void fyr_component_main_end(void);
 void fyr_yield(bool);
 int fyr_stacksize();
 void fyr_resume(struct fyr_coro_t *coro);
-struct fyr_coro_t* fyr_coroutine();
+struct fyr_coro_t* fyr_coroutine(void);
 
 #endif

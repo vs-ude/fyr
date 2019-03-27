@@ -35,3 +35,4 @@ bin/linux*
 /compiler/**/*.js
 /test/tests/*
 !/test/tests/.gitkeep
+.vscode/ipch/*
