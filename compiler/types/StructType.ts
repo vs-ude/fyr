@@ -83,8 +83,8 @@ export class StructType extends Type {
     public doesExtend(parent: Type): boolean {
         if (this.extends == parent) {
             return true
-        } else if (this.extends) {
-            return this.doesExtend(parent)
+        } else if (this.extends && (this.extends instanceof StructType)) {
+            return this.extends.doesExtend(parent)
         }
         return false
     }
