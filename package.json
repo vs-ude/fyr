@@ -15,7 +15,8 @@
     "build:js": "tsc",
     "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c && gcc -o pkg/`bin/fyrarch`/fyr_spawn.o -O3 -g3 -c src/runtime/fyr_spawn.c -U_FORTIFY_SOURCE",
     "build": "npm run build:parser && npm run build:js && npm run build:lib",
-    "clean": "rm -rf lib/* test/tests/*"
+    "build:doc": "typedoc --readme ./API.md --exclude '**/*.spec.ts' --out docs compiler",
+    "clean": "rm -rf lib/* test/tests/* coverage/ docs/ .nyc_output/"
   },
   "keywords": [
     "fyr",
@@ -41,6 +42,7 @@
     "nyc": "^13.3.0",
     "pegjs": "^0.10.0",
     "ts-mockito": "^2.3.1",
+    "typedoc": "^0.14.2",
     "typescript": "^3.2.2"
   },
   "nyc": {

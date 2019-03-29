@@ -2,6 +2,7 @@
 
 See http://fyr.vs.uni-due.de for more information.
 
+
 ## Testing
 
 ### High-level
@@ -31,3 +32,9 @@ Failure to do so will result in errors at runtime.
 
 To ensure consistent indentation and encoding, we use the editorconfig framework. It's settings are stored in the `.editorconfig` file.
 Many applications support it natively. Please refer to the [documentation](https://editorconfig.org/#download) on how to enable or install it.
+
+
+## API Documentation
+
+The internal compiler API documentation is built using [TypeDoc](https://typedoc.org/).
+To build it, run `npm run build:doc` in a terminal.
