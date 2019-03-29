@@ -2,10 +2,14 @@ import { Type } from './Type'
 import { PointerMode } from './PointerType'
 import { ArrayType } from './ArrayType'
 import { RestrictedType } from './RestrictedType'
+import { ImplementationError } from '../errors';
 
 export class SliceType extends Type {
     constructor(arrayType: ArrayType | RestrictedType, mode: PointerMode) {
         super()
+        if (arrayType instanceof RestrictedType && !(RestrictedType.strip(arrayType) instanceof ArrayType)) {
+            throw new ImplementationError('slice of a non-array')
+        }
         this.arrayType = arrayType
         this.mode = mode
     }
