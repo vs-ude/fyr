@@ -2,7 +2,7 @@ import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
 import { PointerType, RestrictedType, BasicType, MapType } from '../'
-import { ImplementationError } from '../../errors';
+import { ImplementationError } from '../../errors'
 
 describe('empty PointerType', () => {
     let instance: PointerType
