@@ -2595,7 +2595,7 @@ export class CodeGenerator {
                 if (element instanceof Variable && element.isForLoopPointer) {
                     return b.assign(b.tmp(), "load", storage, [v, 0]);
                 }
-                if ((enode.flags & AstFlags.ZeroAfterAssignment) != AstFlags.ZeroAfterAssignment) {
+                if ((enode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {
                     let copy = b.assign(b.tmp(), "copy", storage, [v]);
                     this.processFillZeros(v, enode.type, b);
                     v = copy;
