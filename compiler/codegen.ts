@@ -2491,7 +2491,7 @@ export class CodeGenerator {
                 } else {
                     throw new ImplementationError();
                 }
-                if ((enode.flags & AstFlags.ZeroAfterAssignment) != AstFlags.ZeroAfterAssignment) {
+                if ((enode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {
                     this.processFillZeros(p, enode.type, b);
                 }
                 if (helper.isSafePointer(enode.type) || helper.isSlice(enode.type) || helper.isString(enode.type)) {
