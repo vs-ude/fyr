@@ -1,91 +1,35 @@
-type S struct {
-    value int
-}
-
-func S.f() {
-    ptr.value = 84
-    ptr = null
-    if (ptr == null) {
-        return
-    }
-    this.value = 42
-}
-
-func S.f2(r const ~S) {
-}
-
-func &S.f3() {
-
-}
-
-var ptr *S = {}
-let ptr2 *S = {}
-
-func factory() *S {
-    return {}
-}
-
-func donateRef() ~S {
-    return null
-}
-
-func sliceme(s ~[]int) {
-}
-
-func refme(s &*S) {
-}
-
-func retarr() [2]*S {
-    var varr [2]*S = [{}, {}]
-    let arr = varr
-    return arr
-}
 
 type H struct {
     value int
     slice []int
 }
 
-export func main() int {
-    // ptr needs locking
-    ptr.f()
-    ptr2.f()
-    var lptr *S = {}
-    let lptr2 *S = {}
-    // ptr needs incref
-    // lptr needs notnull
-    lptr.f2(ptr)
-    // lptr needs notnull
-    lptr.f2(ptr2)
-    // lptr needs notnull
-    lptr.f2(lptr)
-    lptr2.f2(lptr)
-    // Needs free after f()
-    factory().f()
-    // Needs free after f()
-    lptr2.f2({})
-    // Needs decref after f()
-    let lptr3 *S = {}
-    lptr3.f2(donateRef())
-    let lptr4 *S = factory()
-    // Requires a null check
-    lptr4.f()
-    var loc1 *S = {}
-    // Requires null check
-    loc1.f3()
-    var loc2 *S = {}
-    refme(&loc2)
-    // Requires a lock, because the variable has been referenced
-    loc2.f3()
-    let hptr *H = {}
-    sliceme(hptr.slice)
-    let s []int = [1, 2]
-    // Requires a free
-    factory()
-    // Requires a free
-    retarr()
+func dummy1() {
+    // Here b must be destructed and a must be left ountouched.
+    // TODO: a is needlessly zero'd, although it is not destructed.
+    let a = &H{}
+    let b = a   
+}
 
-    let x *S = {}
-    let y = x
+func dummy2() {
+    let a = H{}
+    // Here no refcounting should happen
+    a.slice = [1, 2]
+    a.value = 2 * a.value
+    let b = H{slice: [5, 6], value: 7}
+    // Here a.slice must be set to zero
+    let s = take(a.slice)
+    s[1] = b.slice[1]
+}
+
+func dummy3() []int {
+    return [1,2]
+}
+
+export func main() int {
+    dummy1()
+    dummy2()
+    let a = dummy3()[1]
+    println(a)
     return 0
 }

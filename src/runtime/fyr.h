@@ -27,6 +27,8 @@ void fyr_decref(addr_t ptr, fyr_dtr_t dtr);
 void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr);
 void fyr_lock(addr_t ptr);
 void fyr_unlock(addr_t ptr, fyr_dtr_t dtr);
+void fyr_lock_arr(addr_t ptr);
+void fyr_unlock_arr(addr_t ptr, fyr_dtr_t dtr);
 int_t fyr_len_arr(addr_t ptr);
 int_t fyr_len_str(addr_t ptr);
 int_t fyr_min(int_t a, int_t b);

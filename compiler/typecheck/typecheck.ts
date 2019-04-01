@@ -3166,6 +3166,7 @@ export class TypeChecker {
                     case "id":
                     case "[":
                     case ".":
+                        enode.lhs.flags |= AstFlags.ZeroAfterAssignment;
                         this.checkIsMutable(enode.lhs, scope);
                         break;
                     case "typeCast":
@@ -3173,6 +3174,7 @@ export class TypeChecker {
                         while (n.op == "typeCast" && helper.isOrType(n.rhs.type)) {
                             n = n.rhs;
                         }
+                        n.flags |= AstFlags.ZeroAfterAssignment;
                         this.checkIsMutable(n, scope);
                         break;
                     default:
@@ -4340,7 +4342,7 @@ export class TypeChecker {
     }
 
 
-
+    // TODO: Move to helper.ts
     public checkIsMutable(node: Node, scope: Scope, doThrow: boolean = true): boolean {
         if (node.type instanceof RestrictedType && node.type.isConst) {
             if (!doThrow) {
@@ -4367,26 +4369,28 @@ export class TypeChecker {
         }
     }
 
+    // TODO: Move to helper.ts
     private mapKeyType(t: Type): Type {
         t = helper.stripType(t);
         if (!(t instanceof PointerType)) {
-            throw new Error("Internal error")
+            throw new ImplementationError("Internal error")
         }
         t = helper.stripType(t.elementType);
         if (!(t instanceof MapType)) {
-            throw new Error("Internal error")
+            throw new ImplementationError("Internal error")
         }
         return t.keyType;
     }
 
+    // TODO: Move to helper.ts
     private mapValueType(t: Type): Type {
         t = helper.stripType(t);
         if (!(t instanceof PointerType)) {
-            throw new Error("Internal error")
+            throw new ImplementationError("Internal error")
         }
         t = helper.stripType(t.elementType);
         if (!(t instanceof MapType)) {
-            throw new Error("Internal error")
+            throw new ImplementationError("Internal error")
         }
         return t.valueType;
     }
@@ -4905,7 +4909,7 @@ export class TypeChecker {
         // Assigning to a strong or unique pointer? Then the RHS must let go of its ownership.
         if (TypeChecker.hasStrongOrUniquePointers(ltype) || (!helper.isSafePointer(ltype) && !helper.isSlice(ltype) && !helper.isPureValue(ltype))) {
             if (rhsIsVariable) {
-                // Make the RHS variable unavailable, since the LHS is now the owner and there can be only one owner
+                // Make the RHS variable unavailable, since the LHS is now the owner and there can be one owner only
                 if (!rnodeReuse) {
                     let rhsVariable = scope.resolveElement(rhsVariableName);
                     scope.setGroup(rhsVariable, null);
@@ -4927,7 +4931,7 @@ export class TypeChecker {
                     let rhsVariable = scope.resolveElement(rhsVariableName);
                     scope.setGroup(rhsVariable, null);
                 }
-                rnode.flags |= AstFlags.ZeroAfterAssignment;
+                rnode.rhs.flags |= AstFlags.ZeroAfterAssignment;
             } else {
                 throw new TypeError("Assignment to an owning pointer (or data structure containing an owning pointer) is only allowed from a variable or take expression", loc);
             }

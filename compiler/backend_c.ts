@@ -1307,9 +1307,9 @@ export class CBackend implements backend.Backend {
             m.funcExpr = new CConst("fyr_incref");
             m.args = [this.emitExpr(n.args[0])];
             return m;
-        } else if (n.kind == "unlock") {
+        } else if (n.kind == "unlock" || n.kind == "unlock_arr") {
             let m = new CFunctionCall();
-            m.funcExpr = new CConst("fyr_unlock");
+            m.funcExpr = new CConst(n.kind == "unlock" ? "fyr_unlock" : "fyr_unlock_arr");
             if (n.args[1] === -1) {
                 m.args = [this.emitExpr(n.args[0]), new CConst("0")];
             } else if (typeof(n.args[1]) == "number") {
@@ -1327,7 +1327,7 @@ export class CBackend implements backend.Backend {
             return m;
         } else if (n.kind == "lock") {
             let m = new CFunctionCall();
-            m.funcExpr = new CConst("fyr_lock");
+            m.funcExpr = new CConst(n.kind == "lock" ? "fyr_lock" : "fyr_lock_arr");
             m.args = [this.emitExpr(n.args[0])];
             return m;
         } else if (n.kind == "notnull_ref") {

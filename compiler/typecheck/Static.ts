@@ -1,4 +1,4 @@
-import { Type, BasicType, FunctionType, InterfaceType, RestrictedType, PointerType } from '../types'
+import { Type, BasicType, FunctionType, InterfaceType, RestrictedType, PointerType, UnsafePointerType } from '../types'
 
 /**
  * The types defined here must be registered in TypeChecker.checkModule.
@@ -29,6 +29,8 @@ export class Static {
 
         Static.t_error = new InterfaceType();
         Static.t_error.name = "error";
+
+        Static.t_voidPtr = new UnsafePointerType(this.t_void);
 
         let toError = new FunctionType();
         toError.name = "toError";
@@ -71,4 +73,6 @@ export class Static {
     public static t_any: Type;
     public static t_error: InterfaceType;
     public static t_coroutine: PointerType;
+    // For convenience, because it is often required
+    public static t_voidPtr: UnsafePointerType;
 }
