@@ -1,6 +1,6 @@
 {
   "name": "fyr",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Fyr: an experimental compiler for IoT applications",
   "main": "lib/index",
   "typings": "lib/index",
@@ -24,8 +24,12 @@
     "distributed",
     "iot"
   ],
-  "author": "Verteilte Systeme UDE (vs.uni-due.de)",
+  "author": "VS.UDE (vs.uni-due.de)",
   "license": "BSD-3-Clause",
+  "repository": {
+      "type": "git",
+      "url": "https://github.com/vs-ude/fyr.git"
+    },
   "dependencies": {
     "colors": "^1.3.3",
     "commander": "^2.19.0",
