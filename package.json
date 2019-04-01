@@ -27,15 +27,15 @@
   "author": "Verteilte Systeme UDE (vs.uni-due.de)",
   "license": "BSD-3-Clause",
   "dependencies": {
-    "colors": "^1.3.0",
-    "commander": "^2.9.0",
+    "colors": "^1.3.3",
+    "commander": "^2.19.0",
     "text-encoding": "^0.6.4"
   },
   "devDependencies": {
     "@types/chai": "^4.1.7",
     "@types/colors": "^1.2.1",
-    "@types/mocha": "^5.2.5",
-    "@types/node": "^8.0.0",
+    "@types/mocha": "^5.2.6",
+    "@types/node": "^8.10.45",
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
     "mocha-typescript": "^1.1.17",
@@ -43,7 +43,7 @@
     "pegjs": "^0.10.0",
     "ts-mockito": "^2.3.1",
     "typedoc": "^0.14.2",
-    "typescript": "^3.2.2"
+    "typescript": "^3.4.1"
   },
   "nyc": {
     "check-coverage": true,
