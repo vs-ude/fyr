@@ -1,7 +1,7 @@
 {
   "name": "fyr",
   "version": "0.0.2",
-  "description": "Fyr: an experimental compiler for WebAssembly and IoT applications",
+  "description": "Fyr: an experimental compiler for IoT applications",
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
@@ -20,9 +20,9 @@
   },
   "keywords": [
     "fyr",
-    "wasm",
-    "webassembly",
-    "compiler"
+    "compiler",
+    "distributed",
+    "iot"
   ],
   "author": "Torben Weis",
   "license": "Apache-2.0",
