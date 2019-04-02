@@ -23,14 +23,14 @@ import { ImplementationError, TodoError } from './errors'
  * once this result is no longer required.
  */
 export class DestructorInstruction {
-    constructor(v: ssa.Variable, t: Type, action: "none" | "decref" | "decref_arr" | "destruct" | "unlock" | "unlock_arr") {
+    constructor(v: ssa.Variable, t: Type, action: "none" | "decref" | "destruct" | "unlock") {
         this.v = v;
         this.t = t;
         this.action = action;
     }
 
     public v: ssa.Variable;
-    public action: "none" | "decref" | "decref_arr" | "destruct" | "unlock" | "unlock_arr"
+    public action: "none" | "decref" | "destruct" | "unlock"
     public t: Type;
 }
 
@@ -4694,7 +4694,7 @@ export class CodeGenerator {
                     dtr = this.generateSliceDestructor(t);
                 }
             } else if (t == Static.t_string) {
-                // Do nothing by intention, because strings are not explicitly destructed. They are always reference counted.
+                // Do nothing by intention, because strings are not explicitly destructed. They are only reference counted.
             } else {
                 throw new ImplementationError()
             }
@@ -4716,7 +4716,7 @@ export class CodeGenerator {
             }
         } else if (free == "unlock") {
             if (helper.isArray(typ) || helper.isString(typ)) {
-                throw new ImplementationError()
+                b.assign(null, "unlock_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
             } else {
                 b.assign(null, "unlock", null, [pointer, dtr ? dtr.getIndex() : -1]);
             }
@@ -5091,19 +5091,13 @@ export class CodeGenerator {
         for(let d of dtor) {
             switch (d.action) {
                 case "decref":
-                    b.assign(null, "decref", "addr", [d.v]);
-                    break;
-                case "decref_arr":
-                    b.assign(null, "decref_arr", "addr", [d.v]);
+                    this.callDestructor(d.t, d.v, b, true, "decref");
                     break;
                 case "destruct":
                     this.callDestructorOnVariable(d.t, d.v, b, false);
                     break;
                 case "unlock":
-                    b.assign(null, "unlock", "addr", [d.v]);
-                    break;
-                case "unlock_arr":
-                    b.assign(null, "unlock_arr", "addr", [d.v]);
+                    this.callDestructor(d.t, d.v, b, true, "unlock");
                     break;
             }
         }
@@ -5125,13 +5119,13 @@ export class CodeGenerator {
             }
         } else if (helper.isString(t)) {
             if (dtor) {
-                dtor.push(new DestructorInstruction(val, t, "decref_arr"));
+                dtor.push(new DestructorInstruction(val, t, "decref"));
             }
             val = b.assign(b.tmp(), "incref_arr", "addr", [val]);
         } else if (helper.isSlice(t) && !helper.isLocalReference(t)) {
             let arrayPointer = b.assign(b.tmp(), "member", "addr", [val, this.slicePointer.fieldIndexByName("array_ptr")]);
             if (dtor) {
-                dtor.push(new DestructorInstruction(val, t, "decref_arr"));
+                dtor.push(new DestructorInstruction(val, t, "decref"));
             }
             b.assign(null, "incref_arr", "addr", [arrayPointer]);
         }
@@ -5149,11 +5143,11 @@ export class CodeGenerator {
                 val = b.assign(b.tmp(), "lock", "addr", [val]);
             }
         } else if (helper.isString(t)) {
-            dtor.push(new DestructorInstruction(val, t, "unlock_arr"));
+            dtor.push(new DestructorInstruction(val, t, "unlock"));
             val = b.assign(b.tmp(), "lock_arr", "addr", [val]);
         } else if (helper.isSlice(t) && !helper.isLocalReference(t)) {
             let arrayPointer = b.assign(b.tmp(), "member", "addr", [val, this.slicePointer.fieldIndexByName("array_ptr")]);                                        
-            dtor.push(new DestructorInstruction(val, t, "unlock_arr"));
+            dtor.push(new DestructorInstruction(val, t, "unlock"));
             b.assign(null, "lock_arr", "addr", [arrayPointer]);
         }
         return val;
