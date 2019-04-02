@@ -764,7 +764,7 @@ export class CodeGenerator {
                     // } else if (snode.rhs.op == "take") {
                     //    rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars, dtor, "none");
                     } else {
-                        rhs = this.processExpression(f, scope, snode.rhs, b, vars, dtor, "none");
+                        rhs = this.processExpression(f, scope, snode.rhs, b, vars, dtor, "donate");
                     }
                     // Assigning to a value containing pointers? -> destruct the LHS value before assigning the RHS
                     if (!helper.isPureValue(snode.lhs.type)) {
@@ -1184,7 +1184,7 @@ export class CodeGenerator {
                     // let rhs: ssa.Variable | ssa.Pointer | number;
                     // let forceIncref = false;
                     let varName = helper.getUnderlyingLocalVariable(snode.lhs)
-                    if ((snode.lhs.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment && varName != null) {
+                    if (varName != null) {
                         let e = scope.resolveElement(varName.value);
                         if (e instanceof FunctionParameter || (e instanceof Variable && !e.isGlobal)) {
                             // Do not run the destructor on this local variable
@@ -2500,15 +2500,15 @@ export class CodeGenerator {
                     }
                     if (keepAlive == "donate") {
                         if ((enode.flags & AstFlags.ZeroAfterAssignment) != AstFlags.ZeroAfterAssignment) {
-                            this.processIncref(result, enode.type, b, null);
+                            result = this.processIncref(result, enode.type, b, null);
                         }
                     } else if (keepAlive == "hold") {
-                        this.processIncref(result, enode.type, b, dtor);
+                        result = this.processIncref(result, enode.type, b, dtor);
                     } else if (keepAlive == "lock") {
                         if (helper.isString(enode.type)) {
-                            this.processIncref(result, enode.type, b, dtor);
+                            result = this.processIncref(result, enode.type, b, dtor);
                         } else {
-                            this.processLock(result, enode.type, b, dtor);
+                            result =this.processLock(result, enode.type, b, dtor);
                         }
                     }
                 }
@@ -2606,15 +2606,17 @@ export class CodeGenerator {
                     }
                     if (keepAlive == "donate") {
                         if ((enode.flags & AstFlags.ZeroAfterAssignment) != AstFlags.ZeroAfterAssignment) {
-                            this.processIncref(v, enode.type, b, null);
+                            v = this.processIncref(v, enode.type, b, null);
                         }
                     } else if (keepAlive == "hold") {
-                        this.processIncref(v, enode.type, b, dtor);
+                        v = this.processIncref(v, enode.type, b, dtor);
                     } else if (keepAlive == "lock") {
-                        if (helper.isString(enode.type)) {
-                            this.processIncref(v, enode.type, b, dtor);
+                        if (this.isThis(v)) {
+                            // This is already locked. No need to do anything
+                        } else if (helper.isString(enode.type)) {
+                            v = this.processIncref(v, enode.type, b, dtor);
                         } else {
-                            this.processLock(v, enode.type, b, dtor);
+                            v = this.processLock(v, enode.type, b, dtor);
                         }
                     }
                 }
@@ -2903,7 +2905,7 @@ export class CodeGenerator {
                             dtor.push(new DestructorInstruction(result, t.returnType, "destruct"));
                         } else {
                             if (keepAlive == "lock") {
-                                this.processLock(result, enode.type, b, dtor);
+                                result = this.processLock(result, enode.type, b, dtor);
                             }
                             dtor.push(new DestructorInstruction(result, t.returnType, "decref"));
                         }
@@ -3350,15 +3352,15 @@ export class CodeGenerator {
                     }
                     if (keepAlive == "donate") {
                         if ((enode.flags & AstFlags.ZeroAfterAssignment) != AstFlags.ZeroAfterAssignment) {
-                            this.processIncref(result, enode.type, b, null);
+                            result = this.processIncref(result, enode.type, b, null);
                         }
                     } else if (keepAlive == "hold") {
-                        this.processIncref(result, enode.type, b, dtor);
+                        result = this.processIncref(result, enode.type, b, dtor);
                     } else if (keepAlive == "lock") {
                         if (helper.isString(enode.type)) {
-                            this.processIncref(result, enode.type, b, dtor);
+                            result = this.processIncref(result, enode.type, b, dtor);
                         } else {
-                            this.processLock(result, enode.type, b, dtor);
+                            result = this.processLock(result, enode.type, b, dtor);
                         }
                     }
                 }
@@ -3434,15 +3436,15 @@ export class CodeGenerator {
                     }
                     if (keepAlive == "donate") {
                         if ((enode.flags & AstFlags.ZeroAfterAssignment) != AstFlags.ZeroAfterAssignment) {
-                            this.processIncref(result, enode.type, b, null);
+                            result = this.processIncref(result, enode.type, b, null);
                         }
                     } else if (keepAlive == "hold") {
-                        this.processIncref(result, enode.type, b, dtor);
+                        result = this.processIncref(result, enode.type, b, dtor);
                     } else if (keepAlive == "lock") {
                         if (helper.isString(enode.type)) {
-                            this.processIncref(result, enode.type, b, dtor);
+                            result = this.processIncref(result, enode.type, b, dtor);
                         } else {
-                            this.processLock(result, enode.type, b, dtor);
+                            result = this.processLock(result, enode.type, b, dtor);
                         }
                     }
                 }

@@ -2,6 +2,7 @@
 type H struct {
     value int
     slice []int
+    ptrRef ~H
 }
 
 func dummy1() {
@@ -24,6 +25,14 @@ func dummy2() {
 
 func dummy3() []int {
     return [1,2]
+}
+
+func dummy4() ~H {
+    let a = &H{}
+    let b = &H{}
+    let tmp = take(a.ptrRef)
+    b.ptrRef = tmp
+    return b.ptrRef
 }
 
 export func main() int {

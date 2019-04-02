@@ -70,7 +70,7 @@ func List.Push(value T) {
     this.last = e
     if (last != null) {
         last.next = e
-    } else if (this.first == null) {
+    } else {
         this.first = e
     }
     this.count++
@@ -215,16 +215,17 @@ export func main() int {
     let l List<int> = {}
     l.Push(42)
     l.Push(43)
+//    println("List completed")
     for(let it = l.Front(); !it.IsNull(); it.Next()) {
         println(*it.At())
     }
     for(let it = l.Front(); !it.IsNull(); it.Next()) {
         *it.At() += 10
-//        *it.At() 
+        *it.At() 
     }
     for(let it = l.Front(); !it.IsNull(); it.Next()) {
         println(*it.At())
     }
-    println("Done")
-    return 42
+//    println("Done")
+    return 0
 }

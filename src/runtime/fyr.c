@@ -167,12 +167,13 @@ void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
     }
 }
 
-void fyr_lock(addr_t ptr) {
+addr_t fyr_lock(addr_t ptr) {
     if (ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0)) {
         exit(EXIT_FAILURE);
     }
     int_t* lptr = ((int_t*)ptr) - 2;
     (*lptr)++;
+    return ptr;
 }
 
 void fyr_unlock(addr_t ptr, fyr_dtr_t dtr) {
