@@ -622,7 +622,7 @@ export class CodeGenerator {
                                 if (p.op == "tuple" || p.op == "array" || p.op == "object") {
                                     processAssignmentDestinations(p, destinations);
                                 } else {
-                                    let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, p, b, vars, dtor, "hold");
+                                    let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, p, b, vars, dtor, "lock");
                                     destinations.push(dest);
                                 }
                             }
@@ -756,7 +756,7 @@ export class CodeGenerator {
                     */
                 } else {
                     let dtor: Array<DestructorInstruction> = [];
-                    let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "hold");
+                    let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "lock");
                     let rhs: ssa.Variable | number;
                     if ((helper.isArray(snode.lhs.type) || helper.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
                         rhs = this.processPureLiteral(snode.rhs);
@@ -844,7 +844,7 @@ export class CodeGenerator {
                 let t = helper.stripType(snode.lhs.type);
                 let storage = this.getSSAType(t);
                 let dtor: Array<DestructorInstruction> = [];
-                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "hold");
+                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "lock");
                 let p1: ssa.Variable;
                 let dest: ssa.Variable;
                 if (tmp instanceof ssa.Pointer) {
@@ -935,7 +935,7 @@ export class CodeGenerator {
                 let t = helper.stripType(snode.lhs.type)
                 let storage = this.getSSAType(t);
                 let dtor: Array<DestructorInstruction> = [];
-                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "hold");
+                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "none");
                 let p1: ssa.Variable;
                 let dest: ssa.Variable;
                 if (tmp instanceof ssa.Pointer) {
@@ -1009,7 +1009,7 @@ export class CodeGenerator {
                     // Address and length of array or string
                     //
                     if (t instanceof SliceType) {
-                        let sliceHeader = this.processInnerExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "hold");
+                        let sliceHeader = this.processInnerExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "lock");
                         if (sliceHeader instanceof ssa.Variable) {
                             if (t.mode != "local_reference") {
                                 let base = b.assign(b.tmp(), "member", this.localSlicePointer, [sliceHeader, this.slicePointer.fieldIndexByName("base")]);
@@ -1031,7 +1031,7 @@ export class CodeGenerator {
                         // Get the address of the array
                         len = t.size;
                         if (this.isLeftHandSide(snode.condition.rhs)) {
-                            let arr = this.processLeftHandExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "hold");
+                            let arr = this.processLeftHandExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "lock");
                             if (arr instanceof ssa.Variable) {
                                 b.assign(ptr, "addr_of", "addr", [arr]);
                             } else {
@@ -1045,7 +1045,7 @@ export class CodeGenerator {
                             b.assign(ptr, "addr_of", "addr", [arr]);
                         }
                     } else if (t == Static.t_string) {
-                        ptr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "hold") as ssa.Variable;
+                        ptr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "lock") as ssa.Variable;
                         len = b.assign(b.tmp(), "len_str", "sint", [ptr]);
                     } else {
                         throw new TodoError("map")
@@ -1333,7 +1333,7 @@ export class CodeGenerator {
                 let elementType = this.getSSAType(RestrictedType.strip(objType.getElementType()));
                 let size = ssa.alignedSizeOf(elementType);
                 // Get the address of the SliceHead. Either compute it from a left-hand-side expression or put it on the stack first
-                let head_addr = this.processInnerExpression(f, scope, snode.lhs, b, vars, dtor, "hold");
+                let head_addr = this.processInnerExpression(f, scope, snode.lhs, b, vars, dtor, "lock");
                 let dest_data_ptr: ssa.Variable | number;
                 let dest_count: ssa.Variable | number;
                 if (head_addr instanceof ssa.Variable) {
@@ -2349,15 +2349,9 @@ export class CodeGenerator {
             {
                 let t = helper.stripType(enode.type);
                 if (t == Static.t_string) {
-                    let p1 = this.processExpression(f, scope, enode.lhs, b, vars, dtor, "hold");
-                    if (!this.disableNullCheck && !(p1 as ssa.Variable).isConstant) {
-                        b.assign(null, "notnull_ref", null, [p1]);
-                    }
+                    let p1 = this.processExpression(f, scope, enode.lhs, b, vars, dtor, "lock", true);
                     let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
-                    let p2 = this.processExpression(f, scope, enode.rhs, b, vars, dtor, "none");
-                    if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
-                        b.assign(null, "notnull_ref", null, [p2]);
-                    }
+                    let p2 = this.processExpression(f, scope, enode.rhs, b, vars, dtor, "none", true);
                     let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
                     let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
                     let lplus = b.assign(b.tmp(), "add", "sint", [l, 1]);
@@ -3870,7 +3864,7 @@ export class CodeGenerator {
                     let p = enode.parameters[i];
                     if (p.op == "unary...") {
                         p = p.rhs;
-                        let head_addr = this.processInnerExpression(f, scope, p, b, vars, dtor, "hold");
+                        let head_addr = this.processInnerExpression(f, scope, p, b, vars, dtor, "lock");
                         let src_data_ptr: ssa.Variable | number;
                         let src_count: ssa.Variable | number;
                         if (head_addr instanceof ssa.Variable) {
@@ -4147,7 +4141,7 @@ export class CodeGenerator {
         let t = helper.stripType(enode.lhs.type);
         if (t == Static.t_string) {
             let dtor: Array<DestructorInstruction> = [];
-            let p1 = this.processExpression(f, scope, enode.lhs, b, vars, dtor, "hold");
+            let p1 = this.processExpression(f, scope, enode.lhs, b, vars, dtor, "lock");
             let p2 = this.processExpression(f, scope, enode.rhs, b, vars, dtor, "none");
             // let cond = b.assign(b.tmp(), "eq", "i8", [p1, p2]);
             let l1 = b.assign(b.tmp(), "len_arr", "sint", [p1]);

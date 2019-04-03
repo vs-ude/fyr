@@ -35,6 +35,9 @@ func dummy4() ~H {
     return b.ptrRef
 }
 
+func dummy5(r ~H) {
+}
+
 export func main() int {
     dummy1()
     dummy2()
