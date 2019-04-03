@@ -3674,6 +3674,9 @@ export class CodeGenerator {
                 // let t = this.getSSAType(enode.type);
                 // let dtor: Array<DestructorInstruction> = [];
                 let copy = this.processExpression(f, scope, enode.lhs, b, vars, dtor, "donate");
+                if (keepAlive != "donate") {
+                    dtor.push(new DestructorInstruction(copy as ssa.Variable, enode.type, "destruct"));
+                }
                 /*
                 if (src instanceof ssa.Pointer) {
                     let copy = b.assign(b.tmp(), "load", t, [src.variable, src.offset]);
