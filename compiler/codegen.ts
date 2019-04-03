@@ -2610,8 +2610,9 @@ export class CodeGenerator {
                     } else if (keepAlive == "hold") {
                         v = this.processIncref(v, enode.type, b, dtor);
                     } else if (keepAlive == "lock") {
-                        if (this.isThis(v)) {
-                            // This is already locked. No need to do anything
+                        if (this.isThis(v) || (element instanceof Variable && !element.isReferenced)) {
+                            // This is already locked. No need to do anything.
+                            // Variables that are not referenced cannot change their value either.
                         } else if (helper.isString(enode.type)) {
                             v = this.processIncref(v, enode.type, b, dtor);
                         } else {
