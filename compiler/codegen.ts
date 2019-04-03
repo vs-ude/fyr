@@ -755,7 +755,6 @@ export class CodeGenerator {
                     }
                     */
                 } else {
-                    let t = this.getSSAType(snode.rhs.type) as ssa.StructType;
                     let dtor: Array<DestructorInstruction> = [];
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "hold");
                     let rhs: ssa.Variable | number;
