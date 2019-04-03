@@ -19,12 +19,14 @@ addr_t fyr_alloc(int_t size) {
 }
 
 addr_t fyr_alloc_arr(int_t count, int_t size) {
-    int_t* ptr = calloc(1, (size_t)count * (size_t)size + 2 * sizeof(int_t));
+    int_t* ptr = calloc(1, (size_t)count * (size_t)size + 3 * sizeof(int_t));
     // printf("calloc arr %lx\n", (long)ptr);
-    // One owner
-    *ptr++ = 1;
     // Number of elements in the array
     *ptr++ = count;
+    // No locks
+    *ptr++ = 0;
+    // One owner
+    *ptr++ = 1;
     return (addr_t)ptr;
 }
 
@@ -32,11 +34,14 @@ void fyr_free(addr_t ptr, fyr_dtr_t dtr) {
     if (ptr == NULL) {
         return;
     }
+    // Get locks
     int_t* lptr = ((int_t*)ptr) - 2;
+    // Get reference count
     int_t* iptr = ((int_t*)ptr) - 1;
+    // Only one reference remaining? -> object can be destroyed (unless it is locked)
     if (*iptr == 1) {
-        // No further references, Give up all memory
         // printf("Free %lx\n", (long)iptr);
+        // Memory is not locked?
         if (*lptr == 0) {            
             // No one holds a lock on it.
             if (dtr) dtr(ptr);
@@ -66,31 +71,36 @@ void fyr_free_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
         return;
     }
 
-    int_t* iptr = ((int_t*)ptr) - 2;
+    // Get locks
+    int_t* lptr = ((int_t*)ptr) - 2;
+    // Get reference count
+    int_t* iptr = ((int_t*)ptr) - 1;
+    // Pointer to the allocated area
+    void* mem = ((int_t*)ptr) - 3;
+    // Only one reference remaining? -> object can be destroyed (unless it is locked)
     if (*iptr == 1) {
-        // No further references, Give up all memory
-        // printf("Free arr %lx\n", (long)iptr);
-        if (dtr) dtr(ptr, *(((int_t*)ptr) - 1));
-        free(iptr);
+        // Memory is not locked?
+        if (*lptr == 0) {            
+            if (dtr) dtr(ptr, *(((int_t*)ptr) - 3));
+            free(mem);
+        } else {
+            *iptr = 0;
+        }
     } else {
         // References exist. Decrease the reference count and realloc.
         // The remaining memory does not need to be destructed.
         *iptr = INT_MIN + *iptr - 1;
         // TODO: Use implementation of realloc that ensures that data does not move while shrinkink
-        if (dtr) dtr(ptr, *(((int_t*)ptr) - 1)); 
+        if (dtr) dtr(ptr, *(((int_t*)ptr) - 3)); 
 #ifndef VALGRIND
-        void* ignore = realloc(iptr, sizeof(int_t));
-        assert(ignore == iptr);
+        void* ignore = realloc(mem, 3*sizeof(int_t));
+        assert(ignore == mem);
 #endif
     }
 }
 
 bool fyr_isnull(addr_t ptr) {
     return ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0);
-}
-
-bool fyr_isnull_arr(addr_t ptr) {
-    return ptr == NULL || *(((int_t*)ptr) - 2) <= 0;
 }
 
 void fyr_notnull_ref(addr_t ptr) {
@@ -104,15 +114,6 @@ addr_t fyr_incref(addr_t ptr) {
         return NULL;
     }
     int_t* iptr = ((int_t*)ptr) - 1;
-    (*iptr)++;
-    return ptr;
-}
-
-addr_t fyr_incref_arr(addr_t ptr) {
-    if (ptr == NULL) {
-        return NULL;
-    }
-    int_t* iptr = ((int_t*)ptr) - 2;
     (*iptr)++;
     return ptr;
 }
@@ -154,22 +155,29 @@ void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
         return;
     }
 
-    int_t* iptr = ((int_t*)ptr) - 2;
+    // Number of locks
+    int_t* lptr = ((int_t*)ptr) - 2;
+    // Number of references
+    int_t* iptr = ((int_t*)ptr) - 1;
+    // Pointer to the allocated area
+    void* mem = ((int_t*)ptr) - 3;
     if (--(*iptr) == 0) {
         // Reference count can drop to zero only when the owning pointer has been assigned
         // to a frozen pointer and all references have been removed.
         // Hence, a destructor must run.
-        if (dtr) dtr(ptr, *(iptr+1));
-        free(iptr);
+        if (*lptr == 0) {
+            if (dtr) dtr(ptr, *(((int_t*)ptr) - 3));
+            free(mem);
+        }
     } else if (*iptr == INT_MIN) {
         // The owning pointer is zero (no freeze) and now all remaining references have been removed.
-        free(iptr);
+        free(mem);
     }
 }
 
 addr_t fyr_lock(addr_t ptr) {
-    if (ptr == NULL || (*(((int_t*)ptr) - 1) <= 0 && *(((int_t*)ptr) - 2) == 0)) {
-        exit(EXIT_FAILURE);
+    if (ptr == NULL) {
+        return NULL;
     }
     int_t* lptr = ((int_t*)ptr) - 2;
     (*lptr)++;
@@ -177,6 +185,9 @@ addr_t fyr_lock(addr_t ptr) {
 }
 
 void fyr_unlock(addr_t ptr, fyr_dtr_t dtr) {
+    if (ptr == NULL) {
+        return;
+    }
     int_t* lptr = ((int_t*)ptr) - 2;
     int_t* iptr = ((int_t*)ptr) - 1;
     if (--(*lptr) == 0 && *iptr <= 0) {
@@ -193,19 +204,41 @@ void fyr_unlock(addr_t ptr, fyr_dtr_t dtr) {
     }
 }
 
+void fyr_unlock_arr(addr_t ptr, fyr_dtr_arr_t dtr) {
+    if (ptr == NULL) {
+        return;
+    }
+    int_t* lptr = ((int_t*)ptr) - 2;
+    int_t* iptr = ((int_t*)ptr) - 1;
+    // Pointer to the allocated area
+    void* mem = ((int_t*)ptr) - 3;
+    if (--(*lptr) == 0 && *iptr <= 0) {
+        if (*iptr == INT_MIN || *iptr == 0) {
+            if (dtr) dtr(ptr, *(((int_t*)ptr) - 3));
+            free(mem);
+        } else {
+            if (dtr) dtr(ptr, *(((int_t*)ptr) - 3));
+#ifndef VALGRIND
+            void* ignore = realloc(mem, 3 * sizeof(int_t));
+            assert(ignore == mem);
+#endif
+        }
+    }
+}
+
 int_t fyr_len_arr(addr_t ptr) {
-    if (ptr == 0) {
+    if (ptr == NULL) {
         return 0;
     }
-    return *(((int_t*)ptr)-1);
+    return *(((int_t*)ptr)-3);
 }
 
 int_t fyr_len_str(addr_t ptr) {
-    if (ptr == 0) {
+    if (ptr == NULL) {
         return 0;
     }
     // -1, because the trailing 0 does not count
-    return (*(((int_t*)ptr)-1)) - 1;
+    return (*(((int_t*)ptr)-3)) - 1;
 }
 
 int_t fyr_min(int_t a, int_t b) {
@@ -229,7 +262,7 @@ addr_t fyr_arr_to_str(addr_t array_ptr, addr_t data_ptr, int_t len) {
     if (array_ptr != data_ptr) {
         memmove(array_ptr, data_ptr, len);
     }
-    int *lenptr = ((int_t*)array_ptr)-1;
+    int *lenptr = ((int_t*)array_ptr)-3;
     // Check for a trailing zero
     if (len >= *lenptr || ((char*)array_ptr)[len] != 0) {
         exit(EXIT_FAILURE);

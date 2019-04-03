@@ -19,16 +19,15 @@ addr_t fyr_alloc_arr(int_t count, int_t size);
 void fyr_free(addr_t, fyr_dtr_t dtr);
 void fyr_free_arr(addr_t, fyr_dtr_arr_t dtr);
 bool fyr_isnull(addr_t);
-bool fyr_isnull_arr(addr_t);
 void fyr_notnull_ref(addr_t);
 addr_t fyr_incref(addr_t ptr);
-addr_t fyr_incref_arr(addr_t ptr);
+#define fyr_incref_arr fyr_incref
 void fyr_decref(addr_t ptr, fyr_dtr_t dtr);
 void fyr_decref_arr(addr_t ptr, fyr_dtr_arr_t dtr);
 addr_t fyr_lock(addr_t ptr);
 void fyr_unlock(addr_t ptr, fyr_dtr_t dtr);
-addr_t fyr_lock_arr(addr_t ptr);
-void fyr_unlock_arr(addr_t ptr, fyr_dtr_t dtr);
+#define fyr_lock_arr fyr_lock
+void fyr_unlock_arr(addr_t ptr, fyr_dtr_arr_t dtr);
 int_t fyr_len_arr(addr_t ptr);
 int_t fyr_len_str(addr_t ptr);
 int_t fyr_min(int_t a, int_t b);
