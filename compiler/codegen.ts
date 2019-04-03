@@ -844,7 +844,7 @@ export class CodeGenerator {
                 let t = helper.stripType(snode.lhs.type);
                 let storage = this.getSSAType(t);
                 let dtor: Array<DestructorInstruction> = [];
-                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "lock");
+                let tmp: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "lock", true);
                 let p1: ssa.Variable;
                 let dest: ssa.Variable;
                 if (tmp instanceof ssa.Pointer) {
@@ -854,15 +854,12 @@ export class CodeGenerator {
                     p1 = tmp;
                     dest = tmp;
                 }
-                let p2 = this.processExpression(f, scope, snode.rhs, b, vars, dtor, "none");
+                let p2 = this.processExpression(f, scope, snode.rhs, b, vars, dtor, "none", true);
                 if (snode.lhs.type == Static.t_string) {
                     if (!this.disableNullCheck) {
                         b.assign(null, "notnull_ref", null, [p1]);
                     }
                     let l1 = b.assign(b.tmp(), "len_str", "sint", [p1]);
-                    if (!this.disableNullCheck && !(p2 as ssa.Variable).isConstant) {
-                        b.assign(null, "notnull_ref", null, [p2]);
-                    }
                     let l2 = b.assign(b.tmp(), "len_str", "sint", [p2]);
                     let l = b.assign(b.tmp(), "add", "sint", [l1, l2]);
                     let lplus = b.assign(b.tmp(), "add", "sint", [l, 1]);
@@ -1667,7 +1664,10 @@ export class CodeGenerator {
      * If a `ssa.Variable` is passed, the value of the variable is tested.
      * If a `ssa.Pointer` is passed, the value stored at the location pointed to is checked.
      */
-    private processNullCheck(ptr: ssa.Variable | number | ssa.Pointer, t: Type, b: ssa.Builder) {
+    private processNullCheck(ptr: ssa.Variable | number | ssa.Pointer, t: Type, b: ssa.Builder): void {
+        if (this.disableNullCheck) {
+            return;
+        }
         let v: ssa.Variable | number;
         if (helper.isSafePointer(t) || helper.isString(t)) {
             // An interface pointer is a fat pointer
