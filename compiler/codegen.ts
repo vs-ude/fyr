@@ -4166,7 +4166,19 @@ export class CodeGenerator {
                 case "ge":
                     return b.assign(b.tmp(), "ge_s", "sint", [cmp, 0]);
             }
-            throw new ImplementationError(opcode)
+            throw new ImplementationError(opcode);
+        } else if (helper.isReference(t)) {
+            let p1 = this.processValueExpression(f, scope, enode.lhs, b, vars);
+            let p2 = this.processValueExpression(f, scope, enode.rhs, b, vars);
+            let cmp = b.assign(b.tmp(), "cmp_ref", "i8", [p1, p2]);
+            switch(opcode) {
+                case "eq":
+                    return cmp;
+                case "ne":
+                    return b.assign(b.tmp(), "eqz", "i8", [cmp, 0]);
+                default:
+                    throw new ImplementationError(opcode);
+            }
         } else {
             let p1 = this.processValueExpression(f, scope, enode.lhs, b, vars);
             let p2 = this.processValueExpression(f, scope, enode.rhs, b, vars);

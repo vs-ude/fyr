@@ -109,6 +109,22 @@ void fyr_notnull_ref(addr_t ptr) {
     }
 }
 
+bool fyr_cmp_ref(addr_t ptr1, addr_t ptr2) {
+    if (ptr1 == ptr2) {
+        return true;
+    }
+    if (ptr1 == NULL) {
+        // Return true, if ptr2 is a weak pointer pointing to a memory area that is destructed
+        // and only kept alive because of weak pointers. In this case ptr2 is considered to be NULL as well.
+        return ((*(((int_t*)ptr2) - 1) <= 0 && *(((int_t*)ptr2) - 2) == 0));
+    } else if (ptr2 == NULL) {
+        // Return true, if ptr1 is a weak pointer pointing to a memory area that is destructed
+        // and only kept alive because of weak pointers. In this case ptr1 is considered to be NULL as well.
+        return ((*(((int_t*)ptr1) - 1) <= 0 && *(((int_t*)ptr1) - 2) == 0));
+    }
+    return false;
+}
+
 addr_t fyr_incref(addr_t ptr) {
     if (ptr == NULL) {
         return NULL;

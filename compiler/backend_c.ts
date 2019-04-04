@@ -1330,6 +1330,11 @@ export class CBackend implements backend.Backend {
             m.funcExpr = new CConst(n.kind == "lock" ? "fyr_lock" : "fyr_lock_arr");
             m.args = [this.emitExpr(n.args[0])];
             return m;
+        } else if (n.kind == "cmp_ref") {
+            let m = new CFunctionCall();
+            m.funcExpr = new CConst("fyr_cmp_ref");
+            m.args = [this.emitExpr(n.args[0]), this.emitExpr(n.args[1])];
+            return m;
         } else if (n.kind == "notnull_ref") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst("fyr_notnull_ref");
