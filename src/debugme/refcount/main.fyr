@@ -36,6 +36,16 @@ func dummy4() ~H {
 }
 
 func dummy5(r ~H) {
+    var p = r
+    // This must not be allowed, because p is not lockedm
+    // since we assume that expressions do not alter variables, but take does.
+    p.ptrRef = take(p)
+}
+
+func dummy6(r ~H) {
+    var p = r
+    // This must not be allowed
+    p.ptrRef.ptrRef = take(p.ptrRef)
 }
 
 export func main() int {
