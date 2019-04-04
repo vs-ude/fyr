@@ -4573,6 +4573,8 @@ export class TypeChecker {
     }
 
     private checkGroupsInStatement(snode: Node, scope: Scope): void {
+        this.modifiedVariabes.clear();
+        this.usedVariables.clear();
         switch (snode.op) {
             case "comment":
             case "yield":
@@ -4658,7 +4660,9 @@ export class TypeChecker {
                 snode.scope.resetGroups();
                 if (snode.lhs) {
                     this.checkGroupsInStatement(snode.lhs, snode.scope);
-                }
+                    this.modifiedVariabes.clear();
+                    this.usedVariables.clear();
+                }        
                 this.checkExpression(snode.condition, snode.scope);
                 for(let st of snode.statements) {
                     this.checkGroupsInStatement(st, snode.scope);
@@ -4718,6 +4722,8 @@ export class TypeChecker {
                     if (snode.condition.op == ";;") {
                         if (snode.condition.lhs) {
                             this.checkGroupsInStatement(snode.condition.lhs, snode.condition.scope);
+                            this.modifiedVariabes.clear();
+                            this.usedVariables.clear();            
                         }
                         if (snode.condition.condition) {
                             this.checkGroupsInExpression(snode.condition.condition, snode.condition.scope, GroupCheckFlags.None);
@@ -5020,6 +5026,22 @@ export class TypeChecker {
                         throw new TypeError("Variable " + element.name + " is not available in this place", enode.loc);
                     }
 //                    console.log(element.name + " is not available, but do not care");
+                }
+                if (element instanceof Variable) {
+                    if ((enode.flags & AstFlags.ZeroAfterAssignment) == AstFlags.ZeroAfterAssignment) {
+                        if (this.modifiedVariabes.has(element)) {
+                            throw new TypeError("Variable " + element.name + " is taken more than once in the same statement", enode.loc);
+                        }
+                        if (this.usedVariables.has(element)) {
+                            throw new TypeError("Variable " + element.name + " is read and taken in the same statement", enode.loc);
+                        }
+                        this.modifiedVariabes.add(element);
+                    } else {
+                        if (this.modifiedVariabes.has(element)) {
+                            throw new TypeError("Variable " + element.name + " is taken and read in the same statement", enode.loc);
+                        }
+                        this.usedVariables.add(element);
+                    }
                 }
                 // Accessing a global isolate is like an expression that evaluates to an isolate. Therefore its Group is null
                 if (element instanceof Variable && element.isGlobal && helper.isUnique(element.type)) {
@@ -5467,6 +5489,16 @@ export class TypeChecker {
     private moduleNode: Node;
 
     private globalGroup: Group;
+    /**
+     * During group checking, the compiler verifies that a variable that is taken in a statement,
+     * is not used a second time in the statement.
+     */
+    private modifiedVariabes: Set<Variable> = new Set<Variable>();
+    /**
+     * During group checking, the compiler verifies that a variable that is taken in a statement,
+     * is not used a second time in the statement.
+     */
+    private usedVariables: Set<Variable> = new Set<Variable>();
 }
 
 export class TypeError {
