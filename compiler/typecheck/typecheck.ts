@@ -720,6 +720,7 @@ export class TypeChecker {
         return f;
     }
 
+    // TODO: move to helper.ts
     public static mangleTemplateParameters(types: Array<Type>): string {
         let str = "<";
         for(let g of types) {
@@ -731,6 +732,7 @@ export class TypeChecker {
         return "_" + hash.digest("hex");
     }
 
+    // TODO: move to helper.ts
     public static mangledTypeName(t: Type): string {
         if (t instanceof TemplateStructType) {
             return t.base.pkg.pkgPath + "/" + t.name + TypeChecker.mangleTemplateParameters(t.templateParameterTypes);

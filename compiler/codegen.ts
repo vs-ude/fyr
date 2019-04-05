@@ -2719,14 +2719,9 @@ export class CodeGenerator {
                         objPtr = this.processExpression(f, scope, lhs.lhs, b, vars, dtor, "none", false);
                     } else if (ltype instanceof StructType) {
                         objType = ltype;
-                        if (this.isLeftHandSide(lhs.lhs)) {
-                            objPtr = this.processLeftHandExpression(f, scope, lhs.lhs, b, vars, dtor, "lock", true);
-                            if (objPtr instanceof ssa.Variable) {
-                                objPtr = b.assign(b.tmp(), "addr_of", "addr", [objPtr]);
-                            }
-                        } else {
-                            let value = this.processExpression(f, scope, lhs.lhs, b, vars, dtor, "lock", true);
-                            objPtr = b.assign(b.tmp(), "addr_of", "addr", [value]);
+                        objPtr = this.processInnerExpression(f, scope, lhs.lhs, b, vars, dtor, "lock", true);
+                        if (objPtr instanceof ssa.Variable) {
+                            objPtr = b.assign(b.tmp(), "addr_of", "addr", [objPtr]);
                         }
                     } else {
                         throw new ImplementationError()
