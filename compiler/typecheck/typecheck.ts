@@ -2332,6 +2332,12 @@ export class TypeChecker {
                 if ((snode.rhs.lhs.type as FunctionType).returnType != Static.t_void) {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
                 }
+                // Functions invoked via `spawn` must not accept local references.
+                for(let p of (snode.lhs.lhs.type as FunctionType).parameters) {
+                    if (helper.isLocalReference(p.type)) {
+                        throw new TypeError("Functions invoked via 'spawn' must not use local references in parameter types", p.loc);
+                    }
+                }
                 break;
             }
             case "copy":
