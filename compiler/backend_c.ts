@@ -1793,7 +1793,7 @@ export class CBackend implements backend.Backend {
                     new CConst("c = (struct fyr_coro_t*)p"),
                     new CConst("c->memory = p"),
                     new CConst("newtop = p + fyr_stacksize()"),
-                    new CConst("mytop = (char*)&p"),
+                    new CConst("mytop = (addr_t)&p"),
                     new CConst("dummy = alloca((size_t)((intptr_t)mytop - (intptr_t)newtop))"),
                     new CConst("c->next = fyr_ready_first"),
                     new CConst("fyr_ready_first = c"),
