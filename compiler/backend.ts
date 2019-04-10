@@ -4,18 +4,20 @@ import {Package} from "./pkg"
 export interface FunctionImport {
     getIndex(): number;
     isImported(): boolean;
+    getName(): string;
 }
 
 export interface Function {
     getIndex(): number;
     isImported(): boolean;
+    getName(): string;
 }
 
 export interface Backend {
     importFunction(name: string, from: string | Package, type: ssa.FunctionType): FunctionImport;
     importGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType, from: string | Package): ssa.Variable;
     declareGlobalVar(name: string, type: ssa.Type | ssa.StructType | ssa.PointerType): ssa.Variable;
-    declareFunction(name: string): Function;
+    declareFunction(name: string | null): Function;
     declareInitFunction(name: string): Function;
     defineFunction(n: ssa.Node, f: Function, isExported: boolean, isPossibleDuplicate: boolean): void;
     generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string;

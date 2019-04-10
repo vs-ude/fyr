@@ -2335,10 +2335,16 @@ export class TypeChecker {
                     throw new TypeError("Functions invoked via 'spawn' must return void", snode.loc);
                 }
                 // Functions invoked via `spawn` must not accept local references.
-                for(let p of (snode.lhs.lhs.type as FunctionType).parameters) {
+                for(let p of (snode.rhs.lhs.type as FunctionType).parameters) {
                     if (helper.isLocalReference(p.type)) {
                         throw new TypeError("Functions invoked via 'spawn' must not use local references in parameter types", p.loc);
                     }
+                }
+                if (snode.rhs.lhs.op == "." && !helper.isSafePointer(snode.rhs.lhs.lhs.type)) {
+                    throw new TypeError("Function calls via 'spawn' must use a pointer to the object", snode.loc);
+                }
+                if (snode.rhs.lhs.op == "." && helper.isLocalReference(snode.rhs.lhs.lhs.type)) {
+                    throw new TypeError("Function calls via 'spawn' must use not use a local-pointer to the object ", snode.loc);
                 }
                 break;
             }
@@ -5146,8 +5152,12 @@ export class TypeChecker {
                 }
                 return g;
             }
+            case "spawn":
             case "(":
             {
+                if (enode.op == "spawn") {
+                    enode = enode.rhs;
+                }    
                 let g = this.checkGroupsInExpression(enode.lhs, scope, flags | GroupCheckFlags.ForbidIsolates);
 //                if (!g) {
 //                    throw new ImplementationError()
@@ -5375,9 +5385,6 @@ export class TypeChecker {
                 }
                 return null;
             }
-            case "spawn":
-                // TODO
-                return null;
             case "resume":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);
                 return null;                

@@ -17,15 +17,22 @@ export enum AstFlags {
     // The RHS must be filled with zeros, after the assignment is complete.
     // This might be necessary when ownership has been transferred from RHS to LHS during an assignment
     // and the RHS must not run the destructor somewhen later, because it no longer owns the data.
-    // In an ideal case, the compiler knows and does not attempt to run the destructor.
+    // In an ideal case, the compiler knows and does not attempt to run the destructor (see TakenAfterAssignment).
     // But in many situations, the compiler cannot know.
     // If the compiler knows better, however, it can ignore this flag and therefore will not assign zero for optimization reasons.
     ZeroAfterAssignment = 1,
+    // Used on the right-hand side of an assignment.
+    // The meaning is that the RHS is implicitly taken (as with ZeroAfterAssignment).
+    // However, it is safe to leave the variable untouched (e.g. not to set it to zero),
+    // because no destructor will be run. 
+    TakenAfterAssignment = 16,
     ReferenceObjectMember = 2,
     // Used on array literals. Indicates that the array literal is incomplete
     // and implies that the variable (to which this literal is assigned) must be
     // filled with zero's first.
     FillArray = 4,
+    // Used on the left-hand side of an assignment.
+    // If set, the destructor must run on the left-hand side before a new value can be assigned.
     EmptyOnAssignment = 8
 }
 

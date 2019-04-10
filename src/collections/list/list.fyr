@@ -212,10 +212,11 @@ func const ConstIterator.IsNull() bool {
 
 
 export func main() int {
-    let l List<int> = {}
+//    let l List<int> = {}
+    var l List<int> = {}
     l.Push(42)
     l.Push(43)
-//    println("List completed")
+    println("List completed")
     for(let it = l.Front(); !it.IsNull(); it.Next()) {
         println(*it.At())
     }
@@ -226,6 +227,6 @@ export func main() int {
     for(let it = l.Front(); !it.IsNull(); it.Next()) {
         println(*it.At())
     }
-//    println("Done")
+    println("Done")
     return 0
 }

@@ -243,7 +243,7 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
         if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
             return true;
         }
-        return isLeftHandSide(node.lhs, scope, true);
+        return isLeftHandSide(node.lhs, scope/*, true*/);
     } else if (node.op == "[") {
         if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
             return true;
@@ -251,7 +251,7 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
         if (node.lhs.type == Static.t_string) {
             return false;
         }
-        return isLeftHandSide(node.lhs, scope, true);
+        return isLeftHandSide(node.lhs, scope/*, true*/);
     }
     return false;
 }

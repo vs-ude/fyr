@@ -1,3 +1,10 @@
+type S struct {
+    value int
+}
+
+func S.Scoro1() {
+}
+
 var c coroutine = null
 
 func coro1() {
@@ -17,7 +24,27 @@ func coro2() {
     println("World 3")
 }
 
+func coro3(s ~S) {
+}
+
+func coro4(s *S) {
+}
+
 export func main() int {
+    let s *S = {value: 42}
+    // argument s must be deferenced after coro3 finished -> coro3 must be launched via a wrapper function
+    spawn coro3(s)
+    let s2 *S = {value: 42}
+    let p2 ~S = s2
+    // argument p2 must be dereference'd after coro3 finished -> coro3 must be launched via a wrapper function
+    spawn coro3(p2)
+    let s3 *S = {value: 42}
+    // No wrapper function should be necessary, because the coroutine consumes the reference.
+    // s3 must not be free'd by main.
+    spawn coro4(s3)
+    let s4 *S = {value: 42}
+    // s4 must be locked by the wrapper -> Scoro4 must be launched via a wrapper function
+    spawn s4.Scoro1()
     spawn coro2()
     coro1()
     component.resume(c)

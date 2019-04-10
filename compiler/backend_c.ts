@@ -14,6 +14,10 @@ export class FunctionImport implements backend.FunctionImport {
         return this.index
     }
 
+    public getName(): string {
+        return this.name;
+    }
+
     public isImported(): boolean {
         return true;
     }
@@ -31,6 +35,10 @@ export class Function implements backend.Function {
 
     public getIndex(): number {
         return this.index
+    }
+
+    public getName(): string {
+        return this.name;
     }
 
     public isImported(): boolean {
@@ -166,9 +174,9 @@ export class CBackend implements backend.Backend {
         return v;
     }
 
-    public declareFunction(name: string): backend.Function {
+    public declareFunction(name: string | null): backend.Function {
         let f = new Function();
-        f.name = name;
+        f.name = name == null ? "f" + (this.funcs.length + 1).toString() : name;
         f.func.returnType = new CType("void");
         f.index = this.funcs.length;
         this.funcs.push(f);

@@ -19,6 +19,14 @@ export class FunctionType extends Type {
         this.parameters = []
     }
 
+    public parameterTypes(): Array<Type> {
+        let lst: Array<Type> = [];
+        for(let p of this.parameters) {
+            lst.push(p.type);
+        }
+        return lst;
+    }
+
     public toString(): string {
         if (this.name) {
             if (this.objectType) {

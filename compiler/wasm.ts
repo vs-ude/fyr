@@ -231,6 +231,10 @@ export class FunctionImport implements backend.FunctionImport {
         this.type = type;
     }
 
+    public getName(): string {
+        return this.name;
+    }
+
     public getIndex(): number {
         return this.index;
     }
@@ -323,6 +327,10 @@ export class Function extends Node implements backend.Function {
 //        } else {
             this.name = name;
 //        }
+    }
+
+    public getName(): string {
+        return this.name;
     }
 
     public getIndex(): number {

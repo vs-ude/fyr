@@ -15,6 +15,9 @@ Or make this a shortcut.
 
 ~~For loops on slices containing pointers free the element that we iterate over.~~
 
+Put a struct on the stack with `let`. Then call a non-const function.
+This changes the value assigned to via `let` and must not be allowed.
+
 ## Language Changes
 
 `for` loop over a string should iterate the bytes, not the runes.

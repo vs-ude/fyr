@@ -147,7 +147,7 @@ void fyr_decref(addr_t ptr, fyr_dtr_t dtr) {
     if (*iptr == 0) {
         // Reference count can drop to zero only when the owning pointer has been assigned
         // to a frozen pointer and all references have been removed.
-        // Hence, a destructor must run.
+        // Hence, a destructor must run (unless the objec is locked).
         if (*lptr == 0) {
             if (dtr) dtr(ptr);
             // printf("DECREF FREE %lx\n", (long)iptr);

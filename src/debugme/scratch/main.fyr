@@ -1,0 +1,8 @@
+type S struct {
+    last ~S
+}
+
+func S.f() *S {
+    let e *S = {last: this.last}
+    return e
+}

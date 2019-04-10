@@ -140,7 +140,7 @@ export class Wasm32Backend implements backend.Backend {
         return v;
     }
 
-    public declareFunction(name: string): backend.Function {
+    public declareFunction(name: string | null): backend.Function {
         let wf = new wasm.Function(name);
         this.module.addFunction(wf);
         return wf;
