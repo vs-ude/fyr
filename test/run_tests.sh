@@ -15,6 +15,11 @@ COMPILE_FILES=(
     "src/examples/mandelbrot"
 )
 
+# these files should fail to compile
+COMPILE_FILES_NEGATIVE=(
+    "src/debugme/refcount"
+)
+
 RUN_FILES=(
     "list"
     "tree"
@@ -29,49 +34,103 @@ FYRBASE="$DIR"
 ARCH=`bin/fyrarch`
 
 COMPILE_ERRORS=""
+COMPILE_FALSE_POSITIVE=""
 RUN_ERRORS=""
+RUN_LEAKS=""
 EXIT=0
 
 # --------- building the compiler if necessary -------------------------------
-if [ ! -f $DIR/lib/index.js ]; then
-    printf "Compiler is not yet built, so I'm building it now."
-    cd $DIR
-    npm run build
-    cd -
-fi
+pre_run() {
+    if [ ! -f $DIR/lib/index.js ]; then
+        printf "Compiler is not yet built, so I'm building it now."
+        cd $DIR
+        npm run build
+        cd -
+    fi
+}
 
 # --------- compile/run the files silently -----------------------------------
-for file in "${COMPILE_FILES[@]}"; do
-    printf "%s: Compiling %s...\n" `date +%F_%T` $file
-    $DIR/bin/fyrc -n "$DIR/$file" >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        COMPILE_ERRORS="$COMPILE_ERRORS $file"
-    fi
-done
+compile_positive() {
+    for file in "${COMPILE_FILES[@]}"; do
+        printf "%s: Compiling %s...\n" `date +%F_%T` $file
+        $DIR/bin/fyrc -n "$DIR/$file" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            COMPILE_ERRORS="$COMPILE_ERRORS $file"
+        fi
+    done
+}
 
-for file in "${RUN_FILES[@]}"; do
-    printf "%s: Running %s...\n" `date +%F_%T` $file
-    eval "$DIR/bin/$ARCH/$file" >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        RUN_ERRORS="$RUN_ERRORS $file"
+compile_negative() {
+    for file in "${COMPILE_FILES_NEGATIVE[@]}"; do
+        printf "%s: Compiling %s should fail...\n" `date +%F_%T` $file
+        $DIR/bin/fyrc -n "$DIR/$file" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            COMPILE_FALSE_POSITIVE="$COMPILE_FALSE_POSITIVE $file"
+        fi
+    done
+}
+
+run_files() {
+    for file in "${RUN_FILES[@]}"; do
+        printf "%s: Running %s...\n" `date +%F_%T` $file
+        eval "$DIR/bin/$ARCH/$file" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            RUN_ERRORS="$RUN_ERRORS $file"
+        fi
+    done
+}
+
+run_files_valgrind() {
+    if ! [ -x "$(command -v valgrind)" ]; then
+        printf "\nUnable to check for memory leaks. Please install valgrind.\n"
+        return
     fi
-done
+    for file in "${RUN_FILES[@]}"; do
+        printf "%s: Checking %s for memory leaks...\n" `date +%F_%T` $file
+        eval "valgrind --leak-check=yes -q $DIR/bin/$ARCH/$file" >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            RUN_LEAKS="$RUN_LEAKS $file"
+        fi
+    done
+}
 
 # --------- output a summary -------------------------------------------------
-printf "\n"
+output_results() {
+    printf "\n"
 
-if [ -n "$COMPILE_ERRORS" ]; then
-    printf "%s did not compile successfully\n" $COMPILE_ERRORS
-    EXIT=1
-fi
+    if [ -n "$COMPILE_ERRORS" ]; then
+        printf "ERROR: %s did not compile successfully\n" $COMPILE_ERRORS
+        EXIT=1
+    fi
 
-if [ -n "$RUN_ERRORS" ]; then
-    printf "%s did not run successfully\n" $RUN_ERRORS
-    EXIT=1
-fi
+    if [ -n "$COMPILE_FALSE_POSITIVE" ]; then
+        printf "ERROR: %s should not have compiled successfully\n" $COMPILE_FALSE_POSITIVE
+        EXIT=1
+    fi
 
-if [ $EXIT -eq 0 ]; then
-    printf "All tests completed successfully.\n"
-fi
+    if [ -n "$RUN_ERRORS" ]; then
+        printf "ERROR: %s did not run successfully\n" $RUN_ERRORS
+        EXIT=1
+    fi
 
-exit $EXIT
+    if [ -n "$RUN_LEAKS" ]; then
+        printf "ERROR: %s may have leaked memory\n" $RUN_LEAKS
+        EXIT=1
+    fi
+
+    if [ $EXIT -eq 0 ]; then
+        printf "All tests completed successfully.\n"
+    fi
+
+    exit $EXIT
+}
+
+pre_run
+
+compile_positive
+compile_negative
+
+run_files
+run_files_valgrind
+
+output_results

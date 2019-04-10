@@ -37,4 +37,5 @@ bin/linux*
 /test/tests/*
 !/test/tests/.gitkeep
 /docs/
+vgcore.*
 

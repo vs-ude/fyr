@@ -42,8 +42,10 @@ It will be hosted on the official documentation page.
 
 To test the whole compiler, we have a simple script that tries to compile some test files and run the resulting binaries.
 It only depends on `/bin/bash` and `date` so it should run on most systems.
+It naively checks the exit codes of the compiler and the binaries and outputs files for which it was not `0`.  
+To check for possible memory leaks we use [valgrind](http://valgrind.org/).
+The script works without it but will complain about the missing dependency.  
 You can invoke it with `run_tests.sh`.
-It naively checks the exit codes of the compiler and the binaries and outputs files for which it was not `0`.
 
 #### Unit tests
 
