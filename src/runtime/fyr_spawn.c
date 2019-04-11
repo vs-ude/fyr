@@ -5,6 +5,8 @@
 #include "fyr.h"
 #include "fyr_spawn.h"
 
+//#include <stdio.h>
+
 struct fyr_coro_t fyr_main_coro;
 struct fyr_coro_t *fyr_running;
 struct fyr_coro_t *fyr_ready_first;
@@ -42,17 +44,20 @@ void fyr_component_main_end(void) {
     // The previous coroutine finished? Garbage collect it now.
     // Doing that before was not possible, because a coroutine cannot delete the stack it operates on.
     if (fyr_garbage_coro) {
+//        printf("Free ...\n");
         fyr_free(fyr_garbage_coro->memory, NULL);
         fyr_garbage_coro = NULL;
     }
 }
 
 void fyr_yield(bool wait) {
+//    printf("yield ... %p\n", fyr_running);
     if (fyr_running) {
         if (setjmp(fyr_running->buf)) {
             // The previous coroutine finished? Garbage collect it now.
             // Doing that before was not possible because a coroutine cannot delete the stack it operates on.
             if (fyr_garbage_coro) {
+//                printf("Free ...\n");
                 fyr_free(fyr_garbage_coro->memory, NULL);
                 fyr_garbage_coro = NULL;
             }
@@ -117,7 +122,9 @@ void fyr_yield(bool wait) {
             fyr_ready2_first = fyr_ready2_first->next;
         }
     }
+//    printf("CORO running %p, main is %p\n", fyr_running, &fyr_main_coro);
     fyr_running->next = NULL;
+//    printf("Jumping ...\n");
     longjmp(fyr_running->buf, 1);    
 }
 
@@ -156,5 +163,6 @@ void fyr_resume(struct fyr_coro_t *c) {
 }
 
 struct fyr_coro_t* fyr_coroutine(void) {
+    fyr_incref((addr_t)fyr_running);
     return fyr_running;
 }

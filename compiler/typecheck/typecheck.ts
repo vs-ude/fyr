@@ -2912,7 +2912,7 @@ export class TypeChecker {
                 } else {
                     throw new TypeError("Expression is not a function", enode.loc);
                 }
-                if (!helper.isConst((t as FunctionType).objectType) && enode.lhs.op == ".") {
+                if (!helper.isConst((t as FunctionType).objectType) && enode.lhs.op == "." && !helper.isSafePointer(enode.lhs.lhs.type) && !helper.isUnsafePointer(enode.lhs.lhs.type)) {
                     this.checkIsMutable(enode.lhs.lhs, scope, true);
                 }
                 if ((t as FunctionType).callingConvention == "fyrCoroutine") {

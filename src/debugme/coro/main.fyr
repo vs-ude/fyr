@@ -17,8 +17,9 @@ func coro1() {
 
 func coro2() {
     println("World 1")
-    c = component.coroutine()
-    yield
+//    c = component.coroutine()
+//    yield
+    yield continue
     println("World 2")
     yield continue
     println("World 3")
@@ -30,7 +31,7 @@ func coro3(s ~S) {
 func coro4(s *S) {
 }
 
-export func main() int {
+func demo() int {
     let s *S = {value: 42}
     // argument s must be deferenced after coro3 finished -> coro3 must be launched via a wrapper function
     spawn coro3(s)
@@ -48,5 +49,13 @@ export func main() int {
     spawn coro2()
     coro1()
     component.resume(c)
+    return 1
+}
+
+export func main() int {
+    spawn coro2()
+    coro1()
+    println("Coroutine 1 is complete")
+//    component.resume(c)
     return 1
 }
