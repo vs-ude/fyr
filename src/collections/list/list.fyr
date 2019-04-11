@@ -217,14 +217,14 @@ export func main() int {
     l.Push(42)
     l.Push(43)
     println("List completed")
-    for(let it = l.Front(); !it.IsNull(); it.Next()) {
+    for(var it = l.Front(); !it.IsNull(); it.Next()) {
         println(*it.At())
     }
-    for(let it = l.Front(); !it.IsNull(); it.Next()) {
+    for(var it = l.Front(); !it.IsNull(); it.Next()) {
         *it.At() += 10
         *it.At() 
     }
-    for(let it = l.Front(); !it.IsNull(); it.Next()) {
+    for(var it = l.Front(); !it.IsNull(); it.Next()) {
         println(*it.At())
     }
     println("Done")

@@ -257,6 +257,84 @@ export function isLeftHandSide(node: Node, scope: Scope, _allowConstVariable: bo
 }
 
 /**
+ * Returns true if the expression denoted by 'node' can be the left-hand-side of an assignment
+ */
+export function isMutable(node: Node, scope: Scope): boolean {
+    if (node.op == "id") {
+        let e = scope.resolveElement(node.value);
+        if (!e) {
+            throw new ImplementationError()
+        }
+        if ((e instanceof Variable && e.isConst) || (e instanceof FunctionParameter && e.isConst)) {
+            return false;
+        }
+        return true;
+    } else if (node.op == "unary*") {
+        if (isConst(node.rhs.type)) {
+            return false;
+        }    
+        return true;
+    } else if (node.op == ".") {
+        if (isConst(node.lhs.type)) {
+            return false;
+        }    
+        if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
+            return true;
+        }
+        return isMutable(node.lhs, scope);
+    } else if (node.op == "[") {
+        if (isConst(node.lhs.type)) {
+            return false;
+        }    
+        if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
+            return true;
+        }
+        if (node.lhs.type == Static.t_string) {
+            return false;
+        }
+        return isMutable(node.lhs, scope);
+    }
+    return !isConst(node.type);
+}
+
+export function isAssignable(node: Node, scope: Scope): boolean {
+    if (node.op == "id") {
+        let e = scope.resolveElement(node.value);
+        if (!e) {
+            throw new ImplementationError()
+        }
+        if ((e instanceof Variable && e.isConst) || (e instanceof FunctionParameter && e.isConst)) {
+            return false;
+        }
+        return true;
+    } else if (node.op == "unary*") {
+        if (isConst(node.rhs.type)) {
+            return false;
+        }    
+        return true;
+    } else if (node.op == ".") {
+        if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
+            if (isConst(node.lhs.type)) {
+                return false;
+            }    
+            return true;
+        }
+        return isAssignable(node.lhs, scope);
+    } else if (node.op == "[") {
+        if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
+            if (isConst(node.lhs.type)) {
+                return false;
+            }    
+            return true;
+        }
+        if (node.lhs.type == Static.t_string) {
+            return false;
+        }
+        return isAssignable(node.lhs, scope);
+    }
+    return false;
+}
+/**
  * A pure value contains no pointers and can be copied byte by byte.
  */
 export function isPureValue(t: Type): boolean {

@@ -1838,7 +1838,7 @@ export class TypeChecker {
                         throw new TypeError("Ellipsis identifier must be at last position in tuple", vnode.loc);
                     }
                     this.checkExpression(p.lhs, scope);
-                    this.checkIsMutable(p.lhs, scope);
+                    this.checkIsAssignable(p.lhs, scope);
                     hasEllipsis = true;
                     if (!(p.lhs.type instanceof TupleType)) {
                         throw new TypeError("Ellipsis identifier in a tuple context must be of tuple type", vnode.loc);
@@ -1892,7 +1892,7 @@ export class TypeChecker {
                     }
                     hasEllipsis = true;
                     this.checkExpression(p.lhs, scope);
-                    this.checkIsMutable(p.lhs, scope);
+                    this.checkIsAssignable(p.lhs, scope);
                     if (rtypeStripped instanceof ArrayLiteralType) {
                         let rt: Type;
                         if (p.lhs.type instanceof ArrayType) {
@@ -1959,7 +1959,7 @@ export class TypeChecker {
                         throw new TypeError("Ellipsis identifier must be at last position in object", vnode.loc);
                     }
                     this.checkExpression(kv.lhs, scope);
-                    this.checkIsMutable(kv.lhs, scope);
+                    this.checkIsAssignable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
                         let rt: Type;
                         if (helper.isMap(kv.lhs.type) && helper.isString(this.mapKeyType(kv.lhs.type))) {
@@ -1997,7 +1997,7 @@ export class TypeChecker {
             }
         } else {
             this.checkExpression(vnode, scope);
-            this.checkIsMutable(vnode, scope);
+            this.checkIsAssignable(vnode, scope);
             if (rnode) {
                 this.checkIsAssignableNode(vnode.type, rnode, scope);
             } else {
@@ -2178,7 +2178,7 @@ export class TypeChecker {
             case "/=":
             case "-=":
                 this.checkExpression(snode.lhs, scope);
-                this.checkIsMutable(snode.lhs, scope);
+                this.checkIsAssignable(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
                 if (snode.op == "+=" && helper.isString(snode.lhs.type)) {
                     this.checkIsString(snode.rhs);
@@ -2201,7 +2201,7 @@ export class TypeChecker {
             case ">>=":
             {
                 this.checkExpression(snode.lhs, scope);
-                this.checkIsMutable(snode.lhs, scope);
+                this.checkIsAssignable(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
                 if (helper.isUnsafePointer(snode.lhs.type)) {
                     if (snode.rhs.op == "int") {
@@ -2225,7 +2225,7 @@ export class TypeChecker {
             case "|=":
             case "^=":
                 this.checkExpression(snode.lhs, scope);
-                this.checkIsMutable(snode.lhs, scope);
+                this.checkIsAssignable(snode.lhs, scope);
                 this.checkExpression(snode.rhs, scope);
                 if (helper.isUnsafePointer(snode.lhs.type)) {
                     if (snode.op == "%=") {
@@ -2380,7 +2380,7 @@ export class TypeChecker {
                 if (helper.isLocalReference(snode.parameters[0].type)) {
                     throw new TypeError("'slice' is not allowed on local references", snode.loc)
                 }
-                this.checkIsMutable(snode.parameters[0], scope, true);
+                this.checkIsAssignable(snode.parameters[0], scope, true);
                 this.checkIsPlatformIntNumber(snode.parameters[1]);
                 this.checkIsPlatformIntNumber(snode.parameters[2]);
                 break;
@@ -2438,7 +2438,7 @@ export class TypeChecker {
                 } else {
                     this.checkIsIntNumber(enode.lhs);
                 }
-                this.checkIsMutable(enode.lhs, scope);
+                this.checkIsAssignable(enode.lhs, scope);
                 enode.type = enode.lhs.type;
                 break;
             case "unary-":
@@ -2499,7 +2499,7 @@ export class TypeChecker {
                     this.checkIsAddressable(enode.rhs, scope, true, true);
                     enode.type = new PointerType(enode.rhs.type, "local_reference");
                     // A reference to a non-mutable variable (e.g. 'let') must not be dereferenced and assigned to -> const
-                    if (!this.checkIsMutable(enode.rhs, scope, false)) {
+                    if (!this.checkIsAssignable(enode.rhs, scope, false)) {
                         enode.type = helper.applyConst(enode.type, enode.loc);
                     }
                 }
@@ -2912,6 +2912,9 @@ export class TypeChecker {
                 } else {
                     throw new TypeError("Expression is not a function", enode.loc);
                 }
+                if (!helper.isConst((t as FunctionType).objectType) && enode.lhs.op == ".") {
+                    this.checkIsMutable(enode.lhs.lhs, scope, true);
+                }
                 if ((t as FunctionType).callingConvention == "fyrCoroutine") {
                     let outer = scope.envelopingFunction();
                     if (outer.type.callingConvention != "fyrCoroutine") {
@@ -3237,7 +3240,7 @@ export class TypeChecker {
                 if (!helper.isSlice(enode.lhs.type)) {
                     throw new TypeError("'pop' is only allowed on slices", enode.loc);
                 }
-                this.checkIsMutable(enode.lhs, scope, true);
+                this.checkIsAssignable(enode.lhs, scope, true);
                 let t = RestrictedType.strip(enode.lhs.type) as SliceType;
                 enode.type = t.getElementType();
                 break;
@@ -3262,7 +3265,7 @@ export class TypeChecker {
                     this.checkExpression(p, scope);
                     if (i == 0) {
                         if (enode.op == "push" || enode.op == "tryPush" || enode.op == "append") {
-                            this.checkIsMutable(p, scope, true);
+                            this.checkIsAssignable(p, scope, true);
                         }
                         if (!helper.isSlice(p.type)) {
                             throw new TypeError("First argument to '" + enode.op + "' must be a slice", p.loc);
@@ -4355,19 +4358,25 @@ export class TypeChecker {
 
 
     // TODO: Move to helper.ts
-    public checkIsMutable(node: Node, scope: Scope, doThrow: boolean = true): boolean {
-        if (node.type instanceof RestrictedType && node.type.isConst) {
+    /**
+     * Returns true if the expression given by `node` can be the target of an assignment.
+     */
+    public checkIsAssignable(node: Node, scope: Scope, doThrow: boolean = true): boolean {
+        if (!helper.isAssignable(node, scope)) {
             if (!doThrow) {
                 return false;
             }
-            throw new TypeError("The expression is not mutable because it is const", node.loc);
+            throw new TypeError("The expression is not assignable, because it is an intermediate value, the underlying variable is not mutable, or the type is const", node.loc);
         }
+        return true;
+    }
 
-        if (!helper.isLeftHandSide(node, scope)) {
+    public checkIsMutable(node: Node, scope: Scope, doThrow: boolean = true): boolean {
+        if (!helper.isMutable(node, scope)) {
             if (!doThrow) {
                 return false;
             }
-            throw new TypeError("The expression is not mutable because it is an intermediate value or the variable is not mutable", node.loc);
+            throw new TypeError("The expression is not mutable, because the variable is not mutable or the type is const", node.loc);
         }
         return true;
     }
