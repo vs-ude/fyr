@@ -1,7 +1,7 @@
 import {Node, Location, AstFlags} from "../ast"
-import { Package, SystemCalls } from "../pkg"
+import { Package } from "../pkg"
 import {
-    ArrayLiteralType, ArrayType, BasicType, FunctionType, GenericParameter,
+    ArrayLiteralType, ArrayType, FunctionType, GenericParameter,
     InterfaceType, MapType, ObjectLiteralType, OrType, PackageType,
     PointerType, RestrictedType, SliceType, StringLiteralType, StructField,
     StructType, TemplateFunctionType, TemplateInterfaceType, TemplateStructType, TemplateType,
