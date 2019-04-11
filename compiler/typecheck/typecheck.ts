@@ -1952,14 +1952,12 @@ export class TypeChecker {
             if (!(rtypeStripped instanceof ObjectLiteralType) && (!helper.isMap(rtype) || !helper.isString(this.mapKeyType(rtype)))) {
                 throw new TypeError("Expected an expression of type object literal or map[string]...", vnode.loc);
             }
-            let hasEllipsis = false;
             for (let i = 0; i < vnode.parameters.length; i++) {
                 let kv = vnode.parameters[i];
                 if (kv.op == "ellipsisAssign") {
                     if (i + 1 != vnode.parameters.length) {
                         throw new TypeError("Ellipsis identifier must be at last position in object", vnode.loc);
                     }
-                    hasEllipsis = true;
                     this.checkExpression(kv.lhs, scope);
                     this.checkIsMutable(kv.lhs, scope);
                     if (rtype instanceof ObjectLiteralType) {
