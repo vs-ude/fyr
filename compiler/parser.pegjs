@@ -616,7 +616,7 @@ assignIdentifierList
 assignIdentifier
   = o:assignObject { return o; }
   / "[" [ \t\n]* e:assignIdentifierList "]" {
-      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e ? e : []});
     }
   / i:("_" / expression) [ \t]* o:"?"? {
       if (i == "_") {
@@ -723,7 +723,7 @@ varIdentifier
     }
   / o:varObject { return o; }
   / "[" [ \t\n]* e:varIdentifierList "]" {
-      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e ? e : []});
     }
   / e:"..."? [ \t]* i:("_" / identifier) [ \t]* o:"?"? [ \t]* t:type? {
       if (i == "_") {
@@ -1072,7 +1072,7 @@ componentElement
 
 array
   = "[" [ \t\n]* e:arrayElementList? [ \t\n]* "]" {
-      return new ast.Node({loc: fl(location()), op: "array", parameters: e});
+      return new ast.Node({loc: fl(location()), op: "array", parameters: e ? e : []});
     }
 
 arrayElementList

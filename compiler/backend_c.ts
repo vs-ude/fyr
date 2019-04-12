@@ -1594,10 +1594,14 @@ export class CBackend implements backend.Backend {
                 let expr = this.emitExpr(n.args[0]);
                 let s = new CIf(expr);
                 code.push(s);
+                this.blockStack.unshift(null);
                 this.emitCode(n.next[0], n.blockPartner, s.body);
+                this.blockStack.shift();
                 if (n.next[1]) {
                     let s2 = new CElse();
+                    this.blockStack.unshift(null);
                     this.emitCode(n.next[1], n.blockPartner, s2.body);
+                    this.blockStack.shift();
                     s.elseClause = s2;
                 }
                 n = n.blockPartner.next[0];
