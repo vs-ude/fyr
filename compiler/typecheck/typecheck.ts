@@ -150,11 +150,8 @@ export class TypeChecker {
             }
             // TODO: Check range before parseInt
             return new ArrayType(this.createType(tnode.rhs, scope, mode), parseInt(tnode.lhs.value));
-        } else if (tnode.op == "funcType" || tnode.op == "asyncFuncType") {
+        } else if (tnode.op == "funcType") {
             let t = new FunctionType();
-            if (tnode.op == "asyncFuncType") {
-                t.callingConvention = "fyrCoroutine";
-            }
             t.loc = tnode.loc;
             if (tnode.parameters) {
                 for(let pnode of tnode.parameters) {
@@ -340,7 +337,7 @@ export class TypeChecker {
         for(let mnode of tnode.parameters) {
             if (mnode.op == "extends") {
                 // Do nothing by intention
-            } else if (mnode.op == "funcType" || mnode.op == "asyncFuncType") {
+            } else if (mnode.op == "funcType") {
                 let ft = this.createType(mnode, scope, mode ? mode : "default") as FunctionType;
                 ft.name = mnode.name.value;
                 if (iface.methods.has(ft.name)) {
@@ -630,7 +627,7 @@ export class TypeChecker {
             throw new TypeError("Type " + baset.toString() + " is not a template function", tnode.loc);
         }
         // Is the type a function template type?
-        if (baset.node.op != "func" && baset.node.op != "export_func" && baset.node.op != "asyncFunc") {
+        if (baset.node.op != "func" && baset.node.op != "export_func") {
             throw new TypeError("Type " + baset.toString() + " is not a template function", tnode.loc);
         }
         if (tnode.genericParameters.length != baset.templateParameterNames.length) {
@@ -830,9 +827,6 @@ export class TypeChecker {
 
         f.scope.parent = parentScope;
         f.type.loc = fnode.loc;
-        if (fnode.op == "asyncFunc") {
-            f.type.callingConvention = "fyrCoroutine";
-        }
         // A member function?
         if (objectType) {
             f.type.objectType = objectType;
@@ -1423,7 +1417,7 @@ export class TypeChecker {
         // Iterate over all files and declare all functions and global variables.
         for(let fnode of this.moduleNode.statements) {
             for (let snode of fnode.statements) {
-                if (snode.op == "func" || snode.op == "export_func" || snode.op == "asyncFunc") {
+                if (snode.op == "func" || snode.op == "export_func") {
                     let f = this.createFunction(snode, fnode.scope, scope);
                     if (f instanceof Function) {
                         this.functions.push(f);
@@ -2311,15 +2305,6 @@ export class TypeChecker {
                 break;
             case "yield_continue":
                 break;
-            /*
-            {
-                let f = scope.envelopingFunction();
-                if (f.type.callingConvention != "fyrCoroutine") {
-                    throw new TypeError("yield is only allowed in async functions", snode.loc);
-                }
-                break;
-            }
-            */
             case "spawn":
             {
                 this.checkExpression(snode.rhs, scope);
@@ -2914,12 +2899,6 @@ export class TypeChecker {
                 }
                 if (!helper.isConst((t as FunctionType).objectType) && enode.lhs.op == "." && !helper.isSafePointer(enode.lhs.lhs.type) && !helper.isUnsafePointer(enode.lhs.lhs.type)) {
                     this.checkIsMutable(enode.lhs.lhs, scope, true);
-                }
-                if ((t as FunctionType).callingConvention == "fyrCoroutine") {
-                    let outer = scope.envelopingFunction();
-                    if (outer.type.callingConvention != "fyrCoroutine") {
-                        throw new TypeError("Calling an async function is only allowed from inside another async function", enode.loc);
-                    }
                 }
                 break;
             }

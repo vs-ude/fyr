@@ -11,7 +11,7 @@ import { TupleType } from './TupleType'
  * CallingConvention is part of a FunctionType.
  * It defines how the function is to be called.
  */
-export type CallingConvention = "fyr" | "fyrCoroutine" | "system" | "native"
+export type CallingConvention = "fyr" | "system" | "native"
 
 export class FunctionType extends Type {
     constructor() {
@@ -89,10 +89,6 @@ export class FunctionType extends Type {
             }
         }
         return i
-    }
-
-    public isAsync(): boolean {
-        return this.callingConvention == "fyrCoroutine"
     }
 
     public createGroups(): Map<string, Group> {

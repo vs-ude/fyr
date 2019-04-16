@@ -9,7 +9,7 @@
     }
 
     function isKeyword(n) {
-        if (n == "println" || n == "default" || n == "switch" || n == "case" || n == "select" || n == "component" || n == "let" || n == "map" || n == "take" || n == "async" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
+        if (n == "println" || n == "default" || n == "switch" || n == "case" || n == "select" || n == "component" || n == "let" || n == "map" || n == "take" || n == "spawn" || n == "this" || n == "type" || n == "struct" || n == "extends" || n == "import" || n == "export" || n == "yield" || n == "true" || n == "false" || n == "null" || n == "in" || n == "func" || n == "is" || n == "for" || n == "if" || n == "else" || n == "struct" || n == "interface" || n == "var" || n == "const") {
             return true;
         }
         return false;
@@ -43,7 +43,7 @@ file
             if (x.op == "var" && x.lhs.op != "id") {
                 error("Illegal variable definition for global variables", x.loc);
             }
-            if (x.op == "func" || x.op == "export_func" || x.op == "asyncFunc" || x.op == "typedef" || x.op == "var" || x.op == "let") {
+            if (x.op == "func" || x.op == "export_func" || x.op == "typedef" || x.op == "var" || x.op == "let") {
                 if (i > 0 && (m[i-1] instanceof Array)) {
                     x.comments = m[i-1];
                 }
@@ -149,7 +149,7 @@ buildElementValues
   }
 
 func
-  = ex:("export" [ \t]+)? async:("async" [ \t+])? "func" [ \t]+ obj:((memberObjectType [ \t]* "." [ \t]* identifier) / identifier) [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
+  = ex:("export" [ \t]+)? "func" [ \t]+ obj:((memberObjectType [ \t]* "." [ \t]* identifier) / identifier) [ \t]* g:genericParameters? "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* b:block {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -166,12 +166,6 @@ func
           name = obj[4];
       }
       let op = ex ? "export_func" : "func";
-      if (async) {
-          if (op == "export_func") {
-              error("Async functions cannot be exported");
-          }
-          op = "asyncFunc";
-      }
       return new ast.Node({loc: fl(location()), op: op, name: name, lhs: scope, parameters: p, statements: b, rhs: t, genericParameters: g});
     }
 
@@ -309,11 +303,11 @@ primitiveType
       }
       return new ast.Node({loc: fl(location()), op: "tupleType", parameters: t});
     }
-  / async:("async" [ \t+])? "func" [ \t]* "(" [ \t]* t:funcTypeParameters? [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:returnType? {
+  / "func" [ \t]* "(" [ \t]* t:funcTypeParameters? [ \t]* e:("," [ \t]* "..." [ \t]* type)? [ \t]* ")" [ \t]* f:returnType? {
       if (e) {
         t.push(new ast.Node({loc: e[4].loc, op: "ellipsisParam", lhs: e[4]}));
       }
-      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", parameters: t ? t : [], rhs: f});
+      return new ast.Node({loc: fl(location()), op: "funcType", parameters: t ? t : [], rhs: f});
     }
   / "*" [ \t]* t:primitiveType {
       return new ast.Node({loc: fl(location()), op: "pointerType", rhs: t});
@@ -392,7 +386,7 @@ interfaceMembers
   }
 
 interfaceMember
-  = async:("async" [ \t+])? "func" [ \t]* scope:ifaceObjectType? [ \t]* name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
+  = "func" [ \t]* scope:ifaceObjectType? [ \t]* name:identifier [ \t]* "(" [ \t\n]* p:parameters? ")" [ \t]* t:returnType? [ \t]* semicolon {
       if (p) {
           for(let i = 0; i < p.length; i++) {
               if (p[i].op == "ellipsisParam" && i != p.length - 1) {
@@ -400,7 +394,7 @@ interfaceMember
               }
           }
       }
-      return new ast.Node({loc: fl(location()), op: async ? "asyncFunctType" : "funcType", name: name, lhs: scope, parameters: p, rhs: t});
+      return new ast.Node({loc: fl(location()), op: "funcType", name: name, lhs: scope, parameters: p, rhs: t});
     }
   / "extends" [ \t]+ t:type [ \t]* semicolon {
         return new ast.Node({loc: fl(location()), op: "extends", rhs: t});

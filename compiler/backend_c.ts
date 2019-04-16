@@ -45,13 +45,6 @@ export class Function implements backend.Function {
         return false;
     }
 
-    public isAsync(): boolean {
-        if (!(this.node.type instanceof ssa.FunctionType)) {
-            throw new ImplementationError()
-        }
-        return this.node.type.isAsync();
-    }
-
     public index: number;
     // The name of the function (not the C-encoding of the name).
     public name: string;
@@ -316,13 +309,6 @@ export class CBackend implements backend.Backend {
             if (emitIR) {
                 ircode += '============ OPTIMIZED Dead code ===============\n';
                 ircode += Node.strainToString("", f.node) + "\n";
-            }
-
-            if (f.isAsync()) {
-                console.log("ASYNC");
-                let tr = new ssa.SMTransformer();
-                tr.transform(f.node);
-                console.log(Node.strainToString("", f.node) + "\n");
             }
 
             this.currentFunction = f;
