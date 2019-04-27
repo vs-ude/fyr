@@ -2236,31 +2236,10 @@ export class CodeGenerator {
                     let dtor: Array<DestructorInstruction> = [];
                     let et = this.getSSAType(t.getElementType());
                     let esize = ssa.alignedSizeOf(et);
-                    let count: number | ssa.Variable = enode.parameters.length;
-                    for(let i = 0; i < enode.parameters.length; i++) {
-                        let p = enode.parameters[i];
-                        if (p.op == "unary...") {
-                            if (typeof(count) != "number") {
-                                throw new ImplementationError()
-                            }
-                            count--;
-                            let dynCount = this.processValueExpression(f, scope, p.rhs, b, vars);
-                            if (typeof(dynCount) == "number") {
-                                count += dynCount;
-                            } else if (count == 0) {
-                                count = dynCount;
-                            } else {
-                                count = b.assign(b.tmp(), "add", "sint", [count, dynCount]);
-                            }
-                            break;
-                        }
-                    }
+                    let count = enode.parameters.length;
                     let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [count, esize]);
                     for(let i = 0; i < enode.parameters.length; i++) {
                         let p = enode.parameters[i];
-                        if (p.op == "unary...") {
-                            continue;
-                        }
                         let v = this.processExpression(f, scope, p, b, vars, dtor, "donate");
                         b.assign(b.mem, "store", et, [ptr, i * esize, v]);
                     }
