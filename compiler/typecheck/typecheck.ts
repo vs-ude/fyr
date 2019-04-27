@@ -19,6 +19,7 @@ import {createHash} from "crypto";
 
 import * as helper from './helper'
 import { Static } from './Static'
+import { endianness } from "os";
 
 /**
  * Typedef represents the result of a 'type' statement, i.e.
@@ -2906,6 +2907,25 @@ export class TypeChecker {
                 this.checkExpression(enode.lhs, scope);
                 enode.type = this.instantiateTemplateFunctionFromNode(enode, scope).type;
                 break;
+            case "make":
+            {
+                if (enode.parameters.length > 0) {
+                    if (enode.parameters.length > 2) {
+                        throw new TypeError("make accepts at most two parameters", enode.loc);
+                    }
+                    let t = this.createType(enode.lhs, scope);
+                    if (!helper.isSlice(t)) {
+                        throw new TypeError("The type of a make expression is always a slice if arguments are passed to make", enode.loc);
+                    }
+                    this.checkExpression(enode.parameters[0], scope);
+                    this.checkIsPlatformIntNumber(enode.parameters[0], true);
+                    if (enode.parameters.length == 2) {
+                        this.checkExpression(enode.parameters[1], scope);
+                        this.checkIsPlatformIntNumber(enode.parameters[1], true);
+                    }
+                }
+                break;
+            }
             case "tuple":
             {
                 let types: Array<Type> = [];
@@ -2929,9 +2949,6 @@ export class TypeChecker {
                         let p = enode.parameters[i];
                         if (p.op == "...") {
                             // Do nothing by intention
-                        } else if (p.op == "unary...") {
-                            this.checkExpression(p.rhs, scope);
-                            this.checkIsPlatformIntNumber(p.rhs);
                         } else {
                             this.checkExpression(p, scope);
                             types.push(p.type);
@@ -2942,12 +2959,6 @@ export class TypeChecker {
                 enode.type = t;
                 if (enode.lhs) {
                     let ct = this.createType(enode.lhs, scope, "variable_toplevel");
-                    if (helper.isArray(ct) && enode.parameters && enode.parameters.length > 0 && enode.parameters[enode.parameters.length - 1].op == "unary...") {
-                        let p = enode.parameters[enode.parameters.length - 1];
-                        if (p.rhs.op != "int") {
-                            throw new TypeError("Only constants are allowed after ... in array context", p.loc);
-                        }
-                    }
                     this.unifyLiterals(ct, enode, scope, enode.loc);
                 }
                 break;
@@ -3536,9 +3547,6 @@ export class TypeChecker {
                         for(var i = 0; i < node.parameters.length; i++) {
                             let pnode = node.parameters[i];
                             node.flags |= (pnode.flags & AstFlags.FillArray);
-                            if (pnode.op == "unary...") {
-                                continue;
-                            }
                             if (pnode.op == "...") {
                                 if (arrayType.size == -1) {
                                     throw new TypeError("The ... operator is not allowed in slice literals", pnode.loc);
@@ -5161,6 +5169,16 @@ export class TypeChecker {
             case "genericInstance":
                 // return this.checkGroupsInExpression(enode.lhs, scope, flags);
                 return new Group(GroupKind.Free);
+            case "make":
+            {
+                this.checkGroupsInExpression(enode.parameters[0], scope, flags);
+                if (enode.parameters.length == 2) {
+                    this.checkGroupsInExpression(enode.parameters[1], scope, flags);
+                }
+                // The new array has been created on the heap.
+                // Therefore, it belongs to a new free group.
+                return new Group(GroupKind.Free)
+            }
             case "tuple":
             {
                 let group: Group = null;
@@ -5183,15 +5201,10 @@ export class TypeChecker {
                 if (helper.isSlice(enode.type)) {
                     t = this.sliceArrayType(t);
                 }
-                let elementType = this.arrayElementType(t);
                 let group: Group = null;
                 if (enode.parameters) {
                     for(var i = 0; i < enode.parameters.length; i++) {
                         let p = enode.parameters[i];
-                        if (p.op == "unary...") {
-                            this.checkGroupsInExpression(p.rhs, scope, flags & GroupCheckFlags.None);
-                            continue;
-                        }
                         if (p.op == "...") {
                             continue;
                         }
