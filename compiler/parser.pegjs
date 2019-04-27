@@ -27,11 +27,9 @@
             } else if (runes[i].op == "runeQ2") {
                 s += "%22%22";
             }
-            var h = runes[i].numValue.toString(16);
-            if(h.length < 2) h = '0' + h;
-            s += '%' + h;
+            s += String.fromCharCode(runes[i].numValue);
         }
-        return decodeURIComponent(s);
+        return s;
     }
 }
 
