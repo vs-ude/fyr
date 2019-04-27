@@ -2909,7 +2909,7 @@ export class TypeChecker {
                 break;
             case "make":
             {
-                let t = this.createType(enode.lhs, scope);
+                enode.lhs.type = this.createType(enode.lhs, scope);
                 if (enode.parameters.length > 0) {
                     if (enode.parameters.length > 2) {
                         throw new TypeError("make accepts at most two parameters", enode.loc);
@@ -2920,9 +2920,9 @@ export class TypeChecker {
                         this.checkExpression(enode.parameters[1], scope);
                         this.checkIsPlatformIntNumber(enode.parameters[1], true);
                     }
-                    enode.type = new SliceType(new ArrayType(t, -1), "strong");
+                    enode.type = new SliceType(new ArrayType(enode.lhs.type, -1), "strong");
                 } else {
-                    enode.type = new PointerType(t, "strong");
+                    enode.type = new PointerType(enode.lhs.type, "strong");
                 }
                 break;
             }
@@ -5171,9 +5171,11 @@ export class TypeChecker {
                 return new Group(GroupKind.Free);
             case "make":
             {
-                this.checkGroupsInExpression(enode.parameters[0], scope, flags);
-                if (enode.parameters.length == 2) {
-                    this.checkGroupsInExpression(enode.parameters[1], scope, flags);
+                if (enode.parameters.length > 0) {
+                    this.checkGroupsInExpression(enode.parameters[0], scope, flags);
+                    if (enode.parameters.length == 2) {
+                        this.checkGroupsInExpression(enode.parameters[1], scope, flags);
+                    }
                 }
                 // The new array has been created on the heap.
                 // Therefore, it belongs to a new free group.

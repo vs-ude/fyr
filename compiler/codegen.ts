@@ -17,6 +17,7 @@ import * as backend from "./backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
 import { ImplementationError, TodoError } from './errors'
+import { endianness } from "os";
 
 /**
  * A DestructorInstruction tells which actions must be taken to destruct the result of an expression
@@ -2190,6 +2191,29 @@ export class CodeGenerator {
                     return s;
                 }
                 throw new ImplementationError()
+            }
+            case "make":
+            {
+                let et = this.getSSAType(enode.lhs.type);
+                let esize = ssa.alignedSizeOf(et);
+                if (enode.parameters.length > 0) {
+                    let len = this.processValueExpression(f, scope, enode.parameters[0], b, vars);
+                    let size = len;
+                    if (enode.parameters.length == 2) {
+                        size = this.processValueExpression(f, scope, enode.parameters[1], b, vars);
+                    }
+                    let ptr = b.assign(b.tmp(), "alloc_arr", "addr", [size, esize]);
+                    let slice = b.assign(b.tmp(), "struct", this.slicePointer, [ptr, len, ptr]);
+                    if (keepAlive == "hold" || keepAlive == "lock" || keepAlive == "none") {
+                        dtor.push(new DestructorInstruction(slice, enode.type, "destruct"));
+                    }
+                    return slice;
+                }    
+                let ptr = b.assign(b.tmp(), "alloc", "addr", [esize]);
+                if (keepAlive == "hold" || keepAlive == "lock" || keepAlive == "none") {
+                    dtor.push(new DestructorInstruction(ptr, enode.type, "destruct"));
+                }
+                return ptr;
             }
             case "tuple":
             {

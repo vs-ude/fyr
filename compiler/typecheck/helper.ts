@@ -397,7 +397,7 @@ export function applyConst(t: Type, loc: Location): Type {
  * Call the function only on expressions of pointer type or expressions that can be assigned to a pointer type
  */
 export function isTakeExpression(enode: Node): boolean {
-    if (enode.op == "clone" || enode.op == "take" || enode.op == "pop" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "null" || (enode.op == ":" && (isStrong(enode.type) || isUnique(enode.type)))) {
+    if (enode.op == "clone" || enode.op == "take" || enode.op == "pop" || enode.op == "array" || enode.op == "object" || enode.op == "tuple" || enode.op == "make" || enode.op == "null" || (enode.op == ":" && (isStrong(enode.type) || isUnique(enode.type)))) {
         return true;
     }
     if (enode.op == "(") {

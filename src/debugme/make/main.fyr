@@ -1,0 +1,14 @@
+type S struct {
+    a int
+    b int
+}
+
+export func main() int {
+    let arr = make<int>(3, 10)
+    println(len(arr))
+    println(cap(arr))
+    let ptr = make<int>()
+    *ptr = 42
+    println(*ptr)
+    return 0
+}
