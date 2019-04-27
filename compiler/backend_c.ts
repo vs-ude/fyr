@@ -2303,7 +2303,7 @@ export class CString extends CNode {
     }
 
     public toString(indent: string = ""): string {
-        let str = indent + "struct {\n" + indent + "    int_t refcount;\n" + indent + "    int_t size;\n" + indent + "    uint8_t data[" + this.bytes.length + "];\n" + indent + "} " + this.name + " = {1, " + this.bytes.length;
+        let str = indent + "struct {\n" + indent + "    int_t size;\n" + indent + "    int_t lockcount;\n" + indent + "    int_t refcount;\n" + indent + "    uint8_t data[" + this.bytes.length + "];\n" + indent + "} " + this.name + " = {" + this.bytes.length + ", 0, 1";
         if (this.bytes.length != 0) {
             str += ",";
         }

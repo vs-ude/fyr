@@ -2285,9 +2285,9 @@ export class TypeChecker {
                         } else {
                             v2.type = tindex2;
                         }
-                        if (v2.type != Static.t_string) {
+//                        if (v2.type != Static.t_string) {
                             v2.isForLoopPointer = true;
-                        }
+//                        }
                     }
                 } else {
                     let v = this.createVar(snode.lhs, scope, false, true);
@@ -2296,9 +2296,9 @@ export class TypeChecker {
                     } else {
                         v.type = tindex1;
                     }
-                    if (v.type != Static.t_string) {
+//                    if (v.type != Static.t_string) {
                         v.isForLoopPointer = true;
-                    }
+//                    }
                 }
                 break;
             }
@@ -4027,7 +4027,7 @@ export class TypeChecker {
         } else if (t instanceof SliceType) {
             return [Static.t_int, t.getElementType()];
         } else if (t == Static.t_string) {
-            return [Static.t_int, Static.t_rune];
+            return [Static.t_int, Static.t_byte];
         }
         throw new TypeError("The type " + t.toString() + " is not enumerable", node.loc);
     }
@@ -4598,12 +4598,12 @@ export class TypeChecker {
                         scope.setGroup(v, new Group(GroupKind.Free));
                     }
                     if (snode.lhs.parameters[1].value != "_") {
-                        let v = scope.resolveElement(snode.lhs.parameters[0].value);
-                        scope.setGroup(v, g);
+                        let v = scope.resolveElement(snode.lhs.parameters[1].value);
+                        scope.setGroup(v, g ? g : new Group(GroupKind.Free));
                     }
                 } else {
                     let v = scope.resolveElement(snode.lhs.value);
-                    scope.setGroup(v, g);
+                    scope.setGroup(v, g ? g : new Group(GroupKind.Free));
                 }
                 break;
             }

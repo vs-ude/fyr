@@ -448,8 +448,11 @@ export class CodeGenerator {
             if (e instanceof Variable) {
                 if (e.isResult) {
                     continue;
+                } else if (e.isForLoopPointer) {
+                    let v = b.declareVar("addr", name, false);
+                    vars.set(e, v);
                 } else {
-                    // Create a variable that can be assigned multiple times
+                    // Create a variable that can be assigned multiple times                    
                     let v = b.declareVar(this.getSSAType(e.type), name, e.isReferencedWithRefcounting);
                     vars.set(e, v);
                 }
@@ -1037,7 +1040,8 @@ export class CodeGenerator {
                             b.assign(ptr, "addr_of", "addr", [arr]);
                         }
                     } else if (t == Static.t_string) {
-                        ptr = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "lock") as ssa.Variable;
+                        let v = this.processExpression(f, snode.condition.scope, snode.condition.rhs, b, vars, dtor, "lock") as ssa.Variable;
+                        b.assign(ptr, "copy", "addr", [v]);
                         len = b.assign(b.tmp(), "len_str", "sint", [ptr]);
                     } else {
                         throw new TodoError("map")
@@ -1060,13 +1064,9 @@ export class CodeGenerator {
                         let endcond = b.assign(b.tmp(), "eq", "i8", [counter, len]);
                         b.br_if(endcond, outer);
                         let t = RestrictedType.strip(snode.condition.rhs.type);
-                        if (t instanceof SliceType || t instanceof ArrayType) {
-                            /* // TODO: null-check
-                            // Store the current value in a variable
-                            let storage = this.getSSAType(t.getElementType());
-                            b.assign(val, "load", storage, [ptr, 0]); */
+                        if (t instanceof SliceType || t instanceof ArrayType || t == Static.t_string) {
                             // Do nothing by intention
-                        } else if (t == Static.t_string) {
+                        /* } else if (t == Static.t_string) {
                             let [decodeUtf8, decodeUtf8Type] = this.loadFunction("runtime/utf8", "DecodeUtf8", snode.loc);
                             // Get address of value
                             let valAddr: ssa.Variable;
@@ -1101,9 +1101,9 @@ export class CodeGenerator {
                             b.br(decodeLoop);
                             b.end();
                             b.end();
-                            b.end();
+                            b.end(); */
                         } else {
-                            throw new TodoError("map and string")
+                            throw new TodoError("map")
                         }
                     } else {
                         // A for loop of the form: "for( condition )"
@@ -1137,7 +1137,9 @@ export class CodeGenerator {
                         // Increase the counter
                         b.assign(counter, "add", "sint", [counter, 1]);
                     } else if (t == Static.t_string) {
-                        // Nothing to do. Counter has been increased already
+                        b.assign(ptr, "add", "addr", [ptr, 1]);
+                        // Increase the counter
+                        b.assign(counter, "add", "sint", [counter, 1]);
                     } else {
                         throw new TodoError("map")
                     }

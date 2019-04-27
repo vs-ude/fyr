@@ -1,8 +1,6 @@
-type S struct {
-    last ~S
-}
-
-func S.f() *S {
-    let e *S = {last: this.last}
-    return e
+export func main() int {
+    for(let c, b in "Übung") {
+        println(c, b)
+    }
+    return 0
 }
