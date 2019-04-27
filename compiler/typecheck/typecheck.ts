@@ -2909,13 +2909,10 @@ export class TypeChecker {
                 break;
             case "make":
             {
+                let t = this.createType(enode.lhs, scope);
                 if (enode.parameters.length > 0) {
                     if (enode.parameters.length > 2) {
                         throw new TypeError("make accepts at most two parameters", enode.loc);
-                    }
-                    let t = this.createType(enode.lhs, scope);
-                    if (!helper.isSlice(t)) {
-                        throw new TypeError("The type of a make expression is always a slice if arguments are passed to make", enode.loc);
                     }
                     this.checkExpression(enode.parameters[0], scope);
                     this.checkIsPlatformIntNumber(enode.parameters[0], true);
@@ -2923,6 +2920,9 @@ export class TypeChecker {
                         this.checkExpression(enode.parameters[1], scope);
                         this.checkIsPlatformIntNumber(enode.parameters[1], true);
                     }
+                    enode.type = new SliceType(new ArrayType(t, -1), "strong");
+                } else {
+                    enode.type = new PointerType(t, "strong");
                 }
                 break;
             }
