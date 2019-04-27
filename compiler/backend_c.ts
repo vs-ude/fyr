@@ -279,9 +279,9 @@ export class CBackend implements backend.Backend {
             }
             // Ignore global variables located in other packages
             let from = this.importedGlobalVariables.get(v);
-            if (!from) {
-                this.module.elements.push(cv);
-            }
+//            if (!from) {
+//                this.module.elements.push(cv);
+//            }
             // Export all global variables, because templates might need them.
             // For native variables however, do nothing.
             if (!from || from instanceof Package) {
@@ -2286,7 +2286,7 @@ export class CExtern extends CNode {
     }
 
     public toString(indent: string = ""): string {
-        return indent + "extern " + this.v.toString();
+        return indent + "extern " + this.v.toString("", true);
     }
 
     public v: CVar;
@@ -2589,9 +2589,9 @@ export class CTypeCast extends CNode {
 }
 
 export class CVar extends CNode {
-    public toString(indent: string = ""): string {
+    public toString(indent: string = "", noInit: boolean = false): string {
         let str = indent + this.type.toString() + " " + this.name;
-        if (this.initExpr) {
+        if (this.initExpr && !noInit) {
             str += " = " + this.initExpr.toString("");
         }
         return str;
