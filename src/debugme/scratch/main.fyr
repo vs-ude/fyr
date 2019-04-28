@@ -1,6 +1,10 @@
+import "runtime/utf8"
+
 export func main() int {
     for(let c, b in "Übung") {
         println(c, b)
     }
+    let result = utf8.DecodeString("Übung")
+    println(len(result[0]), result[0][0])
     return 0
 }

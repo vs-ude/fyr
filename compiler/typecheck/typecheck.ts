@@ -130,6 +130,9 @@ export class TypeChecker {
             } else if (tnode.value == "~[]") {
                 s.mode = "reference";
             } else if (tnode.value == "&[]") {
+                if (originalMode != "parameter_toplevel") {
+                    throw new TypeError("A local reference slice is not allowed in this place", tnode.loc);
+                }
                 s.mode = "local_reference";
             }
             return s;
@@ -3099,7 +3102,7 @@ export class TypeChecker {
             }
             case "typeCast":
             {
-                let t = this.createType(enode.lhs, scope, "variable_toplevel");
+                let t = this.createType(enode.lhs, scope, "parameter_toplevel");
                 this.checkExpression(enode.rhs, scope);
                 let right = RestrictedType.strip(enode.rhs.type);
                 let left = RestrictedType.strip(t);
@@ -3136,8 +3139,9 @@ export class TypeChecker {
                 } else if (helper.isString(left) && right instanceof SliceType && !helper.isLocalReference(right) && !helper.isConst(enode.rhs.type) && (right.getElementType() == Static.t_byte || right.getElementType() == Static.t_char)) {
                     // A slice of bytes or chars can be converted to a string by taking ownership away from the slice
                     enode.type = t;
-                } else if (left instanceof SliceType && (left.mode == "strong" || left.mode == "unique") && (left.getElementType() == Static.t_byte || left.getElementType() == Static.t_char) && helper.isString(right)) {
-                    // A string can be casted into a unique or owning sequence of bytes or chars by copying it
+                } else if (left instanceof SliceType && (left.mode == "strong" || left.mode == "unique" || helper.isConst(left.arrayType)) && (left.getElementType() == Static.t_byte || left.getElementType() == Static.t_char) && helper.isString(right)) {
+                    // A string can be casted into a unique or owning sequence of bytes or chars by copying it.
+                    // A string can be casted to a const slice without copying it.
                     enode.type = t;
                 } else if (helper.isComplexOrType(right)) {
                     let ok = false;
@@ -4633,14 +4637,27 @@ export class TypeChecker {
                     throw new ImplementationError()
                 }
                 if (snode.lhs) {
+                    // Returning a tuple?
                     if (f.namedReturnVariables) {
-                        for(let i = 0; i < f.namedReturnVariables.length; i++) {
-                            let group = scope.resolveGroup(f.namedReturnVariables[i]);
-                            if (helper.isUnique(f.namedReturnVariables[i].type)) {
-                                group = null;
+                        if (snode.lhs.op == "tuple") {
+                            for(let i = 0; i < f.namedReturnVariables.length; i++) {
+                                let group = scope.resolveGroup(f.namedReturnVariables[i]);
+                                if (helper.isUnique(f.namedReturnVariables[i].type)) {
+                                    group = null;
+                                }
+                                this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, null, snode.lhs.parameters[i], false, scope, snode.loc);
                             }
-                            this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, null, snode.lhs.parameters[i], false, scope, snode.loc);
-                        }
+                        } else {
+                            let flags = TypeChecker.hasReferenceOrStrongPointers(snode.lhs.type) ? GroupCheckFlags.ForbidIsolates : GroupCheckFlags.AllowIsolates;
+                            let g = this.checkGroupsInExpression(snode.lhs, scope, flags);
+                            for(let i = 0; i < f.namedReturnVariables.length; i++) {
+                                let group = scope.resolveGroup(f.namedReturnVariables[i]);
+                                if (helper.isUnique(f.namedReturnVariables[i].type)) {
+                                    group = null;
+                                }                            
+                                this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, g instanceof TupleGroup ? g.groups[i] : g, snode.lhs, i+1 < f.namedReturnVariables.length, scope, snode.loc);
+                            }
+                        }                        
                     } else {
                         if (!f.unnamedReturnVariable) {
                             throw new ImplementationError()
@@ -5331,7 +5348,9 @@ export class TypeChecker {
                     this.checkGroupsInSingleAssignment(new SliceType(new ArrayType(Static.t_byte, -1), "unique"), null, g, enode.rhs, false, scope, enode.loc);
                     return null;
                 }
-                if (helper.isSlice(enode.type) && enode.rhs.type == Static.t_string) {
+                if (helper.isSlice(enode.type) && enode.rhs.type == Static.t_string && !helper.isConst(enode.type)) {
+                    // Converting a string to a non-const slice implies copying it.
+                    // The returned copy belongs to a free group.
                     return new Group(GroupKind.Free);
                 }
                 return this.checkGroupsInExpression(enode.rhs, scope, flags);
