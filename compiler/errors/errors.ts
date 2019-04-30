@@ -1,4 +1,4 @@
-import { Location } from './parser'
+import { Location } from '../parser'
 
 export class ImplementationError extends Error {
     constructor(message?: string) {

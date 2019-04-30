@@ -1,6 +1,6 @@
 "use strict"
 
-import {ErrorHandler, StdErrorOutput} from "./errorhandler"
+import {ErrorHandler, StdErrorOutput} from "./errors"
 
 export class FyrConfiguration {
     public emitC: boolean = false;

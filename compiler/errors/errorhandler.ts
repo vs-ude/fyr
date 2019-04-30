@@ -1,6 +1,6 @@
 "use strict"
 
-import ast = require("./parser/ast");
+import ast = require("../parser/ast");
 
 import { SyntaxError, TypeError, ImportError } from './errors'
 
