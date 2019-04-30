@@ -1,6 +1,6 @@
 import * as textEncoding from "text-encoding";
 import * as backend from "./backend";
-import { ImplementationError } from './errors'
+import { ImplementationError } from '../errors'
 
 export abstract class Node {
     public abstract get op(): string;

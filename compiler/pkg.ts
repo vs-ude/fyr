@@ -11,10 +11,10 @@ import {Function, FunctionParameter, Scope} from "./scope"
 import { TypeChecker, Static } from './typecheck'
 import {FunctionType, UnsafePointerType} from "./types/";
 import {CodeGenerator} from "./codegen";
-import * as backend from "./backend";
-import {Wasm32Backend} from "./backend_wasm";
-import {CBackend} from "./backend_c";
-import {DummyBackend} from "./backend_dummy";
+import * as backend from "./backend/backend";
+import {Wasm32Backend} from "./backend/backend_wasm";
+import {CBackend} from "./backend/backend_c";
+import {DummyBackend} from "./backend/backend_dummy";
 import { ImplementationError } from './errors'
 
 

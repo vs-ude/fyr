@@ -1,5 +1,5 @@
-import * as ssa from "./ssa"
-import {Package} from "./pkg"
+import * as ssa from "../ssa"
+import {Package} from "../pkg"
 
 export interface FunctionImport {
     getIndex(): number;

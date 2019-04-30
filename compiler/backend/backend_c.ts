@@ -1,11 +1,11 @@
-import {Optimizer, Stackifier, StructType, FunctionType, Variable, Node} from "./ssa";
-import {Package} from "./pkg";
+import {Optimizer, Stackifier, StructType, FunctionType, Variable, Node} from "../ssa";
+import {Package} from "../pkg";
 import * as backend from "./backend";
-import * as ssa from "./ssa"
+import * as ssa from "../ssa"
 import path = require("path");
 import {createHash} from "crypto";
-import { ImplementationError, TodoError } from './errors'
-import { FunctionParameter } from "./scope";
+import { ImplementationError, TodoError } from '../errors'
+import { FunctionParameter } from "../scope";
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 

@@ -13,7 +13,7 @@ import * as helper from './typecheck/helper'
 import * as types from "./types/"
 import * as ssa from "./ssa"
 import {SystemCalls} from "./pkg"
-import * as backend from "./backend"
+import * as backend from "./backend/backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
 import { ImplementationError, TodoError } from './errors'

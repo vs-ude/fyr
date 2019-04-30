@@ -1,10 +1,10 @@
 import * as wasm from "./wasm"
-import {SystemCalls, Package} from "./pkg"
-import {SMTransformer, Optimizer, Stackifier, Type, PointerType, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "./ssa"
+import {SystemCalls, Package} from "../pkg"
+import {SMTransformer, Optimizer, Stackifier, Type, PointerType, StructType, FunctionType, Variable, sizeOf, Node, alignmentOf, isSigned, NodeKind, BinaryData} from "../ssa"
 import * as backend from "./backend"
-import {BinaryBuffer} from "./binarybuffer"
-import * as tc from "./typecheck"
-import { ImplementationError, TodoError } from './errors'
+import {BinaryBuffer} from "../binarybuffer"
+import * as tc from "../typecheck"
+import { ImplementationError, TodoError } from '../errors'
 
 export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap" | "global_strings";
 
