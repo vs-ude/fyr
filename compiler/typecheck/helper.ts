@@ -452,3 +452,75 @@ export function makeConst(t: Type, loc: Location): Type {
 //        }
     return new RestrictedType(t, {isConst: true});
 }
+
+export function isSigned(t: Type): boolean {
+    t = stripType(t);
+    if (t == Static.t_char || t == Static.t_int || t == Static.t_int8 || t == Static.t_int16 || t == Static.t_int32 || t == Static.t_int64 || t == Static.t_float || t == Static.t_double) {
+        return true;
+    }
+    if (t == Static.t_byte || t == Static.t_uint || t == Static.t_uint8 || t == Static.t_uint16 || t == Static.t_uint32 || t == Static.t_uint64) {
+        return false;
+    }
+    if (isUnsafePointer(t)) {
+        return true;
+    }
+    throw new ImplementationError("CodeGen: Implementation error: signed check on non number type " + t.toString())
+}
+
+export function isPureLiteral(t: Type, n: Node): boolean {
+    t = RestrictedType.strip(t);
+    if (t instanceof InterfaceType) {
+        return false;
+    }
+    switch (n.op) {
+        case "int":
+        case "bool":
+        case "float":
+        case "null":
+        case "rune":
+        case "str":
+            return true;
+        case "array":
+        {
+            if (isArray(t)) {
+                if (n.parameters) {
+                    for(let p of n.parameters) {
+                        if (p.op == "unary...") {
+                            continue;
+                        } else if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+            break;
+        }
+        case "tuple":
+        {
+            let i = 0
+            for(let p of n.parameters) {
+                if (!this.isPureLiteral((t as TupleType).types[i], p)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case "object":
+        {
+            if (isStruct(t)) {
+                if (n.parameters) {
+                    for(let p of n.parameters) {
+                        let f = (t as StructType).field(p.name.value);
+                        if (!this.isPureLiteral(f.type, p.lhs)) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+            break;
+        }
+    }
+    return false;
+}

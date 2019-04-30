@@ -158,7 +158,7 @@ export class CodeGenerator {
         }
         for(let v of globals) {
             let g = this.globalVars.get(v);
-            if ((helper.isStruct(v.type) || helper.isArray(v.type)) && this.isPureLiteral(v.type, v.node.rhs)) {
+            if ((helper.isStruct(v.type) || helper.isArray(v.type)) && helper.isPureLiteral(v.type, v.node.rhs)) {
                 let expr = this.processPureLiteral(v.node.rhs);
                 if (v.isConst) {
                     g.isConstant = true;
@@ -526,7 +526,7 @@ export class CodeGenerator {
                         // A single variabe is defined and assigned
                         let element = scope.resolveElement(snode.lhs.value) as Variable;
                         let v = vars.get(element);
-                        if ((helper.isArray(element.type) || helper.isStruct(element.type)) && this.isPureLiteral(element.type, snode.rhs)) {
+                        if ((helper.isArray(element.type) || helper.isStruct(element.type)) && helper.isPureLiteral(element.type, snode.rhs)) {
                             let data = this.processPureLiteral(snode.rhs);
                             if (element.isConst) {
                                 v.isConstant = true;
@@ -761,7 +761,7 @@ export class CodeGenerator {
                     let dtor: Array<DestructorInstruction> = [];
                     let dest: ssa.Variable | ssa.Pointer = this.processLeftHandExpression(f, scope, snode.lhs, b, vars, dtor, "lock");
                     let rhs: ssa.Variable | number;
-                    if ((helper.isArray(snode.lhs.type) || helper.isStruct(snode.lhs.type)) && this.isPureLiteral(snode.lhs.type, snode.rhs)) {
+                    if ((helper.isArray(snode.lhs.type) || helper.isStruct(snode.lhs.type)) && helper.isPureLiteral(snode.lhs.type, snode.rhs)) {
                         rhs = this.processPureLiteral(snode.rhs);
                     // } else if (snode.rhs.op == "take") {
                     //    rhs = this.processLeftHandExpression(f, scope, snode.rhs.lhs, b, vars, dtor, "none");
@@ -916,11 +916,11 @@ export class CodeGenerator {
                         let x = b.assign(b.tmp(), "xor", storage, [p2, -1]);
                         b.assign(dest, "and", storage, [p1, x]);
                     } else if (snode.op == "/=") {
-                        b.assign(dest, this.isSigned(snode.lhs.type) ? "div_s" : "div_u", storage, [p1, p2]);
+                        b.assign(dest, helper.isSigned(snode.lhs.type) ? "div_s" : "div_u", storage, [p1, p2]);
                     } else if (snode.op == "%=") {
-                        b.assign(dest, this.isSigned(snode.lhs.type) ? "rem_s" : "rem_u", storage, [p1, p2]);
+                        b.assign(dest, helper.isSigned(snode.lhs.type) ? "rem_s" : "rem_u", storage, [p1, p2]);
                     } else if (snode.op == ">>=") {
-                        b.assign(dest, this.isSigned(snode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
+                        b.assign(dest, helper.isSigned(snode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
                     }
                 }
                 if (tmp instanceof ssa.Pointer) {
@@ -2282,7 +2282,7 @@ export class CodeGenerator {
                 if (t == Static.t_float || t == Static.t_double || t == Static.t_string) {
                     return this.processCompare("lt", f, scope, enode, b, vars);
                 }
-                if (!(t instanceof UnsafePointerType) && this.isSigned(t)) {
+                if (!(t instanceof UnsafePointerType) && helper.isSigned(t)) {
                     return this.processCompare("lt_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("lt_u", f, scope, enode, b, vars);
@@ -2293,7 +2293,7 @@ export class CodeGenerator {
                 if (t == Static.t_float || t == Static.t_double || t == Static.t_string) {
                     return this.processCompare("gt", f, scope, enode, b, vars);
                 }
-                if (!(t instanceof UnsafePointerType) && this.isSigned(t)) {
+                if (!(t instanceof UnsafePointerType) && helper.isSigned(t)) {
                     return this.processCompare("gt_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("gt_u", f, scope, enode, b, vars);
@@ -2304,7 +2304,7 @@ export class CodeGenerator {
                 if (t == Static.t_float || t == Static.t_double || t == Static.t_string) {
                     return this.processCompare("le", f, scope, enode, b, vars);
                 }
-                if (!(t instanceof UnsafePointerType) && this.isSigned(t)) {
+                if (!(t instanceof UnsafePointerType) && helper.isSigned(t)) {
                     return this.processCompare("le_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("le_u", f, scope, enode, b, vars);
@@ -2315,7 +2315,7 @@ export class CodeGenerator {
                 if (t == Static.t_float || t == Static.t_double || t == Static.t_string) {
                     return this.processCompare("ge", f, scope, enode, b, vars);
                 }
-                if (!(t instanceof UnsafePointerType) && this.isSigned(t)) {
+                if (!(t instanceof UnsafePointerType) && helper.isSigned(t)) {
                     return this.processCompare("ge_s", f, scope, enode, b, vars);
                 }
                 return this.processCompare("ge_u", f, scope, enode, b, vars);
@@ -2383,7 +2383,7 @@ export class CodeGenerator {
                 if (storage == "f32" || storage == "f64") {
                     return b.assign(b.tmp(), "div", storage, [p1, p2]);
                 }
-                let opcode: "div_u" | "div_s" = this.isSigned(t) ? "div_s" : "div_u";
+                let opcode: "div_u" | "div_s" = helper.isSigned(t) ? "div_s" : "div_u";
                 return b.assign(b.tmp(), opcode, storage, [p1, p2]);
             }
             case "%":
@@ -2392,7 +2392,7 @@ export class CodeGenerator {
                 let p1 = this.processValueExpression(f, scope, enode.lhs, b, vars);
                 let p2 = this.processValueExpression(f, scope, enode.rhs, b, vars);
                 let storage = this.getSSAType(t);
-                let opcode: "rem_u" | "rem_s" = this.isSigned(t) ? "rem_s" : "rem_u";
+                let opcode: "rem_u" | "rem_s" = helper.isSigned(t) ? "rem_s" : "rem_u";
                 return b.assign(b.tmp(), opcode, storage, [p1, p2]);
             }
             case "|":
@@ -2542,7 +2542,7 @@ export class CodeGenerator {
                 let p1 = this.processValueExpression(f, scope, enode.lhs, b, vars);
                 let p2 = this.processValueExpression(f, scope, enode.rhs, b, vars);
                 let storage = this.getSSAType(enode.lhs.type);
-                return b.assign(b.tmp(), this.isSigned(enode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
+                return b.assign(b.tmp(), helper.isSigned(enode.lhs.type) ? "shr_s" : "shr_u", storage, [p1, p2]);
             }
             case "<<":
             {
@@ -3582,7 +3582,7 @@ export class CodeGenerator {
                     } else if (t2 == Static.t_int64) {
                         op = "convert64_s";
                     } else {
-                        op = this.isSigned(t2) ? "convert32_s" : "convert32_u";
+                        op = helper.isSigned(t2) ? "convert32_s" : "convert32_u";
                     }
                     return b.assign(b.tmp(), op, to, [expr]);
                 } else if (helper.isIntNumber(t) && (t2 == Static.t_float || t2 == Static.t_double)) {
@@ -4271,21 +4271,6 @@ export class CodeGenerator {
         }
     }
 
-    // TODO: Move to helper.ts
-    public isSigned(t: Type): boolean {
-        t = helper.stripType(t);
-        if (t == Static.t_char || t == Static.t_int || t == Static.t_int8 || t == Static.t_int16 || t == Static.t_int32 || t == Static.t_int64 || t == Static.t_float || t == Static.t_double) {
-            return true;
-        }
-        if (t == Static.t_byte || t == Static.t_uint || t == Static.t_uint8 || t == Static.t_uint16 || t == Static.t_uint32 || t == Static.t_uint64) {
-            return false;
-        }
-        if (helper.isUnsafePointer(t)) {
-            return true;
-        }
-        throw new ImplementationError("CodeGen: Implementation error: signed check on non number type " + t.toString())
-    }
-
     /*
     private generateZero(t: ssa.Type | ssa.StructType | ssa.PointerType): Array<number> {
         if (t instanceof ssa.StructType) {
@@ -4329,64 +4314,7 @@ export class CodeGenerator {
         return v instanceof ssa.Variable && v.name == "this";
     }
 
-    // TODO: Move to helper.ts
-    private isPureLiteral(t: Type, n: Node): boolean {
-        t = RestrictedType.strip(t);
-        if (t instanceof InterfaceType) {
-            return false;
-        }
-        switch (n.op) {
-            case "int":
-            case "bool":
-            case "float":
-            case "null":
-            case "rune":
-            case "str":
-                return true;
-            case "array":
-            {
-                if (helper.isArray(t)) {
-                    if (n.parameters) {
-                        for(let p of n.parameters) {
-                            if (p.op == "unary...") {
-                                continue;
-                            } else if (!this.isPureLiteral((t as ArrayType).elementType, p)) {
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
-                }
-                break;
-            }
-            case "tuple":
-            {
-                let i = 0
-                for(let p of n.parameters) {
-                    if (!this.isPureLiteral((t as TupleType).types[i], p)) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            case "object":
-            {
-                if (helper.isStruct(t)) {
-                    if (n.parameters) {
-                        for(let p of n.parameters) {
-                            let f = (t as StructType).field(p.name.value);
-                            if (!this.isPureLiteral(f.type, p.lhs)) {
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
-                }
-                break;
-            }
-        }
-        return false;
-    }
+
 
     private mangleDestructorName(t: Type): string {
         let hash = createHash("md5");
@@ -5103,7 +5031,7 @@ export class CodeGenerator {
     /*
     private processLiteralArgument(f: Function, scope: Scope, rhsNode: Node, targetType: Type, b: ssa.Builder, vars: Map<ScopeElement, ssa.Variable>): ssa.Variable | number {
         let rhs: ssa.Pointer | ssa.Variable | number;
-        if ((helper.isArray(rhsNode.type) || helper.isStruct(rhsNode.type)) && this.isPureLiteral(targetType, rhsNode)) {
+        if ((helper.isArray(rhsNode.type) || helper.isStruct(rhsNode.type)) && helper.isPureLiteral(targetType, rhsNode)) {
             rhs = this.processPureLiteral(rhsNode);
         } else if (rhsNode.op == "take") {
             rhs = this.processLeftHandExpression(f, scope, rhsNode.lhs, b, vars);
