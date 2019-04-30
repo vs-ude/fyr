@@ -1,5 +1,5 @@
 import { Type } from '../types'
-import { Location } from '../ast'
+import { Location } from '../parser'
 
 // ScopeElement is implemented by Variable and Function, FunctionParameter.
 // A Scope contains ScopeElements.

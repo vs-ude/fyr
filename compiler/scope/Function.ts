@@ -1,5 +1,5 @@
 import { Type, FunctionType } from '../types'
-import { Node, Location } from '../ast'
+import { Node, Location } from '../parser'
 
 import { Scope, ScopeElement, Variable } from './'
 

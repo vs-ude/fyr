@@ -1,4 +1,4 @@
-import {Node, Location} from "../ast"
+import {Node, Location} from "../parser"
 import {
     ArrayType, InterfaceType, MapType, OrType, PointerType,
     RestrictedType, SliceType, StringLiteralType, StructType, TemplateType,

@@ -1,4 +1,4 @@
-import {Node, AstFlags, Location} from "./ast"
+import {Node, AstFlags, Location} from "./parser"
 import {
     Function, TemplateFunction, Scope, Variable, ScopeElement,
     FunctionParameter, ImportedPackage

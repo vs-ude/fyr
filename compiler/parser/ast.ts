@@ -1,5 +1,5 @@
-import { Scope, ScopeExit } from "./scope"
-import { Type } from "./types/"
+import { Scope, ScopeExit } from "../scope"
+import { Type } from "../types"
 
 var _currentFile: string;
 

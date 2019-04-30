@@ -1,6 +1,6 @@
 import { Type } from '../types'
 import { TypeError, Group, GroupKind, TupleGroup } from '../typecheck'
-import { Location, Node } from '../ast'
+import { Location, Node } from '../parser'
 import { Package } from '../pkg'
 import { ImplementationError } from '../errors'
 

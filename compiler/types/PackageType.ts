@@ -1,5 +1,5 @@
 import { Package } from '../pkg'
-import { Location } from '../ast'
+import { Location } from '../parser'
 import { ImplementationError } from '../errors'
 
 import { Type } from './Type'

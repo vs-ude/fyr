@@ -1,4 +1,4 @@
-import { Location } from '../ast'
+import { Location } from '../parser'
 import { Scope } from '../scope'
 
 export enum GroupKind {

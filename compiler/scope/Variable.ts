@@ -1,5 +1,5 @@
 import { Type } from '../types'
-import { Node, Location } from '../ast'
+import { Node, Location } from '../parser'
 
 import { ScopeElement } from './ScopeElement'
 

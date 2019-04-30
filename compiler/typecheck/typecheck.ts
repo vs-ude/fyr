@@ -1,4 +1,4 @@
-import {Node, Location, AstFlags} from "../ast"
+import {Node, Location, AstFlags} from "../parser"
 import { Package } from "../pkg"
 import {
     ArrayLiteralType, ArrayType, FunctionType, GenericParameter,

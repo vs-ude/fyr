@@ -4,8 +4,8 @@ import fs = require("fs");
 import child_process = require("child_process");
 import os = require("os");
 import tc = require("./typecheck");
-import parser = require("./parser");
-import ast = require("./ast");
+import parser = require("./parser/parser");
+import ast = require("./parser/ast");
 import colors = require('colors');
 import {Function, FunctionParameter, Scope} from "./scope"
 import { TypeChecker, Static } from './typecheck'

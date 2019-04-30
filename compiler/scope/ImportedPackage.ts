@@ -1,6 +1,6 @@
 import { Package } from '../pkg'
 import { PackageType } from '../types'
-import { Location } from '../ast'
+import { Location } from '../parser'
 
 import { ScopeElement } from './'
 

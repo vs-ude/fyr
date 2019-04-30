@@ -1,4 +1,4 @@
-import { Location } from "../ast"
+import { Location } from "../parser"
 
 /**
  * Type is the base class for all types.

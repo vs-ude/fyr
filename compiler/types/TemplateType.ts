@@ -1,4 +1,4 @@
-import { Node } from '../ast'
+import { Node } from '../parser'
 import { TemplateFunction, Scope } from '../scope'
 import { Package } from '../pkg'
 import { ImplementationError } from '../errors';
