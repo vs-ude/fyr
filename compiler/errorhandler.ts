@@ -1,9 +1,8 @@
 "use strict"
 
 import ast = require("./parser/ast");
-import {SyntaxError} from "./parser/parser";
-import {TypeError} from "./typecheck";
-import {ImportError} from "./pkg";
+
+import { SyntaxError, TypeError, ImportError } from './errors'
 
 import { readFileSync } from 'fs'
 

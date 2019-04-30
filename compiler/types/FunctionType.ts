@@ -1,7 +1,8 @@
 import { SystemCalls } from "../pkg"
-import { TypeChecker, TypeError, Group, GroupKind } from '../typecheck'
+import { TypeChecker, Group, GroupKind } from '../typecheck'
 import { FunctionParameter } from '../scope'
 import { isUnique } from '../typecheck/helper'
+import { TypeError } from '../errors'
 
 import { Type } from './Type'
 import { TupleType } from './TupleType'

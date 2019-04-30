@@ -1,3 +1,5 @@
+import { Location } from './parser'
+
 export class ImplementationError extends Error {
     constructor(message?: string) {
         super(message);
@@ -16,3 +18,30 @@ export class TodoError extends Error {
     }
 }
 
+export class SyntaxError {
+    message: string;
+    location: Location;
+}
+
+export class TypeError {
+    constructor(message: string, loc: Location) {
+        this.message = message;
+        this.location = loc;
+    }
+
+    public message: string;
+    public location: Location;
+    public name: string = "TypeError";
+}
+
+export class ImportError {
+    constructor(message: string, loc: Location, path: string) {
+        this.message = message;
+        this.location = loc;
+        this.path = path;
+    }
+
+    public message: string;
+    public location: Location;
+    public path: string;
+}

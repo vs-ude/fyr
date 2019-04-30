@@ -1,8 +1,8 @@
 import { Type } from '../types'
-import { TypeError, Group, GroupKind, TupleGroup } from '../typecheck'
+import { Group, GroupKind, TupleGroup } from '../typecheck'
 import { Location, Node } from '../parser'
 import { Package } from '../pkg'
-import { ImplementationError } from '../errors'
+import { ImplementationError, TypeError } from '../errors'
 
 import { ScopeElement, Function } from './'
 

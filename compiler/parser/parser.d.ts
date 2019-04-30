@@ -13,8 +13,3 @@ export interface Location {
 }
 
 export function parse(code: string): Node
-
-export class SyntaxError {
-    message: string;
-    location: Location;
-}

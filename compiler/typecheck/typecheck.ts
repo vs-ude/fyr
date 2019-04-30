@@ -14,7 +14,7 @@ import {
     Scope, ScopeElement, Function, FunctionParameter, TemplateFunction,
     Variable, ImportedPackage, ScopeExit
 } from '../scope'
-import { ImplementationError, TodoError } from '../errors'
+import { ImplementationError, TodoError, TypeError } from '../errors'
 import {createHash} from "crypto";
 
 import * as helper from './helper'
@@ -5534,15 +5534,4 @@ export class TypeChecker {
      * is not used a second time in the statement.
      */
     private usedVariables: Set<Variable> = new Set<Variable>();
-}
-
-export class TypeError {
-    constructor(message: string, loc: Location) {
-        this.message = message;
-        this.location = loc;
-    }
-
-    public message: string;
-    public location: Location;
-    public name: string = "TypeError";
 }

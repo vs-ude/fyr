@@ -15,7 +15,7 @@ import * as backend from "./backend/backend";
 import {Wasm32Backend} from "./backend/backend_wasm";
 import {CBackend} from "./backend/backend_c";
 import {DummyBackend} from "./backend/backend_dummy";
-import { ImplementationError } from './errors'
+import { ImplementationError, ImportError } from './errors'
 
 
 // Make TSC not throw out the colors lib
@@ -563,17 +563,6 @@ export class Package {
     public static fyrBase: string;
 }
 
-export class ImportError {
-    constructor(message: string, loc: ast.Location, path: string) {
-        this.message = message;
-        this.location = loc;
-        this.path = path;
-    }
-
-    public message: string;
-    public location: ast.Location;
-    public path: string;
-}
 
 function makeMathFunction64(name: string, paramCount: number, call: SystemCalls, tc: TypeChecker): Function {
     var f: Function = new Function();

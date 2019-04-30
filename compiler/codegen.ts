@@ -8,7 +8,7 @@ import {
     RestrictedType, OrType, StructType, UnsafePointerType, PointerType,
     FunctionType, ArrayType, SliceType, TupleType, TemplateFunctionType
 } from "./types/"
-import { TypeChecker, TypeError, Static } from './typecheck/'
+import { TypeChecker, Static } from './typecheck/'
 import * as helper from './typecheck/helper'
 import * as types from "./types/"
 import * as ssa from "./ssa"
@@ -16,7 +16,7 @@ import {SystemCalls} from "./pkg"
 import * as backend from "./backend/backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
-import { ImplementationError, TodoError } from './errors'
+import { ImplementationError, TodoError, TypeError } from './errors'
 import { endianness } from "os";
 
 /**
