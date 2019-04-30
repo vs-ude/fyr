@@ -5,6 +5,7 @@
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
+    "preinstall": "git config core.hooksPath || git config core.hooksPath ./dev/hooks",
     "pretest": "pegjs -o test/tests/parser.js compiler/parser.pegjs && tsc -p test/tsconfig.test.json",
     "test": "mocha --reporter list || exit 0",
     "pretest:watch": "pegjs -o test/tests/parser.js compiler/parser.pegjs",
