@@ -1,4 +1,4 @@
-import { Restrictions } from '../group'
+import { Restrictions } from '../typecheck'
 import { ImplementationError } from '../errors';
 
 import { Type } from './Type'

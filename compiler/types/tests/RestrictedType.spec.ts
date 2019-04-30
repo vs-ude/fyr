@@ -3,7 +3,7 @@ import * as m from 'ts-mockito'
 
 import { RestrictedType, BasicType } from '../'
 import { ImplementationError } from '../../errors';
-import { Restrictions } from '../../group';
+import { Restrictions } from '../../typecheck';
 
 describe('empty RestrictedType', () => {
     let instance: RestrictedType

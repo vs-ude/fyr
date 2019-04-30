@@ -9,7 +9,7 @@ import {
 } from "../types/";
 import {
     Group, GroupKind, TupleGroup, GroupCheckFlags, Restrictions, combineRestrictions
-} from '../group'
+} from './group'
 import {
     Scope, ScopeElement, Function, FunctionParameter, TemplateFunction,
     Variable, ImportedPackage, ScopeExit
@@ -4654,10 +4654,10 @@ export class TypeChecker {
                                 let group = scope.resolveGroup(f.namedReturnVariables[i]);
                                 if (helper.isUnique(f.namedReturnVariables[i].type)) {
                                     group = null;
-                                }                            
+                                }
                                 this.checkGroupsInSingleAssignment(f.namedReturnVariables[i].type, group, g instanceof TupleGroup ? g.groups[i] : g, snode.lhs, i+1 < f.namedReturnVariables.length, scope, snode.loc);
                             }
-                        }                        
+                        }
                     } else {
                         if (!f.unnamedReturnVariable) {
                             throw new ImplementationError()
@@ -4687,7 +4687,7 @@ export class TypeChecker {
                     this.checkGroupsInStatement(snode.lhs, snode.scope);
                     this.modifiedVariabes.clear();
                     this.usedVariables.clear();
-                }        
+                }
                 this.checkExpression(snode.condition, snode.scope);
                 for(let st of snode.statements) {
                     this.checkGroupsInStatement(st, snode.scope);
@@ -4748,7 +4748,7 @@ export class TypeChecker {
                         if (snode.condition.lhs) {
                             this.checkGroupsInStatement(snode.condition.lhs, snode.condition.scope);
                             this.modifiedVariabes.clear();
-                            this.usedVariables.clear();            
+                            this.usedVariables.clear();
                         }
                         if (snode.condition.condition) {
                             this.checkGroupsInExpression(snode.condition.condition, snode.condition.scope, GroupCheckFlags.None);
@@ -5168,7 +5168,7 @@ export class TypeChecker {
             {
                 if (enode.op == "spawn") {
                     enode = enode.rhs;
-                }    
+                }
                 let g = this.checkGroupsInExpression(enode.lhs, scope, flags | GroupCheckFlags.ForbidIsolates);
 //                if (!g) {
 //                    throw new ImplementationError()
@@ -5407,7 +5407,7 @@ export class TypeChecker {
             }
             case "resume":
                 this.checkGroupsInExpression(enode.lhs, scope, flags);
-                return null;                
+                return null;
             case "coroutine":
                 return this.globalGroup;
             default:

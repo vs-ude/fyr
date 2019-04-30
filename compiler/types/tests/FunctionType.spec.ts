@@ -3,7 +3,7 @@ import * as m from 'ts-mockito'
 
 import { FunctionType, BasicType, TupleType } from '../'
 import { FunctionParameter } from '../../scopes';
-import { Group } from '../../group';
+import { Group } from '../../typecheck';
 
 describe('empty FunctionType', () => {
     let instance: FunctionType
@@ -30,10 +30,6 @@ describe('empty FunctionType', () => {
 
     it('requiredParamterCount() returns 0', () => {
         expect(instance.requiredParameterCount()).to.equal(0)
-    })
-
-    it('isAsync() returns false', () => {
-        expect(instance.isAsync()).to.be.false
     })
 
     it('createGroups() returns an empty group map', () => {
