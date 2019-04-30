@@ -1,4 +1,4 @@
-import { Scope, ScopeExit } from "./scopes"
+import { Scope, ScopeExit } from "./scope"
 import { Type } from "./types/"
 
 var _currentFile: string;
@@ -24,7 +24,7 @@ export enum AstFlags {
     // Used on the right-hand side of an assignment.
     // The meaning is that the RHS is implicitly taken (as with ZeroAfterAssignment).
     // However, it is safe to leave the variable untouched (e.g. not to set it to zero),
-    // because no destructor will be run. 
+    // because no destructor will be run.
     TakenAfterAssignment = 16,
     ReferenceObjectMember = 2,
     // Used on array literals. Indicates that the array literal is incomplete

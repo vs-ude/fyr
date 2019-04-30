@@ -2,7 +2,7 @@ import { expect } from 'chai'
 import * as m from 'ts-mockito'
 
 import { FunctionType, BasicType, TupleType } from '../'
-import { FunctionParameter } from '../../scopes';
+import { FunctionParameter } from '../../scope';
 import { Group } from '../../typecheck';
 
 describe('empty FunctionType', () => {

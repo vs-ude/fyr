@@ -1,5 +1,5 @@
 import { Node } from '../ast'
-import { TemplateFunction, Scope } from '../scopes'
+import { TemplateFunction, Scope } from '../scope'
 import { Package } from '../pkg'
 import { ImplementationError } from '../errors';
 

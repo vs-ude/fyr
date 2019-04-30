@@ -1,5 +1,5 @@
 import { Location } from '../ast'
-import { Scope } from '../scopes'
+import { Scope } from '../scope'
 
 export enum GroupKind {
     Free = 0,

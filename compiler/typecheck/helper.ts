@@ -4,7 +4,7 @@ import {
     RestrictedType, SliceType, StringLiteralType, StructType, TemplateType,
     TupleType, Type, UnsafePointerType
 } from "../types/";
-import { Scope, FunctionParameter, Variable } from '../scopes'
+import { Scope, FunctionParameter, Variable } from '../scope'
 import { ImplementationError } from '../errors'
 
 import { Static } from './'
@@ -272,12 +272,12 @@ export function isMutable(node: Node, scope: Scope): boolean {
     } else if (node.op == "unary*") {
         if (isConst(node.rhs.type)) {
             return false;
-        }    
+        }
         return true;
     } else if (node.op == ".") {
         if (isConst(node.lhs.type)) {
             return false;
-        }    
+        }
         if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
             return true;
         }
@@ -285,7 +285,7 @@ export function isMutable(node: Node, scope: Scope): boolean {
     } else if (node.op == "[") {
         if (isConst(node.lhs.type)) {
             return false;
-        }    
+        }
         if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
             return true;
         }
@@ -310,13 +310,13 @@ export function isAssignable(node: Node, scope: Scope): boolean {
     } else if (node.op == "unary*") {
         if (isConst(node.rhs.type)) {
             return false;
-        }    
+        }
         return true;
     } else if (node.op == ".") {
         if (node.lhs.type instanceof PointerType || node.lhs.type instanceof UnsafePointerType) {
             if (isConst(node.lhs.type)) {
                 return false;
-            }    
+            }
             return true;
         }
         return isAssignable(node.lhs, scope);
@@ -324,7 +324,7 @@ export function isAssignable(node: Node, scope: Scope): boolean {
         if (node.lhs.type instanceof UnsafePointerType || node.lhs.type instanceof SliceType) {
             if (isConst(node.lhs.type)) {
                 return false;
-            }    
+            }
             return true;
         }
         if (node.lhs.type == Static.t_string) {

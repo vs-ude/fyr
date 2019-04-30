@@ -5,7 +5,7 @@ import * as ssa from "./ssa"
 import path = require("path");
 import {createHash} from "crypto";
 import { ImplementationError, TodoError } from './errors'
-import { FunctionParameter } from "./scopes";
+import { FunctionParameter } from "./scope";
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -469,7 +469,7 @@ export class CBackend implements backend.Backend {
                 v.initExpr = call;
                 v.type = new CType("int");
                 main.body.push(v);
-                
+
                 // Call code to finalize coroutines
                 call = new CFunctionCall();
                 call.funcExpr = new CConst("fyr_component_main_end")
@@ -610,7 +610,7 @@ export class CBackend implements backend.Backend {
             return new CType("addr_t");
         }
         if (t instanceof ssa.FunctionType) {
-            let r = t.result ? this.mapType(t.result, cstyle) : new CType("void");                        
+            let r = t.result ? this.mapType(t.result, cstyle) : new CType("void");
             let params = [];
             for (let p of t.params) {
                 params.push(this.mapType(p, cstyle));
@@ -1740,7 +1740,7 @@ export class CBackend implements backend.Backend {
                     result = conv;
                 }
                 result = c;
-    
+
                 let f2 = new CFunction();
                 f2.name = name2;
                 f2.returnType = new CType("void");

@@ -7,7 +7,7 @@ import tc = require("./typecheck");
 import parser = require("./parser");
 import ast = require("./ast");
 import colors = require('colors');
-import {Function, FunctionParameter, Scope} from "./scopes"
+import {Function, FunctionParameter, Scope} from "./scope"
 import { TypeChecker, Static } from './typecheck'
 import {FunctionType, UnsafePointerType} from "./types/";
 import {CodeGenerator} from "./codegen";

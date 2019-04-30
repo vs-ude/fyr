@@ -13,7 +13,7 @@ import {
 import {
     Scope, ScopeElement, Function, FunctionParameter, TemplateFunction,
     Variable, ImportedPackage, ScopeExit
-} from '../scopes'
+} from '../scope'
 import { ImplementationError, TodoError } from '../errors'
 import {createHash} from "crypto";
 
