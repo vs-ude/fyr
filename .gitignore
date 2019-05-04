@@ -3,6 +3,7 @@ node_modules
 tmp.*
 old
 out
+npm-debug.log
 examples/*.wasm
 examples/*.wast
 examples/*.wat
