@@ -1319,7 +1319,7 @@ export class CBackend implements backend.Backend {
                 m.args = [this.emitExpr(n.args[0]), cast];
             }
             return m;
-        } else if (n.kind == "lock") {
+        } else if (n.kind == "lock" || n.kind == "lock_arr") {
             let m = new CFunctionCall();
             m.funcExpr = new CConst(n.kind == "lock" ? "fyr_lock" : "fyr_lock_arr");
             m.args = [this.emitExpr(n.args[0])];
