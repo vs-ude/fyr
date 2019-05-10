@@ -17,7 +17,7 @@ COMPILE_FILES=(
 
 # these files should fail to compile
 COMPILE_FILES_NEGATIVE=(
-    "src/debugme/refcount"
+    # "src/debugme/refcount"
 )
 
 RUN_FILES=(
