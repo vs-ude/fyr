@@ -5,7 +5,8 @@
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
-    "preinstall": "git config core.hooksPath || git config core.hooksPath ./dev/hooks",
+    "preinstall": "[ -d .git ] && git config core.hooksPath || git config core.hooksPath ./dev/hooks",
+    "postinstall": "npm run build:lib",
     "pretest": "mkdir -p test/tests/parser && pegjs -o test/tests/parser/parser.js compiler/parser/parser.pegjs && tsc -p test/tsconfig.test.json",
     "test": "mocha --reporter list || exit 0",
     "pretest:watch": "mkdir -p test/tests/parser && pegjs -o test/tests/parser/parser.js compiler/parser/parser.pegjs",
@@ -17,7 +18,7 @@
     "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c && gcc -o pkg/`bin/fyrarch`/fyr_spawn.o -O3 -g3 -c src/runtime/fyr_spawn.c -U_FORTIFY_SOURCE",
     "build": "npm run build:parser && npm run build:js && npm run build:lib",
     "build:doc": "typedoc --readme ./API.md --exclude '**/*.spec.ts' --out docs compiler",
-    "clean": "rm -rf lib/* test/tests/* coverage/ docs/ .nyc_output/"
+    "clean": "rm -rf lib/* test/tests/* coverage/ docs/ .nyc_output/ bin/`bin/fyrarch`/"
   },
   "keywords": [
     "fyr",
