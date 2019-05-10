@@ -16,3 +16,5 @@ npm-debug.log
 tmp.*
 tsconfig.json
 vgcore.*
+*.d.ts
+*.map
