@@ -18,7 +18,7 @@ jobs:
     - stage: test
       before_script: npm run pretest
       script: node_modules/mocha/bin/mocha --reporter list
-    - before_script: npm run pretest
+    - before_script: npm run build
       script: test/run_tests.sh
     - stage: deploy
       before_script: npm run build
