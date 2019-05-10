@@ -168,7 +168,7 @@ config
 configElement
   = [ \t]* n:$("singleton"/"irc") [ \t]* ":" [ \t]* v:$("true"/"false") ([ \t]* newline)+ {
       let name = new ast.Node({loc: fl(location()), op: "id", value: n});
-      let value = return new ast.Node({loc: fl(location()), op: "bool", value: v});
+      let value = new ast.Node({loc: fl(location()), op: "bool", value: v});
       return new ast.Node({loc: fl(location()), op: "config_property", name: name, rhs: value });
   }
 
