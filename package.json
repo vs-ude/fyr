@@ -1,5 +1,5 @@
 {
-  "name": "fyr",
+  "name": "fyrlang",
   "version": "0.1.0",
   "description": "Fyr: an experimental compiler for IoT applications",
   "main": "lib/index",
