@@ -14,8 +14,8 @@ install:
 jobs:
   include:
     - stage: build
-      script: npm build
-    - script: npm pretest
+      script: npm run build
+    - script: npm run pretest
     - stage: test
       script: node_modules/mocha/bin/mocha --reporter list
     - script: test/run_tests.sh
