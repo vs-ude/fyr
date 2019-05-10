@@ -27,5 +27,6 @@ jobs:
         provider: npm
         email: $NPM_MAIL_ADDRESS
         api_key: $NPM_PUBLISH_TOKEN
+        skip_cleanup: true
         on:
           branch: master
