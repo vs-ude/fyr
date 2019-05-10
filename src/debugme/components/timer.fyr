@@ -1,0 +1,5 @@
+component HardwareTimer
+
+config {
+    irc: "timer1"
+}

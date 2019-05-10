@@ -1,92 +1,19 @@
-type Event struct {
+component Main
+
+config {
+    singleton: true
 }
 
-component Fonts {
-    // Fonts is not active. However, it runs on one thread only.
-    // This thread can be shared with other components using Fonts.
-}
+// Component Gui uses component Fonts.
+// They run in the same thread.
+// Now, Renderer cannot use Fonts any more.
+compose "subcomponent"
+compose "debugme/foo" as foobar
+compose Fonts from "src/components" as font
+compose || Fonts as font
 
-// The Gui component is instantiated when the application starts.
-// Creating new instances of the component is not possible.
-component Gui {
-    [active]
-
-    // Component Gui uses component Fonts.
-    // They run in the same thread.
-    // Now, Renderer cannot use Fonts any more.
-    import . from Fonts
-}
-
-type Window component {
-    // Observable properties
-    @width int
-    // Observable properties
-    @height int
-
-    import . from Gui
-}
-
-component Renderer {
-    // Renderer and Gui run in different threads, because they are both active
-    [active]
-    type GLNode struct {
-    }
-}
-
-type IWorker component interface {
-    func work()
-}
-
-// The worker component can be instantiated
-type Worker component {
-    // Worker implements the IWorker interface
-    IWorker
-    // A property that can be accessed from the outside
-    name string
-
-    var busy bool = false
-
-    // This variable is not mutable, and therefore initialized only once
-    let pi float = 3.14
-    // This variable is not mutable, and therefore initialized only once
-    let seq const []int = [1, 2, 3]
-    // This variable is not mutable, and therefore initialized only once
-    let extName string = "ext" + name
-    // This variable is not mutable, and therefore initialized only once
-    let result [5]int = [...]
-    // The Rect object being pointed to is mutable, hence every instance has its own copy of the rects variable
-    let rect *Rect = {}
-}
-
-// The global component uses the Gui component
-import . from Gui
-
-let worker ^Worker = {name: "w1"}
-
-func Gui.main() {
-    // Do some initialization here
-}
-
-func Gui.event(e ^Event) {
-
-}
-
-func Window.show() {
-    event({})
-}
-
-func Worker.work() {
-}
+var name string
+export var Name string
 
 func main() {
-    let w = Window top {
-        children: [
-            Widget w1 {
-                // The @ means that the expression is recomputed whenever the width property changes.
-                // Bindings are only allowed when constructing new components
-                x: @top.width / 2
-            }
-        ]
-    }
-    w.show()
 }

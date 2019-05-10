@@ -118,6 +118,11 @@ export class InterfaceType extends Type {
     }
 
     /**
+     * Set to true, if this is a component interface.
+     */
+    public isComponent: boolean;
+
+    /**
      * Package the type has been defined in.
      * For global types sich as "int" the package is undefined.
      */

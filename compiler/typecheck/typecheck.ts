@@ -225,7 +225,7 @@ export class TypeChecker {
             return this.createInterfaceType(tnode, scope, null, mode);
         } else if (tnode.op == "structType") {
             return this.createStructType(tnode, scope, null, mode);
-        } else if (tnode.op == "interfaceType") {
+        } else if (tnode.op == "interfaceType" || tnode.op == "componentInterfaceType") {
             if (originalMode == "parameter_toplevel" || originalMode == "variable_toplevel") {
                 throw new TypeError("Interface types are not allowed in this place. Use a pointer to an interface instead", tnode.loc);
             }
@@ -311,6 +311,7 @@ export class TypeChecker {
     private createInterfaceType(tnode: Node, scope: Scope, iface?: InterfaceType, mode?: "default" | "parameter" | "variable"): InterfaceType {
         if (!iface) {
             iface = new InterfaceType();
+            iface.isComponent = (tnode.op == "componentInterfaceType");
             iface.pkg = this.pkg;
             iface.loc = tnode.loc;
             this.ifaces.push(iface);
@@ -567,7 +568,7 @@ export class TypeChecker {
                 this.instantiateTemplateMemberFunction(t, s, m);
             }
             return s;
-        } else if (node.op == "interfaceType" || node.op == "andType") {
+        } else if (node.op == "interfaceType" || node.op == "andType" || node.op == "componentInterfaceType") {
             let s = new TemplateInterfaceType();
             s.base = t;
             s.name = t.name;
@@ -982,11 +983,12 @@ export class TypeChecker {
             this.structs.push(s);
             t.type = s;
             scope.registerType(t.name, s, tnode.loc);
-        } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType") {
+        } else if (t.node.rhs.op == "interfaceType" || t.node.rhs.op == "andType" || t.node.rhs.op == "componentInterfaceType") {
             let iface = new InterfaceType();
             iface.pkg = this.pkg;
             iface.loc = t.node.loc;
             iface.name = t.name;
+            iface.isComponent = (t.node.rhs.op == "interfaceType");
             this.ifaces.push(iface);
             t.type = iface;
             scope.registerType(t.name, iface, tnode.loc);

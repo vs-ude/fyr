@@ -1,0 +1,19 @@
+component Window
+
+compose Main
+
+// Observable properties
+// observable var width int
+// Observable properties
+// observable var height int
+
+export func Show() {
+}
+
+func Repaint() {
+
+}
+
+func paintDefault() {
+    
+}

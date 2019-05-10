@@ -34,7 +34,21 @@
 }
 
 file
-  = m:(comments / func / import / export / build / typedef / varStatement / $("\n"+))* {
+  = comments? f: file2 {
+    return f;
+  }
+
+file2
+  = "component" [ \t]+ i:identifier $("\n"*) ([ \t]* newline)+ f:file3 {
+      f.lhs = i;
+      return f;
+    }
+  / f: file3 {
+      return f;
+    }
+
+file3
+  = m:(comments / func / import / export / build / typedef / exportVarStatement / $("\n"+))* {
         let result = [];
         for(let i = 0; i < m.length; i++) {
             let x = m[i];
@@ -46,7 +60,7 @@ file
                     x.comments = m[i-1];
                 }
                 result.push(x);
-            } else if (x.op == "import" || x.op == "export_as" || x.op == "build") {
+            } else if (x.op == "import" || x.op == "export_as" || x.op == "build" || x.op == "config") {
                 result.push(x);
             }
         }
@@ -130,10 +144,10 @@ build
   }
 
 buildElement
-  = [ \t]* "link" [ \t]* ":" [ \t]* "[" ([ \t]* newline)* v:buildElementValues? "]" ([ \t]* newline)* {
+  = [ \t]* "link" [ \t]* ":" [ \t]* "[" ([ \t]* newline)* v:buildElementValues? "]" ([ \t]* newline)+ {
       return new ast.Node({loc: fl(location()), op: "build_link", parameters: v});
     }
-  / [ \t]* "compile" [ \t]* ":" [ \t]* "[" ([ \t]* newline)* v:buildElementValues? "]" ([ \t]* newline)* {
+  / [ \t]* "compile" [ \t]* ":" [ \t]* "[" ([ \t]* newline)* v:buildElementValues? "]" ([ \t]* newline)+ {
       return new ast.Node({loc: fl(location()), op: "build_compile", parameters: v});
     }
 
@@ -144,6 +158,18 @@ buildElementValues
           result = result.concat(r[3]);
       }
       return result;
+  }
+
+config
+  = "config" [ \t]* "{" ([ \t]* newline)+ e:configElement* [ \t\n]* "}" {
+      return new ast.Node({loc: fl(location()), op: "config", parameters: e});
+  }
+
+configElement
+  = [ \t]* n:$("singleton"/"irc") [ \t]* ":" [ \t]* v:$("true"/"false") ([ \t]* newline)+ {
+      let name = new ast.Node({loc: fl(location()), op: "id", value: n});
+      let value = return new ast.Node({loc: fl(location()), op: "bool", value: v});
+      return new ast.Node({loc: fl(location()), op: "config_property", name: name, rhs: value });
   }
 
 func
@@ -330,6 +356,9 @@ primitiveType
     }
   / "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
         return new ast.Node({loc: fl(location()), op: "interfaceType", parameters: f ? f : []});
+    }
+  / "component" [ \t]+ "interface" [ \t]* "{" [ \t]* f:interfaceContent? comments? "}" {
+        return new ast.Node({loc: fl(location()), op: "componentInterfaceType", parameters: f ? f : []});
     }
   / "null" {
       return new ast.Node({loc: fl(location()), op: "basicType", value: "null" });
@@ -655,6 +684,14 @@ assignKeyIdentifier
     }
   / "..." [ \t]* e:expression {
       return new ast.Node({loc: fl(location()), op: "ellipsisAssign", lhs: e});
+    }
+
+exportVarStatement
+  = "export" [ \t]+ v:varStatement {
+      v.op = "export_" + v.op;
+    }
+  / v:varStatement {
+      return v;
     }
 
 varStatement
