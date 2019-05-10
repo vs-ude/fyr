@@ -1,8 +1,7 @@
 stages:
   - build
   - test
-  - name: deploy
-    if: branch = master
+  - deploy
 dist: xenial
 addons:
   apt:
@@ -17,14 +16,18 @@ install:
   - export FYRBASE=$PWD
   - npm install
 jobs:
-  - stage: build
-    script: npm build
-  - script: npm pretest
-  - stage: test
-    script: node_modules/mocha/bin/mocha --reporter list
-  - script: test/run_tests.sh
-  - stage: deploy
-    script: echo "Deploying to npm"
-    deploy:
-      provider: npm
-      api_key: $NPM_PUBLISH_TOKEN
+  include:
+    - stage: build
+      script: npm build
+    - script: npm pretest
+    - stage: test
+      script: node_modules/mocha/bin/mocha --reporter list
+    - script: test/run_tests.sh
+    - stage: deploy
+      script: echo "Deploying to npm"
+      deploy:
+        provider: npm
+        email: $NPM_MAIL_ADDRESS
+        api_key: $NPM_PUBLISH_TOKEN
+        on:
+          branch: master
