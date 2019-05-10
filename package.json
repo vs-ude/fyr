@@ -1,12 +1,12 @@
 {
   "name": "fyrlang",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Fyr: an experimental compiler for IoT applications",
   "homepage": "http://fyr.vs.uni-due.de",
   "main": "lib/index",
   "typings": "lib/index",
   "scripts": {
-    "preinstall": "[ -d .git ] && git config core.hooksPath || git config core.hooksPath ./dev/hooks",
+    "preinstall": "[ -d .git ] && git config core.hooksPath ./dev/hooks || true",
     "postinstall": "npm run build:lib",
     "pretest": "mkdir -p test/tests/parser && pegjs -o test/tests/parser/parser.js compiler/parser/parser.pegjs && tsc -p test/tsconfig.test.json",
     "test": "mocha --reporter list || exit 0",
