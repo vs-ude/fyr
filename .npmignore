@@ -11,6 +11,7 @@
 /test/
 .editorconfig
 .gitignore
+.travis.yml
 API.md
 npm-debug.log
 tmp.*

@@ -1,0 +1,30 @@
+stages:
+  - build
+  - test
+  - name: deploy
+    if: branch = master
+dist: xenial
+addons:
+  apt:
+    - gcc
+    - valgrind
+language: node_js
+node_js:
+  - "8"
+git:
+  quiet: true
+install:
+  - export FYRBASE=$PWD
+  - npm install
+jobs:
+  - stage: build
+    script: npm build
+  - script: npm pretest
+  - stage: test
+    script: node_modules/mocha/bin/mocha --reporter list
+  - script: test/run_tests.sh
+  - stage: deploy
+    script: echo "Deploying to npm"
+    deploy:
+      provider: npm
+      api_key: $NPM_PUBLISH_TOKEN
