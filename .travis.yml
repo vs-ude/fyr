@@ -21,8 +21,7 @@ jobs:
     - before_script: npm run build
       script: test/run_tests.sh
     - stage: deploy
-      before_script: npm run build
-      script: echo "Deploying to npm"
+      before_deploy: npm run build
       deploy:
         provider: npm
         email: $NPM_MAIL_ADDRESS
