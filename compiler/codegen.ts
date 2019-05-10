@@ -17,7 +17,6 @@ import * as backend from "./backend/backend"
 import {Package} from "./pkg"
 import {createHash} from "crypto";
 import { ImplementationError, TodoError, TypeError } from './errors'
-import { endianness } from "os";
 
 /**
  * A DestructorInstruction tells which actions must be taken to destruct the result of an expression
@@ -4719,12 +4718,13 @@ export class CodeGenerator {
                 b.end();
             }
         }
-        // Free the underlying memory and by doing so invoke the destructor
+        // Check that the interface is not a null-pointer
         if (!avoidNullCheck && t instanceof InterfaceType) {
             let realPointer = b.assign(b.tmp(), "member", "addr", [pointer, this.ifaceHeader.fieldIndexByName("pointer")]);
             let cond = b.assign(b.tmp(), "ne", "i8", [realPointer, 0]);
             b.ifBlock(cond);
         }
+        // Free the underlying memory and by doing so invoke the destructor
         if (free == "free") {
             if (helper.isArray(typ) || helper.isString(typ)) {
                 b.assign(null, "free_arr", null, [pointer, dtr ? dtr.getIndex() : -1]);
@@ -5142,7 +5142,7 @@ export class CodeGenerator {
         } else if (helper.isSlice(t) && !helper.isLocalReference(t)) {
             let arrayPointer = b.assign(b.tmp(), "member", "addr", [val, this.slicePointer.fieldIndexByName("array_ptr")]);
             if (dtor) {
-                dtor.push(new DestructorInstruction(val, t, "decref"));
+                dtor.push(new DestructorInstruction(arrayPointer, t, "decref"));
             }
             b.assign(null, "incref_arr", "addr", [arrayPointer]);
         }
@@ -5170,7 +5170,7 @@ export class CodeGenerator {
         } else if (helper.isSlice(t) && !helper.isLocalReference(t)) {
             let arrayPointer = b.assign(b.tmp(), "member", "addr", [val, this.slicePointer.fieldIndexByName("array_ptr")]);
             if (dtor) {
-                dtor.push(new DestructorInstruction(val, t, "unlock"));
+                dtor.push(new DestructorInstruction(arrayPointer, t, "unlock"));
             }
             b.assign(null, "lock_arr", "addr", [arrayPointer]);
         }
