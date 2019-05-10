@@ -1,6 +1,6 @@
 # Fyr
 
-[![npm Version](https://img.shields.io/npm/v/fyr.svg)](https://www.npmjs.com/package/fyrlang)
+[![npm Version](https://img.shields.io/npm/v/fyrlang.svg)](https://www.npmjs.com/package/fyrlang)
 [![Build Status](https://travis-ci.org/vs-ude/fyr.svg?branch=dev)](https://travis-ci.org/vs-ude/fyr)
 
 Fyr is a modern systems programming language that combines the versatility of C with the ease and safety of application programming languages like Java, Go or TypeScript. Like C/C++, Fyr can be used for low-level hardware-oriented programming and high-level application programming. In contrast to C, the Fyr compiler guarantees memory safety and thread safety at compilation time.  
