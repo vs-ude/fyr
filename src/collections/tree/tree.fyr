@@ -2,7 +2,7 @@ type Node<T> struct {
     Value T
     parent ~Node<T>
     children []*Node<T>
-} 
+}
 
 type Iterator<T> struct {
     Node ~Node<T>
@@ -171,10 +171,10 @@ export func main() int {
     root.Append({Value: 30})
     println(root.Size())
     println(root.IndexOf(child2))
-    for(let it = root.First(); !it.IsNull(); it.Next()) {
+    for(var it = root.First(); !it.IsNull(); it.Next()) {
         println(it.Value())
     }
-    for(let it = root.Traverse(); !it.IsNull(); it.Next()) {
+    for(var it = root.Traverse(); !it.IsNull(); it.Next()) {
         println(it.Value())
     }
     var it = root.First()
