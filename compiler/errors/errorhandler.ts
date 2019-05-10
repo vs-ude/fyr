@@ -14,17 +14,14 @@ export class StdErrorOutput implements ErrorHandler {
     handle(e: Error) {
         if (e instanceof TypeError) {
             console.log((e.location.file + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
-            return;
         } else if (e instanceof SyntaxError) {
             console.log((ast.currentFile() + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
-            return;
         } else if (e instanceof ImportError) {
             if (e.location) {
                 console.log((e.location.file + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
             } else {
                 console.log((e.path + ": ".yellow) + e.message.red);
             }
-            return
         } else {
             if (e.stack) {
                 console.error(this.buildOffendingLineString(e.stack))
@@ -32,8 +29,8 @@ export class StdErrorOutput implements ErrorHandler {
             } else {
                 console.error(e)
             }
-            process.exit(1)
         }
+        process.exit(1)
     }
 
     /**
