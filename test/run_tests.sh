@@ -9,7 +9,7 @@
 
 # --------- define the files that should be compiled/run ---------------------
 COMPILE_FILES=(
-    "src/collections/tree"
+    # "src/collections/tree"
     "src/collections/list"
     "src/strconv"
     "src/examples/mandelbrot"
@@ -22,8 +22,8 @@ COMPILE_FILES_NEGATIVE=(
 
 RUN_FILES=(
     "list"
-    "tree"
-    # "mandelbrot" # this takes a second...
+    # "tree"
+    "mandelbrot" # this takes a second...
 )
 
 # --------- setup the required variables -------------------------------------
