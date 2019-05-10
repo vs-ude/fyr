@@ -1,17 +1,13 @@
+language: node_js
+node_js:
+  - "8"
+dist: xenial
 stages:
   - build
   - test
   - deploy
-dist: xenial
-addons:
-  apt:
-    - gcc
-    - valgrind
-language: node_js
-node_js:
-  - "8"
-git:
-  quiet: true
+before_install:
+  - sudo apt-get install gcc valgrind
 install:
   - export FYRBASE=$PWD
   - npm install
