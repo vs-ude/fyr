@@ -2,30 +2,40 @@ language: node_js
 node_js:
   - "8"
 dist: xenial
+
 stages:
   - build
   - test
-  - deploy
-before_install:
-  - sudo apt-get install gcc valgrind
+  - name: deploy
+    if: branch = master
+
 install:
-  - export FYRBASE=$PWD
+  - sudo apt-get install gcc valgrind
   - npm install
+
 jobs:
   include:
     - stage: build
-      script: npm run build
+      name: "Build the Compiler"
     - stage: test
+      name: "Unit Tests"
       before_script: npm run pretest
       script: node_modules/mocha/bin/mocha --reporter list
-    - before_script: npm run build
+    - name: "Integration Tests"
+      before_script: npm run build
       script: test/run_tests.sh
     - stage: deploy
-      before_deploy: npm run build
-      deploy:
-        provider: npm
-        email: $NPM_MAIL_ADDRESS
-        api_key: $NPM_PUBLISH_TOKEN
-        skip_cleanup: true
-        on:
-          branch: master
+      name: "Deploy to npmjs"
+      env: TARGET=npmjs
+
+script:
+  - npm run build
+
+deploy:
+  provider: npm
+  email: $NPM_MAIL_ADDRESS
+  api_key: $NPM_PUBLISH_TOKEN
+  skip_cleanup: true
+  on:
+    branch: master
+    condition: "x${TARGET} = xnpmjs"
