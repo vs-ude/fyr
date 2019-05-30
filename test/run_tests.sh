@@ -23,8 +23,14 @@ COMPILE_FILES_NEGATIVE=(
 RUN_FILES=(
     "list"
     "tree"
-    "mandelbrot" # this takes a second...
 )
+
+# only run these tests if we explicitly tell it to
+if [ -n "$SLOW_TESTS" ]; then
+    RUN_FILES+=(
+        "mandelbrot"
+    )
+fi
 
 # --------- setup the required variables -------------------------------------
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && cd ../ && pwd )"

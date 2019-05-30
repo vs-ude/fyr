@@ -24,6 +24,7 @@ jobs:
     - name: "Integration Tests"
       before_script: npm run build
       script: test/run_tests.sh
+      env: SLOW_TESTS=y
     - stage: deploy
       name: "Deploy to npmjs"
       env: TARGET=npmjs
