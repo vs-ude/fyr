@@ -4,4 +4,6 @@
 
 process.argv.splice(2, 0, "compile");
 
+process.env.FYRBASE = (__dirname + '/../')
+
 require('../lib/index.js');
