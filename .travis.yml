@@ -31,12 +31,23 @@ jobs:
 
 script:
   - npm run build
+  - test $OS && test $DIST && dev/build.sh || true
 
 deploy:
-  provider: npm
-  email: $NPM_MAIL_ADDRESS
-  api_key: $NPM_PUBLISH_TOKEN
-  skip_cleanup: true
-  on:
-    branch: master
-    condition: "x${TARGET} = xnpmjs"
+  - provider: npm
+    email: $NPM_MAIL_ADDRESS
+    api_key: $NPM_PUBLISH_TOKEN
+    skip_cleanup: true
+    on:
+      branch: master
+      condition: "x${TARGET} = xnpmjs"
+  - provider: packagecloud
+    repository: vs-ude/fyrlang
+    username: vs-ude
+    token: $PACKAGECLOUD_TOKEN
+    dist: "${OS}/${DIST}"
+    package_glob: build/*.{rpm,deb}
+    skip_cleanup: true
+    on:
+      branch: "master"
+      condition: -n "${OS}" && -n "${DIST}" && -n "${PACKAGECLOUD_TOKEN}"
