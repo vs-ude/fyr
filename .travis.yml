@@ -31,7 +31,7 @@ jobs:
 
 script:
   - npm run build
-  - test $OS && test $DIST && dev/build.sh || true
+  - test $OS && test $DIST && make -f .travis.mk package || true
 
 deploy:
   - provider: npm

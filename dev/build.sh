@@ -21,7 +21,7 @@ prepare() {
 
 copy_build_files() {
     printf "Copying the built compiler and dependencies.\n"
-    cp -r package*.json ${DATADIR}/
+    cp -r package*.json README.md LICENSE.md ${DATADIR}/
     cp -r bin ${DATADIR}/
     cp -r lib ${DATADIR}/
     cp -r node_modules ${DATADIR}/

@@ -10,19 +10,17 @@ Packager: Oskar Carl <oskar.carl@uni-due.de>
 %description
 
 %prep
-%setup -q -n %{name}-%{version}
 
 %install
-%make_install
+ln -s %{_bindir}/fyrc %{_datarootdir}/bin/fyrc
 
 %post
 # Fix security context for SELinux
 # http://stackoverflow.com/questions/24288616/permission-denied-on-accessing-host-directory-in-docker
-chcon -Rt svirt_sandbox_file_t %{_datarootdir}/packpack/ || :
+chcon -Rt svirt_sandbox_file_t %{_datarootdir}/fyrlang/ || :
 
 %files
-%{_bindir}/packpack
-%{_datarootdir}/packpack/*
+%{_datarootdir}/fyrlang/*
 %doc README.md
 %{!?_licensedir:%global license %doc}
-%license LICENSE
+%license LICENSE.md

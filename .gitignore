@@ -7,6 +7,7 @@
 /docs/
 /lib/*
 /node_modules/
+/packpack/
 /pkg/*
 /src/**/*.o
 /src/**/*.ir
