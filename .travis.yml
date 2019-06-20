@@ -1,3 +1,6 @@
+services:
+  - docker
+
 language: node_js
 node_js:
   - "8"
@@ -28,10 +31,16 @@ jobs:
     - stage: deploy
       name: "Deploy to npmjs"
       env: TARGET=npmjs
+    - name: Fedora 29
+      env: OS=fedora DIST=29
+    - name: Fedora 30
+      env: OS=fedora DIST=30
+    - name: Fedora Rawhide
+      env: OS=fedora DIST=Rawhide
 
 script:
   - npm run build
-  - test $OS && test $DIST && make -f .travis.mk package || true
+  - make package
 
 deploy:
   - provider: npm
