@@ -36,7 +36,7 @@ jobs:
     - name: Fedora 30
       env: OS=fedora DIST=30
     - name: Fedora Rawhide
-      env: OS=fedora DIST=Rawhide
+      env: OS=fedora DIST=rawhide
 
 script:
   - npm run build
