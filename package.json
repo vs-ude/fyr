@@ -1,6 +1,6 @@
 {
   "name": "fyrlang",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Fyr: an experimental compiler for IoT applications",
   "homepage": "http://fyr.vs.uni-due.de",
   "main": "lib/index",
