@@ -55,7 +55,7 @@ deploy:
     username: vs-ude
     token: $PACKAGECLOUD_TOKEN
     dist: "${OS}/${DIST}"
-    package_glob: build/*.{rpm,deb}
+    package_glob: build/*.{rpm,deb,dsc}
     skip_cleanup: true
     on:
       branch: "master"

@@ -2,7 +2,7 @@ Source: fyrlang
 Section: devel
 Priority: optional
 Maintainer: Oskar Carl <oskar.carl@uni-due.de>
-Build-Depends: nodejs, npm
+Build-Depends: debhelper (>=10), nodejs, npm
 Standards-Version: 4.1.3
 Homepage: http://fyr.vs.uni-due.de
 Vcs-Browser: https://github.com/vs-ude/fyr
