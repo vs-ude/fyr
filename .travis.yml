@@ -10,7 +10,7 @@ stages:
   - build
   - test
   - name: deploy
-    if: branch = master
+    if: branch = packaging
 
 install:
   - sudo apt-get install gcc valgrind
