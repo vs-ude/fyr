@@ -39,6 +39,10 @@ jobs:
       env: OS=fedora DIST=rawhide
     - name: Debian Buster
       env: OS=debian DIST=buster
+    - name: Ubuntu Cosmic Cuttlefish
+      env: OS=ubuntu DIST=cosmic
+    - name: Ubuntu Disco Dingo
+      env: OS=ubuntu DIST=disco
 
 script:
   - npm run build
