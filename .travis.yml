@@ -35,8 +35,6 @@ jobs:
       env: OS=fedora DIST=29
     - name: Fedora 30
       env: OS=fedora DIST=30
-    - name: Fedora Rawhide
-      env: OS=fedora DIST=rawhide
     - name: Debian Buster
       env: OS=debian DIST=buster
     - name: Ubuntu Cosmic Cuttlefish
