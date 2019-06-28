@@ -55,7 +55,7 @@ deploy:
       branch: master
       condition: "x${TARGET} = xnpmjs"
   - provider: packagecloud
-    repository: vs-ude/fyrlang
+    repository: fyrlang
     username: vs-ude
     token: $PACKAGECLOUD_TOKEN
     dist: "${OS}/${DIST}"
