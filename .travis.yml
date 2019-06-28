@@ -37,6 +37,8 @@ jobs:
       env: OS=fedora DIST=30
     - name: Fedora Rawhide
       env: OS=fedora DIST=rawhide
+    - name: Debian Buster
+      env: OS=debian DIST=buster
 
 script:
   - npm run build
