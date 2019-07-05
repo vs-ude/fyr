@@ -19,6 +19,14 @@ An _npm_ package is available in the standard npm [registry](https://www.npmjs.c
 Additionally, we maintain a [Homebrew Tap](https://github.com/vs-ude/homebrew-fyr) containing the _fyrlang_ formula.
 See the [home page](http://fyr.vs.uni-due.de) for more information.  
 
+### From Source
+
+Simply clone this repository and run `npm install && npm run build`.
+Working _node_, _npm_, and _gcc_ executables are required, everything else will be installed by _npm_.  
+The _fyrc_ executable can be found in _bin/_.
+
+The install script also registers a git hook that will automatically rebuild the compiler after git pulls if necessary.
+
 ## Usage
 
 The package comes with the _fyrc_ binary, which can be used to compile Fyr code into C or binary executables.  
@@ -33,6 +41,8 @@ export func main() int {
 
 It can be compiled with `fyrc -n hello_world.fyr`.
 The generated executable is _hello_world_ and yields `Hello World` when run.
+
+More examples can be found in the _src/_ folder of this repository.
 
 
 ### Tools
