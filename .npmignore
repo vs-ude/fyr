@@ -3,9 +3,11 @@
 /bin/darwin*
 /bin/linux*
 /compiler/
+/debian/
 /dev/
 /docs/
 /pkg/
+/rpm/
 /src/*
 !/src/runtime/
 /test/
@@ -13,6 +15,7 @@
 .gitignore
 .travis.yml
 API.md
+Makefile
 npm-debug.log
 tmp.*
 tsconfig.json
