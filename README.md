@@ -14,10 +14,10 @@ It is currently in early stages of development, so some features are not yet imp
 ## Installation
 
 The compiler currently only supports UNIX-like systems, Windows support is planned for a future release.  
-We are currently working on providing _deb_ and _rpm_ packages hosted on [packagecloud](https://packagecloud.io/vs-ude/fyrlang).
+We provide _deb_ and _rpm_ packages hosted on [packagecloud](https://packagecloud.io/vs-ude/fyrlang).
 An _npm_ package is available in the standard npm [registry](https://www.npmjs.com/package/fyrlang).
+Additionally, we maintain a [Homebrew Tap](https://github.com/vs-ude/homebrew-fyr) containing the _fyrlang_ formula.
 See the [home page](http://fyr.vs.uni-due.de) for more information.  
-_Note:_ Installation of the _npm_ package requires _gcc_ to be present and working.
 
 ### Usage
 
