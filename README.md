@@ -19,8 +19,23 @@ An _npm_ package is available in the standard npm [registry](https://www.npmjs.c
 Additionally, we maintain a [Homebrew Tap](https://github.com/vs-ude/homebrew-fyr) containing the _fyrlang_ formula.
 See the [home page](http://fyr.vs.uni-due.de) for more information.  
 
-### Usage
+## Usage
 
-The package comes with the _fyrc_ binary, which can be used to compile Fyr code into C or binary executables.
-We provide a [plugin](https://marketplace.visualstudio.com/items?itemName=vs-ude.fyr) for Visual Studio Code that currently supports code highlighting.
+The package comes with the _fyrc_ binary, which can be used to compile Fyr code into C or binary executables.  
+A simple _hello_world.fyr_ looks like this:
+
+```
+export func main() int {
+    println("Hello World")
+    return 0
+}
+```
+
+It can be compiled with `fyrc -n hello_world.fyr`.
+The generated executable is _hello_world_ and yields `Hello World` when run.
+
+
+### Tools
+
+We provide a [plugin](https://marketplace.visualstudio.com/items?itemName=vs-ude.fyr) for Visual Studio Code that supports code highlighting.
 Integration of a language server is currently in progress but depends on some functionality of the compiler that is not yet fully implemented.
