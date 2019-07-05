@@ -23,7 +23,9 @@ $(DESTDIR)$(datadir)/fyrlang/bin/%: $(DESTDIR)$(datadir)/fyrlang/
 	install -DTpm0755 bin/$(notdir $@) $@
 $(DESTDIR)$(datadir)/fyrlang/lib: $(DESTDIR)$(datadir)/fyrlang/
 	cp -a lib $(DESTDIR)$(datadir)/fyrlang/lib
+	rm $(DESTDIR)$(datadir)/fyrlang/lib/*.ts
 	rm $(DESTDIR)$(datadir)/fyrlang/lib/**/*.ts
+	rm $(DESTDIR)$(datadir)/fyrlang/lib/*.map
 	rm $(DESTDIR)$(datadir)/fyrlang/lib/**/*.map
 $(DESTDIR)$(datadir)/fyrlang/node_modules: install_prod $(DESTDIR)$(datadir)/fyrlang/
 	cp -a node_modules $(DESTDIR)$(datadir)/fyrlang/
