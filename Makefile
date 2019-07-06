@@ -1,7 +1,5 @@
 prefix ?= /usr
-bindir ?= $(prefix)/bin
 datadir ?= $(prefix)/lib
-export HOME=/tmp
 
 all: build
 
@@ -9,10 +7,10 @@ build: install_dev
 	npm run build
 
 install_dev:
-	npm install >/dev/null 2>&1
+	npm install --cache /tmp/npm-cache >/dev/null 2>&1
 
 install_prod:
-	npm prune --production
+	npm prune --cache /tmp/npm-cache --production >/dev/null 2>&1
 	rm -rf node_modules/.cache
 
 $(DESTDIR)$(datadir)/fyrlang/:
