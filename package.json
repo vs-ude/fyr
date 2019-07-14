@@ -42,7 +42,7 @@
     "@types/chai": "^4.1.7",
     "@types/colors": "^1.2.1",
     "@types/mocha": "^5.2.7",
-    "@types/node": "^12.6.2",
+    "@types/node": "^8.10.50",
     "chai": "^4.2.0",
     "mocha": "^6.1.4",
     "mocha-typescript": "^1.1.17",
@@ -71,5 +71,10 @@
       "lcov"
     ],
     "all": true
+  },
+  "greenkeeper": {
+    "ignore": [
+      "@types/node"
+    ]
   }
 }
