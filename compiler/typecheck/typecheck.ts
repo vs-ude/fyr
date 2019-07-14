@@ -1427,6 +1427,9 @@ export class TypeChecker {
                     let f = this.createFunction(snode, fnode.scope, scope);
                     if (f instanceof Function) {
                         this.functions.push(f);
+                        if (f.name == "main") {
+                            this.mainFunction = f;
+                        }
                     }
                 } else if (snode.op == "var") {
                     let v = this.createVar(snode.lhs, scope, false, false, true);
@@ -5520,6 +5523,7 @@ export class TypeChecker {
 
     private typedefs: Array<Typedef> = [];
     private functions: Array<Function> = [];
+    private mainFunction: Function = null;
     public globalVariables: Array<Variable> = [];
 
     private stringLiteralTypes: Map<string, StringLiteralType> = new Map<string, StringLiteralType>();
