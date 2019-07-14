@@ -5,7 +5,7 @@ import * as ssa from "../ssa"
 import path = require("path");
 import {createHash} from "crypto";
 import { ImplementationError, TodoError } from '../errors'
-import { FunctionParameter } from "../scope";
+import * as scope from "../scope"
 
 export type BinaryOperator = "*" | "/" | "%" | "+" | "-" | "->" | "." | ">>" | "<<" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "&" | "^" | "|" | "&&" | "||" | "=" | "+=" | "-=" | "/=" | "*=" | "%=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "[";
 
@@ -220,6 +220,8 @@ export class CBackend implements backend.Backend {
         }
         f.node = n;
     }
+
+    public defineMainFunction(f: scope.Function) {}
 
     private mangleName(name: string): string {
         name = name.replace(/_/g, "_u");

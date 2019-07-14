@@ -2,6 +2,7 @@ import * as ssa from "../ssa"
 import {Package} from "../pkg"
 import * as backend from "./backend"
 import {InterfaceType, StructType} from "../types/"
+import * as scope from "../scope";
 
 export class FunctionImport implements backend.Function {
     getIndex(): number {
@@ -90,6 +91,8 @@ export class DummyBackend {
         }
         f.node = n;
     }
+
+    defineMainFunction(f: scope.Function) {}
 
     generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         let ircode = "";

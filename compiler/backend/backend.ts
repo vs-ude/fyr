@@ -1,5 +1,6 @@
 import * as ssa from "../ssa"
 import {Package} from "../pkg"
+import * as scope from "../scope"
 import {DummyBackend} from "./backend_dummy"
 import {CBackend} from "./backend_c"
 import {Wasm32Backend} from "./backend_wasm"
@@ -32,6 +33,7 @@ export interface Backend {
      * Returns the init function unless it is empty or missing.
      */
     getInitFunction(): Function | null;
+    defineMainFunction(f: scope.Function);
 }
 
 export function getInitializedBackend(config: FyrConfiguration, pkg: Package): Backend {

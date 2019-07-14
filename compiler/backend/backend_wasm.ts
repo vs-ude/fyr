@@ -5,6 +5,7 @@ import * as backend from "./backend"
 import {BinaryBuffer} from "../typecheck/helper"
 import * as tc from "../typecheck"
 import { ImplementationError, TodoError } from '../errors'
+import * as scope from "../scope";
 
 export type Wasm32StorageType = "local" | "vars" | "params" | "result" | "local_result" | "local_var" | "global" | "global_heap" | "global_strings";
 
@@ -159,6 +160,8 @@ export class Wasm32Backend implements backend.Backend {
     public defineFunction(n: Node, f: wasm.Function, isExported: boolean, isPossibleDuplicate: boolean) {
         this.funcs.push({node: n, wf: f, isExported: isExported});
     }
+
+    public defineMainFunction(f: scope.Function) {}
 
     public generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         let ircode = "";
