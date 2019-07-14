@@ -7,6 +7,7 @@ import colors = require('colors');
 import { Package } from "./pkg";
 import { FyrConfiguration } from "./config";
 import { ImplementationError } from './errors';
+import { getInitializedBackend } from './backend/backend';
 
 // Make TSC not throw out the colors lib
 colors.red;
@@ -42,6 +43,7 @@ function runCompiler() {
     config.sourcePath = args;
 
     let pkg: Package = constructPkg(config);
+    Package.b = getInitializedBackend(config, pkg)
 
 //    if (!program.disableRuntime) {
 //        files.push(path.join(fyrBase, "runtime/mem.fyr"));
@@ -120,13 +122,7 @@ export function compile(pkg: Package, config: FyrConfiguration) {
 
         // Generate code
         if (!config.disableCodegen) {
-            let backend: "C" | "WASM" | null = null;
-            if (config.emitWasm) {
-                backend = "WASM";
-            } else if (config.emitC) {
-                backend = "C";
-            }
-            Package.generateCodeForPackages(backend, config.emitIr, config.emitNative, config.disableNullCheck);
+            Package.generateCodeForPackages(config.emitIr, config.emitNative, config.disableNullCheck);
         }
     } catch(e) {
         config.errorHandler.handle(e);

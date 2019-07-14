@@ -188,27 +188,14 @@ export class Package {
         this.tc.checkModulePassFour();
     }
 
-    public generateCode(backend: "C" | "WASM" | null, emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package>,  disableNullCheck: boolean) {
+    public generateCode(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package>,  disableNullCheck: boolean) {
         if (this.isInternal) {
             return;
         }
 
         console.log("Compiling " + (this.pkgPath ? this.pkgPath : path.join(this.objFilePath, this.objFileName)) + " ...");
 
-        let cBackend: CBackend;
-        let wasmBackend: Wasm32Backend;
-        let b: backend.Backend;
-        if (backend == "C") {
-            cBackend = new CBackend(this);
-            b = cBackend;
-        } else if (backend == "WASM") {
-            wasmBackend = new Wasm32Backend();
-            b = wasmBackend;
-        } else {
-            b = new DummyBackend();
-        }
-
-        this.codegen = new CodeGenerator(this.tc, b, disableNullCheck);
+        this.codegen = new CodeGenerator(this.tc, Package.b, disableNullCheck);
         let ircode = this.codegen.processModule(this.pkgNode, emitIR, initPackages, duplicateCodePackages);
 
         this.createObjFilePath();
@@ -218,36 +205,36 @@ export class Package {
             fs.writeFileSync(irfile, ircode, 'utf8');
         }
 
-        if (backend == "WASM") {
+        if (Package.b instanceof Wasm32Backend) {
             // Generate WAST
-            let wastcode = wasmBackend.getCode();
+            let wastcode = Package.b.getCode();
             let wastfile = path.join(this.objFilePath, this.objFileName + ".wat");
             fs.writeFileSync(wastfile, wastcode, 'utf8');
             // Generate WASM
             let wasmfile = path.join(this.objFilePath, this.objFileName + ".wasm");
             child_process.execFileSync("wat2wasm", [wastfile, "-r", "-o", wasmfile]);
-        } else if (backend == "C") {
+        } else if (Package.b instanceof CBackend) {
             // Generate C code
-            let code = cBackend.getImplementationCode();
+            let code = Package.b.getImplementationCode();
             let cfile = path.join(this.objFilePath, this.objFileName + ".c");
             fs.writeFileSync(cfile, code, 'utf8');
-            let hcode = cBackend.getHeaderCode();
+            let hcode = Package.b.getHeaderCode();
             let hfile = path.join(this.objFilePath, this.objFileName + ".h");
             fs.writeFileSync(hfile, hcode, 'utf8');
 
-            this.hasMain = cBackend.hasMainFunction();
+            this.hasMain = Package.b.hasMainFunction();
 
             if (this.isImported && this.hasMain) {
                 throw new ImportError("Package " + this.pkgPath + " has been imported as a library, but contains a main function", null, this.pkgPath);
             }
         }
 
-        this.hasInitFunction = (b.getInitFunction() != null);
+        this.hasInitFunction = (Package.b.getInitFunction() != null);
     }
 
-    public generateObjectFiles(backend: "C" | "WASM" | null, nativePackages: Array<Package>) {
+    public generateObjectFiles(nativePackages: Array<Package>) {
         // Compile the *.c and *.h files to *.o files
-        if (backend == "C") {
+        if (Package.b instanceof CBackend) {
             let cfile = path.join(this.objFilePath, this.objFileName + ".c");
             let ofile = path.join(this.objFilePath, this.objFileName + ".o");
             let includes: Array<string> = [];
@@ -375,7 +362,7 @@ export class Package {
     /**
      * Generates C or WASM files and optionally compiles and links these files to create a native executable.
      */
-    public static generateCodeForPackages(backend: "C" | "WASM" | null, emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
+    public static generateCodeForPackages(emitIR: boolean, emitNative: boolean, disableNullCheck: boolean) {
         // Generate code (in the case of "C" this is source code)
         let initPackages: Array<Package> = [];
         // Packages that contain native files, e.g. *.c
@@ -390,7 +377,7 @@ export class Package {
             if (p == Package.mainPackage || p.isInternal) {
                 continue;
             }
-            p.generateCode(backend, emitIR, null, null, disableNullCheck);
+            p.generateCode(emitIR, null, null, disableNullCheck);
             if (p.hasInitFunction) {
                 initPackages.push(p);
             }
@@ -399,12 +386,12 @@ export class Package {
             }
         }
         if (Package.mainPackage) {
-            Package.mainPackage.generateCode(backend, emitIR, initPackages, duplicateCodePackages, disableNullCheck);
+            Package.mainPackage.generateCode(emitIR, initPackages, duplicateCodePackages, disableNullCheck);
         }
 
         // Create native executable?
         if (emitNative) {
-            if (backend !== "C") {
+            if ( !(this.b instanceof CBackend) ) {
                 throw new ImplementationError()
             }
 
@@ -413,13 +400,13 @@ export class Package {
                 if (p.isInternal) {
                     continue;
                 }
-                p.generateObjectFiles(backend, nativePackages);
+                p.generateObjectFiles(nativePackages);
             }
 
             // Run the linker on the package that contains a main function and is not itself imported
             for(let p of Package.packages) {
                 if (!p.isImported && p.hasMain) {
-                    if (backend == "C") {
+                    if (this.b instanceof CBackend) {
                         // List of all object files
                         let oFiles: Array<string> = [];
                         // Always include fyr.o and fyr_spawn.o
@@ -561,6 +548,7 @@ export class Package {
     private static packages: Array<Package> = [];
     private static fyrPaths: Array<string>;
     public static fyrBase: string;
+    public static b: backend.Backend;
 }
 
 
