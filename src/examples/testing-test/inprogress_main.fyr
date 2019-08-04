@@ -1,0 +1,11 @@
+import "testing"
+
+export func main() int{
+    var t *testing.Test = {
+        tests: ["Even"],
+        current: 0,
+        step: 0 }
+    TestEven(t)
+    t.fin()
+    return 0
+}
