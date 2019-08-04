@@ -1,0 +1,13 @@
+import "testing"
+
+func TestEven(t ~testing.Test) {
+    let testInput []int = [2, 3, 4, 7]
+    let expectedResults []bool = [true, false, true, false]
+
+    var actualResults []bool = []
+    for (let i in testInput) {
+        append(actualResults, even(i))
+    }
+
+    t.assertArraysEqual<bool>(actualResults, expectedResults)
+}
