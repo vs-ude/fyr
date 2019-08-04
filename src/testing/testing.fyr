@@ -1,0 +1,23 @@
+type Test struct {
+    tests []string
+    results [][]bool
+    current int
+    step int
+}
+
+export func Test.nextTest() {
+    this.current++
+    this.step = 0
+}
+
+export func Test.nextStep() {
+    this.step++
+}
+
+export func Test.fin() {
+    for (let i = 0; i < len(this.tests); i++) {
+        for (let j = 0; j < len(this.results[i]); j++) {
+            println(this.tests[i], "step", j, this.results[i][j])
+        }
+    }
+}
