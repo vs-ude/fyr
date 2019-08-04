@@ -15,7 +15,7 @@ import * as backend from "./backend/backend";
 import {Wasm32Backend} from "./backend/backend_wasm";
 import {CBackend} from "./backend/backend_c";
 import {DummyBackend} from "./backend/backend_dummy";
-import { ImplementationError, ImportError } from './errors'
+import { ImplementationError, ImportError, SyntaxError } from './errors'
 
 
 // Make TSC not throw out the colors lib
@@ -149,8 +149,12 @@ export class Package {
             }
             // Remove windows line ending
             code = code.replace(/\r/g, "");
-            let f = parser.parse(code);
-            this.pkgNode.statements.push(f);
+            try {
+                let f = parser.parse(code);
+                this.pkgNode.statements.push(f);
+            } catch (e) {
+                throw new SyntaxError(e.message, {start: e.location.start, end: e.location.end, file: ""})
+            }
         }
 
         // This might load more packages

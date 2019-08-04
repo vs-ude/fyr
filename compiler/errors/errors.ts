@@ -19,8 +19,13 @@ export class TodoError extends Error {
 }
 
 export class SyntaxError {
-    message: string;
-    location: Location;
+    constructor(message: string, loc: Location) {
+        this.message = message;
+        this.location = loc;
+    }
+
+    public message: string;
+    public location: Location;
 }
 
 export class TypeError {
