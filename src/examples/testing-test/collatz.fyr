@@ -1,0 +1,42 @@
+func even(n int) bool {
+    var res = false
+    if (n % 2 == 0) {
+        res = true
+    }
+    return res
+}
+
+func halve(n int) int {
+    return n / 2
+}
+
+func multiply(n int) int {
+    return n * 3 + 1
+}
+
+func step(n int) int {
+    if (even(n)) {
+        n = halve(n)
+    } else {
+        n = multiply(n)
+    }
+    return n
+}
+
+func do_collatz(n int) int {
+    var cycle = 0
+    if (n > 1) {
+        for (n > 1) {
+            n = step(n)
+            cycle++
+        }
+    }
+    return cycle
+}
+
+export func main() int {
+    let n = 14
+    let steps = do_collatz(n)
+    println("It takes", steps, "steps to reach 1 with the collatz conjecture starting at", n)
+    return 0
+}
