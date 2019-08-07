@@ -132,7 +132,7 @@ export class CBackend implements backend.Backend {
         if (type.callingConvention == "native") {
             f.name = name;
         } else {
-            f.name = this.mangleName((from as Package).pkgPath + "/" + name);
+            f.name = mangleName((from as Package).pkgPath + "/" + name);
         }
         f.index = this.funcs.length;
         this.funcs.push(f);
@@ -142,7 +142,7 @@ export class CBackend implements backend.Backend {
     public importGlobalVar(name: string, type: ssa.Type | ssa.StructType, from: string | Package): ssa.Variable {
         this.importPackage(from);
         if (from instanceof Package) {
-            name = "g_" + this.mangleName(from.pkgPath + "/" + name);
+            name = "g_" + mangleName(from.pkgPath + "/" + name);
         } else {
             // An imported native variable. Use its name without mangling it.
         }
@@ -157,7 +157,7 @@ export class CBackend implements backend.Backend {
     }
 
     public declareGlobalVar(name: string, type: ssa.Type | ssa.StructType): ssa.Variable {
-        name = "g_" + this.mangleName(this.pkg.pkgPath + "/" + name);
+        name = "g_" + mangleName(this.pkg.pkgPath + "/" + name);
         let v = new Variable(name);
         v.type = type;
         v.readCount = 2; // Avoid that global variables are optimized away
@@ -204,7 +204,7 @@ export class CBackend implements backend.Backend {
                 name = this.pkg.pkgPath + "/" + name;
             }
         }
-        name = this.mangleName(name);
+        name = mangleName(name);
         if (f == this.initFunction) {
             f.func.name = "s_" + name;
         } else if (isExported && f.name == "main") {
@@ -223,24 +223,7 @@ export class CBackend implements backend.Backend {
 
     public defineMainFunction(f: scope.Function) {}
 
-    private mangleName(name: string): string {
-        name = name.replace(/_/g, "_u");
-        name = name.replace(/\./g, "__");
-        name = name.replace(/</g, "_l");
-        name = name.replace(/>/g, "_g");
-        name = name.replace(/,/g, "_c");
-        name = name.replace(/\//g, "_");
-        name = name.replace(/\*/g, "_s");
-        name = name.replace(/\^/g, "_u");
-        name = name.replace(/\~/g, "_r");
-        name = name.replace(/\&/g, "_R");
-        name = name.replace(/\[/g, "_o");
-        name = name.replace(/\]/g, "_c");
-        name = name.replace(/\(/g, "_O");
-        name = name.replace(/\)/g, "_C");
-        name = name.replace(/ /g, "_");
-        return name;
-    }
+
 
     public generateModule(emitIR: boolean, initPackages: Array<Package> | null, duplicateCodePackages: Array<Package> | null): string {
         let ircode = "";
@@ -448,7 +431,7 @@ export class CBackend implements backend.Backend {
                         throw new ImplementationError()
                     }
                     name = p.pkgPath + "/" + name;
-                    name = this.mangleName(name);
+                    name = mangleName(name);
                     name = "s_" + name;
                     let call = new CFunctionCall();
                     call.funcExpr = new CConst(name);
@@ -496,7 +479,7 @@ export class CBackend implements backend.Backend {
     }
 
     public addSymbol(name: string): number {
-        let c = new CConst("sym_" + this.mangleName(name));
+        let c = new CConst("sym_" + mangleName(name));
         this.module.symbols.set(name, c);
         this.symbols.push(name);
         return this.symbols.length - 1;
@@ -565,9 +548,9 @@ export class CBackend implements backend.Backend {
             let mangledName: string;
             if (t.name) {
                 if (t.pkg) {
-                    mangledName = this.mangleName(t.pkg.pkgPath + "/" + t.name);
+                    mangledName = mangleName(t.pkg.pkgPath + "/" + t.name);
                 } else {
-                    mangledName = this.mangleName(t.name);
+                    mangledName = mangleName(t.name);
                 }
             } else {
                 // An anonymous struct
@@ -2185,10 +2168,10 @@ export class CModule {
     }
 
     public getHeaderCode(pkg: Package): string {
-        let mangledName = pkg.pkgPath;
+        let mangledName = mangleName(pkg.pkgPath);
         let str: string = "";
         if (mangledName) {
-            mangledName = mangledName.replace(/\//g, "_").toUpperCase() + "_H";
+            mangledName = mangledName.toUpperCase() + "_H";
             str += "#ifndef " + mangledName + "\n";
             str += "#define " + mangledName + "\n\n";
         }
@@ -2367,13 +2350,13 @@ export class CFunction extends CNode {
         }
         str += "\n";
 
-        str += indent + this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
+        str += indent + this.returnType + " " + mangleName(this.name) + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ") {\n";
         str += this.body.map(function(c: CNode) { return c.toString(indent + "    ") + ";"}).join("\n");
         return str + "\n" + indent + "}";
     }
 
     public declaration(): string {
-        return this.returnType + " " + this.name + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ");";
+        return this.returnType + " " + mangleName(this.name) + "(" + this.parameters.map(function(c: CFunctionParameter) { return c.toString()}).join(", ") + ");";
     }
 
     public addString(str: string): CString {
@@ -2711,4 +2694,24 @@ export class CUnionLiteral extends CNode {
 
     public name: string;
     public value: CNode;
+}
+
+function mangleName(name: string): string {
+    // name = name.replace(/_/g, "_u");
+    name = name.replace(/\./g, "__");
+    name = name.replace(/</g, "_l");
+    name = name.replace(/>/g, "_g");
+    name = name.replace(/,/g, "_co");
+    name = name.replace(/\//g, "_");
+    name = name.replace(/\*/g, "_s");
+    name = name.replace(/\^/g, "_u");
+    name = name.replace(/\~/g, "_r");
+    name = name.replace(/\&/g, "_R");
+    name = name.replace(/\[/g, "_o");
+    name = name.replace(/\]/g, "_c");
+    name = name.replace(/\(/g, "_O");
+    name = name.replace(/\)/g, "_C");
+    name = name.replace(/-/g, "_d");
+    name = name.replace(/ /g, "_");
+    return name;
 }
