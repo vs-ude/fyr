@@ -1,6 +1,5 @@
 type Test struct {
     tests []string
-    results [][]bool
     current int
     step int
 }
@@ -10,14 +9,16 @@ export func Test.nextTest() {
     this.step = 0
 }
 
-export func Test.nextStep() {
+func Test.nextStep() {
     this.step++
 }
 
-export func Test.fin() {
-    for (let i = 0; i < len(this.tests); i++) {
-        for (let j = 0; j < len(this.results[i]); j++) {
-            println(this.tests[i], "step", j, this.results[i][j])
-        }
-    }
+func Test.ok(name string) {
+    println(this.tests[this.current], "step", this.step, name, "passed")
+    this.nextStep()
+}
+
+func Test.fail(name string, message string) {
+    println(this.tests[this.current], "step", this.step, name, "failed:", message)
+    this.nextStep()
 }

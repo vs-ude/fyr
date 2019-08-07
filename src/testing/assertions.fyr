@@ -1,11 +1,7 @@
-export func Test.assertEqual<T>(actual T, expected T) {
+export func Test.assertEqual(actual bool, expected bool) {
     if (actual != expected) {
-        this.results[current][step] = false
+        this.fail("assertEqual", "values do not match")
+    } else {
+        this.ok("assertEqual")
     }
-    this.results[current][step] = true
-    this.nextStep()
 }
-
-// export func Test.assertEqual(actual bool, expected bool) {
-//     this.assertEqual(actual, expected)
-// }

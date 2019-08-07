@@ -1,16 +1,11 @@
-export func Test.assertArraysEqual<T>(actual []T, expected []T) {
+export func Test.assertArraysEqual(actual ~[]bool, expected ~[]bool) {
     if (len(actual) != len(expected)) {
-        this.results[current][step] = false
+        this.fail("assertArraysEqual", "arrays do not match")
     }
-    for (let i = 0; i < len(actual); i++) {
+    for (var i = 0; i < len(actual); i++) {
         if (actual[i] != expected[i]) {
-            this.results[current][step] = false
+            this.fail("assertArraysEqual", "arrays do not match")
         }
     }
-    this.results[current][step] = true
-    this.nextStep()
-}
-
-export func Test.assertArraysEqual(actual []bool, expected []bool) {
-    this.assertArraysEqual<bool>(actual, expected)
+    this.ok("assertArraysEqual")
 }

@@ -6,6 +6,5 @@ export func main() int{
         current: 0,
         step: 0 }
     TestEven(t)
-    t.fin()
     return 0
 }
