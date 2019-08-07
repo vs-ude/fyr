@@ -2,7 +2,7 @@
 
 import ast = require("../parser/ast");
 
-import { SyntaxError, TypeError, ImportError } from './errors'
+import { SyntaxError, TypeError, ImportError, ImplementationError } from './errors'
 
 import { readFileSync } from 'fs'
 
@@ -22,6 +22,8 @@ export class StdErrorOutput implements ErrorHandler {
             } else {
                 console.log((e.path + ": ".yellow) + e.message.red);
             }
+        } else if (e instanceof ImplementationError && e.location) {
+                console.log((e.location.file + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
         } else {
             if (e.stack) {
                 console.error(this.buildOffendingLineString(e.stack))

@@ -2743,7 +2743,7 @@ export class CodeGenerator {
                         let methodName = TypeChecker.mangledTypeName(methodObjType) + "." + lhs.name.value;
                         let e = scope.resolveElement(methodName);
                         if (!(e instanceof Function)) {
-                            throw new ImplementationError()
+                            throw new ImplementationError("call to unknown member function " + methodName, lhs.loc)
                         }
                         f = e;
                         t = f.type;

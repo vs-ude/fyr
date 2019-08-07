@@ -1,12 +1,16 @@
 import { Location } from '../parser'
 
 export class ImplementationError extends Error {
-    constructor(message?: string) {
+    constructor(message?: string, loc?: Location) {
         super(message);
         // see: typescriptlang.org/docs/handbook/release-notes/typescript-2-2.html
         Object.setPrototypeOf(this, new.target.prototype); // restore prototype chain
         this.name = ImplementationError.name; // stack traces display correctly now
+        this.location = loc;
     }
+
+    public message: string;
+    public location: Location;
 }
 
 export class TodoError extends Error {
