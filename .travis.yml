@@ -13,7 +13,6 @@ stages:
     if: branch = master
 
 install:
-  - sudo apt-get install gcc valgrind
   - npm install
 
 jobs:
@@ -25,6 +24,7 @@ jobs:
       before_script: npm run pretest
       script: node_modules/mocha/bin/mocha --reporter list
     - name: "Integration Tests"
+      before_install: sudo apt-get install valgrind
       before_script: npm run build
       script: test/run_tests.sh
       env: SLOW_TESTS=y
