@@ -1,6 +1,6 @@
 "use strict"
 
-import ast = require("../parser/ast");
+import * as parser from '../parser'
 
 import { SyntaxError, TypeError, ImportError, ImplementationError } from './errors'
 
@@ -14,8 +14,8 @@ export class StdErrorOutput implements ErrorHandler {
     handle(e: Error) {
         if (e instanceof TypeError) {
             console.log((e.location.file + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
-        } else if (e instanceof SyntaxError) {
-            console.log((ast.currentFile() + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
+        } else if (e instanceof SyntaxError || e instanceof parser.SyntaxError) { //TODO: clean this by consolidating these types
+            console.log((parser.currentFile() + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
         } else if (e instanceof ImportError) {
             if (e.location) {
                 console.log((e.location.file + " (" + e.location.start.line + "," + e.location.start.column + "): ").yellow + e.message.red);
