@@ -594,7 +594,7 @@ simpleStatement
   / i:assignIdentifierList [ \t]* p:("++" / "--" / (assignOp [ \t\n]* expression))? {
         if (!p) {
             if (i.length > 1) {
-                expected("assignment operator", v.loc);
+                expected("assignment operator", i.loc);
             }
             if (i[0].op == "ellipsisAssign") {
                 error("'...' not allowed in this place", i[0].loc);
@@ -644,7 +644,7 @@ assignIdentifier
           i = new ast.Node({loc: fl(location()), op: "id", value: "_"});
       }
       if (i.op == "unary..." && o) {
-          error("'...' and '?' must not be used on the same expression", e.loc);
+          error("'...' and '?' must not be used on the same expression", o.loc);
       } else if (i.op == "unary...") {
           return new ast.Node({loc: fl(location()), op: "ellipsisAssign", lhs: i.rhs});
       } else if (o) {
