@@ -8,18 +8,18 @@
   "scripts": {
     "preinstall": "[ -d .git ] && git config core.hooksPath ./dev/hooks || true",
     "postinstall": "npm run build:lib",
-    "pretest": "mkdir -p test/tests/parser && pegjs -o test/tests/parser/parser.js compiler/parser/parser.pegjs && tsc -p test/tsconfig.test.json",
+    "pretest": "npm run build:parser && tsc -p test/tsconfig.test.json",
     "test": "mocha --reporter list || exit 0",
-    "pretest:watch": "mkdir -p test/tests/parser && pegjs -o test/tests/parser/parser.js compiler/parser/parser.pegjs",
+    "pretest:watch": "npm run build:parser",
     "test:watch": "mocha-typescript-watch -p test/tsconfig.test.json",
     "pretest:coverage": "npm run pretest",
     "test:coverage": "nyc mocha --reporter progress || exit 0",
-    "build:parser": "mkdir -p lib/parser && pegjs -o lib/parser/parser.js compiler/parser/parser.pegjs",
+    "build:parser": "pegjs --plugin ./node_modules/ts-pegjs -o compiler/parser/parser.ts compiler/parser/parser.pegjs",
     "build:js": "tsc",
     "build:lib": "mkdir -p pkg/`bin/fyrarch` && gcc -o pkg/`bin/fyrarch`/fyr.o -O3 -g3 -c src/runtime/fyr.c && gcc -o pkg/`bin/fyrarch`/fyr_spawn.o -O3 -g3 -c src/runtime/fyr_spawn.c -U_FORTIFY_SOURCE",
     "build": "npm run build:parser && npm run build:js && npm run build:lib",
     "build:doc": "typedoc --readme ./API.md --exclude '**/*.spec.ts' --out docs compiler",
-    "clean": "rm -rf lib/* test/tests/* coverage/ docs/ .nyc_output/ bin/`bin/fyrarch`/ build/ packpack/ pkg/*"
+    "clean": "rm -rf lib/* test/tests/* coverage/ docs/ .nyc_output/ bin/`bin/fyrarch`/ build/ compiler/parser/parser.ts packpack/ pkg/*"
   },
   "keywords": [
     "fyr",
@@ -49,6 +49,7 @@
     "nyc": "^14.1.1",
     "pegjs": "^0.10.0",
     "ts-mockito": "^2.3.1",
+    "ts-pegjs": "^0.2.6",
     "typedoc": "^0.15.0",
     "typescript": "^3.5.3"
   },

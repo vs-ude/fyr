@@ -2314,6 +2314,15 @@
         "lodash": "^4.17.5"
       }
     },
+    "ts-pegjs": {
+      "version": "0.2.6",
+      "resolved": "https://registry.npmjs.org/ts-pegjs/-/ts-pegjs-0.2.6.tgz",
+      "integrity": "sha512-mIX/dMQ6a1EHAEhvCLS6Z41+O700zlLiwB4V5ZSlKFLZKLDE93reik5IFw/HJsKgs488UiLx144yeEWWyu7YIw==",
+      "dev": true,
+      "requires": {
+        "pegjs": "^0.10.0"
+      }
+    },
     "type-detect": {
       "version": "4.0.8",
       "resolved": "https://registry.npmjs.org/type-detect/-/type-detect-4.0.8.tgz",

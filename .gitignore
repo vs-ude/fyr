@@ -3,6 +3,7 @@
 /bin/darwin*
 /bin/linux*
 /build
+/compiler/parser/parser.ts
 /coverage/
 /docs/
 /lib/*
