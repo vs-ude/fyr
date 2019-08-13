@@ -45,7 +45,7 @@ export class StdErrorOutput implements ErrorHandler {
     private buildOffendingLineString(stack: string) {
         let fileAndLocation: Array<string> = stack
             .split('\n')[1]
-            .replace(/\s*at\s*[\w\.]*\s*\(/i, '') // remove the cruft before the path
+            .replace(/\s*at\s*[\w\.\$]*\s*\(/i, '') // remove the cruft before the path
             .replace(')', '')
             .split(':')
 
